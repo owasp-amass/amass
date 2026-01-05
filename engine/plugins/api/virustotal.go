@@ -52,12 +52,13 @@ func (vt *virusTotal) Start(r et.Registry) error {
 
 	name := vt.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     vt,
-		Name:       name,
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   vt.check,
+		Plugin:       vt,
+		Name:         name,
+		Position:     31,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     vt.check,
 	}); err != nil {
 		r.Log().Error(fmt.Sprintf("Failed to register a handler: %v", err),
 			slog.Group("plugin", "name", vt.name, "handler", name))

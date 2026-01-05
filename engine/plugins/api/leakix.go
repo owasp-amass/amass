@@ -50,12 +50,13 @@ func (ix *leakix) Start(r et.Registry) error {
 	ix.log = r.Log().WithGroup("plugin").With("name", ix.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     ix,
-		Name:       ix.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   ix.check,
+		Plugin:       ix,
+		Name:         ix.name + "-Handler",
+		Position:     27,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     ix.check,
 	}); err != nil {
 		return err
 	}

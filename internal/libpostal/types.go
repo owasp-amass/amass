@@ -10,3 +10,8 @@ type ParsedComponent struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 }
+
+type ParserOptions struct {
+	Language string
+	Country  string
+}

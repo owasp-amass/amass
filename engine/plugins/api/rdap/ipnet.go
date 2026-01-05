@@ -5,6 +5,7 @@
 package rdap
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -82,9 +83,12 @@ func (r *ipnet) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*sup
 		}
 	}
 
-	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
@@ -126,7 +130,10 @@ func (r *ipnet) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*sup
 }
 
 func (r *ipnet) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since time.Time) bool {
-	if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, src.Name); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
 			if _, ok := tag.Property.(*general.SourceProperty); ok {
 				return true
@@ -140,8 +147,11 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, entity *dbt.Entity, m *
 	var findings []*support.Finding
 	iprec := entity.Asset.(*oamreg.IPNetRecord)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	if u := r.plugin.getJSONLink(resp.Links); u != nil && m.IsMatch(string(oam.URL)) {
-		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
+		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
 				From:     entity,
 				FromName: "IPNetRecord: " + iprec.Handle,
@@ -151,11 +161,12 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, entity *dbt.Entity, m *
 			})
 		}
 	}
+
 	if name := iprec.WhoisServer; name != "" && m.IsMatch(string(oam.FQDN)) {
 		fqdn := &oamdns.FQDN{Name: name}
 
 		if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
-			if a, err := e.Session.Cache().CreateAsset(fqdn); err == nil && a != nil {
+			if a, err := e.Session.DB().CreateAsset(ctx, fqdn); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
 					From:     entity,
 					FromName: "IPNetRecord: " + iprec.Handle,

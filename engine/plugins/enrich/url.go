@@ -5,6 +5,7 @@
 package enrich
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/netip"
@@ -53,11 +54,13 @@ func (u *urlexpand) Start(r et.Registry) error {
 	u.log = r.Log().WithGroup("plugin").With("name", u.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     u,
-		Name:       u.name,
-		Transforms: u.transforms,
-		EventType:  oam.URL,
-		Callback:   u.check,
+		Plugin:       u,
+		Name:         u.name,
+		Position:     10,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   u.transforms,
+		EventType:    oam.URL,
+		Callback:     u.check,
 	}); err != nil {
 		return err
 	}
@@ -120,6 +123,9 @@ func (u *urlexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []
 	rtypes := stringset.New()
 	defer rtypes.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
 	for _, atype := range u.transforms {
@@ -145,9 +151,9 @@ func (u *urlexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []
 		}
 	}
 
-	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes.Slice()...); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, asset, time.Time{}, rtypes.Slice()...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
@@ -175,8 +181,11 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, m *config
 	oamu := asset.Asset.(*url.URL)
 	var findings []*support.Finding
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	if tstr == string(oam.FQDN) && m.IsMatch(string(oam.FQDN)) {
-		if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: oamu.Host}); err == nil && a != nil {
+		if a, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: oamu.Host}); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
 				From:     asset,
 				FromName: "URL: " + oamu.Raw,
@@ -191,7 +200,7 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, m *config
 			ntype = "IPv6"
 		}
 
-		if a, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{
+		if a, err := e.Session.DB().CreateAsset(ctx, &oamnet.IPAddress{
 			Address: ip,
 			Type:    ntype,
 		}); err == nil && a != nil {

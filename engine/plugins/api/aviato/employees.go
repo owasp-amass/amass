@@ -75,12 +75,15 @@ func (ae *employees) check(e *et.Event) error {
 func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*dbt.Entity, []*dbt.Entity) {
 	var orgent *dbt.Entity
 
-	if edges, err := e.Session.Cache().IncomingEdges(ident, since, "id"); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, ae.plugin.source.Name); err != nil || len(tags) == 0 {
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ae.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*org.Organization); ok {
 					orgent = a
 					break
@@ -94,12 +97,12 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 		return nil, employents
 	}
 
-	if edges, err := e.Session.Cache().OutgoingEdges(orgent, since, "member"); err == nil {
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent, since, "member"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, ae.plugin.source.Name); err != nil || len(tags) == 0 {
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ae.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*people.Person); ok {
 					employents = append(employents, a)
 				}
@@ -186,9 +189,12 @@ loop:
 func (ae *employees) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 	var orgent *dbt.Entity
 
-	if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
 		for _, edge := range edges {
-			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*org.Organization); ok {
 					orgent = a
 					break
@@ -203,20 +209,23 @@ func (ae *employees) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entit
 func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []employeeResult) []*dbt.Entity {
 	var employents []*dbt.Entity
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, emp := range employlist {
 		p := support.FullNameToPerson(emp.Person.FullName)
 		if p == nil {
 			continue
 		}
 
-		personent, err := e.Session.Cache().CreateAsset(p)
+		personent, err := e.Session.DB().CreateAsset(ctx, p)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 			continue
 		}
 
-		_, err = e.Session.Cache().CreateEntityProperty(personent, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &general.SourceProperty{
 			Source:     ae.name,
 			Confidence: ae.plugin.source.Confidence,
 		})
@@ -226,7 +235,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 			continue
 		}
 
-		if err := ae.plugin.createRelation(e.Session, orgent,
+		if err := ae.plugin.createRelation(ctx, e.Session, orgent,
 			general.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
 			employents = append(employents, personent)
 		} else {

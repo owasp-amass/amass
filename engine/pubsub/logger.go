@@ -35,3 +35,16 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 func (l *Logger) Subscribe() <-chan *string {
 	return l.ch // Return the channel for external components to read from.
 }
+
+func (l *Logger) Close() {
+	// drain the channel
+loop:
+	for {
+		select {
+		case <-l.ch:
+		default:
+			break loop
+		}
+	}
+	close(l.ch)
+}

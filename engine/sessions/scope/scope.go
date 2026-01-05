@@ -61,6 +61,11 @@ func (s *Scope) Add(a oam.Asset) bool {
 }
 
 func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
+	// Check blacklist first
+	if s.IsBlacklisted(a) {
+		return nil, 0
+	}
+
 	var accuracy int
 	var match oam.Asset
 
@@ -125,4 +130,44 @@ func getEmailDomain(email *general.Identifier) (string, bool) {
 	}
 
 	return parts[1], true
+}
+
+func (s *Scope) AddBlacklist(name string) {
+	s.blLock.Lock()
+	defer s.blLock.Unlock()
+
+	key := strings.ToLower(strings.TrimSpace(name))
+	if key != "" {
+		s.blacklist[key] = true
+	}
+}
+
+func (s *Scope) IsBlacklisted(a oam.Asset) bool {
+	s.blLock.Lock()
+	defer s.blLock.Unlock()
+
+	var name string
+	switch v := a.(type) {
+	case *oamdns.FQDN:
+		name = strings.ToLower(v.Name)
+	case *oamurl.URL:
+		name = strings.ToLower(v.Host)
+	default:
+		return false
+	}
+
+	if name == "" {
+		return false
+	}
+
+	for bl := range s.blacklist {
+		if strings.HasSuffix(name, bl) {
+			nlen := len(name)
+			blen := len(bl)
+			if nlen == blen || (nlen > blen && name[nlen-blen-1] == '.') {
+				return true
+			}
+		}
+	}
+	return false
 }

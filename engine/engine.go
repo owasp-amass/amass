@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/engine/api/graphql/server"
+	"github.com/owasp-amass/amass/v5/engine/api/server"
 	"github.com/owasp-amass/amass/v5/engine/dispatcher"
 	"github.com/owasp-amass/amass/v5/engine/plugins"
 	"github.com/owasp-amass/amass/v5/engine/registry"
@@ -44,10 +44,6 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 	}
 
 	if err := plugins.LoadAndStartPlugins(reg); err != nil {
-		return nil, err
-	}
-
-	if err := reg.BuildPipelines(); err != nil {
 		return nil, err
 	}
 

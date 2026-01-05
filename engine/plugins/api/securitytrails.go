@@ -50,12 +50,13 @@ func (st *securityTrails) Start(r et.Registry) error {
 	st.log = r.Log().WithGroup("plugin").With("name", st.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     st,
-		Name:       st.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   st.check,
+		Plugin:       st,
+		Name:         st.name + "-Handler",
+		Position:     30,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     st.check,
 	}); err != nil {
 		return err
 	}

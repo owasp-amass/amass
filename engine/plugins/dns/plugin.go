@@ -5,6 +5,7 @@
 package dns
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -32,7 +33,7 @@ type dnsPlugin struct {
 	secondSweepSize int
 	maxSweepSize    int
 	source          *et.Source
-	apexLock        sync.Mutex
+	apexLock        sync.RWMutex
 	apexList        map[string]*dbt.Entity
 }
 
@@ -57,19 +58,6 @@ func (d *dnsPlugin) Name() string {
 func (d *dnsPlugin) Start(r et.Registry) error {
 	d.log = r.Log().WithGroup("plugin").With("name", d.name)
 
-	d.apex = &dnsApex{name: d.name + "-Apex", plugin: d}
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.apex.name,
-		Priority:     5,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     d.apex.check,
-	}); err != nil {
-		return err
-	}
-
 	cname := d.name + "-CNAME"
 	d.cname = &dnsCNAME{
 		name:   cname,
@@ -82,8 +70,8 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.cname.name,
-		Priority:     2,
-		MaxInstances: support.MaxHandlerInstances,
+		Position:     2,
+		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
 		Callback:     d.cname.check,
@@ -104,8 +92,8 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.ip.name,
-		Priority:     3,
-		MaxInstances: support.MaxHandlerInstances,
+		Position:     3,
+		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.IPAddress)},
 		EventType:    oam.FQDN,
 		Callback:     d.ip.check,
@@ -113,31 +101,32 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	d.reverse = NewReverse(d)
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.reverse.name,
-		Priority:     8,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.IPAddress,
-		Callback:     d.reverse.check,
-	}); err != nil {
-		return err
-	}
-
 	d.subs = NewSubs(d)
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     d,
-		Name:       d.subs.name,
-		Priority:   4,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   d.subs.check,
+		Plugin:       d,
+		Name:         d.subs.name,
+		Position:     7,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     d.subs.check,
 	}); err != nil {
 		return err
 	}
 	go d.subs.releaseSessions()
+
+	d.apex = &dnsApex{name: d.name + "-Apex", plugin: d}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       d,
+		Name:         d.apex.name,
+		Position:     8,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     d.apex.check,
+	}); err != nil {
+		return err
+	}
 
 	txtname := d.name + "-TXT"
 	d.txt = &dnsTXT{
@@ -151,11 +140,24 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.txt.name,
-		Priority:     1,
-		MaxInstances: support.MaxHandlerInstances,
+		Position:     9,
+		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
 		Callback:     d.txt.check,
+	}); err != nil {
+		return err
+	}
+
+	d.reverse = NewReverse(d)
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       d,
+		Name:         d.reverse.name,
+		Position:     8,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.IPAddress,
+		Callback:     d.reverse.check,
 	}); err != nil {
 		return err
 	}
@@ -176,15 +178,19 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 		return results
 	}
 
-	ents, err := session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, time.Time{})
-	if err != nil || len(ents) != 1 {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	entity, err := session.DB().FindOneEntityByContent(ctx, oam.FQDN, time.Time{}, dbt.ContentFilters{
+		"name": name,
+	})
+	if err != nil || entity == nil {
 		return results
 	}
-	entity := ents[0]
 
-	if edges, err := session.Cache().OutgoingEdges(entity, since, "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := session.DB().OutgoingEdges(ctx, entity, since, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if tags, err := session.Cache().GetEdgeTags(edge, since, d.source.Name); err == nil && len(tags) > 0 {
+			if tags, err := session.DB().FindEdgeTags(ctx, edge, since, d.source.Name); err == nil && len(tags) > 0 {
 				var found bool
 
 				for _, tag := range tags {
@@ -216,7 +222,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 
 			for _, t := range rrtypes {
 				if rrtype == t {
-					if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil && to.Asset.AssetType() == atype {
+					if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil && to.Asset.AssetType() == atype {
 						results = append(results, to)
 						break
 					}
@@ -229,15 +235,16 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 }
 
 func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
-	entity, err := e.Session.Cache().CreateAsset(ip)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	entity, err := e.Session.DB().CreateAsset(ctx, ip)
 	if err == nil && entity != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
-	}
 
-	if entity != nil {
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),
 			Entity:  entity,
@@ -256,8 +263,8 @@ func (d *dnsPlugin) addApex(name string, entity *dbt.Entity) {
 }
 
 func (d *dnsPlugin) getApex(name string) *dbt.Entity {
-	d.apexLock.Lock()
-	defer d.apexLock.Unlock()
+	d.apexLock.RLock()
+	defer d.apexLock.RUnlock()
 
 	if entity, found := d.apexList[name]; found {
 		return entity
@@ -266,8 +273,8 @@ func (d *dnsPlugin) getApex(name string) *dbt.Entity {
 }
 
 func (d *dnsPlugin) getApexList() []string {
-	d.apexLock.Lock()
-	defer d.apexLock.Unlock()
+	d.apexLock.RLock()
+	defer d.apexLock.RUnlock()
 
 	var results []string
 	for name := range d.apexList {

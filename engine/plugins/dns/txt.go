@@ -5,6 +5,7 @@
 package dns
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -28,6 +29,10 @@ func (d *dnsTXT) check(e *et.Event) error {
 	_, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
+	}
+
+	if support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
+		return nil
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
@@ -59,7 +64,10 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*oamdn
 		return props
 	}
 
-	if tags, err := e.Session.Cache().GetEntityTags(fqdn, since, "dns_record"); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if tags, err := e.Session.DB().FindEntityTags(ctx, fqdn, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				props = append(props, prop)
@@ -87,13 +95,16 @@ func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []dns.RR {
 }
 
 func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, record := range rr {
 		if record.Header().Rrtype != dns.TypeTXT {
 			continue
 		}
 
 		txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
-		_, err := e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
+		_, err := e.Session.DB().CreateEntityProperty(ctx, fqdn, &oamdns.DNSRecordProperty{
 			PropertyName: "dns_record",
 			Header: oamdns.RRHeader{
 				RRType: int(dns.TypeTXT),

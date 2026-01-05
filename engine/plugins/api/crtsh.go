@@ -50,12 +50,13 @@ func (c *crtsh) Start(r et.Registry) error {
 	c.log = r.Log().WithGroup("plugin").With("name", c.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     c,
-		Name:       c.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   c.check,
+		Plugin:       c,
+		Name:         c.name + "-Handler",
+		Position:     22,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     c.check,
 	}); err != nil {
 		return err
 	}

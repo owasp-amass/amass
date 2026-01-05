@@ -18,12 +18,12 @@ type QueueDB struct {
 }
 
 type Element struct {
-	ID        uint64    `gorm:"primaryKey;column:id"`
-	CreatedAt time.Time `gorm:"index:idx_created_at,sort:asc;column:created_at"`
+	ID        uint64    `gorm:"primaryKey; column:id"`
+	CreatedAt time.Time `gorm:"index:idx_created_at, sort:asc; column:created_at"`
 	UpdatedAt time.Time
-	Type      string `gorm:"index:idx_etype;column:etype"`
-	EntityID  string `gorm:"index:idx_entity_id,unique;column:entity_id"`
-	Processed bool   `gorm:"index:idx_processed;column:processed"`
+	Type      string `gorm:"index:idx_etype; column:etype"`
+	EntityID  string `gorm:"uniqueIndex:idx_entity_id; column:entity_id"`
+	Processed bool   `gorm:"index:idx_processed; column:processed"`
 }
 
 func NewQueueDB(dbPath string) (*QueueDB, error) {
@@ -82,6 +82,14 @@ func (r *QueueDB) Append(atype oam.AssetType, eid string) error {
 		Type:      string(atype),
 		EntityID:  eid,
 		Processed: false,
+	}).Error
+}
+
+func (r *QueueDB) AppendAndMark(atype oam.AssetType, eid string) error {
+	return r.db.Create(&Element{
+		Type:      string(atype),
+		EntityID:  eid,
+		Processed: true,
 	}).Error
 }
 

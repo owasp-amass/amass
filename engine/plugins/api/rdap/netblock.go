@@ -66,19 +66,18 @@ func (nb *netblock) lookup(e *et.Event, cidr string, since time.Time) *dbt.Entit
 }
 
 func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IPNetwork) {
-	n := asset.Asset.(*network.Netblock)
+	_ = nb.plugin.rlimit.Wait(context.TODO())
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	n := asset.Asset.(*network.Netblock)
 	_, ipnet, err := net.ParseCIDR(n.CIDR.String())
 	if err != nil {
 		return nil, nil
 	}
-	req := rdap.NewIPNetRequest(ipnet)
+	req := rdap.NewIPNetRequest(ipnet).WithContext(ctx)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-
-	_ = nb.plugin.rlimit.Wait(context.TODO())
 	resp, err := nb.plugin.client.Do(req)
 	if err != nil {
 		return nil, nil
@@ -126,19 +125,22 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) 
 		return nil
 	}
 
-	record, err := e.Session.Cache().CreateAsset(ipnetrec)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	record, err := e.Session.DB().CreateAsset(ctx, ipnetrec)
 	if err == nil && record != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(record, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, record, &general.SourceProperty{
 			Source:     nb.plugin.source.Name,
 			Confidence: nb.plugin.source.Confidence,
 		})
 
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   record,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     nb.plugin.source.Name,
 				Confidence: nb.plugin.source.Confidence,
 			})

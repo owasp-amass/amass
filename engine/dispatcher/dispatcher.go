@@ -5,50 +5,45 @@
 package dispatcher
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"runtime"
+	"sync"
 	"time"
 
+	"github.com/caffix/queue"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-const (
-	MinPipelineQueueSize = 100
-	MaxPipelineQueueSize = 500
-)
-
-type dis struct {
-	logger *slog.Logger
+type dynamicDispatcher struct {
+	log    *slog.Logger
 	reg    et.Registry
 	mgr    et.SessionManager
 	done   chan struct{}
-	dchan  chan *et.Event
 	cchan  chan *et.EventDataElement
+	cqueue queue.Queue
+
+	mu    sync.RWMutex
+	pools map[oam.AssetType]*pipelinePool
 }
 
 func NewDispatcher(l *slog.Logger, r et.Registry, mgr et.SessionManager) et.Dispatcher {
-	if l == nil {
-		l = slog.New(slog.NewTextHandler(os.Stdout, nil))
-	}
-
-	d := &dis{
-		logger: l,
+	d := &dynamicDispatcher{
+		log:    l,
 		reg:    r,
 		mgr:    mgr,
 		done:   make(chan struct{}),
-		dchan:  make(chan *et.Event, MinPipelineQueueSize),
-		cchan:  make(chan *et.EventDataElement, MinPipelineQueueSize),
+		cchan:  make(chan *et.EventDataElement, 1000),
+		cqueue: queue.NewQueue(),
+		pools:  make(map[oam.AssetType]*pipelinePool),
 	}
 
-	go d.maintainPipelines()
+	go d.runEvents()
 	return d
 }
 
-func (d *dis) Shutdown() {
+func (d *dynamicDispatcher) Shutdown() {
+	// Optional: add pool-level shutdown if you want explicit draining.
 	select {
 	case <-d.done:
 		return
@@ -57,111 +52,44 @@ func (d *dis) Shutdown() {
 	close(d.done)
 }
 
-func (d *dis) DispatchEvent(e *et.Event) error {
-	if e == nil {
-		return errors.New("the event is nil")
-	} else if e.Session == nil {
-		return errors.New("the event has no associated session")
-	} else if e.Session.Done() {
-		return errors.New("the associated session has been terminated")
-	} else if e.Entity == nil || e.Entity.Asset == nil {
-		return errors.New("the event has no associated entity or asset")
-	}
+func (d *dynamicDispatcher) runEvents() {
+	scale := time.NewTicker(5 * time.Second)
+	defer scale.Stop()
 
-	d.dchan <- e
-	return nil
-}
-
-func (d *dis) maintainPipelines() {
-	ctick := time.NewTimer(time.Second)
-	defer ctick.Stop()
-	mtick := time.NewTimer(10 * time.Second)
-	defer mtick.Stop()
-loop:
 	for {
 		select {
 		case <-d.done:
-			break loop
-		case <-mtick.C:
-			checkOnTheHeap()
-			mtick.Reset(10 * time.Second)
+			return
 		default:
 		}
 
 		select {
-		case <-ctick.C:
-			d.fillPipelineQueues()
-			ctick.Reset(time.Second)
-		case e := <-d.dchan:
-			if err := d.safeDispatch(e); err != nil {
-				d.logger.Error(fmt.Sprintf("Failed to dispatch event: %s", err.Error()))
+		case <-scale.C:
+			for _, pool := range d.pools {
+				pool.maybeScale()
 			}
 		case e := <-d.cchan:
-			d.completedCallback(e)
-		}
-	}
-}
-
-func checkOnTheHeap() {
-	var mstats runtime.MemStats
-	runtime.ReadMemStats(&mstats)
-
-	h := mstats.HeapAlloc
-	n := mstats.NextGC
-	if h <= n {
-		return
-	}
-
-	if diff := mstats.HeapAlloc - mstats.NextGC; bToMb(diff) > 500 {
-		runtime.GC()
-	}
-}
-
-func bToMb(b uint64) uint64 {
-	return b / 1024 / 1024
-}
-
-func (d *dis) fillPipelineQueues() {
-	sessions := d.mgr.GetSessions()
-	if len(sessions) == 0 {
-		return
-	}
-
-	var ptypes []oam.AssetType
-	for _, atype := range oam.AssetList {
-		if ap, err := d.reg.GetPipeline(atype); err == nil {
-			if ap.Queue.Len() < MinPipelineQueueSize {
-				ptypes = append(ptypes, atype)
-			}
-		}
-	}
-
-	numRequested := MaxPipelineQueueSize / len(sessions)
-	for _, s := range sessions {
-		if s == nil || s.Done() {
-			continue
-		}
-		for _, atype := range ptypes {
-			if entities, err := s.Queue().Next(atype, numRequested); err == nil && len(entities) > 0 {
-				for _, entity := range entities {
-					e := &et.Event{
-						Name:    fmt.Sprintf("%s - %s", string(atype), entity.Asset.Key()),
-						Entity:  entity,
-						Session: s,
-					}
-					if err := d.appendToPipeline(e); err != nil {
-						d.logger.Error(fmt.Sprintf("Failed to append to a data pipeline: %s", err.Error()))
-					}
+			d.cqueue.Append(e)
+		case <-d.cqueue.Signal():
+			d.cqueue.Process(func(data interface{}) {
+				if ede, valid := data.(*et.EventDataElement); valid {
+					d.completedCallback(ede)
 				}
-			}
+			})
 		}
 	}
 }
 
-func (d *dis) completedCallback(data interface{}) {
+func (d *dynamicDispatcher) completedCallback(data interface{}) {
 	ede, ok := data.(*et.EventDataElement)
 	if !ok {
 		return
+	}
+
+	_ = ede.Event.Session.Queue().Processed(ede.Event.Entity)
+
+	if inst, ok := ede.Ref.(*pipelineInstance); ok {
+		inst.onDequeue(ede.Event)
 	}
 
 	if err := ede.Error; err != nil {
@@ -175,10 +103,9 @@ func (d *dis) completedCallback(data interface{}) {
 	}
 }
 
-func (d *dis) safeDispatch(e *et.Event) error {
-	// there is no need to dispatch the event if there's no associated asset pipeline
-	if ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType()); err != nil || ap == nil {
-		return err
+func (d *dynamicDispatcher) DispatchEvent(e *et.Event) error {
+	if e == nil || e.Entity == nil {
+		return nil
 	}
 
 	// do not schedule the same asset more than once
@@ -186,42 +113,56 @@ func (d *dis) safeDispatch(e *et.Event) error {
 		return nil
 	}
 
-	err := e.Session.Queue().Append(e.Entity)
+	err := e.Session.Queue().Append(e.Entity, false)
 	if err != nil {
 		return err
 	}
 
-	// increment the number of events processed in the session
+	atype := e.Entity.Asset.AssetType()
+	pool := d.getOrCreatePool(atype)
+	if pool == nil {
+		return fmt.Errorf("no pipeline pool available for asset type %s", string(atype))
+	}
+
+	if err := pool.Dispatch(e); err != nil {
+		return err
+	}
+	// increment the number of events in the session
 	if stats := e.Session.Stats(); stats != nil {
 		stats.Lock()
 		stats.WorkItemsTotal++
 		stats.Unlock()
 	}
-
-	if e.Meta != nil {
-		if err := d.appendToPipeline(e); err != nil {
-			d.logger.Error(fmt.Sprintf("Failed to append to a data pipeline: %s", err.Error()))
-			return err
-		}
-	}
 	return nil
 }
 
-func (d *dis) appendToPipeline(e *et.Event) error {
-	if e == nil || e.Session == nil || e.Entity == nil || e.Entity.Asset == nil {
-		return errors.New("the event is nil")
+func (d *dynamicDispatcher) getOrCreatePool(atype oam.AssetType) *pipelinePool {
+	d.mu.RLock()
+	pool := d.pools[atype]
+	d.mu.RUnlock()
+	if pool != nil {
+		return pool
 	}
 
-	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
-	if err != nil {
-		return err
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if pool = d.pools[atype]; pool != nil {
+		return pool
 	}
 
-	e.Dispatcher = d
-	if data := et.NewEventDataElement(e); data != nil {
-		_ = e.Session.Queue().Processed(e.Entity)
-		data.Queue = d.cchan
-		ap.Queue.Append(data)
+	min, max := assetTypeToPoolMinMax(atype)
+	pool = newPipelinePool(d, atype, min, max)
+	d.pools[atype] = pool
+	return pool
+}
+
+func assetTypeToPoolMinMax(atype oam.AssetType) (int, int) {
+	switch atype {
+	case oam.FQDN:
+		return 4, 128
+	case oam.IPAddress:
+		return 4, 128
+	default:
+		return 1, 32
 	}
-	return nil
 }

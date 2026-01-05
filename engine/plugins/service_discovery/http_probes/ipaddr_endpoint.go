@@ -5,6 +5,7 @@
 package http_probes
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -41,7 +42,7 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	if reserved, _ := amassnet.IsReservedAddress(addrstr); reserved {
 		return nil
 	}
-	if !e.Session.Scope().IsAddressInScope(e.Session.Cache(), ip) {
+	if !e.Session.Scope().IsAddressInScope(e.Session.DB(), ip) {
 		return nil
 	}
 
@@ -67,20 +68,24 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 		r.process(e, findings)
 	}
 
-	go support.IPAddressSweep(e, ip, src, 25, sweepCallback)
+	support.IPAddressSweep(e, ip, src, 25, sweepCallback)
 	return nil
 }
 
 func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
-	if edges, err := e.Session.Cache().OutgoingEdges(ip, since, "port"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, ip, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, r.plugin.source.Name); err != nil {
+			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, r.plugin.source.Name); err != nil {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
-				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
+				if srv, err := e.Session.DB().FindEntityById(ctx,
+					edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     ip,
 						FromName: ip.Asset.Key(),
@@ -122,8 +127,11 @@ func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding) {
 }
 
 func sweepCallback(e *et.Event, ip *network.IPAddress, src *et.Source) {
-	if entity, err := e.Session.Cache().CreateAsset(ip); err == nil && entity != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if entity, err := e.Session.DB().CreateAsset(ctx, ip); err == nil && entity != nil {
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})

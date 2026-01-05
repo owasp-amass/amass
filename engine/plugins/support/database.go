@@ -5,6 +5,7 @@
 package support
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,30 +23,29 @@ import (
 	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/platform"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
 	var entities []*dbt.Entity
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	switch atype {
 	case string(oam.FQDN):
-		roots, err := session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, since)
-		if err != nil || len(roots) != 1 {
+		root, err := session.DB().FindOneEntityByContent(ctx, oam.FQDN, since, dbt.ContentFilters{
+			"name": name,
+		})
+		if err != nil || root == nil {
 			return nil
 		}
-		root := roots[0]
 
-		entities, _ = db.FindByFQDNScope(session.Cache(), root, since)
+		entities, _ = db.FindByFQDNScope(ctx, session.DB(), root, since)
 	case string(oam.Identifier):
 		if parts := strings.Split(name, ":"); len(parts) == 2 {
-			id := &general.Identifier{
-				UniqueID: name,
-				ID:       parts[1],
-				Type:     parts[0],
-			}
-
-			entities, _ = session.Cache().FindEntitiesByContent(id, since)
+			entities, _ = session.DB().FindEntitiesByContent(ctx, oam.Identifier, since, dbt.ContentFilters{
+				"unique_id": name,
+			})
 		}
 	case string(oam.AutnumRecord):
 		num, err := strconv.Atoi(name)
@@ -53,21 +53,27 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 			return nil
 		}
 
-		entities, _ = session.Cache().FindEntitiesByContent(&oamreg.AutnumRecord{Number: num}, since)
+		entities, _ = session.DB().FindEntitiesByContent(ctx, oam.AutnumRecord, since, dbt.ContentFilters{
+			"number": num,
+		})
 	case string(oam.IPNetRecord):
 		prefix, err := netip.ParsePrefix(name)
 		if err != nil {
 			return nil
 		}
 
-		entities, _ = session.Cache().FindEntitiesByContent(&oamreg.IPNetRecord{CIDR: prefix}, since)
+		entities, _ = session.DB().FindEntitiesByContent(ctx, oam.IPNetRecord, since, dbt.ContentFilters{
+			"cidr": prefix,
+		})
 	case string(oam.Service):
-		entities, _ = session.Cache().FindEntitiesByContent(&platform.Service{ID: name}, since)
+		entities, _ = session.DB().FindEntitiesByContent(ctx, oam.Service, since, dbt.ContentFilters{
+			"unique_id": name,
+		})
 	}
 
 	var results []*dbt.Entity
 	for _, entity := range entities {
-		if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+		if tags, err := session.DB().FindEntityTags(ctx, entity, since, src.Name); err == nil && len(tags) > 0 {
 			for _, tag := range tags {
 				if tag.Property.PropertyType() == oam.SourceProperty {
 					results = append(results, entity)
@@ -85,10 +91,13 @@ func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, pl
 		return results
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, name := range names {
-		if a, err := session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && a != nil {
+		if a, err := session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
+			_, _ = session.DB().CreateEntityProperty(ctx, a, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -107,16 +116,19 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 		return results
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, e := range emails {
 		email := strings.ToLower(e)
 
-		if a, err := session.Cache().CreateAsset(&general.Identifier{
+		if a, err := session.DB().CreateAsset(ctx, &general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
 			ID:       email,
 			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
+			_, _ = session.DB().CreateEntityProperty(ctx, a, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -133,15 +145,18 @@ func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
 		return
 	}
 
-	if tags, err := session.Cache().GetEntityTags(asset, time.Time{}, "last_monitored"); err == nil && len(tags) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if tags, err := session.DB().FindEntityTags(ctx, asset, time.Time{}, "last_monitored"); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
 			if tag.Property.Value() == src.Name {
-				_ = session.Cache().DeleteEntityTag(tag.ID)
+				_ = session.DB().DeleteEntityTag(ctx, tag.ID)
 			}
 		}
 	}
 
-	_, _ = session.Cache().CreateEntityProperty(asset, general.SimpleProperty{
+	_, _ = session.DB().CreateEntityProperty(ctx, asset, general.SimpleProperty{
 		PropertyName:  "last_monitored",
 		PropertyValue: src.Name,
 	})
@@ -152,7 +167,10 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 		return false
 	}
 
-	if tags, err := session.Cache().GetEntityTags(asset, since, "last_monitored"); err == nil && len(tags) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if tags, err := session.DB().FindEntityTags(ctx, asset, since, "last_monitored"); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
 			if tag.Property.Value() == src.Name {
 				return true
@@ -166,14 +184,17 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *platform.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
 	var srvs []*dbt.Entity
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	if rport, ok := rel.(*general.PortRelation); ok && src != nil && serv != nil {
 		srcs := []*dbt.Entity{src}
 
 		if _, ok := src.Asset.(*oamdns.FQDN); ok {
 			// check for IP assresses associated with the FQDN
-			if edges, err := session.Cache().OutgoingEdges(src, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+			if edges, err := session.DB().OutgoingEdges(ctx, src, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
 				for _, edge := range edges {
-					if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil {
+					if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
 						if _, ok := to.Asset.(*oamnet.IPAddress); ok {
 							srcs = append(srcs, to)
 						}
@@ -184,11 +205,12 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 
 		// go though the hosts that could have previously associated with the service
 		for _, s := range srcs {
-			if edges, err := session.Cache().OutgoingEdges(s, time.Time{}, "port"); err == nil && len(edges) > 0 {
+			if edges, err := session.DB().OutgoingEdges(ctx, s, time.Time{}); err == nil && len(edges) > 0 {
 				for _, edge := range edges {
-					if eport, ok := edge.Relation.(*general.PortRelation); ok && eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
-						if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil {
-							if srv, ok := to.Asset.(*platform.Service); ok && srv.OutputLen == serv.OutputLen {
+					if eport, ok := edge.Relation.(*general.PortRelation); ok &&
+						eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
+						if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
+							if srv, ok := to.Asset.(*platform.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
 								srvs = append(srvs, to)
 							}
 						}
@@ -202,7 +224,12 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	for _, srv := range srvs {
 		var num int
 
-		s := srv.Asset.(*platform.Service)
+		s, valid := srv.Asset.(*platform.Service)
+		if !valid {
+			continue
+		}
+
+		// compare some of the service attributes to find a match
 		for _, key := range []string{"Server", "X-Powered-By"} {
 			if server1, ok := serv.Attributes[key]; ok && server1[0] != "" {
 				if server2, ok := s.Attributes[key]; ok && server1[0] == server2[0] {
@@ -214,11 +241,11 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		}
 
 		if cert != nil {
-			if edges, err := session.Cache().OutgoingEdges(srv, time.Time{}, "certificate"); err == nil && len(edges) > 0 {
+			if edges, err := session.DB().OutgoingEdges(ctx, srv, time.Time{}, "certificate"); err == nil && len(edges) > 0 {
 				var found bool
 
 				for _, edge := range edges {
-					if t, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && t != nil {
+					if t, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && t != nil {
 						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && c.SerialNumber == cert.SerialNumber {
 							found = true
 							break
@@ -240,21 +267,18 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		}
 	}
 
-	var result *dbt.Entity
-	if match != nil {
-		result = match
-	} else {
-		if a, err := session.Cache().CreateAsset(serv); err == nil && a != nil {
-			result = a
+	if match == nil {
+		if a, err := session.DB().CreateAsset(ctx, serv); err == nil && a != nil {
+			match = a
 		} else {
 			return nil, errors.New("failed to create the OAM Service asset")
 		}
 	}
 
-	_, err := session.Cache().CreateEdge(&dbt.Edge{
+	_, err := session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel,
 		FromEntity: src,
-		ToEntity:   result,
+		ToEntity:   match,
 	})
-	return result, err
+	return match, err
 }

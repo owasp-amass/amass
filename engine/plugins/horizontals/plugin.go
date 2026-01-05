@@ -5,8 +5,10 @@
 package horizontals
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
@@ -14,10 +16,14 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
+	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/resolve/utils"
 	"golang.org/x/net/publicsuffix"
 )
@@ -54,7 +60,7 @@ func (h *horizPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       h,
 		Name:         h.horfqdn.name,
-		Priority:     6,
+		Position:     10,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -68,11 +74,13 @@ func (h *horizPlugin) Start(r et.Registry) error {
 		plugin: h,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     h,
-		Name:       h.horContact.name,
-		Transforms: []string{string(oam.ContactRecord)},
-		EventType:  oam.ContactRecord,
-		Callback:   h.horContact.check,
+		Plugin:       h,
+		Name:         h.horContact.name,
+		Position:     10,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.ContactRecord)},
+		EventType:    oam.ContactRecord,
+		Callback:     h.horContact.check,
 	}); err != nil {
 		return err
 	}
@@ -85,7 +93,10 @@ func (h *horizPlugin) Stop() {
 	h.log.Info("Plugin stopped")
 }
 
-func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Association) {
+func (h *horizPlugin) addAssociatedRelationship(e *et.Event, since time.Time, assocs []*scope.Association) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, assoc := range assocs {
 		for _, impacted := range assoc.ImpactedAssets {
 			conf := 50
@@ -97,14 +108,47 @@ func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Ass
 			}
 
 			if match, result := e.Session.Scope().IsAssetInScope(impacted.Asset, conf); result >= conf && match != nil {
-				if a, err := e.Session.Cache().FindEntitiesByContent(match, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
-					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.Cache(), a[0]) {
+				if a, err := e.Session.DB().FindOneEntityByContent(ctx,
+					match.AssetType(), since, assetToContentFilters(match)); err == nil && a != nil {
+					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.DB(), a) {
 						h.makeAssocRelationshipEntries(e, assoc.Match, assoc2)
 					}
 				}
 			}
 		}
 	}
+}
+
+func assetToContentFilters(a oam.Asset) dbt.ContentFilters {
+	filters := dbt.ContentFilters{}
+
+	switch v := a.(type) {
+	case *oamdns.FQDN:
+		filters["name"] = v.Name
+	case *oamnet.IPAddress:
+		filters["address"] = v.Address.String()
+	case *oamnet.Netblock:
+		filters["cidr"] = v.CIDR.String()
+	case *oamnet.AutonomousSystem:
+		filters["number"] = v.Number
+	case *oamreg.DomainRecord:
+		filters["domain"] = v.Domain
+	case *oamreg.IPNetRecord:
+		filters["handle"] = v.Handle
+	case *oamreg.AutnumRecord:
+		filters["handle"] = v.Handle
+	case *oamgen.Identifier:
+		filters["unique_id"] = v.UniqueID
+	case *oamcert.TLSCertificate:
+		filters["serial_number"] = v.SerialNumber
+	case *oamurl.URL:
+		filters["url"] = v.Raw
+	case *oamorg.Organization:
+		filters["unique_id"] = v.ID
+	case *oamcon.Location:
+		filters["address"] = v.Address
+	}
+	return filters
 }
 
 // TODO: this needs to be cleaned up
@@ -114,34 +158,39 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 		return
 	}
 
-	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "associated_with"},
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, _ = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
+		Relation:   &oamgen.SimpleRelation{Name: "associated_with"},
 		FromEntity: assoc,
 		ToEntity:   assoc2,
 	})
-	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "associated_with"},
+	_, _ = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
+		Relation:   &oamgen.SimpleRelation{Name: "associated_with"},
 		FromEntity: assoc2,
 		ToEntity:   assoc,
 	})
 }
 
-func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity) {
+func (h *horizPlugin) process(e *et.Event, since time.Time, assets []*dbt.Entity) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
 	for _, asset := range assets {
 		// check for new networks added to the scope
 		switch v := asset.Asset.(type) {
 		case *oamnet.Netblock:
-			h.ipPTRTargetsInScope(e, asset)
-			h.sweepAroundIPs(e, asset)
+			h.ipPTRTargetsInScope(ctx, e, asset, since)
+			h.sweepAroundIPs(ctx, e, asset, since)
 			//h.sweepNetblock(e, v, src)
 		case *oamreg.IPNetRecord:
-			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
-				a := ents[0]
-
+			if a, err := e.Session.DB().FindOneEntityByContent(ctx, oam.Netblock, since, dbt.ContentFilters{
+				"cidr": v.CIDR.String(),
+			}); err == nil && a != nil {
 				if _, ok := a.Asset.(*oamnet.Netblock); ok {
-					h.ipPTRTargetsInScope(e, a)
-					h.sweepAroundIPs(e, a)
+					h.ipPTRTargetsInScope(ctx, e, a, since)
+					h.sweepAroundIPs(ctx, e, a, since)
 					//h.sweepNetblock(e, nb, src)
 				}
 			}
@@ -153,17 +202,17 @@ func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity) {
 			Session: e.Session,
 		})
 
-		_, _ = e.Session.Cache().CreateEntityProperty(asset, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, asset, &oamgen.SourceProperty{
 			Source:     h.source.Name,
 			Confidence: h.source.Confidence,
 		})
 	}
 }
 
-func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
-	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
+func (h *horizPlugin) ipPTRTargetsInScope(ctx context.Context, e *et.Event, nb *dbt.Entity, since time.Time) {
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, nb, since, "contains"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			to, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
@@ -173,16 +222,15 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
 				continue
 			}
 
-			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&oamdns.FQDN{Name: utils.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
-				a := ents[0]
-
-				if edges, err := e.Session.Cache().OutgoingEdges(a, e.Session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+			if a, err := e.Session.DB().FindOneEntityByContent(ctx, oam.FQDN, since, dbt.ContentFilters{
+				"name": utils.RemoveLastDot(reverse),
+			}); err == nil && a != nil {
+				if edges, err := e.Session.DB().OutgoingEdges(ctx, a, since, "dns_record"); err == nil && len(edges) > 0 {
 					for _, edge := range edges {
 						if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); !ok || rel.Header.RRType != 12 {
 							continue
 						}
-						to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+						to, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 						if err != nil {
 							continue
 						}
@@ -199,15 +247,15 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
 	}
 }
 
-func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity) {
-	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
+func (h *horizPlugin) sweepAroundIPs(ctx context.Context, e *et.Event, nb *dbt.Entity, since time.Time) {
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, nb, since, "contains"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			size := 100
 			if e.Session.Config().Active {
 				size = 250
 			}
 
-			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			to, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
@@ -273,10 +321,14 @@ func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity) {
 		return results
 	}
 */
+
 func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, src *et.Source) {
-	addr, err := e.Session.Cache().CreateAsset(asset)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	addr, err := e.Session.DB().CreateAsset(ctx, asset)
 	if err == nil && addr != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(addr, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, addr, &oamgen.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -289,9 +341,12 @@ func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, sr
 }
 
 func (h *horizPlugin) submitFQDN(e *et.Event, dom string) {
-	fqdn, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: dom})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	fqdn, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: dom})
 	if err == nil && fqdn != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(fqdn, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, fqdn, &oamgen.SourceProperty{
 			Source:     h.source.Name,
 			Confidence: h.source.Confidence,
 		})

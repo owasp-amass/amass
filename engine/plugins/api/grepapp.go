@@ -55,12 +55,13 @@ func (g *grepApp) Start(r et.Registry) error {
 
 	name := g.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     g,
-		Name:       name,
-		Priority:   9,
-		Transforms: []string{string(oam.Identifier)},
-		EventType:  oam.FQDN,
-		Callback:   g.check,
+		Plugin:       g,
+		Name:         name,
+		Position:     24,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.Identifier)},
+		EventType:    oam.FQDN,
+		Callback:     g.check,
 	}); err != nil {
 		return err
 	}

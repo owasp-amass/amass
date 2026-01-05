@@ -5,9 +5,11 @@
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -53,7 +55,10 @@ func (d *dnsApex) check(e *et.Event) error {
 }
 
 func (d *dnsApex) store(e *et.Event, name string, fqdn, apex *dbt.Entity) {
-	if _, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if _, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: apex,
 		ToEntity:   fqdn,

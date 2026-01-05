@@ -50,12 +50,13 @@ func (pt *passiveTotal) Start(r et.Registry) error {
 	pt.log = r.Log().WithGroup("plugin").With("name", pt.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     pt,
-		Name:       pt.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   pt.check,
+		Plugin:       pt,
+		Name:         pt.name + "-Handler",
+		Position:     28,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     pt.check,
 	}); err != nil {
 		return err
 	}

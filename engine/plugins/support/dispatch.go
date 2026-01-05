@@ -5,7 +5,9 @@
 package support
 
 import (
+	"context"
 	"log/slog"
+	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -24,13 +26,16 @@ type Finding struct {
 }
 
 func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, pname, hname string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, finding := range findings {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   finding.Rel,
 			FromEntity: finding.From,
 			ToEntity:   finding.To,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -55,7 +60,7 @@ func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source)
 			continue
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(context.Background(), entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -87,7 +92,7 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 			}
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(context.Background(), entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})

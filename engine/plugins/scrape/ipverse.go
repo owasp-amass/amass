@@ -53,12 +53,13 @@ func (v *ipverse) Start(r et.Registry) error {
 	v.log = r.Log().WithGroup("plugin").With("name", v.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     v,
-		Name:       v.name + "-Handler",
-		Priority:   1,
-		Transforms: []string{string(oam.Netblock)},
-		EventType:  oam.AutonomousSystem,
-		Callback:   v.check,
+		Plugin:       v,
+		Name:         v.name + "-Handler",
+		Position:     30,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.Netblock)},
+		EventType:    oam.AutonomousSystem,
+		Callback:     v.check,
 	}); err != nil {
 		return err
 	}

@@ -5,21 +5,63 @@
 package support
 
 import (
-	"github.com/owasp-amass/amass/v5/internal/libpostal"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"os"
+	"time"
+
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/open-asset-model/contact"
 )
+
+type parsedComponent struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type parsed struct {
+	Parts []parsedComponent `json:"parts"`
+}
+
+type parseRequest struct {
+	Address  string `json:"addr"`
+	Language string `json:"lang"`
+	Country  string `json:"country"`
+}
+
+var postalReqAvail chan struct{}
+var postalResponseAvail chan bool
+var postalHost, postalPort string
+
+func init() {
+	postalHost = os.Getenv("POSTAL_SERVER_HOST")
+	if postalHost == "" {
+		postalHost = "0.0.0.0"
+	}
+
+	postalPort = os.Getenv("POSTAL_SERVER_PORT")
+	if postalPort == "" {
+		postalPort = "4001"
+	}
+
+	postalReqAvail = make(chan struct{}, 1)
+	postalResponseAvail = make(chan bool, 1)
+	go postalServerHeartbeat()
+}
 
 func StreetAddressToLocation(address string) *contact.Location {
 	if address == "" {
 		return nil
 	}
 
-	loc := &contact.Location{Address: address}
-	parts, err := libpostal.ParseAddress(loc.Address)
+	parts, err := postalServerParseAddress(address)
 	if err != nil {
 		return nil
 	}
 
+	loc := &contact.Location{Address: address}
 	for _, part := range parts {
 		switch part.Label {
 		case "house":
@@ -49,4 +91,65 @@ func StreetAddressToLocation(address string) *contact.Location {
 		}
 	}
 	return loc
+}
+
+func postalServerParseAddress(address string) ([]parsedComponent, error) {
+	if !isPostalServerAvailable() {
+		return nil, errors.New("libpostal is not available")
+	}
+
+	reqJSON, err := json.Marshal(parseRequest{Address: address})
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	resp, err := amasshttp.RequestWebPage(ctx, &amasshttp.Request{
+		Method: "POST",
+		URL:    "http://" + postalHost + ":" + postalPort + "/parse",
+		Body:   string(reqJSON),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var p parsed
+	if err := json.Unmarshal([]byte("{\"parts\":"+resp.Body+"}"), &p); err != nil {
+		return nil, err
+	}
+	return p.Parts, nil
+}
+
+func checkPostalServerHealth() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if resp, err := amasshttp.RequestWebPage(ctx, &amasshttp.Request{
+		URL: "http://" + postalHost + ":" + postalPort + "/health",
+	}); err != nil || resp == nil || resp.StatusCode != http.StatusOK {
+		return false
+	}
+	return true
+}
+
+func isPostalServerAvailable() bool {
+	postalReqAvail <- struct{}{}
+	return <-postalResponseAvail
+}
+
+func postalServerHeartbeat() {
+	avail := checkPostalServerHealth()
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-t.C:
+			avail = checkPostalServerHealth()
+		case <-postalReqAvail:
+			postalResponseAvail <- avail
+		}
+	}
 }

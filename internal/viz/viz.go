@@ -5,6 +5,7 @@
 package viz
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -43,8 +44,13 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 
 	var next []*types.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
-			if n, err := amassdb.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if ent, err := db.FindOneEntityByContent(ctx, oam.FQDN, since, types.ContentFilters{
+			"name": d,
+		}); err == nil && ent != nil {
+			if n, err := amassdb.FindByFQDNScope(ctx, db, ent, since); err == nil && len(n) > 0 {
 				next = append(next, n...)
 			}
 		}
@@ -132,10 +138,13 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 			}
 			// Obtain relations to additional assets in the graph
 			if out {
-				if edges, err := db.OutgoingEdges(a, since, outRels...); err == nil && len(edges) > 0 {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				if edges, err := db.OutgoingEdges(ctx, a, since, outRels...); err == nil && len(edges) > 0 {
 					fromID := id
 					for _, edge := range edges {
-						if to, err := db.FindEntityById(edge.ToEntity.ID); err == nil {
+						if to, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil {
 							toID := idx
 							n2 := newNode(db, toID, to, since)
 							if n2 == nil {
@@ -162,10 +171,13 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 				}
 			}
 			if in {
-				if edges, err := db.IncomingEdges(a, since, inRels...); err == nil && len(edges) > 0 {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				if edges, err := db.IncomingEdges(ctx, a, since, inRels...); err == nil && len(edges) > 0 {
 					toID := id
 					for _, edge := range edges {
-						if from, err := db.FindEntityById(edge.FromEntity.ID); err == nil {
+						if from, err := db.FindEntityById(ctx, edge.FromEntity.ID); err == nil {
 							fromID := idx
 							n2 := newNode(db, fromID, from, since)
 							if n2 == nil {
@@ -250,9 +262,12 @@ func domainNameInScope(name string, scope []string) bool {
 }
 
 func associatedWithScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
-	if edges, err := db.OutgoingEdges(asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if edges, err := db.OutgoingEdges(ctx, asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if to, err := db.FindEntityById(edge.ToEntity.ID); err == nil {
+			if to, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil {
 				if n, ok := to.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
 					return true
 				}
@@ -260,11 +275,15 @@ func associatedWithScope(db repository.Repository, asset *types.Entity, scope []
 		}
 		return false
 	}
+
 	return followBackForScope(db, asset, scope, since)
 }
 
 func followBackForScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
-	if edges, err := db.IncomingEdges(asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if edges, err := db.IncomingEdges(ctx, asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType != 5 {
 				continue
@@ -273,7 +292,7 @@ func followBackForScope(db repository.Repository, asset *types.Entity, scope []s
 			} else if rel, ok := edge.Relation.(*oamdns.SRVDNSRelation); ok && rel.Header.RRType != 33 {
 				continue
 			}
-			if from, err := db.FindEntityById(edge.FromEntity.ID); err == nil {
+			if from, err := db.FindEntityById(ctx, edge.FromEntity.ID); err == nil {
 				if n, ok := from.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
 					return true
 				} else if followBackForScope(db, from, scope, since) {
@@ -282,5 +301,6 @@ func followBackForScope(db repository.Repository, asset *types.Entity, scope []s
 			}
 		}
 	}
+
 	return false
 }

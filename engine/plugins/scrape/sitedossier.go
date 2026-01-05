@@ -52,12 +52,13 @@ func (sd *siteDossier) Start(r et.Registry) error {
 	sd.log = r.Log().WithGroup("plugin").With("name", sd.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     sd,
-		Name:       sd.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   sd.check,
+		Plugin:       sd,
+		Name:         sd.name + "-Handler",
+		Position:     37,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     sd.check,
 	}); err != nil {
 		return err
 	}

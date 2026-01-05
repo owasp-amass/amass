@@ -7,6 +7,7 @@ package http_probes
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"hash/maphash"
 	"log/slog"
 	"sync"
@@ -55,9 +56,10 @@ func (hp *httpProbing) Start(r et.Registry) error {
 		plugin: hp,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:   hp,
-		Name:     hp.fqdnend.name,
-		Priority: 9,
+		Plugin:       hp,
+		Name:         hp.fqdnend.name,
+		Position:     41,
+		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.Service),
 			string(oam.TLSCertificate),
@@ -75,8 +77,8 @@ func (hp *httpProbing) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       hp,
 		Name:         hp.ipaddr.name,
-		Priority:     9,
-		MaxInstances: support.MaxHandlerInstances,
+		Position:     42,
+		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.Service),
 			string(oam.TLSCertificate),
@@ -124,7 +126,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 				break
 			}
 
-			a, err := e.Session.Cache().CreateAsset(c)
+			a, err := e.Session.DB().CreateAsset(context.Background(), c)
 			if err != nil {
 				break
 			}
@@ -132,8 +134,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 			if prev == nil {
 				firstAsset = a
 				firstCert = cert
-			} else {
-				tls := prev.Asset.(*oamcert.TLSCertificate)
+			} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
 				findings = append(findings, &support.Finding{
 					From:     prev,
 					FromName: tls.SerialNumber,
@@ -151,21 +152,24 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 	if serv == nil {
 		return findings
 	}
+	serv.Type = "web-service"
 	serv.Output = resp.Body
 	serv.OutputLen = int(resp.Length)
 	serv.Attributes = resp.Header
 
-	proto := "http"
 	var c *oamcert.TLSCertificate
 	if firstAsset != nil {
-		proto = "https"
-		c = firstAsset.Asset.(*oamcert.TLSCertificate)
+		var valid bool
+		c, valid = firstAsset.Asset.(*oamcert.TLSCertificate)
+		if !valid {
+			return findings
+		}
 	}
 
 	portrel := &general.PortRelation{
-		Name:       "port",
+		Name:       fmt.Sprintf("tcp_port_%d", port),
 		PortNumber: port,
-		Protocol:   proto,
+		Protocol:   "TCP",
 	}
 
 	s, err := support.CreateServiceAsset(e.Session, entity, portrel, serv, c)
@@ -173,7 +177,11 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 		return findings
 	}
 
-	serv = s.Asset.(*platform.Service)
+	serv, valid := s.Asset.(*platform.Service)
+	if !valid {
+		return findings
+	}
+
 	// for adding the source information
 	findings = append(findings, &support.Finding{
 		From:     entity,

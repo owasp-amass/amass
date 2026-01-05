@@ -14,7 +14,7 @@ import (
 type Event struct {
 	Name       string
 	Entity     *dbt.Entity
-	Meta       interface{}
+	Meta       any
 	Dispatcher Dispatcher
 	Session    Session
 }
@@ -43,7 +43,8 @@ type Asset struct {
 type EventDataElement struct {
 	Event *Event
 	Error error
-	Queue chan *EventDataElement
+	Exit  chan *EventDataElement
+	Ref   any
 }
 
 func NewEventDataElement(e *Event) *EventDataElement {

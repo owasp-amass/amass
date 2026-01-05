@@ -10,13 +10,13 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/owasp-amass/amass/v5/engine/api/graphql/client"
+	"github.com/owasp-amass/amass/v5/engine/api/client"
 )
 
 func engineIsRunning() bool {
-	c := client.NewClient("http://127.0.0.1:4000/graphql")
+	c := client.NewClient("http://127.0.0.1:4000/")
 
-	if _, err := c.SessionStats(uuid.New()); err != nil && err.Error() == "invalid session token" {
+	if _, err := c.SessionStats(uuid.New()); err != nil && err.Error() == "session not found" {
 		return true
 	}
 	return false

@@ -5,8 +5,11 @@
 package horizontals
 
 import (
+	"context"
 	"errors"
+	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -40,7 +43,13 @@ func (h *horContact) check(e *et.Event) error {
 		conf = matches.Confidence(string(oam.ContactRecord))
 	}
 
-	if assocs := h.lookup(e, e.Entity, conf); len(assocs) > 0 {
+	since, err := support.TTLStartTime(e.Session.Config(),
+		string(oam.ContactRecord), string(oam.ContactRecord), h.plugin.name)
+	if err != nil {
+		return nil
+	}
+
+	if assocs := h.lookup(e, e.Entity, since, conf); len(assocs) > 0 {
 		var impacted []*dbt.Entity
 
 		for _, assoc := range assocs {
@@ -51,26 +60,28 @@ func (h *horContact) check(e *et.Event) error {
 		}
 
 		if len(impacted) > 0 {
-			h.plugin.process(e, impacted)
-			h.plugin.addAssociatedRelationship(e, assocs)
+			h.plugin.process(e, since, impacted)
+			h.plugin.addAssociatedRelationship(e, since, assocs)
 		}
 	}
 	return nil
 }
 
-func (h *horContact) lookup(e *et.Event, entity *dbt.Entity, conf int) []*scope.Association {
+func (h *horContact) lookup(e *et.Event, entity *dbt.Entity, since time.Time, conf int) []*scope.Association {
 	labels := []string{"organization", "location", "id"}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var results []*scope.Association
-	if edges, err := e.Session.Cache().OutgoingEdges(entity,
-		e.Session.Cache().StartTime(), labels...); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, entity, since, labels...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			entity, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			entity, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
 			// check if these asset discoveries could change the scope
-			if assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
+			if assocs, err := e.Session.Scope().IsAssociated(e.Session.DB(), &scope.Association{
 				Submission:  entity,
 				Confidence:  conf,
 				ScopeChange: true,

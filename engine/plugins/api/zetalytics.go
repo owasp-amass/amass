@@ -51,12 +51,13 @@ func (z *zetalytics) Start(r et.Registry) error {
 	z.log = r.Log().WithGroup("plugin").With("name", z.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     z,
-		Name:       z.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   z.check,
+		Plugin:       z,
+		Name:         z.name + "-Handler",
+		Position:     32,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     z.check,
 	}); err != nil {
 		return err
 	}

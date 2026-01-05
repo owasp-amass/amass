@@ -72,12 +72,15 @@ func (ce *companyEnrich) check(e *et.Event) error {
 }
 
 func (ce *companyEnrich) lookup(e *et.Event, ident *dbt.Entity, since time.Time) *dbt.Entity {
-	if edges, err := e.Session.Cache().IncomingEdges(ident, since, "id"); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, ce.plugin.source.Name); err != nil || len(tags) == 0 {
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ce.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*org.Organization); ok {
 					return a
 				}
@@ -152,6 +155,9 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 	o.NonProfit = data.IsNonProfit
 	o.Headcount = data.Headcount
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// attempt to set the legal name
 	if o.LegalName == "" && data.LegalName != "" {
 		o.LegalName = data.LegalName
@@ -162,34 +168,34 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 			Type:     general.LegalName,
 		}
 
-		ident, err := e.Session.Cache().CreateAsset(oamid)
+		ident, err := e.Session.DB().CreateAsset(ctx, oamid)
 		if err != nil || ident == nil {
 			msg := fmt.Sprintf("failed to create the Identifier asset for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			return
 		}
 
-		_, err = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &general.SourceProperty{
 			Source:     ce.name,
 			Confidence: ce.plugin.source.Confidence,
 		})
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the SourceProperty for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
-			_ = e.Session.Cache().DeleteEntity(ident.ID)
+			_ = e.Session.DB().DeleteEntity(ctx, ident.ID)
 			return
 		}
 
-		err = ce.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
+		err = ce.plugin.createRelation(ctx, e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the relation for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
-			_ = e.Session.Cache().DeleteEntity(ident.ID)
+			_ = e.Session.DB().DeleteEntity(ctx, ident.ID)
 			return
 		}
 	}
 	// update entity
-	_, err := e.Session.Cache().CreateEntity(orgent)
+	_, err := e.Session.DB().CreateEntity(ctx, orgent)
 	if err != nil {
 		msg := fmt.Sprintf("failed to update the Organization asset for %s: %s", o.Name, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))

@@ -5,8 +5,10 @@
 package enrich
 
 import (
+	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -41,11 +43,13 @@ func (ee *emailexpand) Start(r et.Registry) error {
 	ee.log = r.Log().WithGroup("plugin").With("name", ee.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     ee,
-		Name:       ee.name,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.Identifier,
-		Callback:   ee.check,
+		Plugin:       ee,
+		Name:         ee.name,
+		Position:     15,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.Identifier,
+		Callback:     ee.check,
 	}); err != nil {
 		return err
 	}
@@ -80,7 +84,10 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 	}
 	domain := parts[1]
 
-	if cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: domain}); err == nil && cr != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if cr, err := e.Session.DB().CreateAsset(ctx, &contact.ContactRecord{DiscoveredAt: domain}); err == nil && cr != nil {
 		findings = append(findings, &support.Finding{
 			From:     asset,
 			FromName: "Identifier: " + asset.Asset.Key(),
@@ -89,7 +96,7 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 			Rel:      &general.SimpleRelation{Name: "registration_agency"},
 		})
 
-		if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: domain}); err == nil && a != nil {
+		if a, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: domain}); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
 				From:     cr,
 				FromName: "ContactRecord: " + cr.Asset.Key(),
@@ -104,13 +111,16 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 }
 
 func (ee *emailexpand) process(e *et.Event, findings []*support.Finding) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	for _, f := range findings {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   f.Rel,
 			FromEntity: f.From,
 			ToEntity:   f.To,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     ee.source.Name,
 				Confidence: ee.source.Confidence,
 			})

@@ -5,6 +5,7 @@
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -89,6 +90,9 @@ func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias {
 	var alias []*relAlias
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	for _, record := range rr {
 		if record.Header().Rrtype != dns.TypeCNAME {
 			continue
@@ -96,8 +100,8 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias
 
 		data := strings.ToLower(strings.TrimSpace((record.(*dns.CNAME)).Target))
 		name := utils.RemoveLastDot(data)
-		if cname, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && cname != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if cname, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && cname != nil {
+			if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
 					Header: oamdns.RRHeader{
@@ -110,7 +114,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias
 				ToEntity:   cname,
 			}); err == nil && edge != nil {
 				alias = append(alias, &relAlias{alias: fqdn, target: cname})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+				_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 					Source:     d.source.Name,
 					Confidence: d.source.Confidence,
 				})

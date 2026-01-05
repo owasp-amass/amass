@@ -5,15 +5,17 @@
 package scope
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/adrg/strutil"
 	"github.com/adrg/strutil/metrics"
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/asset-db/cache"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -35,7 +37,7 @@ type Association struct {
 	ImpactedAssets []*dbt.Entity
 }
 
-func (s *Scope) IsAssociated(c *cache.Cache, req *Association) ([]*Association, error) {
+func (s *Scope) IsAssociated(c repository.Repository, req *Association) ([]*Association, error) {
 	if req == nil || req.Submission == nil || req.Submission.Asset == nil || req.Confidence < 0 || req.Confidence > 100 {
 		return nil, errors.New("invalid request")
 	}
@@ -91,19 +93,22 @@ func (s *Scope) addScopeChangesToRationale(result *Association) {
 	result.Rationale += ". The following assets were added to the session scope: " + strings.Join(changes, ", ")
 }
 
-func (s *Scope) reviewAndUpdate(c *cache.Cache, req *Association) []*dbt.Entity {
+func (s *Scope) reviewAndUpdate(c repository.Repository, req *Association) []*dbt.Entity {
 	var assocs []*dbt.Entity
 
-	if drs, err := c.FindEntitiesByType(oam.DomainRecord, c.StartTime()); err == nil && len(drs) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if drs, err := c.FindEntitiesByType(ctx, oam.DomainRecord, s.startTime); err == nil && len(drs) > 0 {
 		assocs = append(assocs, drs...)
 	}
-	if iprecs, err := c.FindEntitiesByType(oam.IPNetRecord, c.StartTime()); err == nil && len(iprecs) > 0 {
+	if iprecs, err := c.FindEntitiesByType(ctx, oam.IPNetRecord, s.startTime); err == nil && len(iprecs) > 0 {
 		assocs = append(assocs, iprecs...)
 	}
-	if autnums, err := c.FindEntitiesByType(oam.AutnumRecord, c.StartTime()); err == nil && len(autnums) > 0 {
+	if autnums, err := c.FindEntitiesByType(ctx, oam.AutnumRecord, s.startTime); err == nil && len(autnums) > 0 {
 		assocs = append(assocs, autnums...)
 	}
-	if certs, err := c.FindEntitiesByType(oam.TLSCertificate, c.StartTime()); err == nil && len(certs) > 0 {
+	if certs, err := c.FindEntitiesByType(ctx, oam.TLSCertificate, s.startTime); err == nil && len(certs) > 0 {
 		assocs = append(assocs, certs...)
 	}
 
@@ -118,7 +123,7 @@ func (s *Scope) reviewAndUpdate(c *cache.Cache, req *Association) []*dbt.Entity 
 	return impacted
 }
 
-func (s *Scope) checkRelatedAssetsforAssoc(c *cache.Cache, req *Association, assocs []*dbt.Entity) []*Association {
+func (s *Scope) checkRelatedAssetsforAssoc(c repository.Repository, req *Association, assocs []*dbt.Entity) []*Association {
 	var results []*Association
 
 	for _, assoc := range assocs {
@@ -156,7 +161,7 @@ func (s *Scope) checkRelatedAssetsforAssoc(c *cache.Cache, req *Association, ass
 	return results
 }
 
-func (s *Scope) assetsRelatedToAssetWithAssoc(c *cache.Cache, assoc *dbt.Entity) []*dbt.Entity {
+func (s *Scope) assetsRelatedToAssetWithAssoc(c repository.Repository, assoc *dbt.Entity) []*dbt.Entity {
 	set := stringset.New(assoc.ID)
 	defer set.Close()
 
@@ -194,7 +199,7 @@ func (s *Scope) assetsRelatedToAssetWithAssoc(c *cache.Cache, assoc *dbt.Entity)
 	return results
 }
 
-func (s *Scope) AssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) []*dbt.Entity {
+func (s *Scope) AssetsWithAssociation(c repository.Repository, asset *dbt.Entity) []*dbt.Entity {
 	set := stringset.New(asset.ID)
 	defer set.Close()
 
@@ -218,8 +223,11 @@ func (s *Scope) AssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) []*dbt.
 				results = append(results, a)
 			case *oamcert.TLSCertificate:
 				found = true
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
 				// only certificates directly used by the services are considered
-				if _, err := c.IncomingEdges(a, c.StartTime(), "certificate"); err == nil {
+				if _, err := c.IncomingEdges(ctx, a, s.startTime, "certificate"); err == nil {
 					results = append(results, a)
 				}
 			}
@@ -239,7 +247,7 @@ func (s *Scope) AssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) []*dbt.
 	return results
 }
 
-func (s *Scope) awayFromAssetsWithAssociation(c *cache.Cache, assoc *dbt.Entity) ([]*dbt.Entity, error) {
+func (s *Scope) awayFromAssetsWithAssociation(c repository.Repository, assoc *dbt.Entity) ([]*dbt.Entity, error) {
 	var results []*dbt.Entity
 	// Determine relationship directions to follow on the graph
 	var out, in bool
@@ -280,18 +288,24 @@ func (s *Scope) awayFromAssetsWithAssociation(c *cache.Cache, assoc *dbt.Entity)
 		outRels = append(outRels, "organization", "location")
 	}
 	if out {
-		if edges, err := c.OutgoingEdges(assoc, c.StartTime(), outRels...); err == nil && len(edges) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if edges, err := c.OutgoingEdges(ctx, assoc, s.startTime, outRels...); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if entity, err := c.FindEntityById(edge.ToEntity.ID); err == nil && entity != nil {
+				if entity, err := c.FindEntityById(ctx, edge.ToEntity.ID); err == nil && entity != nil {
 					results = append(results, entity)
 				}
 			}
 		}
 	}
 	if in {
-		if edges, err := c.IncomingEdges(assoc, c.StartTime(), inRels...); err == nil && len(edges) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if edges, err := c.IncomingEdges(ctx, assoc, s.startTime, inRels...); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if entity, err := c.FindEntityById(edge.FromEntity.ID); err == nil && entity != nil {
+				if entity, err := c.FindEntityById(ctx, edge.FromEntity.ID); err == nil && entity != nil {
 					results = append(results, entity)
 				}
 			}
@@ -303,7 +317,7 @@ func (s *Scope) awayFromAssetsWithAssociation(c *cache.Cache, assoc *dbt.Entity)
 	return results, nil
 }
 
-func (s *Scope) towardsAssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) ([]*dbt.Entity, error) {
+func (s *Scope) towardsAssetsWithAssociation(c repository.Repository, asset *dbt.Entity) ([]*dbt.Entity, error) {
 	var results []*dbt.Entity
 	// Determine relationship directions to follow on the graph
 	var out, in bool
@@ -337,18 +351,24 @@ func (s *Scope) towardsAssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) 
 		inRels = append(inRels, "port")
 	}
 	if out {
-		if edges, err := c.OutgoingEdges(asset, c.StartTime(), outRels...); err == nil && len(edges) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if edges, err := c.OutgoingEdges(ctx, asset, s.startTime, outRels...); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if entity, err := c.FindEntityById(edge.ToEntity.ID); err == nil && entity != nil {
+				if entity, err := c.FindEntityById(ctx, edge.ToEntity.ID); err == nil && entity != nil {
 					results = append(results, entity)
 				}
 			}
 		}
 	}
 	if in {
-		if edges, err := c.IncomingEdges(asset, c.StartTime(), inRels...); err == nil && len(edges) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if edges, err := c.IncomingEdges(ctx, asset, s.startTime, inRels...); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if entity, err := c.FindEntityById(edge.FromEntity.ID); err == nil && entity != nil {
+				if entity, err := c.FindEntityById(ctx, edge.FromEntity.ID); err == nil && entity != nil {
 					results = append(results, entity)
 				}
 			}
@@ -360,26 +380,30 @@ func (s *Scope) towardsAssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) 
 	return results, nil
 }
 
-func (s *Scope) IsAddressInScope(c *cache.Cache, ip *oamnet.IPAddress) bool {
+func (s *Scope) IsAddressInScope(c repository.Repository, ip *oamnet.IPAddress) bool {
 	if _, conf := s.IsAssetInScope(ip, 0); conf > 0 {
 		return true
 	}
 
-	addrs, err := c.FindEntitiesByContent(ip, c.StartTime())
-	if err != nil || len(addrs) != 1 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	addr, err := c.FindOneEntityByContent(ctx, oam.IPAddress, s.startTime, dbt.ContentFilters{
+		"address": ip.Address.String(),
+	})
+	if err != nil {
 		return false
 	}
-	addr := addrs[0]
 
 	rtype := 1
 	if ip.Type == "IPv6" {
 		rtype = 28
 	}
 
-	if edges, err := c.IncomingEdges(addr, c.StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := c.IncomingEdges(ctx, addr, s.startTime, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rec.Header.RRType == rtype {
-				from, err := c.FindEntityById(edge.FromEntity.ID)
+				from, err := c.FindEntityById(ctx, edge.FromEntity.ID)
 				if err != nil {
 					continue
 				}
@@ -392,7 +416,7 @@ func (s *Scope) IsAddressInScope(c *cache.Cache, ip *oamnet.IPAddress) bool {
 	return false
 }
 
-func (s *Scope) IsURLInScope(c *cache.Cache, u *oamurl.URL) bool {
+func (s *Scope) IsURLInScope(c repository.Repository, u *oamurl.URL) bool {
 	if ip, err := netip.ParseAddr(u.Host); err == nil {
 		ntype := "IPv4"
 		if ip.Is6() {

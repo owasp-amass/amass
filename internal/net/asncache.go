@@ -5,6 +5,7 @@
 package net
 
 import (
+	"context"
 	"net"
 	"strings"
 	"sync"
@@ -191,8 +192,11 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 }
 
 func FillCache(cache *ASNCache, db repository.Repository) error {
-	start := time.Now().Add(-730 * time.Hour)
-	assets, err := db.FindEntitiesByType(oam.AutonomousSystem, start)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	since := time.Now().Add(-1 * (time.Hour * 24 * 365))
+	assets, err := db.FindEntitiesByType(ctx, oam.AutonomousSystem, since)
 	if err != nil {
 		return err
 	}
@@ -204,13 +208,13 @@ func FillCache(cache *ASNCache, db repository.Repository) error {
 		}
 
 		var desc string
-		edges, err := db.OutgoingEdges(a, start, "registration")
+		edges, err := db.OutgoingEdges(ctx, a, time.Time{}, "registration")
 		if err != nil || len(edges) == 0 {
 			continue
 		}
 
 		for _, edge := range edges {
-			if asset, err := db.FindEntityById(edge.ToEntity.ID); err == nil && asset != nil {
+			if asset, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil && asset != nil {
 				if autnum, ok := asset.Asset.(*oamreg.AutnumRecord); ok && autnum != nil {
 					desc = autnum.Handle + " - " + autnum.Name
 					break
@@ -221,7 +225,7 @@ func FillCache(cache *ASNCache, db repository.Repository) error {
 			continue
 		}
 
-		for _, prefix := range ReadASPrefixes(db, as.Number, start) {
+		for _, prefix := range ReadASPrefixes(ctx, db, as.Number, time.Time{}) {
 			first, cidr, err := net.ParseCIDR(prefix)
 			if err != nil {
 				continue

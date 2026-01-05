@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -31,7 +32,7 @@ type wayback struct {
 }
 
 func NewWayback() et.Plugin {
-	limit := rate.Every(5 * time.Second)
+	limit := rate.Every(10 * time.Second)
 
 	return &wayback{
 		name:   "Wayback",
@@ -52,12 +53,13 @@ func (w *wayback) Start(r et.Registry) error {
 	w.log = r.Log().WithGroup("plugin").With("name", w.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   w.check,
+		Plugin:       w,
+		Name:         w.name + "-Handler",
+		Position:     40,
+		MaxInstances: 1,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     w.check,
 	}); err != nil {
 		return err
 	}
@@ -105,7 +107,8 @@ func (w *wayback) lookup(e *et.Event, name string, since time.Time) []*dbt.Entit
 
 func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
 	_ = w.rlimit.Wait(context.TODO())
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: w.URL + name})
+	end := fmt.Sprintf("*.%s/*", name)
+	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: w.URL + end})
 	if err != nil {
 		return nil
 	}

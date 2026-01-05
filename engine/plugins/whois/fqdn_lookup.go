@@ -60,7 +60,6 @@ func (r *fqdnLookup) check(e *et.Event) error {
 
 	if asset != nil {
 		r.process(e, record, e.Entity, asset)
-		r.waitForDomRecContacts(e, asset)
 	}
 	return nil
 }
@@ -116,14 +115,17 @@ func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.
 		dr.ExpirationDate = tstr
 	}
 
-	autasset, err := e.Session.Cache().CreateAsset(dr)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	autasset, err := e.Session.DB().CreateAsset(ctx, dr)
 	if err == nil && autasset != nil {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -147,25 +149,4 @@ func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, d
 	fname := fqdn.Asset.(*oamdns.FQDN)
 	e.Session.Log().Info("relationship discovered", "from", fname.Name, "relation",
 		"registration", "to", name, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
-}
-
-func (r *fqdnLookup) waitForDomRecContacts(e *et.Event, dr *dbt.Entity) {
-	t := time.NewTimer(time.Minute)
-	defer t.Stop()
-	tick := time.NewTicker(10 * time.Second)
-	defer t.Stop()
-
-	for range tick.C {
-		select {
-		case <-t.C:
-			// stop after one minute of waiting
-			return
-		default:
-		}
-
-		rtypes := []string{"registrant_contact", "admin_contact", "technical_contact", "billing_contact"}
-		if edges, err := e.Session.Cache().OutgoingEdges(dr, e.Session.Cache().StartTime(), rtypes...); err == nil && len(edges) > 0 {
-			return
-		}
-	}
 }

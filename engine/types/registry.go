@@ -6,8 +6,8 @@ package types
 
 import (
 	"context"
+	"errors"
 	"log/slog"
-	"time"
 
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
@@ -23,7 +23,7 @@ type Plugin interface {
 type Handler struct {
 	Plugin       Plugin
 	Name         string
-	Priority     int
+	Position     int
 	MaxInstances int
 	EventType    oam.AssetType
 	Transforms   []string
@@ -38,37 +38,52 @@ type AssetPipeline struct {
 type Registry interface {
 	Log() *slog.Logger
 	RegisterHandler(h *Handler) error
-	BuildPipelines() error
-	GetPipeline(eventType oam.AssetType) (*AssetPipeline, error)
+	BuildAssetPipeline(atype string) (*AssetPipeline, error)
 }
 
 type PipelineQueue struct {
-	queue.Queue
+	draining bool
+	drainCh  chan struct{}
+	q        queue.Queue
 }
 
 func NewPipelineQueue() *PipelineQueue {
-	return &PipelineQueue{queue.NewQueue()}
+	return &PipelineQueue{
+		q:       queue.NewQueue(),
+		drainCh: make(chan struct{}, 1),
+	}
+}
+
+func (pq *PipelineQueue) Append(data *EventDataElement) error {
+	if pq.draining {
+		return errors.New("pipeline queue is draining")
+	}
+	pq.q.Append(data)
+	return nil
+}
+
+func (pq *PipelineQueue) Drain() {
+	pq.draining = true
+	close(pq.drainCh)
 }
 
 // Next implements the pipeline InputSource interface.
 func (pq *PipelineQueue) Next(ctx context.Context) bool {
-	t := time.NewTicker(100 * time.Millisecond)
-	defer t.Stop()
-
-	if pq.Len() > 0 {
+	if pq.q.Len() > 0 {
 		return true
 	}
 
 	for {
 		select {
+		case <-pq.drainCh:
+			if pq.q.Len() == 0 {
+				return false
+			}
+			return true
 		case <-ctx.Done():
 			return false
-		case <-t.C:
-			if pq.Len() > 0 {
-				return true
-			}
-		case <-pq.Signal():
-			if pq.Len() > 0 {
+		case <-pq.q.Signal():
+			if pq.q.Len() > 0 {
 				return true
 			}
 		}
@@ -78,7 +93,7 @@ func (pq *PipelineQueue) Next(ctx context.Context) bool {
 // Data implements the pipeline InputSource interface.
 func (pq *PipelineQueue) Data() pipeline.Data {
 	for {
-		element, good := pq.Queue.Next()
+		element, good := pq.q.Next()
 		if !good {
 			break
 		}

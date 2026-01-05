@@ -65,14 +65,14 @@ func (r *autsys) lookup(e *et.Event, num string, since time.Time) *dbt.Entity {
 }
 
 func (r *autsys) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.Autnum) {
-	as := asset.Asset.(*network.AutonomousSystem)
-	req := rdap.NewAutnumRequest(uint32(as.Number))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-
 	_ = r.plugin.rlimit.Wait(context.TODO())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	as := asset.Asset.(*network.AutonomousSystem)
+	req := rdap.NewAutnumRequest(uint32(as.Number)).WithContext(ctx)
+
 	resp, err := r.plugin.client.Do(req)
 	if err != nil {
 		return nil, nil
@@ -114,14 +114,17 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity) *dbt.E
 		return nil
 	}
 
-	autasset, err := e.Session.Cache().CreateAsset(autrec)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	autasset, err := e.Session.DB().CreateAsset(ctx, autrec)
 	if err == nil && autasset != nil {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     r.plugin.source.Name,
 				Confidence: r.plugin.source.Confidence,
 			})

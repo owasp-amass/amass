@@ -19,10 +19,10 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
-	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	"github.com/owasp-amass/asset-db/repository/postgres"
+	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	"github.com/yl2chen/cidranger"
 )
 
@@ -32,11 +32,11 @@ type Session struct {
 	ps       *pubsub.Logger
 	cfg      *config.Config
 	scope    *scope.Scope
+	start    time.Time
 	db       repository.Repository
 	queue    *sessionQueue
 	dsn      string
 	dbtype   string
-	cache    *cache.Cache
 	ranger   cidranger.Ranger
 	tmpdir   string
 	stats    *et.SessionStats
@@ -51,11 +51,14 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 	if cfg == nil {
 		cfg = config.NewConfig()
 	}
+
+	startTime := time.Now()
 	// Create a new session object
 	s := &Session{
 		id:     uuid.New(),
 		cfg:    cfg,
-		scope:  scope.CreateFromConfigScope(cfg),
+		scope:  scope.CreateFromConfigScope(cfg, startTime),
+		start:  startTime,
 		ranger: NewAmassRanger(),
 		ps:     pubsub.NewLogger(),
 		stats:  new(et.SessionStats),
@@ -71,16 +74,6 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 	s.tmpdir, err = s.createTemporaryDir()
 	if err != nil {
 		return nil, err
-	}
-
-	c, err := s.createFileCacheRepo()
-	if err != nil {
-		return nil, err
-	}
-
-	s.cache, err = cache.New(c, s.db, time.Minute)
-	if err != nil || s.cache == nil {
-		return nil, errors.New("failed to create the session cache")
 	}
 
 	s.queue, err = newSessionQueue(s)
@@ -114,12 +107,12 @@ func (s *Session) Scope() *scope.Scope {
 	return s.scope
 }
 
-func (s *Session) DB() repository.Repository {
-	return s.db
+func (s *Session) StartTime() time.Time {
+	return s.start
 }
 
-func (s *Session) Cache() *cache.Cache {
-	return s.cache
+func (s *Session) DB() repository.Repository {
+	return s.db
 }
 
 func (s *Session) Queue() et.SessionQueue {
@@ -179,15 +172,14 @@ func (s *Session) selectDBMS() error {
 			switch db.System {
 			case "postgres":
 				// Construct the connection string for a Postgres database.
-				s.dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
-				s.dbtype = sqlrepo.Postgres
+				s.dsn = fmt.Sprintf("postgres://%s:%s@%s:%s/%s", db.Username, db.Password, db.Host, db.Port, db.DBName)
+				s.dbtype = postgres.Postgres
 			case "sqlite":
 				fallthrough
 			case "sqlite3":
 				// Define the connection path for an SQLite database.
-				path := filepath.Join(config.OutputDirectory(s.cfg.Dir), "assetdb.db")
-				s.dsn = path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)"
-				s.dbtype = sqlrepo.SQLite
+				s.dsn = filepath.Join(config.OutputDirectory(s.cfg.Dir), "asset.db")
+				s.dbtype = sqlite3.SQLite
 			case "neo4j":
 				fallthrough
 			case "neo4+s":
@@ -231,15 +223,4 @@ func (s *Session) createTemporaryDir() (string, error) {
 	}
 
 	return dir, nil
-}
-
-func (s *Session) createFileCacheRepo() (repository.Repository, error) {
-	path := filepath.Join(s.TmpDir(), "cache.db")
-	dsn := path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)"
-
-	c, err := assetdb.New(sqlrepo.SQLite, dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create the db: %s", err.Error())
-	}
-	return c, nil
 }

@@ -27,6 +27,10 @@ func FullNameToPerson(raw string) *people.Person {
 		return nil
 	}
 
+	if parts := strings.Split(raw, " "); len(parts) == 1 {
+		return nil
+	}
+
 	name := fnparser.ParseFullname(raw)
 	if name.First == "" || name.Last == "" {
 		return nil

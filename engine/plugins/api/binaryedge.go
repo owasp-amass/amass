@@ -51,12 +51,13 @@ func (be *binaryEdge) Start(r et.Registry) error {
 	be.log = r.Log().WithGroup("plugin").With("name", be.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     be,
-		Name:       be.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   be.check,
+		Plugin:       be,
+		Name:         be.name + "-Handler",
+		Position:     20,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     be.check,
 	}); err != nil {
 		return err
 	}

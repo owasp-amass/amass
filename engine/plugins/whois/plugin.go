@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"golang.org/x/time/rate"
@@ -47,12 +48,13 @@ func (w *whois) Start(r et.Registry) error {
 		plugin: w,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.fqdn.name,
-		Priority:   9,
-		Transforms: []string{string(oam.DomainRecord)},
-		EventType:  oam.FQDN,
-		Callback:   w.fqdn.check,
+		Plugin:       w,
+		Name:         w.fqdn.name,
+		Position:     43,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.DomainRecord)},
+		EventType:    oam.FQDN,
+		Callback:     w.fqdn.check,
 	}); err != nil {
 		return err
 	}
@@ -72,11 +74,13 @@ func (w *whois) Start(r et.Registry) error {
 		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.domrec.name,
-		Transforms: w.domrec.transforms,
-		EventType:  oam.DomainRecord,
-		Callback:   w.domrec.check,
+		Plugin:       w,
+		Name:         w.domrec.name,
+		Position:     10,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   w.domrec.transforms,
+		EventType:    oam.DomainRecord,
+		Callback:     w.domrec.check,
 	}); err != nil {
 		return err
 	}

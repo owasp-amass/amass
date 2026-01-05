@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
-        go-version: [ "1.24.0" ]
+        go-version: [ "1.25.5" ]
     runs-on: ${{ matrix.os }}
     env:
       CGO_ENABLED: 0

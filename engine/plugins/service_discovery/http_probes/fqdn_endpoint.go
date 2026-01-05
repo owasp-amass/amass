@@ -5,6 +5,7 @@
 package http_probes
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -72,13 +73,17 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
-	if edges, err := e.Session.Cache().OutgoingEdges(host, since, "port"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, host, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, fe.plugin.source.Name); err != nil {
+			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, fe.plugin.source.Name); err != nil {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
-				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
+				if srv, err := e.Session.DB().FindEntityById(ctx,
+					edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     host,
 						FromName: host.Asset.Key(),

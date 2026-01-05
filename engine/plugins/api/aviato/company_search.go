@@ -13,16 +13,17 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 func (cs *companySearch) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*org.Organization)
+	_, ok := e.Entity.Asset.(*oamorg.Organization)
 	if !ok {
 		return errors.New("failed to extract the Organization asset")
 	}
@@ -67,13 +68,16 @@ func (cs *companySearch) check(e *et.Event) error {
 }
 
 func (cs *companySearch) lookup(e *et.Event, orgent *dbt.Entity, since time.Time) *dbt.Entity {
-	if edges, err := e.Session.Cache().OutgoingEdges(orgent, since, "id"); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge,
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge,
 				since, cs.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
 				if id, ok := a.Asset.(*general.Identifier); ok && id != nil && id.Type == AviatoCompanyID {
 					return a
 				}
@@ -84,8 +88,8 @@ func (cs *companySearch) lookup(e *et.Event, orgent *dbt.Entity, since time.Time
 }
 
 func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string) *dbt.Entity {
-	o := orgent.Asset.(*org.Organization)
-	brand := support.ExtractBrandName(o.Name)
+	o := orgent.Asset.(*oamorg.Organization)
+	brand := org.ExtractBrandName(o.Name)
 
 	var body string
 	success := false
@@ -160,14 +164,17 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 		Type:     AviatoCompanyID,
 	}
 
-	ident, err := e.Session.Cache().CreateAsset(oamid)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ident, err := e.Session.DB().CreateAsset(ctx, oamid)
 	if err != nil || ident == nil {
 		msg := fmt.Sprintf("failed to create the identifier asset for %s: %s", companyID, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 		return nil
 	}
 
-	_, err = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+	_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &general.SourceProperty{
 		Source:     cs.name,
 		Confidence: cs.plugin.source.Confidence,
 	})
@@ -177,11 +184,11 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 		return nil
 	}
 
-	if err := cs.plugin.createRelation(e.Session, orgent,
+	if err := cs.plugin.createRelation(ctx, e.Session, orgent,
 		general.SimpleRelation{Name: "id"}, ident, cs.plugin.source.Confidence); err != nil {
 		msg := fmt.Sprintf("failed to create the identifier relation for %s: %s", companyID, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
-		_ = e.Session.Cache().DeleteEntity(ident.ID)
+		_ = e.Session.DB().DeleteEntity(ctx, ident.ID)
 		return nil
 	}
 	return ident
@@ -196,7 +203,7 @@ func (cs *companySearch) process(e *et.Event, orgent, ident *dbt.Entity) {
 		Session: e.Session,
 	})
 
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 	e.Session.Log().Info("relationship discovered", "from", o.Name, "relation", "id",
 		"to", id.UniqueID, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 }

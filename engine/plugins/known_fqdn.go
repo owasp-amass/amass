@@ -5,6 +5,7 @@
 package plugins
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -39,7 +40,7 @@ func (d *knownFQDN) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.name + "-Handler",
-		Priority:     7,
+		Position:     11,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -74,7 +75,10 @@ func (d *knownFQDN) check(e *et.Event) error {
 }
 
 func (d *knownFQDN) lookup(e *et.Event, dom *dbt.Entity) []*dbt.Entity {
-	names, _ := db.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	names, _ := db.FindByFQDNScope(ctx, e.Session.DB(), dom, time.Time{})
 	return names
 }
 

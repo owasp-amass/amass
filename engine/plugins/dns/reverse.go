@@ -5,6 +5,7 @@
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -123,6 +124,10 @@ func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity) []*relRev
 
 func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev {
 	var rev []*relRev
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// additional validation of the PTR record
 	for _, record := range rr {
 		if record.Header().Rrtype != dns.TypePTR {
@@ -135,8 +140,8 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 			continue
 		}
 
-		if t, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if t, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
+			if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
 					Header: oamdns.RRHeader{
@@ -149,7 +154,7 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 				ToEntity:   t,
 			}); err == nil && edge != nil {
 				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+				_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 					Source:     d.plugin.source.Name,
 					Confidence: d.plugin.source.Confidence,
 				})
@@ -163,16 +168,19 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 }
 
 func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *dbt.Entity {
-	ptr, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	ptr, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name})
 	if err != nil || ptr == nil {
 		return nil
 	}
-	if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+	if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   &general.SimpleRelation{Name: "ptr_record"},
 		FromEntity: ip,
 		ToEntity:   ptr,
 	}); err == nil && edge != nil {
-		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 			Source:     d.plugin.source.Name,
 			Confidence: d.plugin.source.Confidence,
 		})
@@ -192,8 +200,15 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *d
 
 func (d *dnsReverse) process(e *et.Event, rev []*relRev) {
 	for _, r := range rev {
-		ip := r.ipFQDN.Asset.(*oamdns.FQDN)
-		target := r.target.Asset.(*oamdns.FQDN)
+		ip, valid := r.ipFQDN.Asset.(*oamdns.FQDN)
+		if !valid {
+			continue
+		}
+
+		target, valid := r.target.Asset.(*oamdns.FQDN)
+		if !valid {
+			continue
+		}
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,

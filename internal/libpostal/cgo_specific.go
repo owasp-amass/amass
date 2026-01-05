@@ -1,5 +1,4 @@
 //go:build cgo
-// +build cgo
 
 // Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
@@ -21,11 +20,6 @@ import (
 	"unicode/utf8"
 	"unsafe"
 )
-
-type ParserOptions struct {
-	Language string
-	Country  string
-}
 
 var (
 	postalLock           sync.Mutex

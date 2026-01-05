@@ -5,6 +5,7 @@
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/netip"
@@ -100,7 +101,11 @@ func (d *dnsIP) lookup(e *et.Event, fqdn string, since time.Time) []*relIP {
 func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 	var ips []*relIP
 
-	fqdn := name.Asset.(*oamdns.FQDN)
+	fqdn, valid := name.Asset.(*oamdns.FQDN)
+	if !valid {
+		return ips
+	}
+
 	for _, qtype := range d.queries {
 		if rr, err := support.PerformQuery(fqdn.Name, qtype); err == nil {
 			if records := d.store(e, name, rr); len(records) > 0 {
@@ -116,57 +121,49 @@ func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 	var ips []*relIP
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for _, record := range rr {
-		if record.Header().Rrtype == dns.TypeA {
-			addr := (record.(*dns.A)).A.String()
+		var addr, ipType string
 
-			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(string(addr)), Type: "IPv4"}); err == nil && ip != nil {
-				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation: &oamdns.BasicDNSRelation{
-						Name: "dns_record",
-						Header: oamdns.RRHeader{
-							RRType: int(record.Header().Rrtype),
-							Class:  int(record.Header().Class),
-							TTL:    int(record.Header().Ttl),
-						},
-					},
-					FromEntity: fqdn,
-					ToEntity:   ip,
-				}); err == nil && edge != nil {
-					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-						Source:     d.source.Name,
-						Confidence: d.source.Confidence,
-					})
-				}
-			} else {
-				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-			}
-		} else if record.Header().Rrtype == dns.TypeAAAA {
-			addr := (record.(*dns.AAAA)).AAAA.String()
+		switch record.Header().Rrtype {
+		case dns.TypeA:
+			ipType = "IPv4"
+			addr = (record.(*dns.A)).A.String()
+		case dns.TypeAAAA:
+			ipType = "IPv6"
+			addr = (record.(*dns.AAAA)).AAAA.String()
+		default:
+			continue
+		}
 
-			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(addr), Type: "IPv6"}); err == nil {
-				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation: &oamdns.BasicDNSRelation{
-						Name: "dns_record",
-						Header: oamdns.RRHeader{
-							RRType: int(record.Header().Rrtype),
-							Class:  int(record.Header().Class),
-							TTL:    int(record.Header().Ttl),
-						},
-					},
-					FromEntity: fqdn,
-					ToEntity:   ip,
-				}); err == nil && edge != nil {
-					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-						Source:     d.source.Name,
-						Confidence: d.source.Confidence,
-					})
-				}
-			} else {
-				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-			}
+		ip, err := e.Session.DB().CreateAsset(ctx, &oamnet.IPAddress{
+			Address: netip.MustParseAddr(addr),
+			Type:    ipType,
+		})
+		if err != nil || ip == nil {
+			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			continue
+		}
+
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
+			Relation: &oamdns.BasicDNSRelation{
+				Name: "dns_record",
+				Header: oamdns.RRHeader{
+					RRType: int(record.Header().Rrtype),
+					Class:  int(record.Header().Class),
+					TTL:    int(record.Header().Ttl),
+				},
+			},
+			FromEntity: fqdn,
+			ToEntity:   ip,
+		}); err == nil && edge != nil {
+			ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
+				Source:     d.source.Name,
+				Confidence: d.source.Confidence,
+			})
 		}
 	}
 
@@ -175,7 +172,10 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 
 func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP) {
 	for _, a := range addrs {
-		ip := a.ip.Asset.(*oamnet.IPAddress)
+		ip, valid := a.ip.Asset.(*oamnet.IPAddress)
+		if !valid {
+			continue
+		}
 
 		switch ip.Type {
 		case "IPv4":
