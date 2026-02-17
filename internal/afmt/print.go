@@ -30,9 +30,6 @@ const Banner = `        .+++:.            :                             .+++.
         +o&&&&+.                                                    +oooo.`
 
 const (
-	// Version is used to display the current version of Amass.
-	Version = "v5.0.0"
-
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
 
@@ -44,6 +41,10 @@ const (
 )
 
 var (
+
+	// Version is used to display the current version of Amass.
+	Version = "unknown"
+
 	// Colors used to ease the reading of program output
 	B       = color.New(color.FgHiBlue)
 	Y       = color.New(color.FgHiYellow)
