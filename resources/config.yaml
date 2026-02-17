@@ -20,17 +20,20 @@ scope:
 #    - example.owasp.org
 options:
   datasources: "./datasources.yaml"
-  # engine: "http://127.0.0.1:4000/graphql"
+  # engine: "http://127.0.0.1:4000"
   # database: "bolt://neo4j:amass4OWASP@neo4j:7687/neo4j"
   # database: "postgres://amass:amass4OWASP@assetdb:5432/assetdb"
   bruteforce:
     enabled: false
-    wordlists: # wordlist(s) specific to FQDN brute forcing
-      - "./namelist.txt"
+    wordlists: # wordlist(s) to use that are specific to brute forcing
+      - "./wordlists/short-wordlist.txt"
+      #- "./wordlists/subdomains-top1mil-5000.txt"
+      #- "./wordlists/subdomains-top1mil-20000.txt"
+      #- "./wordlists/subdomains-top1mil-110000.txt"
   alterations:
     enabled: false
-    wordlists: # wordlist(s) specific to name alterations
-      - "./alterations.txt"
+    wordlists: # wordlist(s) to use that are specific to name alterations
+      - "./wordlists/alterations.txt"
   default_transform_values:
     ttl: 1440 # minutes. If not specified, the default is 1440 minutes (1 day)
     confidence: 50 # 50%
@@ -38,7 +41,7 @@ options:
 
 transformations:
   Account->ALL:
-    ttl: 1080 # 7 days
+    ttl: 10800 # 7 days
   AutnumRecord->ALL:
   AutonomousSystem->ALL:
   AutonomousSystem->RDAP:
@@ -47,12 +50,10 @@ transformations:
   DomainRecord->ALL:
   File->ALL:
   FQDN->ALL:
-  FQDN->DNS:
-    ttl: 1440
   FQDN->DomainRecord:
     ttl: 43200 # 30 days
   FundsTransfer->ALL:
-    ttl: 1080 # 7 days
+    ttl: 10800 # 7 days
   Identifier->ALL:
   Identifier->GLEIF:
     ttl: 43200 # 30 days
@@ -70,11 +71,11 @@ transformations:
   Person->ALL:
     ttl: 43200 # 30 days
   Phone->ALL:
-    ttl: 1080 # 7 days
+    ttl: 10800 # 7 days
   Product->ALL:
-    ttl: 10080 # 7 days
+    ttl: 10800 # 7 days
   ProductRelease->ALL:
   Service->ALL:
   TLSCertificate->ALL:
-    ttl: 10080 # 7 days
+    ttl: 10800 # 7 days
   URL->ALL:
