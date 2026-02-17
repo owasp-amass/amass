@@ -172,7 +172,6 @@ var prefixes = map[string]*oamorg.Organization{
 	"mixpanel-domain-verify=":                {Name: "Mixpanel, Inc.", Jurisdiction: "US-DE", RegistrationID: "4689044"},
 	"mongodb-site-verification=":             {Name: "MongoDB, Inc.", Jurisdiction: "US-DE", RegistrationID: "4462691"},
 	"mscid=":                                 {Name: "Microsoft Corporation", Jurisdiction: "US-WA", RegistrationID: "600413485"},
-	"mtc=":                                   {Name: "Microsoft Corporation", Jurisdiction: "US-WA", RegistrationID: "600413485"},
 	"nethely-dvc:":                           {Name: "Nethely Kft.", Jurisdiction: "HU", RegistrationID: "0109961790"},
 	"netlify-verification=":                  {Name: "Netlify, Inc.", Jurisdiction: "US-DE", RegistrationID: "5484838"},
 	"nifty-dns-verify:":                      {Name: "Fujitsu Limited", Jurisdiction: "JP", RegistrationID: "1020001071491"},
