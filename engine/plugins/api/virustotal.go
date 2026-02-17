@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -52,12 +52,13 @@ func (vt *virusTotal) Start(r et.Registry) error {
 
 	name := vt.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     vt,
-		Name:       name,
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   vt.check,
+		Plugin:       vt,
+		Name:         name,
+		Position:     31,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     vt.check,
 	}); err != nil {
 		r.Log().Error(fmt.Sprintf("Failed to register a handler: %v", err),
 			slog.Group("plugin", "name", vt.name, "handler", name))
@@ -100,9 +101,7 @@ func (vt *virusTotal) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, vt.source, since) {
-		names = append(names, vt.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, vt.source, since) {
 		names = append(names, vt.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, vt.source)
 	}
@@ -113,16 +112,15 @@ func (vt *virusTotal) check(e *et.Event) error {
 	return nil
 }
 
-func (vt *virusTotal) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), vt.source, since)
-}
-
 func (vt *virusTotal) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		_ = vt.rlimit.Wait(context.TODO())
-		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+		_ = vt.rlimit.Wait(e.Session.Ctx())
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		defer cancel()
+
+		resp, err := http.RequestWebPage(ctx, &http.Request{
 			URL: "https://www.virustotal.com/vtapi/v2/domain/report?domain=" + name + "&apikey=" + key,
 		})
 		if err != nil || resp.Body == "" {

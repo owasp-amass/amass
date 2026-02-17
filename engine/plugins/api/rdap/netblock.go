@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -34,7 +34,7 @@ func (nb *netblock) Name() string {
 func (nb *netblock) check(e *et.Event) error {
 	n, ok := e.Entity.Asset.(*network.Netblock)
 	if !ok {
-		return errors.New("failed to extract the Netblock asset")
+		return errors.New("failed to cast the Netblock asset")
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
@@ -59,26 +59,42 @@ func (nb *netblock) check(e *et.Event) error {
 }
 
 func (nb *netblock) lookup(e *et.Event, cidr string, since time.Time) *dbt.Entity {
-	if assets := support.SourceToAssetsWithinTTL(e.Session, cidr, string(oam.IPNetRecord), nb.plugin.source, since); len(assets) > 0 {
-		return assets[0]
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	ents, err := e.Session.DB().FindEntitiesByContent(ctx, oam.IPNetRecord, since, 1, dbt.ContentFilters{
+		"cidr": cidr,
+	})
+	if err != nil || len(ents) != 1 {
+		return nil
 	}
+	ipnet := ents[0]
+
+	if tags, err := e.Session.DB().FindEntityTags(ctx, ipnet,
+		since, nb.plugin.source.Name); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if tag.Property.PropertyType() == oam.SourceProperty {
+				return ipnet
+			}
+		}
+	}
+
 	return nil
 }
 
 func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IPNetwork) {
-	n := asset.Asset.(*network.Netblock)
+	_ = nb.plugin.rlimit.Wait(e.Session.Ctx())
 
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Minute)
+	defer cancel()
+
+	n := asset.Asset.(*network.Netblock)
 	_, ipnet, err := net.ParseCIDR(n.CIDR.String())
 	if err != nil {
 		return nil, nil
 	}
-	req := rdap.NewIPNetRequest(ipnet)
+	req := rdap.NewIPNetRequest(ipnet).WithContext(ctx)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-
-	_ = nb.plugin.rlimit.Wait(context.TODO())
 	resp, err := nb.plugin.client.Do(req)
 	if err != nil {
 		return nil, nil
@@ -126,19 +142,22 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) 
 		return nil
 	}
 
-	record, err := e.Session.Cache().CreateAsset(ipnetrec)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	record, err := e.Session.DB().CreateAsset(ctx, ipnetrec)
 	if err == nil && record != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(record, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, record, &general.SourceProperty{
 			Source:     nb.plugin.source.Name,
 			Confidence: nb.plugin.source.Confidence,
 		})
 
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   record,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     nb.plugin.source.Name,
 				Confidence: nb.plugin.source.Confidence,
 			})

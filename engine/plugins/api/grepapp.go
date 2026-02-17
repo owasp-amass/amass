@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -55,12 +55,13 @@ func (g *grepApp) Start(r et.Registry) error {
 
 	name := g.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     g,
-		Name:       name,
-		Priority:   9,
-		Transforms: []string{string(oam.Identifier)},
-		EventType:  oam.FQDN,
-		Callback:   g.check,
+		Plugin:       g,
+		Name:         name,
+		Position:     24,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.Identifier)},
+		EventType:    oam.FQDN,
+		Callback:     g.check,
 	}); err != nil {
 		return err
 	}
@@ -89,9 +90,7 @@ func (g *grepApp) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, g.source, since) {
-		names = append(names, g.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, g.source, since) {
 		names = append(names, g.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, g.source)
 	}
@@ -100,9 +99,6 @@ func (g *grepApp) check(e *et.Event) error {
 		g.process(e, names)
 	}
 	return nil
-}
-func (g *grepApp) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.Identifier), g.source, since)
 }
 
 func (g *grepApp) query(e *et.Event, name string) []*dbt.Entity {
@@ -115,8 +111,11 @@ func (g *grepApp) query(e *et.Event, name string) []*dbt.Entity {
 
 	cont := true
 	for page := 1; cont; page++ {
-		_ = g.rlimit.Wait(context.TODO())
-		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+		_ = g.rlimit.Wait(e.Session.Ctx())
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		defer cancel()
+
+		resp, err := http.RequestWebPage(ctx, &http.Request{
 			URL: fmt.Sprintf("https://grep.app/api/search?page=%s&q=%s&regexp=true", strconv.Itoa(page), escapedQuery),
 		})
 		if err != nil {

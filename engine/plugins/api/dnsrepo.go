@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -50,12 +50,13 @@ func (d *dnsrepo) Start(r et.Registry) error {
 	d.log = r.Log().WithGroup("plugin").With("name", d.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     d,
-		Name:       d.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   d.check,
+		Plugin:       d,
+		Name:         d.name + "-Handler",
+		Position:     23,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     d.check,
 	}); err != nil {
 		return err
 	}
@@ -94,9 +95,7 @@ func (d *dnsrepo) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
-		names = append(names, d.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
 		names = append(names, d.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
@@ -105,10 +104,6 @@ func (d *dnsrepo) check(e *et.Event) error {
 		d.process(e, names)
 	}
 	return nil
-}
-
-func (d *dnsrepo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), d.source, since)
 }
 
 func (d *dnsrepo) query(e *et.Event, name string, keys []string) []*dbt.Entity {
@@ -125,8 +120,11 @@ func (d *dnsrepo) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 			}
 		}
 
-		_ = d.rlimit.Wait(context.TODO())
-		if resp, err := http.RequestWebPage(context.TODO(), req); err == nil {
+		_ = d.rlimit.Wait(e.Session.Ctx())
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		defer cancel()
+
+		if resp, err := http.RequestWebPage(ctx, req); err == nil {
 			if key == "" {
 				names = append(names, d.parseHTML(e, resp.Body)...)
 			} else {

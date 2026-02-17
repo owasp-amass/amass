@@ -1,9 +1,18 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package scope
 
+/*
+import (
+
+	"strings"
+
+	oam "github.com/owasp-amass/open-asset-model"
+
+)
+*/
 type Fingerprint struct {
 	Type  string
 	Value string

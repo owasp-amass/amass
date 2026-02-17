@@ -1,29 +1,18 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package enum
 
 import (
-	"fmt"
 	"net"
 	"net/netip"
 
 	"github.com/owasp-amass/amass/v5/config"
-	et "github.com/owasp-amass/amass/v5/engine/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
-
-// returns Asset objects by converting the contests of config.Scope
-func makeAssets(config *config.Config) []*et.Asset {
-	assets := convertScopeToAssets(config.Scope)
-
-	for i, asset := range assets {
-		asset.Name = fmt.Sprintf("asset#%d", i+1)
-	}
-	return assets
-}
 
 // ipnet2Prefix converts a net.IPNet to a netip.Prefix.
 func ipnet2Prefix(ipn net.IPNet) netip.Prefix {
@@ -32,23 +21,15 @@ func ipnet2Prefix(ipn net.IPNet) netip.Prefix {
 	return netip.PrefixFrom(addr, cidr)
 }
 
-// convertScopeToAssets converts all items in a Scope to a slice of *Asset.
-func convertScopeToAssets(scope *config.Scope) []*et.Asset {
+// convertScopeToAssets converts all items in a Scope to a slice of oam.Asset.
+func convertScopeToAssets(scope *config.Scope) []oam.Asset {
 	const ipv4 = "IPv4"
 	const ipv6 = "IPv6"
-	var assets []*et.Asset
+	var assets []oam.Asset
 
 	// Convert Domains to assets.
 	for _, d := range scope.Domains {
-		fqdn := oamdns.FQDN{Name: d}
-		data := et.AssetData{
-			OAMAsset: fqdn,
-			OAMType:  fqdn.AssetType(),
-		}
-		asset := &et.Asset{
-			Data: data,
-		}
-		assets = append(assets, asset)
+		assets = append(assets, oamdns.FQDN{Name: d})
 	}
 
 	var ipType string
@@ -68,11 +49,7 @@ func convertScopeToAssets(scope *config.Scope) []*et.Asset {
 
 			// Create an asset from the IP address and append it to the assets slice.
 			asset := oamnet.IPAddress{Address: addr, Type: ipType}
-			data := et.AssetData{
-				OAMAsset: asset,
-				OAMType:  asset.AssetType(),
-			}
-			assets = append(assets, &et.Asset{Data: data})
+			assets = append(assets, asset)
 		}
 	}
 
@@ -92,21 +69,13 @@ func convertScopeToAssets(scope *config.Scope) []*et.Asset {
 
 		// Create an asset from the CIDR and append it to the assets slice.
 		asset := oamnet.Netblock{CIDR: prefix, Type: ipType}
-		data := et.AssetData{
-			OAMAsset: asset,
-			OAMType:  asset.AssetType(),
-		}
-		assets = append(assets, &et.Asset{Data: data})
+		assets = append(assets, asset)
 	}
 
 	// Convert ASNs to assets.
 	for _, asn := range scope.ASNs {
 		asset := oamnet.AutonomousSystem{Number: asn}
-		data := et.AssetData{
-			OAMAsset: asset,
-			OAMType:  asset.AssetType(),
-		}
-		assets = append(assets, &et.Asset{Data: data})
+		assets = append(assets, asset)
 	}
 	return assets
 }

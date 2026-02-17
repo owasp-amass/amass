@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -52,12 +52,13 @@ func (b *bing) Start(r et.Registry) error {
 	b.log = r.Log().WithGroup("plugin").With("name", b.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     b,
-		Name:       b.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   b.check,
+		Plugin:       b,
+		Name:         b.name + "-Handler",
+		Position:     33,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     b.check,
 	}); err != nil {
 		return err
 	}
@@ -86,9 +87,7 @@ func (b *bing) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, b.source, since) {
-		names = append(names, b.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, b.source, since) {
 		names = append(names, b.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, b.source)
 	}
@@ -97,10 +96,6 @@ func (b *bing) check(e *et.Event) error {
 		b.process(e, names)
 	}
 	return nil
-}
-
-func (b *bing) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), b.source, since)
 }
 
 func (b *bing) query(e *et.Event, name string) []*dbt.Entity {

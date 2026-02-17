@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"golang.org/x/time/rate"
@@ -23,14 +24,14 @@ type whois struct {
 }
 
 func NewWHOIS() et.Plugin {
-	limit := rate.Every(time.Second)
+	limit := rate.Every(5 * time.Second)
 
 	return &whois{
 		name:   "WHOIS",
 		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "WHOIS",
-			Confidence: 100,
+			Confidence: 90,
 		},
 	}
 }
@@ -47,12 +48,14 @@ func (w *whois) Start(r et.Registry) error {
 		plugin: w,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.fqdn.name,
-		Priority:   9,
-		Transforms: []string{string(oam.DomainRecord)},
-		EventType:  oam.FQDN,
-		Callback:   w.fqdn.check,
+		Plugin:       w,
+		Name:         w.fqdn.name,
+		Position:     14,
+		Exclusive:    true,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.DomainRecord)},
+		EventType:    oam.FQDN,
+		Callback:     w.fqdn.check,
 	}); err != nil {
 		return err
 	}
@@ -72,11 +75,14 @@ func (w *whois) Start(r et.Registry) error {
 		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.domrec.name,
-		Transforms: w.domrec.transforms,
-		EventType:  oam.DomainRecord,
-		Callback:   w.domrec.check,
+		Plugin:       w,
+		Name:         w.domrec.name,
+		Position:     2,
+		Exclusive:    true,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   w.domrec.transforms,
+		EventType:    oam.DomainRecord,
+		Callback:     w.domrec.check,
 	}); err != nil {
 		return err
 	}

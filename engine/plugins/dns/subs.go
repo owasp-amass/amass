@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -64,7 +65,7 @@ func NewSubs(p *dnsPlugin) *dnsSubs {
 }
 
 func (d *dnsSubs) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
+	_, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -73,50 +74,46 @@ func (d *dnsSubs) check(e *et.Event) error {
 		return nil
 	}
 
-	dom := d.registered(e, fqdn.Name)
-	if dom == "" {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
 	if err != nil {
 		return err
 	}
 
-	if names := d.traverse(e, dom, e.Entity, since); len(names) > 0 {
-		d.process(e, names)
+	if dom := d.registeredDomainName(e); dom != "" {
+		if names := d.traverse(e, dom, e.Entity, since); len(names) > 0 {
+			d.process(e, names)
+		}
 	}
 	return nil
 }
 
-func (d *dnsSubs) registered(e *et.Event, name string) string {
-	if a, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 && a != nil {
+func (d *dnsSubs) registeredDomainName(e *et.Event) string {
+	fqdn := e.Entity.Asset.(*oamdns.FQDN)
+
+	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 && a != nil {
 		if fqdn, ok := a.(*oamdns.FQDN); ok {
 			return fqdn.Name
 		}
 	}
 
-	fqdns, err := e.Session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, time.Time{})
-	if err != nil || len(fqdns) != 1 {
-		return ""
-	}
-	fqdn := fqdns[0]
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	defer cancel()
 
 	var rels []*dbt.Edge
 	// allow name servers and mail servers to be investigated like in-scope assets
-	if edges, err := e.Session.Cache().IncomingEdges(fqdn, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.DB().IncomingEdges(ctx, e.Entity, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if r, ok := edge.Relation.(*oamdns.PrefDNSRelation); ok {
-				if r.Header.RRType == int(dns.TypeNS) || r.Header.RRType == int(dns.TypeMX) {
-					rels = append(rels, edge)
-				}
+			if r, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && r.Header.RRType == int(dns.TypeNS) {
+				rels = append(rels, edge)
+			} else if r, ok := edge.Relation.(*oamdns.PrefDNSRelation); ok && r.Header.RRType == int(dns.TypeMX) {
+				rels = append(rels, edge)
 			}
 		}
 	}
 
 	var inscope bool
 	for _, r := range rels {
-		from, err := e.Session.Cache().FindEntityById(r.FromEntity.ID)
+		from, err := e.Session.DB().FindEntityById(ctx, r.FromEntity.ID)
 		if err != nil {
 			continue
 		}
@@ -128,7 +125,7 @@ func (d *dnsSubs) registered(e *et.Event, name string) string {
 		}
 	}
 	if inscope {
-		if dom, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil {
+		if dom, err := publicsuffix.EffectiveTLDPlusOne(fqdn.Name); err == nil {
 			return dom
 		}
 	}
@@ -164,21 +161,25 @@ func (d *dnsSubs) traverse(e *et.Event, dom string, fqdn *dbt.Entity, since time
 func (d *dnsSubs) lookup(e *et.Event, subdomain string, since time.Time) []*relSubs {
 	var alias []*relSubs
 
-	fqdns, err := e.Session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: subdomain}, time.Time{})
-	if err != nil || len(fqdns) != 1 {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Second)
+	defer cancel()
+
+	ents, err := e.Session.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{
+		"name": subdomain,
+	})
+	if err != nil {
 		return alias
 	}
-	fqdn := fqdns[0]
+	fqdn := ents[0]
 
-	n := fqdn.Asset.Key()
 	// Check for NS records within the since period
-	if assets := d.plugin.lookupWithinTTL(e.Session, n, oam.FQDN, since, oam.PrefDNSRelation, 2); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.BasicDNSRelation, 2); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
 		}
 	}
 	// Check for MX records within the since period
-	if assets := d.plugin.lookupWithinTTL(e.Session, n, oam.FQDN, since, oam.PrefDNSRelation, 15); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.PrefDNSRelation, 15); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
 		}
@@ -191,10 +192,15 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 	var alias []*relSubs
 
 	for i, t := range d.types {
-		if rr, err := support.PerformQuery(subdomain, t.Qtype); err == nil && len(rr) > 0 {
+		if rr, err := support.PerformQuery(e.Session.Ctx(), subdomain, t.Qtype); err == nil && len(rr) > 0 {
 			if records := d.store(e, subdomain, rr); len(records) > 0 {
 				alias = append(alias, records...)
 			}
+		} else if err == support.ErrFailedMaxDNSAttempts {
+			e.Session.Log().Warn(err.Error(), "fqdn", subdomain,
+				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			apex = i > 0
+			break
 		} else if i == 0 {
 			// do not continue if we failed to obtain the NS record
 			apex = false
@@ -206,24 +212,28 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 		return alias
 	}
 
-	rch := make(chan []*relSubs, len(srvNames))
+	srvs := NamesByTier(Tier3)
+	rch := make(chan []*relSubs, len(srvs))
 	defer close(rch)
 
-	for _, name := range srvNames {
+	for _, name := range srvs {
 		go func(label, sub string, ch chan []*relSubs) {
 			n := name + "." + subdomain
 
 			var results []*relSubs
-			if rr, err := support.PerformQuery(n, dns.TypeSRV); err == nil && len(rr) > 0 {
+			if rr, err := support.PerformQuery(e.Session.Ctx(), n, dns.TypeSRV); err == nil && len(rr) > 0 {
 				if records := d.store(e, n, rr); len(records) > 0 {
 					results = append(results, records...)
 				}
+			} else if err == support.ErrFailedMaxDNSAttempts {
+				e.Session.Log().Warn(err.Error(), "fqdn", n,
+					slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
 			ch <- results
 		}(name, subdomain, rch)
 	}
 
-	for i := 0; i < len(srvNames); i++ {
+	for range len(srvs) {
 		answers := <-rch
 		alias = append(alias, answers...)
 	}
@@ -234,7 +244,10 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 	var alias []*relSubs
 
-	fqdn, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	defer cancel()
+
+	fqdn, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name})
 	if err != nil || fqdn == nil {
 		return alias
 	}
@@ -246,9 +259,9 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 		if record.Header().Rrtype == dns.TypeNS {
 			data := utils.RemoveLastDot((record.(*dns.NS)).Ns)
 
-			a, err = e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: data})
+			a, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: data})
 			if err == nil && a != nil {
-				edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+				edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
 						Header: oamdns.RRHeader{
@@ -264,9 +277,9 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 		} else if record.Header().Rrtype == dns.TypeMX {
 			data := utils.RemoveLastDot((record.(*dns.MX)).Mx)
 
-			a, err = e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: data})
+			a, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: data})
 			if err == nil && a != nil {
-				edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+				edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 					Relation: &oamdns.PrefDNSRelation{
 						Name: "dns_record",
 						Header: oamdns.RRHeader{
@@ -286,7 +299,7 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 
 		if err == nil && edge != nil {
 			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     d.plugin.source.Name,
 				Confidence: d.plugin.source.Confidence,
 			})
@@ -379,177 +392,4 @@ loop:
 		sess.strset.Close()
 	}
 	d.Unlock()
-}
-
-var srvNames = []string{
-	"_afs3-kaserver._tcp",
-	"_afs3-kaserver._tcp",
-	"_afs3-kaserver._udp",
-	"_afs3-prserver._tcp",
-	"_afs3-prserver._udp",
-	"_afs3-vlserver._tcp",
-	"_afs3-vlserver._udp",
-	"_amt._udp",
-	"_autodiscover._tcp",
-	"_autotunnel._udp",
-	"_avatars-sec._tcp",
-	"_avatars._tcp",
-	"_bittorrent-tracker._tcp",
-	"_caldav._tcp",
-	"_caldavs._tcp",
-	"_carddav._tcp",
-	"_carddavs._tcp",
-	"_ceph-mon._tcp",
-	"_ceph._tcp",
-	"_certificates._tcp",
-	"_chat._udp",
-	"_citrixreceiver._tcp",
-	"_collab-edge._tls",
-	"_crls._tcp",
-	"_daap._tcp",
-	"_diameters._tcp",
-	"_diameter._tcp",
-	"_diameter._tls",
-	"_dns-llq._tcp",
-	"_dns-llq-tls._tcp",
-	"_dns-llq-tls._udp",
-	"_dns-llq._udp",
-	"_dns-push-tls._tcp",
-	"_dns-sd._udp",
-	"_dns._udp",
-	"_dns-update._tcp",
-	"_dns-update-tls._tcp",
-	"_dns-update._udp",
-	"_dots-call-home._tcp",
-	"_dots-call-home._udp",
-	"_dots-data._tcp",
-	"_dots-signal._tcp",
-	"_dots-signal._udp",
-	"_dvbservdsc._tcp",
-	"_dvbservdsc._udp",
-	"_ftp._tcp",
-	"_gc._tcp",
-	"_hip-nat-t._udp",
-	"_http._tcp",
-	"_hybrid-pop._tcp",
-	"_hybrid-pop._udp",
-	"_imap3._tcp",
-	"_imap3._udp",
-	"_imaps._tcp",
-	"_imaps._udp",
-	"_imap._tcp",
-	"_imap._udp",
-	"_imps-server._tcp",
-	"_ipp._tcp",
-	"_jabber._tcp",
-	"_jmap._tcp",
-	"_kca._udp",
-	"_kerberos-adm._tcp",
-	"_kerberos-adm._udp",
-	"_kerberos-master._tcp",
-	"_kerberos-master._udp",
-	"_kerberos._tcp",
-	"_kerberos-tls._tcp",
-	"_kerberos._udp",
-	"_kerneros-iv._udp",
-	"_kftp-data._tcp",
-	"_kftp-data._udp",
-	"_kftp._tcp",
-	"_kftp._udp",
-	"_kpasswd._tcp",
-	"_kpasswd._udp",
-	"_ktelnet._tcp",
-	"_ktelnet._udp",
-	"_ldap-admin._tcp",
-	"_ldap-admin._udp",
-	"_ldaps._tcp",
-	"_ldaps._udp",
-	"_ldap._tcp",
-	"_ldap._udp",
-	"_matrix._tcp",
-	"_matrix-vnet._tcp",
-	"_MIHIS._tcp",
-	"_MIHIS._udp",
-	"_minecraft._tcp",
-	"_msft-gc-ssl._tcp",
-	"_msft-gc-ssl._udp",
-	"_msrps._tcp",
-	"_mtqp._tcp",
-	"_nfs-domainroot._tcp",
-	"_nicname._tcp",
-	"_nicname._udp",
-	"_ntp._udp",
-	"_pop2._tcp",
-	"_pop2._udp",
-	"_pop3s._tcp",
-	"_pop3s._udp",
-	"_pop3._tcp",
-	"_pop3._udp",
-	"_presence._tcp",
-	"_presence._udp",
-	"_puppet._tcp",
-	"_radiusdtls._udp",
-	"_radiustls._tcp",
-	"_radiustls._udp",
-	"_radsec._tcp",
-	"_rwhois._tcp",
-	"_rwhois._udp",
-	"_sieve._tcp",
-	"_sips._tcp",
-	"_sips._udp",
-	"_sip._tcp",
-	"_sip._udp",
-	"_slpda._tcp",
-	"_slpda._udp",
-	"_slp._tcp",
-	"_slp._udp",
-	"_smtp._tcp",
-	"_smtp._tls",
-	"_smtp._udp",
-	"_soap-beep._tcp",
-	"_ssh._tcp",
-	"_stun-behaviors._tcp",
-	"_stun-behaviors._udp",
-	"_stun-behavior._tcp",
-	"_stun-behavior._udp",
-	"_stun-p1._tcp",
-	"_stun-p1._udp",
-	"_stun-p2._tcp",
-	"_stun-p2._udp",
-	"_stun-p3._tcp",
-	"_stun-p3._udp",
-	"_stun-port._tcp",
-	"_stun-port._udp",
-	"_stuns._tcp",
-	"_stuns._udp",
-	"_stun._tcp",
-	"_stun._udp",
-	"_submissions._tcp",
-	"_submission._tcp",
-	"_submission._udp",
-	"_sztp._tcp",
-	"_telnet._tcp",
-	"_timezones._tcp",
-	"_timezone._tcp",
-	"_ts3._udp",
-	"_tsdns._tcp",
-	"_tunnel._tcp",
-	"_turns._tcp",
-	"_turns._udp",
-	"_turn._tcp",
-	"_turn._udp",
-	"_whoispp._tcp",
-	"_whoispp._udp",
-	"_www-http._tcp",
-	"_www-ldap-gw._tcp",
-	"_www-ldap-gw._udp",
-	"_www._tcp",
-	"_xmlrpc-beep._tcp",
-	"_xmpp-bosh._tcp",
-	"_xmpp-client._tcp",
-	"_xmpp-client._udp",
-	"_xmpp-server._tcp",
-	"_xmpp-server._udp",
-	"_xmpp._tcp",
-	"_x-puppet._tcp",
 }

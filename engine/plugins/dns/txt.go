@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,6 +31,10 @@ func (d *dnsTXT) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
+	if support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
+		return nil
+	}
+
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
 	if err != nil {
 		return err
@@ -44,7 +49,7 @@ func (d *dnsTXT) check(e *et.Event) error {
 		d.store(e, e.Entity, txtRecords)
 	}
 
-	if len(txtRecords) > 0 {
+	if len(txtRecords) > 0 || len(props) > 0 {
 		d.process(e, e.Entity, txtRecords, props)
 		support.AddDNSRecordType(e, int(dns.TypeTXT))
 	}
@@ -59,7 +64,10 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*oamdn
 		return props
 	}
 
-	if tags, err := e.Session.Cache().GetEntityTags(fqdn, since, "dns_record"); err == nil {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Second)
+	defer cancel()
+
+	if tags, err := e.Session.DB().FindEntityTags(ctx, fqdn, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				props = append(props, prop)
@@ -78,22 +86,28 @@ func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []dns.RR {
 		return txtRecords
 	}
 
-	if rr, err := support.PerformQuery(fqdn.Name, dns.TypeTXT); err == nil {
+	if rr, err := support.PerformQuery(e.Session.Ctx(), fqdn.Name, dns.TypeTXT); err == nil {
 		txtRecords = append(txtRecords, rr...)
 		support.MarkAssetMonitored(e.Session, name, d.source)
+	} else if err == support.ErrFailedMaxDNSAttempts {
+		e.Session.Log().Warn(err.Error(), "fqdn", fqdn.Name,
+			slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 
 	return txtRecords
 }
 
 func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
 	for _, record := range rr {
 		if record.Header().Rrtype != dns.TypeTXT {
 			continue
 		}
 
 		txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
-		_, err := e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
+		_, err := e.Session.DB().CreateEntityProperty(ctx, fqdn, &oamdns.DNSRecordProperty{
 			PropertyName: "dns_record",
 			Header: oamdns.RRHeader{
 				RRType: int(dns.TypeTXT),

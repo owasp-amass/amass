@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -64,7 +65,7 @@ func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*rel
 		return alias
 	}
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, 5); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.BasicDNSRelation, 5); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relAlias{alias: fqdn, target: a})
 		}
@@ -76,11 +77,14 @@ func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 	var alias []*relAlias
 
 	fqdn := name.Asset.(*oamdns.FQDN)
-	if rr, err := support.PerformQuery(fqdn.Name, dns.TypeCNAME); err == nil {
+	if rr, err := support.PerformQuery(e.Session.Ctx(), fqdn.Name, dns.TypeCNAME); err == nil {
 		if records := d.store(e, name, rr); len(records) > 0 {
 			alias = append(alias, records...)
 			support.MarkAssetMonitored(e.Session, name, d.source)
 		}
+	} else if err == support.ErrFailedMaxDNSAttempts {
+		e.Session.Log().Warn(err.Error(), "fqdn", fqdn.Name,
+			slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 
 	return alias
@@ -89,6 +93,9 @@ func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias {
 	var alias []*relAlias
 
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
 	for _, record := range rr {
 		if record.Header().Rrtype != dns.TypeCNAME {
 			continue
@@ -96,8 +103,8 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias
 
 		data := strings.ToLower(strings.TrimSpace((record.(*dns.CNAME)).Target))
 		name := utils.RemoveLastDot(data)
-		if cname, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && cname != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if cname, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && cname != nil {
+			if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
 					Header: oamdns.RRHeader{
@@ -110,7 +117,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias
 				ToEntity:   cname,
 			}); err == nil && edge != nil {
 				alias = append(alias, &relAlias{alias: fqdn, target: cname})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+				_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 					Source:     d.source.Name,
 					Confidence: d.source.Confidence,
 				})

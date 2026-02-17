@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -29,7 +29,12 @@ func (s *Scope) AddIPAddress(ip *oamnet.IPAddress) bool {
 }
 
 func (s *Scope) AddAddress(addr string) bool {
-	ip := &oamnet.IPAddress{Address: netip.MustParseAddr(strings.TrimSpace(addr)), Type: "IPv4"}
+	a, err := netip.ParseAddr(strings.TrimSpace(addr))
+	if err != nil {
+		return false
+	}
+
+	ip := &oamnet.IPAddress{Address: a, Type: "IPv4"}
 	if ip.Address.Is6() {
 		ip.Type = "IPv6"
 	}
@@ -87,7 +92,12 @@ func (s *Scope) AddNetblock(nb *oamnet.Netblock) bool {
 }
 
 func (s *Scope) AddCIDR(cidr string) bool {
-	nb := &oamnet.Netblock{CIDR: netip.MustParsePrefix(strings.TrimSpace(cidr)), Type: "IPv4"}
+	p, err := netip.ParsePrefix(strings.TrimSpace(cidr))
+	if err != nil {
+		return false
+	}
+
+	nb := &oamnet.Netblock{CIDR: p, Type: "IPv4"}
 	if nb.CIDR.Addr().Is6() {
 		nb.Type = "IPv6"
 	}

@@ -1,11 +1,13 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package support
 
 import (
+	"context"
 	"log/slog"
+	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -24,13 +26,17 @@ type Finding struct {
 }
 
 func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, pname, hname string) {
+	seconds := 10 * len(findings)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), time.Duration(seconds)*time.Second)
+	defer cancel()
+
 	for _, finding := range findings {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   finding.Rel,
 			FromEntity: finding.From,
 			ToEntity:   finding.To,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -49,13 +55,17 @@ func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, p
 }
 
 func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
+	seconds := 10 * len(entities)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), time.Duration(seconds)*time.Second)
+	defer cancel()
+
 	for _, entity := range entities {
 		fqdn, ok := entity.Asset.(*oamdns.FQDN)
 		if !ok || fqdn == nil {
 			continue
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -69,6 +79,10 @@ func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source)
 }
 
 func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
+	seconds := 10 * len(entities)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), time.Duration(seconds)*time.Second)
+	defer cancel()
+
 	for _, entity := range entities {
 		email, ok := entity.Asset.(*general.Identifier)
 		if !ok || email == nil || email.Type != general.EmailAddress || email.ID == "" {
@@ -87,7 +101,7 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 			}
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})

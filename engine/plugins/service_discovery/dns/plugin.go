@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,6 +7,7 @@ package dns
 import (
 	"log/slog"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -42,12 +43,13 @@ func (p *dnsPlugin) Start(r et.Registry) error {
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     p,
-		Name:       p.txt.name,
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   p.txt.check,
+		Plugin:       p,
+		Name:         p.txt.name,
+		Position:     12,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.Organization)},
+		EventType:    oam.FQDN,
+		Callback:     p.txt.check,
 	}); err != nil {
 		p.log.Error("failed to register handler", "error", err)
 		return err

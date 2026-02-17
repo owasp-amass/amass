@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -47,7 +47,7 @@ func (d *alts) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.name + "-Handler",
-		Priority:     8,
+		Position:     13,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{"fqdn"},
 		EventType:    oam.FQDN,
@@ -132,7 +132,7 @@ func (d *alts) check(e *et.Event) error {
 	}
 
 	if len(assets) > 0 {
-		d.process(e, assets, d.source)
+		d.process(e, assets)
 		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
 	return nil
@@ -142,7 +142,7 @@ func (d *alts) store(e *et.Event, name string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, []string{name}, d.source, d.name, d.name+"-Handler")
 }
 
-func (d *alts) process(e *et.Event, fqdns []*dbt.Entity, src *et.Source) {
+func (d *alts) process(e *et.Event, fqdns []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, fqdns, d.source)
 }
 
@@ -179,7 +179,7 @@ func flipNumbers(name string) []string {
 
 	var guesses []string
 	// Flip the first number and attempt a second number
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		sf := n[:first] + strconv.Itoa(i) + n[first+1:]
 		guesses = append(guesses, secondNumberFlip(sf, first+1)...)
 	}
@@ -198,7 +198,7 @@ func secondNumberFlip(name string, minIndex int) []string {
 
 	var guesses []string
 	// Flip those numbers and send out the mutations
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		guesses = append(guesses, name[:last]+strconv.Itoa(i)+name[last+1:])
 	}
 	// Take the second number out
@@ -216,7 +216,7 @@ func appendNumbers(name string) []string {
 	}
 
 	var guesses []string
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		guesses = append(guesses, addSuffix(parts, strconv.Itoa(i))...)
 	}
 	return guesses
@@ -277,7 +277,7 @@ func fuzzyLabelSearches(name string, distance int, chars string) []string {
 	}
 
 	results = append(results, parts[0])
-	for i := 0; i < distance; i++ {
+	for range distance {
 		var conv []string
 
 		conv = append(conv, additions(results, chars)...)
@@ -305,7 +305,7 @@ func additions(set []string, chars string) []string {
 		rlen := len(rstr)
 
 		for i := 0; i <= rlen; i++ {
-			for j := 0; j < ldhLen; j++ {
+			for j := range ldhLen {
 				temp := append(rstr, ldh[0])
 
 				copy(temp[i+1:], temp[i:])
@@ -324,7 +324,7 @@ func deletions(set []string) []string {
 		rstr := []rune(str)
 		rlen := len(rstr)
 
-		for i := 0; i < rlen; i++ {
+		for i := range rlen {
 			if del := string(append(rstr[:i], rstr[i+1:]...)); del != "" {
 				guesses = append(guesses, del)
 			}
@@ -342,10 +342,10 @@ func substitutions(set []string, chars string) []string {
 		rstr := []rune(str)
 		rlen := len(rstr)
 
-		for i := 0; i < rlen; i++ {
+		for i := range rlen {
 			temp := rstr
 
-			for j := 0; j < ldhLen; j++ {
+			for j := range ldhLen {
 				temp[i] = ldh[j]
 				guesses = append(guesses, string(temp))
 			}

@@ -1,12 +1,14 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package plugins
 
 import (
+	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -44,7 +46,8 @@ func (j *jarmPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       j,
 		Name:         j.name + "-Handler",
-		MaxInstances: 25,
+		Position:     42,
+		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.Service)},
 		EventType:    oam.Service,
 		Callback:     j.check,
@@ -66,27 +69,30 @@ func (j *jarmPlugin) check(e *et.Event) error {
 		return errors.New("failed to extract the Service asset")
 	}
 
-	if !j.hasCertificate(e) {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Service), string(oam.Service), j.name)
 	if err != nil {
 		return err
 	}
 
+	if !j.hasCertificate(e, since) {
+		return nil
+	}
+
 	src := j.source
 	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		j.query(e)
+		j.query(e, since)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 	return nil
 }
 
-func (j *jarmPlugin) hasCertificate(e *et.Event) bool {
-	if edges, err := e.Session.Cache().OutgoingEdges(e.Entity, e.Session.Cache().StartTime(), "certificate"); err == nil && len(edges) > 0 {
+func (j *jarmPlugin) hasCertificate(e *et.Event, since time.Time) bool {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, e.Entity, since, "certificate"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
 				if a.Asset.AssetType() == oam.TLSCertificate {
 					return true
 				}
@@ -102,19 +108,22 @@ type fingerprint struct {
 	hash  string
 }
 
-func (j *jarmPlugin) query(e *et.Event) {
+func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	var targets []*fingerprint
 
-	if edges, err := e.Session.Cache().IncomingEdges(e.Entity, e.Session.Cache().StartTime(), "port"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().IncomingEdges(ctx, e.Entity, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			portrel, ok := edge.Relation.(*general.PortRelation)
 			if !ok {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 				switch a.Asset.(type) {
 				case *oamdns.FQDN:
-					if portrel.Protocol == "https" {
+					if portrel.Protocol == "TCP" {
 						t := &fingerprint{
 							asset: e.Entity,
 							port:  edge,
@@ -122,7 +131,7 @@ func (j *jarmPlugin) query(e *et.Event) {
 						targets = append([]*fingerprint{t}, targets...)
 					}
 				case *network.IPAddress:
-					if portrel.Protocol == "https" {
+					if portrel.Protocol == "TCP" {
 						targets = append(targets, &fingerprint{
 							asset: e.Entity,
 							port:  edge,
@@ -151,8 +160,11 @@ func (j *jarmPlugin) query(e *et.Event) {
 }
 
 func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	defer cancel()
+
 	for _, fp := range fps {
-		_, _ = e.Session.Cache().CreateEdgeProperty(fp.port, &general.SimpleProperty{
+		_, _ = e.Session.DB().CreateEdgeProperty(ctx, fp.port, &general.SimpleProperty{
 			PropertyName:  "JARM",
 			PropertyValue: fp.hash,
 		})

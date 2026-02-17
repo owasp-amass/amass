@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -18,7 +18,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 	"golang.org/x/time/rate"
 )
 
@@ -57,12 +56,13 @@ func (p *Prospeo) Start(r et.Registry) error {
 
 	name := p.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     p,
-		Name:       name,
-		Priority:   9,
-		Transforms: []string{string(oam.Identifier)},
-		EventType:  oam.FQDN,
-		Callback:   p.check,
+		Plugin:       p,
+		Name:         name,
+		Position:     29,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.Identifier)},
+		EventType:    oam.FQDN,
+		Callback:     p.check,
 	}); err != nil {
 		return err
 	}
@@ -91,9 +91,7 @@ func (p *Prospeo) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, p.source, since) {
-		names = append(names, p.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, p.source, since) {
 		names = append(names, p.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, p.source)
 	}
@@ -104,41 +102,28 @@ func (p *Prospeo) check(e *et.Event) error {
 	return nil
 }
 
-func (p *Prospeo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	var emails []*dbt.Entity
-
-	for _, e := range support.SourceToAssetsWithinTTL(e.Session, name, string(oam.Identifier), p.source, since) {
-		if email, ok := e.Asset.(*general.Identifier); ok && email != nil && email.Type == general.EmailAddress {
-			emails = append(emails, e)
-		}
-	}
-
-	return emails
-}
-
 func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 	key, err := support.GetAPI(p.name, e)
 	if err != nil {
 		return nil
 	}
 
-	rcreds, err := p.accountType(key)
+	rcreds, err := p.accountType(e.Session.Ctx(), key)
 	if err != nil || key == "" {
 		return nil
 	}
 
-	count, err := p.count(name, key)
+	count, err := p.count(e.Session.Ctx(), name, key)
 	if err != nil {
 		return nil
 	}
+	limit := min(rcreds*50, count)
 
-	limit := rcreds * 50
-	if limit > count {
-		limit = count
-	}
+	_ = p.rlimit.Wait(e.Session.Ctx())
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	defer cancel()
 
-	_ = p.rlimit.Wait(context.TODO())
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+	resp, err := http.RequestWebPage(ctx, &http.Request{
 		Method: "POST",
 		Body:   `{"company": "` + name + `", "limit": ` + strconv.Itoa(limit) + `}`,
 		URL:    p.queryurl,
@@ -174,10 +159,13 @@ func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessEmailsWithSource(e, assets, p.source)
 }
 
-func (p *Prospeo) accountType(key string) (int, error) {
-	_ = p.rlimit.Wait(context.TODO())
+func (p *Prospeo) accountType(ctx context.Context, key string) (int, error) {
+	_ = p.rlimit.Wait(ctx)
 
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	resp, err := http.RequestWebPage(rctx, &http.Request{
 		Method: "POST",
 		URL:    p.accturl,
 		Header: http.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
@@ -197,10 +185,13 @@ func (p *Prospeo) accountType(key string) (int, error) {
 	return r.Response.RemainingCredits, nil
 }
 
-func (p *Prospeo) count(domain string, key string) (int, error) {
-	_ = p.rlimit.Wait(context.TODO())
+func (p *Prospeo) count(ctx context.Context, domain string, key string) (int, error) {
+	_ = p.rlimit.Wait(ctx)
 
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	resp, err := http.RequestWebPage(rctx, &http.Request{
 		Method: "POST",
 		Body:   `{"domain": "` + domain + `"}`,
 		URL:    p.counturl,

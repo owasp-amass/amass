@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,7 +14,6 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -26,7 +25,6 @@ import (
 )
 
 type bgpTools struct {
-	sync.Mutex
 	name     string
 	addr     string
 	port     int
@@ -58,7 +56,10 @@ func (bt *bgpTools) Name() string {
 func (bt *bgpTools) Start(r et.Registry) error {
 	bt.log = r.Log().WithGroup("plugin").With("name", bt.name)
 
-	rr, err := support.PerformQuery("bgp.tools", dns.TypeA)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	rr, err := support.PerformQuery(ctx, "bgp.tools", dns.TypeA)
 	if err != nil {
 		return fmt.Errorf("failed to obtain the BGPTools IP address: %v", err)
 	} else if len(rr) == 0 {
@@ -80,12 +81,14 @@ func (bt *bgpTools) Start(r et.Registry) error {
 		plugin: bt,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     bt,
-		Name:       bt.netblock.name,
-		Priority:   1,
-		Transforms: []string{string(oam.Netblock)},
-		EventType:  oam.IPAddress,
-		Callback:   bt.netblock.check,
+		Plugin:       bt,
+		Name:         bt.netblock.name,
+		Position:     2,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Netblock)},
+		EventType:    oam.IPAddress,
+		Callback:     bt.netblock.check,
 	}); err != nil {
 		return err
 	}
@@ -97,8 +100,9 @@ func (bt *bgpTools) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       bt,
 		Name:         bt.autsys.name,
-		Priority:     1,
-		MaxInstances: 10,
+		Position:     2,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
 		Transforms:   []string{string(oam.AutonomousSystem)},
 		EventType:    oam.Netblock,
 		Callback:     bt.autsys.check,
@@ -124,11 +128,14 @@ type bgpToolsRecord struct {
 	ASName        string
 }
 
-func (bt *bgpTools) whois(ipstr string) (*bgpToolsRecord, error) {
+func (bt *bgpTools) whois(ctx context.Context, ipstr string) (*bgpToolsRecord, error) {
 	addr := net.JoinHostPort(bt.addr, strconv.Itoa(bt.port))
 
-	_ = bt.rlimit.Wait(context.TODO())
-	conn, err := amassnet.DialContext(context.TODO(), "tcp", addr)
+	_ = bt.rlimit.Wait(ctx)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	conn, err := amassnet.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish a connection with the WHOIS server: %v", err)
 	}

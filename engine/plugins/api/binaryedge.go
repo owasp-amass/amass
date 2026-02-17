@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -51,12 +51,13 @@ func (be *binaryEdge) Start(r et.Registry) error {
 	be.log = r.Log().WithGroup("plugin").With("name", be.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     be,
-		Name:       be.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   be.check,
+		Plugin:       be,
+		Name:         be.name + "-Handler",
+		Position:     20,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     be.check,
 	}); err != nil {
 		return err
 	}
@@ -97,9 +98,7 @@ func (be *binaryEdge) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, be.source, since) {
-		names = append(names, be.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, be.source, since) {
 		names = append(names, be.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, be.source)
 	}
@@ -110,10 +109,6 @@ func (be *binaryEdge) check(e *et.Event) error {
 	return nil
 }
 
-func (be *binaryEdge) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), be.source, since)
-}
-
 func (be *binaryEdge) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
@@ -122,8 +117,11 @@ func (be *binaryEdge) query(e *et.Event, name string, keys []string) []*dbt.Enti
 loop:
 	for _, key := range keys {
 		for pagenum <= 500 {
-			_ = be.rlimit.Wait(context.TODO())
-			resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+			_ = be.rlimit.Wait(e.Session.Ctx())
+			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+			defer cancel()
+
+			resp, err := http.RequestWebPage(ctx, &http.Request{
 				Header: http.Header{"X-KEY": []string{key}},
 				URL:    "https://api.binaryedge.io/v2/query/domains/subdomain/" + name + "?page=" + strconv.Itoa(pagenum),
 			})

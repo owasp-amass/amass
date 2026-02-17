@@ -52,12 +52,13 @@ func (d *dnsHistory) Start(r et.Registry) error {
 	d.log = r.Log().WithGroup("plugin").With("name", d.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     d,
-		Name:       d.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   d.check,
+		Plugin:       d,
+		Name:         d.name + "-Handler",
+		Position:     34,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     d.check,
 	}); err != nil {
 		return err
 	}
@@ -86,9 +87,7 @@ func (d *dnsHistory) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
-		names = append(names, d.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
 		names = append(names, d.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
@@ -97,10 +96,6 @@ func (d *dnsHistory) check(e *et.Event) error {
 		d.process(e, names)
 	}
 	return nil
-}
-
-func (d *dnsHistory) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), d.source, since)
 }
 
 func (d *dnsHistory) query(e *et.Event, name string) []*dbt.Entity {

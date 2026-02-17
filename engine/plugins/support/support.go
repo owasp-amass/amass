@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package support
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -19,15 +20,22 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/url"
 	xurls "mvdan.cc/xurls/v2"
 )
 
-type SweepCallback func(d *et.Event, addr *oamnet.IPAddress, src *et.Source)
+const (
+	MinHandlerInstances  int = 4
+	MidHandlerInstances  int = 16
+	HighHandlerInstances int = 32
+	MaxHandlerInstances  int = 64
+)
 
-const MaxHandlerInstances int = 100
+type SweepCallback func(d *et.Event, addr *oamnet.IPAddress, src *et.Source)
 
 var done chan struct{}
 var subre, urlre *regexp.Regexp
@@ -162,15 +170,10 @@ func AddNetblock(session et.Session, cidr string, asn int, src *et.Source) error
 }
 
 func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int, callback SweepCallback) {
-	// do not work on an IP address that was processed previously
-	_, err := e.Session.Cache().FindEntitiesByContent(addr, e.Session.Cache().StartTime())
-	if err == nil {
-		return
-	}
-
 	var mask net.IPMask
 	addrstr := addr.Address.String()
 	ip := net.ParseIP(addrstr)
+
 	if amassnet.IsIPv4(ip) {
 		mask = net.CIDRMask(18, 32)
 	} else if amassnet.IsIPv6(ip) {
@@ -194,17 +197,48 @@ func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size in
 	}
 }
 
+func IsRegisteredDomain(session et.Session, fqdn *dbt.Entity) bool {
+	if _, valid := fqdn.Asset.(*oamdns.FQDN); !valid {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(session.Ctx(), 10*time.Second)
+	defer cancel()
+
+	matches, err := session.Config().CheckTransformations(string(oam.FQDN), string(oam.FQDN))
+	if err != nil || matches == nil {
+		return false
+	}
+
+	var since time.Time
+	if ttl := matches.TTL(string(oam.FQDN)); ttl >= 0 {
+		since = time.Now().Add(time.Duration(-ttl) * time.Minute)
+	}
+	if since.IsZero() {
+		return false
+	}
+
+	if edges, err := session.DB().IncomingEdges(ctx, fqdn, since, "node"); err == nil && len(edges) > 0 {
+		return false
+	}
+	return true
+}
+
 func IsCNAME(session et.Session, name *oamdns.FQDN) (*oamdns.FQDN, bool) {
-	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
-	if err != nil || len(fqdns) != 1 {
+	ctx, cancel := context.WithTimeout(session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	ents, err := session.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{
+		"name": name.Name,
+	})
+	if err != nil {
 		return nil, false
 	}
-	fqdn := fqdns[0]
 
-	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := session.DB().OutgoingEdges(ctx, ents[0], time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rec.Header.RRType == 5 {
-				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
+				if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil {
 					if cname, ok := to.Asset.(*oamdns.FQDN); ok {
 						return cname, true
 					}
@@ -216,17 +250,27 @@ func IsCNAME(session et.Session, name *oamdns.FQDN) (*oamdns.FQDN, bool) {
 }
 
 func NameIPAddresses(session et.Session, name *oamdns.FQDN) []*oamnet.IPAddress {
-	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
-	if err != nil || len(fqdns) != 1 {
+	ctx, cancel := context.WithTimeout(session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	ents, err := session.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{
+		"name": name.Name,
+	})
+	if err != nil {
 		return nil
 	}
-	fqdn := fqdns[0]
+	fqdn := ents[0]
+
+	since, err := TTLStartTime(session.Config(), string(oam.FQDN), string(oam.IPAddress), "")
+	if err != nil {
+		return nil
+	}
 
 	var results []*oamnet.IPAddress
-	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := session.DB().OutgoingEdges(ctx, fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
-				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
+				if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil {
 					if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
 						results = append(results, ip)
 					}
@@ -267,6 +311,7 @@ func AddSLDInScope(e *et.Event) {
 		e.Meta = &FQDNMeta{
 			SLDInScope: true,
 		}
+		return
 	}
 
 	if fm, ok := e.Meta.(*FQDNMeta); ok {

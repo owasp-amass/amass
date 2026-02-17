@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package http_probes
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -41,12 +42,14 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	if reserved, _ := amassnet.IsReservedAddress(addrstr); reserved {
 		return nil
 	}
-	if !e.Session.Scope().IsAddressInScope(e.Session.Cache(), ip) {
+
+	// only perform the probe if the address is in scope
+	if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf <= 0 {
 		return nil
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.IPAddress), string(oam.Service), r.name)
-	if err != nil {
+	if err != nil || since.IsZero() {
 		return err
 	}
 
@@ -55,32 +58,30 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		findings = append(findings, r.lookup(e, e.Entity, since)...)
 	} else {
-		go func() {
-			if findings := append(findings, r.query(e, e.Entity)...); len(findings) > 0 {
-				r.process(e, findings)
-			}
-		}()
+		findings = append(findings, r.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
 		r.process(e, findings)
 	}
-
-	go support.IPAddressSweep(e, ip, src, 25, sweepCallback)
 	return nil
 }
 
 func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
-	if edges, err := e.Session.Cache().OutgoingEdges(ip, since, "port"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, ip, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, r.plugin.source.Name); err != nil {
+			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, r.plugin.source.Name); err != nil {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
-				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
+				if srv, err := e.Session.DB().FindEntityById(ctx,
+					edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     ip,
 						FromName: ip.Asset.Key(),
@@ -97,40 +98,40 @@ func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, since time.Time) []
 
 func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	ip := ipaddr.Asset.(*network.IPAddress)
 
+	var count int
+	fch := make(chan []*support.Finding, len(e.Session.Config().Scope.Ports))
 	for _, port := range e.Session.Config().Scope.Ports {
-		a := ip.Address.String()
-		if ip.Type == "IPv6" {
-			a = "[" + a + "]"
-		}
-		addr := a + ":" + strconv.Itoa(port)
+		count++
+		go r.probeOnePort(e, ipaddr, port, fch)
+	}
 
-		proto := "https"
-		if port == 80 || port == 8080 {
-			proto = "http"
+	for range count {
+		if results := <-fch; len(results) > 0 {
+			findings = append(findings, results...)
 		}
-
-		findings = append(findings, r.plugin.query(e, ipaddr, proto+"://"+addr, port)...)
 	}
 
 	return findings
 }
 
-func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding) {
-	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+func (r *ipaddrEndpoint) probeOnePort(e *et.Event, ipaddr *dbt.Entity, port int, ch chan []*support.Finding) {
+	ip := ipaddr.Asset.(*network.IPAddress)
+
+	a := ip.Address.String()
+	if ip.Type == "IPv6" {
+		a = "[" + a + "]"
+	}
+	addr := a + ":" + strconv.Itoa(port)
+
+	proto := "https"
+	if port == 80 || port == 8080 {
+		proto = "http"
+	}
+
+	ch <- r.plugin.query(e, ipaddr, proto+"://"+addr, port)
 }
 
-func sweepCallback(e *et.Event, ip *network.IPAddress, src *et.Source) {
-	if entity, err := e.Session.Cache().CreateAsset(ip); err == nil && entity != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
-		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    ip.Address.String(),
-			Entity:  entity,
-			Session: e.Session,
-		})
-	}
+func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding) {
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 }

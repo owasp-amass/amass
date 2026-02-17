@@ -1,45 +1,19 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package gleif
 
-import (
-	"log/slog"
-
-	et "github.com/owasp-amass/amass/v5/engine/types"
-	"golang.org/x/time/rate"
-)
-
-type gleif struct {
-	name    string
-	log     *slog.Logger
-	rlimit  *rate.Limiter
-	fuzzy   *fuzzyCompletions
-	related *relatedOrgs
-	source  *et.Source
-}
-
-type fuzzyCompletions struct {
-	name   string
-	plugin *gleif
-}
-
-type relatedOrgs struct {
-	name   string
-	plugin *gleif
-}
-
-type singleResponse struct {
+type SingleResponse struct {
 	Meta struct {
 		GoldenCopy struct {
 			PublishDate string `json:"publishDate"`
 		} `json:"goldenCopy"`
 	} `json:"meta"`
-	Data leiRecord `json:"data"`
+	Data LEIRecord `json:"data"`
 }
 
-type multipleResponse struct {
+type MultipleResponse struct {
 	Meta struct {
 		GoldenCopy struct {
 			PublishDate string `json:"publishDate"`
@@ -58,10 +32,30 @@ type multipleResponse struct {
 		Next  string `json:"next"`
 		Last  string `json:"last"`
 	} `json:"links"`
-	Data []leiRecord `json:"data"`
+	Data []LEIRecord `json:"data"`
 }
 
-type leiRecord struct {
+type FuzzyCompletionsResponse struct {
+	Data []struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Value string `json:"value"`
+		} `json:"attributes"`
+		Relationships struct {
+			LEIRecords struct {
+				Data struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+				} `json:"data"`
+				Links struct {
+					Related string `json:"related"`
+				} `json:"links"`
+			} `json:"lei-records"`
+		} `json:"relationships"`
+	} `json:"data"`
+}
+
+type LEIRecord struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
@@ -81,8 +75,8 @@ type leiRecord struct {
 				Language string `json:"language"`
 				Type     string `json:"type"`
 			} `json:"transliteratedOtherNames"`
-			LegalAddress        leiAddress `json:"legalAddress"`
-			HeadquartersAddress leiAddress `json:"headquartersAddress"`
+			LegalAddress        LEIAddress `json:"legalAddress"`
+			HeadquartersAddress LEIAddress `json:"headquartersAddress"`
 			RegisteredAt        struct {
 				ID    string `json:"id"`
 				Other string `json:"other"`
@@ -94,17 +88,17 @@ type leiRecord struct {
 				ID    string `json:"id"`
 				Other string `json:"other"`
 			} `json:"legalForm"`
-			AssociatedEntity leiEntity `json:"associatedEntity"`
+			AssociatedEntity LEIEntity `json:"associatedEntity"`
 			Status           string    `json:"status"`
 			Expiration       struct {
 				Date   string `json:"date"`
 				Reason string `json:"reason"`
 			} `json:"expiration"`
-			SuccessorEntity   leiEntity    `json:"successorEntity"`
-			SuccessorEntities []leiEntity  `json:"successorEntities"`
+			SuccessorEntity   LEIEntity    `json:"successorEntity"`
+			SuccessorEntities []LEIEntity  `json:"successorEntities"`
 			CreationDate      string       `json:"creationDate"`
 			SubCategory       string       `json:"subCategory"`
-			OtherAddresses    []leiAddress `json:"otherAddresses"`
+			OtherAddresses    []LEIAddress `json:"otherAddresses"`
 			EventGroups       []struct {
 				GroupType string `json:"groupType"`
 				Events    []struct {
@@ -144,31 +138,31 @@ type leiRecord struct {
 	} `json:"attributes"`
 	Relationships struct {
 		ManagingLOU struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"managing-lou"`
 		LEIIssuer struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"lei-issuer"`
 		FieldModifications struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"field-modifications"`
 		DirectParent struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"direct-parent"`
 		UltimateParent struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"ultimate-parent"`
 		DirectChildren struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"direct-children"`
 		UltimateChildren struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"ultimate-children"`
 		FundManager struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"fund-manager"`
 		ISINs struct {
-			Links leiRelationshipLinks `json:"links"`
+			Links LEIRelationshipLinks `json:"links"`
 		} `json:"isins"`
 	} `json:"relationships"`
 	Links struct {
@@ -176,12 +170,12 @@ type leiRecord struct {
 	} `json:"links"`
 }
 
-type leiEntity struct {
+type LEIEntity struct {
 	LEI  string `json:"lei"`
 	Name string `json:"name"`
 }
 
-type leiAddress struct {
+type LEIAddress struct {
 	Language                    string   `json:"language"`
 	AddressLines                []string `json:"addressLines"`
 	AddressNumber               string   `json:"addressNumber"`
@@ -193,7 +187,7 @@ type leiAddress struct {
 	PostalCode                  string   `json:"postalCode"`
 }
 
-type leiRelationshipLinks struct {
+type LEIRelationshipLinks struct {
 	Related             string `json:"related"`
 	LEIRecord           string `json:"lei-record"`
 	RelationshipRecord  string `json:"relationship-record"`

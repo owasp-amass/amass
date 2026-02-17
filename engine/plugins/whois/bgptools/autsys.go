@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package bgptools
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
@@ -33,14 +34,44 @@ func (r *autsys) Name() string {
 }
 
 func (r *autsys) check(e *et.Event) error {
-	nb, ok := e.Entity.Asset.(*oamnet.Netblock)
-	if !ok {
-		return errors.New("failed to extract the Netblock asset")
+	nb, valid := e.Entity.Asset.(*oamnet.Netblock)
+	if !valid {
+		return errors.New("failed to cast the Netblock asset")
 	}
 
 	ipstr := nb.CIDR.Addr().String()
 	if reserved, _ := amassnet.IsReservedAddress(ipstr); reserved {
 		return nil
+	}
+
+	cidr := nb.Key()
+	_, ipnet, _ := net.ParseCIDR(cidr)
+	if ipnet == nil {
+		return nil
+	}
+
+	first, _ := amassnet.FirstLast(ipnet)
+	if first == nil {
+		return nil
+	}
+
+	// check if there's a autonomous system associated with this netblock
+	if asn, src := r.checkCIDRanger(e, cidr, first); asn != 0 {
+		if asent := r.store(e, asn, e.Entity, src); asent != nil {
+			r.process(e, e.Entity, asent)
+			return nil
+		}
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	// re-check if there's a autonomous system associated with this netblock
+	if asn, src := r.checkCIDRanger(e, cidr, first); asn != 0 {
+		if asent := r.store(e, asn, e.Entity, src); asent != nil {
+			r.process(e, e.Entity, asent)
+			return nil
+		}
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Netblock), string(oam.AutonomousSystem), r.plugin.name)
@@ -60,16 +91,19 @@ func (r *autsys) check(e *et.Event) error {
 }
 
 func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time) *dbt.Entity {
-	edges, err := e.Session.Cache().IncomingEdges(nb, since, "announces")
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), time.Minute)
+	defer cancel()
+
+	edges, err := e.Session.DB().IncomingEdges(ctx, nb, since, "announces")
 	if err != nil {
 		return nil
 	}
 
 	for _, edge := range edges {
-		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, r.plugin.source.Name); err == nil && len(tags) > 0 {
+		if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, r.plugin.source.Name); err == nil && len(tags) > 0 {
 			for _, tag := range tags {
 				if _, ok := tag.Property.(*general.SourceProperty); ok {
-					if as, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && as != nil {
+					if as, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && as != nil {
 						return as
 					}
 				}
@@ -80,21 +114,27 @@ func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time) *dbt.Entit
 }
 
 func (r *autsys) query(e *et.Event, nb *dbt.Entity) *dbt.Entity {
-	cidr := nb.Asset.Key()
-
-	_, ipnet, _ := net.ParseCIDR(cidr)
-	if ipnet == nil {
-		return nil
-	}
-
-	first, _ := amassnet.FirstLast(ipnet)
-	if first == nil {
-		return nil
-	}
-
 	var asn int
-	src := r.plugin.source
-	if entries, err := e.Session.CIDRanger().ContainingNetworks(first); err == nil && len(entries) > 0 {
+	arg := nb.Asset.Key()
+
+	if record, err := r.plugin.whois(e.Session.Ctx(), arg); err == nil {
+		asn = record.ASN
+	} else {
+		e.Session.Log().Error("failed to obtain a response from the WHOIS server", "err",
+			err.Error(), "argument", arg, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
+	}
+
+	if asn == 0 {
+		return nil
+	}
+	return r.store(e, asn, nb, r.plugin.source)
+}
+
+func (r *autsys) checkCIDRanger(e *et.Event, cidr string, ip net.IP) (int, *et.Source) {
+	var asn int
+	var src *et.Source
+
+	if entries, err := e.Session.CIDRanger().ContainingNetworks(ip); err == nil && len(entries) > 0 {
 		for _, entry := range entries {
 			if arentry, ok := entry.(*sessions.CIDRangerEntry); ok {
 				if strings.EqualFold(cidr, arentry.Net.String()) {
@@ -105,38 +145,26 @@ func (r *autsys) query(e *et.Event, nb *dbt.Entity) *dbt.Entity {
 			}
 		}
 	}
-
-	if asn == 0 {
-		arg := nb.Asset.Key()
-
-		if record, err := r.plugin.whois(arg); err == nil {
-			asn = record.ASN
-		} else {
-			e.Session.Log().Error("failed to obtain a response from the WHOIS server", "err",
-				err.Error(), "argument", arg, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
-		}
-	}
-
-	if asn == 0 {
-		return nil
-	}
-	return r.store(e, asn, nb, src)
+	return asn, src
 }
 
 func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity, src *et.Source) *dbt.Entity {
-	as, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: asn})
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	as, err := e.Session.DB().CreateAsset(ctx, &oamnet.AutonomousSystem{Number: asn})
 	if err == nil && as != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(as, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, as, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
 
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "announces"},
 			FromEntity: as,
 			ToEntity:   nb,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     r.plugin.source.Name,
 				Confidence: r.plugin.source.Confidence,
 			})

@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package rdap
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -34,7 +35,7 @@ func (r *autnum) Name() string {
 func (r *autnum) check(e *et.Event) error {
 	_, ok := e.Entity.Asset.(*oamreg.AutnumRecord)
 	if !ok {
-		return errors.New("failed to extract the AutnumRecord asset")
+		return errors.New("failed to cast the AutnumRecord asset")
 	}
 
 	matches, err := e.Session.Config().CheckTransformations(
@@ -82,9 +83,12 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*su
 		}
 	}
 
-	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), time.Minute)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
@@ -126,7 +130,10 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*su
 }
 
 func (r *autnum) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since time.Time) bool {
-	if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
+	if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, src.Name); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
 			if _, ok := tag.Property.(*general.SourceProperty); ok {
 				return true
@@ -140,8 +147,11 @@ func (r *autnum) store(e *et.Event, resp *rdap.Autnum, entity *dbt.Entity, m *co
 	var findings []*support.Finding
 	autrec := entity.Asset.(*oamreg.AutnumRecord)
 
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
 	if u := r.plugin.getJSONLink(resp.Links); u != nil && m.IsMatch(string(oam.URL)) {
-		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
+		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
 				From:     entity,
 				FromName: "AutnumRecord: " + autrec.Handle,
@@ -155,7 +165,7 @@ func (r *autnum) store(e *et.Event, resp *rdap.Autnum, entity *dbt.Entity, m *co
 		fqdn := &oamdns.FQDN{Name: name}
 
 		if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
-			if a, err := e.Session.Cache().CreateAsset(fqdn); err == nil && a != nil {
+			if a, err := e.Session.DB().CreateAsset(ctx, fqdn); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
 					From:     entity,
 					FromName: "AutnumRecord: " + autrec.Handle,

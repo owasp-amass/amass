@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -91,13 +91,10 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	r.Lock()
 	defer r.Unlock()
 
-	if qdb := r.sessions[id].Queue(); qdb != nil {
-		if err := qdb.Close(); err != nil {
-			s.Log().Error(fmt.Sprintf("failed to close the queue for session %s: %v", id, err))
+	if backlog := r.sessions[id].Backlog(); backlog != nil {
+		if err := backlog.Close(); err != nil {
+			s.Log().Error(fmt.Sprintf("failed to close the backlog for session %s: %v", id, err))
 		}
-	}
-	if c := r.sessions[id].Cache(); c != nil {
-		_ = c.Close()
 	}
 	if s, ok := r.sessions[id].(*Session); ok {
 		s.ranger = nil
@@ -110,6 +107,8 @@ func (r *manager) CancelSession(id uuid.UUID) {
 			s.Log().Error(fmt.Sprintf("failed to close the database for session %s: %v", id, err))
 		}
 	}
+
+	s.PubSub().Close()
 	delete(r.sessions, id)
 }
 

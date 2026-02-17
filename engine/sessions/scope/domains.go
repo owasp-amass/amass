@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,6 +16,10 @@ func (s *Scope) AddFQDN(fqdn *dns.FQDN) bool {
 	if fqdn.Name == "" {
 		return false
 	}
+
+	name := strings.ToLower(strings.TrimSpace(fqdn.Name))
+	fqdn.Name = name
+
 	// only registered domain names can be added to the session scope
 	if dom, err := publicsuffix.EffectiveTLDPlusOne(
 		fqdn.Name); err != nil || !strings.EqualFold(fqdn.Name, dom) {
@@ -25,16 +29,15 @@ func (s *Scope) AddFQDN(fqdn *dns.FQDN) bool {
 	s.domLock.Lock()
 	defer s.domLock.Unlock()
 
-	key := strings.ToLower(fqdn.Name)
-	if _, found := s.domains[key]; !found {
-		s.domains[key] = fqdn
+	if _, found := s.domains[name]; !found {
+		s.domains[name] = fqdn
 		return true
 	}
 	return false
 }
 
 func (s *Scope) AddDomain(d string) bool {
-	return s.AddFQDN(&dns.FQDN{Name: strings.ToLower(strings.TrimSpace(d))})
+	return s.AddFQDN(&dns.FQDN{Name: d})
 }
 
 func (s *Scope) FQDNs() []*dns.FQDN {

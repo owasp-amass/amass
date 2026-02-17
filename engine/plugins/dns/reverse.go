@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -56,19 +57,25 @@ func (d *dnsReverse) check(e *et.Event) error {
 	}
 	reverse = utils.RemoveLastDot(reverse)
 
-	src := d.plugin.source
-	ptr := d.createPTRAlias(e, reverse, e.Entity)
-	if ptr == nil {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), "IPAddress", "FQDN", d.plugin.name)
 	if err != nil {
 		return err
 	}
 
+	var ptr *dbt.Entity
+	src := d.plugin.source
+	monitored := support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since)
+	if monitored {
+		ptr = d.lookupPTRAlias(e, reverse, since)
+	} else {
+		ptr = d.createPTRAlias(e, reverse, e.Entity)
+	}
+	if ptr == nil {
+		return nil
+	}
+
 	var rev []*relRev
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+	if monitored {
 		rev = append(rev, d.lookup(e, ptr, since)...)
 	} else {
 		rev = append(rev, d.query(e, addrstr, ptr)...)
@@ -76,8 +83,8 @@ func (d *dnsReverse) check(e *et.Event) error {
 	}
 
 	if len(rev) > 0 {
-		d.process(e, rev)
 		support.AddDNSRecordType(e, int(dns.TypePTR))
+		d.process(e, rev)
 
 		var size int
 		if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf > 0 {
@@ -96,12 +103,11 @@ func (d *dnsReverse) check(e *et.Event) error {
 func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relRev {
 	var rev []*relRev
 
-	n, ok := fqdn.Asset.(*oamdns.FQDN)
-	if !ok || n == nil {
+	if _, ok := fqdn.Asset.(*oamdns.FQDN); !ok {
 		return rev
 	}
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, 12); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.BasicDNSRelation, 12); len(assets) > 0 {
 		for _, a := range assets {
 			rev = append(rev, &relRev{ipFQDN: fqdn, target: a})
 		}
@@ -113,9 +119,14 @@ func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*r
 func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity) []*relRev {
 	var rev []*relRev
 
-	if rr, err := support.PerformQuery(ipstr, dns.TypePTR); err == nil {
+	if rr, err := support.PerformQuery(e.Session.Ctx(), ipstr, dns.TypePTR); err == nil {
 		if records := d.store(e, ptr, rr); len(records) > 0 {
 			rev = append(rev, records...)
+		}
+	} else if err == support.ErrFailedMaxDNSAttempts {
+		if name, derr := dns.ReverseAddr(ipstr); derr == nil {
+			e.Session.Log().Warn(err.Error(), "fqdn", name,
+				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
 	}
 	return rev
@@ -123,6 +134,10 @@ func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity) []*relRev
 
 func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev {
 	var rev []*relRev
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
 	// additional validation of the PTR record
 	for _, record := range rr {
 		if record.Header().Rrtype != dns.TypePTR {
@@ -135,8 +150,8 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 			continue
 		}
 
-		if t, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if t, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
+			if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
 					Header: oamdns.RRHeader{
@@ -149,7 +164,7 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 				ToEntity:   t,
 			}); err == nil && edge != nil {
 				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+				_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 					Source:     d.plugin.source.Name,
 					Confidence: d.plugin.source.Confidence,
 				})
@@ -162,17 +177,33 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 	return rev
 }
 
+func (d *dnsReverse) lookupPTRAlias(e *et.Event, name string, since time.Time) *dbt.Entity {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Second)
+	defer cancel()
+
+	if ents, err := e.Session.DB().FindEntitiesByContent(ctx, oam.FQDN, since, 1, dbt.ContentFilters{
+		"name": name,
+	}); err == nil && len(ents) == 1 {
+		return ents[0]
+	}
+
+	return nil
+}
+
 func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *dbt.Entity {
-	ptr, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	defer cancel()
+
+	ptr, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name})
 	if err != nil || ptr == nil {
 		return nil
 	}
-	if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+	if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   &general.SimpleRelation{Name: "ptr_record"},
 		FromEntity: ip,
 		ToEntity:   ptr,
 	}); err == nil && edge != nil {
-		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 			Source:     d.plugin.source.Name,
 			Confidence: d.plugin.source.Confidence,
 		})
@@ -192,8 +223,15 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *d
 
 func (d *dnsReverse) process(e *et.Event, rev []*relRev) {
 	for _, r := range rev {
-		ip := r.ipFQDN.Asset.(*oamdns.FQDN)
-		target := r.target.Asset.(*oamdns.FQDN)
+		ip, valid := r.ipFQDN.Asset.(*oamdns.FQDN)
+		if !valid {
+			continue
+		}
+
+		target, valid := r.target.Asset.(*oamdns.FQDN)
+		if !valid {
+			continue
+		}
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,
@@ -201,7 +239,7 @@ func (d *dnsReverse) process(e *et.Event, rev []*relRev) {
 			Session: e.Session,
 		})
 
-		e.Session.Log().Info("relationship discovered", "from", ip.Name, "relation", "ptr_record",
+		e.Session.Log().Info("relationship discovered", "from", ip.Name, "relation", "dns_record",
 			"to", target.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }

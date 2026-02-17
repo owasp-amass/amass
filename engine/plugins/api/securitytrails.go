@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -50,12 +50,13 @@ func (st *securityTrails) Start(r et.Registry) error {
 	st.log = r.Log().WithGroup("plugin").With("name", st.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     st,
-		Name:       st.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   st.check,
+		Plugin:       st,
+		Name:         st.name + "-Handler",
+		Position:     30,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     st.check,
 	}); err != nil {
 		return err
 	}
@@ -96,9 +97,7 @@ func (st *securityTrails) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, st.source, since) {
-		names = append(names, st.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, st.source, since) {
 		names = append(names, st.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, st.source)
 	}
@@ -109,16 +108,15 @@ func (st *securityTrails) check(e *et.Event) error {
 	return nil
 }
 
-func (st *securityTrails) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), st.source, since)
-}
-
 func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		_ = st.rlimit.Wait(context.TODO())
-		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+		_ = st.rlimit.Wait(e.Session.Ctx())
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		defer cancel()
+
+		resp, err := http.RequestWebPage(ctx, &http.Request{
 			URL:    "https://api.securitytrails.com/v1/domain/" + name + "/subdomains",
 			Header: http.Header{"APIKEY": []string{key}},
 		})

@@ -1,33 +1,39 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package horizontals
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
-	"github.com/miekg/dns"
+	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
-	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamcon "github.com/owasp-amass/open-asset-model/contact"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/resolve/utils"
-	"golang.org/x/net/publicsuffix"
 )
 
 type horizPlugin struct {
-	name       string
-	log        *slog.Logger
-	horfqdn    *horfqdn
-	horContact *horContact
-	source     *et.Source
+	name        string
+	log         *slog.Logger
+	horfqdn     *horfqdn
+	horaddr     *horaddr
+	horOrg      *horOrg
+	horLocation *horLocation
+	horRegRec   *horRegRec
+	horTlsCert  *horTlsCert
+	source      *et.Source
 }
 
 func NewHorizontals() et.Plugin {
@@ -35,7 +41,7 @@ func NewHorizontals() et.Plugin {
 		name: "Horizontals",
 		source: &et.Source{
 			Name:       "Horizontals",
-			Confidence: 50,
+			Confidence: 75,
 		},
 	}
 }
@@ -54,8 +60,9 @@ func (h *horizPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       h,
 		Name:         h.horfqdn.name,
-		Priority:     6,
-		MaxInstances: support.MaxHandlerInstances,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
 		Callback:     h.horfqdn.check,
@@ -63,16 +70,111 @@ func (h *horizPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	h.horContact = &horContact{
-		name:   h.name + "-ContactRecord-Handler",
+	h.horaddr = &horaddr{
+		name:   h.name + "-IPAddress-Handler",
 		plugin: h,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     h,
-		Name:       h.horContact.name,
-		Transforms: []string{string(oam.ContactRecord)},
-		EventType:  oam.ContactRecord,
-		Callback:   h.horContact.check,
+		Plugin:       h,
+		Name:         h.horaddr.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.IPAddress)},
+		EventType:    oam.IPAddress,
+		Callback:     h.horaddr.check,
+	}); err != nil {
+		return err
+	}
+
+	h.horOrg = &horOrg{
+		name:   h.name + "-Organization-Handler",
+		plugin: h,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       h,
+		Name:         h.horOrg.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Organization)},
+		EventType:    oam.Organization,
+		Callback:     h.horOrg.check,
+	}); err != nil {
+		return err
+	}
+
+	h.horLocation = &horLocation{
+		name:   h.name + "-Location-Handler",
+		plugin: h,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       h,
+		Name:         h.horLocation.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Location)},
+		EventType:    oam.Location,
+		Callback:     h.horLocation.check,
+	}); err != nil {
+		return err
+	}
+
+	h.horRegRec = &horRegRec{
+		name:   h.name + "-Registration-Record-Handler",
+		plugin: h,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       h,
+		Name:         h.horRegRec.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.AutnumRecord)},
+		EventType:    oam.AutnumRecord,
+		Callback:     h.horRegRec.check,
+	}); err != nil {
+		return err
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       h,
+		Name:         h.horRegRec.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.DomainRecord)},
+		EventType:    oam.DomainRecord,
+		Callback:     h.horRegRec.check,
+	}); err != nil {
+		return err
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       h,
+		Name:         h.horRegRec.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.IPNetRecord)},
+		EventType:    oam.IPNetRecord,
+		Callback:     h.horRegRec.check,
+	}); err != nil {
+		return err
+	}
+
+	h.horTlsCert = &horTlsCert{
+		name:   h.name + "-TLS-Certificate-Handler",
+		plugin: h,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       h,
+		Name:         h.horTlsCert.name,
+		Position:     10,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.TLSCertificate)},
+		EventType:    oam.TLSCertificate,
+		Callback:     h.horTlsCert.check,
 	}); err != nil {
 		return err
 	}
@@ -85,198 +187,21 @@ func (h *horizPlugin) Stop() {
 	h.log.Info("Plugin stopped")
 }
 
-func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Association) {
-	for _, assoc := range assocs {
-		for _, impacted := range assoc.ImpactedAssets {
-			conf := 50
+func (h *horizPlugin) submitIPAddress(e *et.Event, asset *oamnet.IPAddress, src *et.Source) {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
 
-			if e.Session.Config().DefaultTransformations != nil {
-				if c := e.Session.Config().DefaultTransformations.Confidence; c > 0 {
-					conf = c
-				}
-			}
-
-			if match, result := e.Session.Scope().IsAssetInScope(impacted.Asset, conf); result >= conf && match != nil {
-				if a, err := e.Session.Cache().FindEntitiesByContent(match, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
-					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.Cache(), a[0]) {
-						h.makeAssocRelationshipEntries(e, assoc.Match, assoc2)
-					}
-				}
-			}
-		}
-	}
-}
-
-// TODO: this needs to be cleaned up
-func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *dbt.Entity) {
-	// do not connect an asset to itself
-	if assoc.ID == assoc2.ID {
+	// ensure we do not work on an IP address that was processed previously
+	_, err := e.Session.DB().FindEntitiesByContent(ctx, oam.IPAddress, e.Session.StartTime(), 1, dbt.ContentFilters{
+		"address": asset.Address.String(),
+	})
+	if err == nil {
 		return
 	}
 
-	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "associated_with"},
-		FromEntity: assoc,
-		ToEntity:   assoc2,
-	})
-	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "associated_with"},
-		FromEntity: assoc2,
-		ToEntity:   assoc,
-	})
-}
-
-func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity) {
-	for _, asset := range assets {
-		// check for new networks added to the scope
-		switch v := asset.Asset.(type) {
-		case *oamnet.Netblock:
-			h.ipPTRTargetsInScope(e, asset)
-			h.sweepAroundIPs(e, asset)
-			//h.sweepNetblock(e, v, src)
-		case *oamreg.IPNetRecord:
-			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
-				a := ents[0]
-
-				if _, ok := a.Asset.(*oamnet.Netblock); ok {
-					h.ipPTRTargetsInScope(e, a)
-					h.sweepAroundIPs(e, a)
-					//h.sweepNetblock(e, nb, src)
-				}
-			}
-		}
-
-		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    asset.Asset.Key(),
-			Entity:  asset,
-			Session: e.Session,
-		})
-
-		_, _ = e.Session.Cache().CreateEntityProperty(asset, &general.SourceProperty{
-			Source:     h.source.Name,
-			Confidence: h.source.Confidence,
-		})
-	}
-}
-
-func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
-	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
-		for _, edge := range edges {
-			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
-			if err != nil {
-				continue
-			}
-
-			reverse, err := dns.ReverseAddr(to.Asset.Key())
-			if err != nil {
-				continue
-			}
-
-			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&oamdns.FQDN{Name: utils.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
-				a := ents[0]
-
-				if edges, err := e.Session.Cache().OutgoingEdges(a, e.Session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
-					for _, edge := range edges {
-						if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); !ok || rel.Header.RRType != 12 {
-							continue
-						}
-						to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
-						if err != nil {
-							continue
-						}
-						if dom, err := publicsuffix.EffectiveTLDPlusOne(to.Asset.Key()); err == nil {
-							if e.Session.Scope().AddDomain(dom) {
-								h.submitFQDN(e, dom)
-								h.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity) {
-	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
-		for _, edge := range edges {
-			size := 100
-			if e.Session.Config().Active {
-				size = 250
-			}
-
-			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
-			if err != nil {
-				continue
-			}
-			if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
-				support.IPAddressSweep(e, ip, h.source, size, h.submitIPAddresses)
-			}
-		}
-	}
-}
-
-/*
-	func (h *horizPlugin) sweepNetblock(e *et.Event, nb *oamnet.Netblock, src *et.Source) {
-		for _, ip := range h.inScopeNetblockIPs(nb) {
-			h.submitIPAddresses(e, ip, src)
-		}
-	}
-
-	func (h *horizPlugin) inScopeNetblockIPs(nb *oamnet.Netblock) []*oamnet.IPAddress {
-		_, cidr, err := net.ParseCIDR(nb.CIDR.String())
-		if err != nil {
-			return []*oamnet.IPAddress{}
-		}
-
-		var ips []net.IP
-		if nb.CIDR.Masked().Bits() > 20 {
-			ips = amassnet.AllHosts(cidr)
-		} else {
-			ips = h.distAcrossNetblock(cidr, 2048)
-		}
-
-		var results []*oamnet.IPAddress
-		for _, ip := range ips {
-			addr := &oamnet.IPAddress{Address: netip.MustParseAddr(ip.String()), Type: "IPv4"}
-			if addr.Address.Is6() {
-				addr.Type = "IPv6"
-			}
-			results = append(results, addr)
-		}
-		return results
-	}
-
-	func (h *horizPlugin) distAcrossNetblock(cidr *net.IPNet, num int) []net.IP {
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-		_, bits := cidr.Mask.Size()
-		if bits == 0 {
-			return []net.IP{}
-		}
-
-		total := 1 << bits
-		inc := total / num
-		var results []net.IP
-		for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); {
-			sel := r.Intn(inc)
-
-			for i := 0; i < inc; i++ {
-				if i == sel {
-					results = append(results, net.ParseIP(ip.String()))
-				}
-				amassnet.IPInc(ip)
-			}
-		}
-		return results
-	}
-*/
-func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, src *et.Source) {
-	addr, err := e.Session.Cache().CreateAsset(asset)
+	addr, err := e.Session.DB().CreateAsset(ctx, asset)
 	if err == nil && addr != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(addr, &general.SourceProperty{
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, addr, &oamgen.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -288,17 +213,300 @@ func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, sr
 	}
 }
 
-func (h *horizPlugin) submitFQDN(e *et.Event, dom string) {
-	fqdn, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: dom})
-	if err == nil && fqdn != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(fqdn, &general.SourceProperty{
-			Source:     h.source.Name,
-			Confidence: h.source.Confidence,
-		})
-		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    fqdn.Asset.Key(),
-			Entity:  fqdn,
-			Session: e.Session,
-		})
+func (h *horizPlugin) getContactRecord(sess et.Session, ent *dbt.Entity, label string) (*dbt.Entity, error) {
+	since, err := support.TTLStartTime(sess.Config(),
+		string(ent.Asset.AssetType()), string(oam.ContactRecord), h.name)
+	if err != nil {
+		return nil, err
 	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
+	defer cancel()
+
+	edges, err := sess.DB().OutgoingEdges(ctx, ent, since, label)
+	if err != nil || len(edges) == 0 {
+		return nil, errors.New("failed to obtain the contact record")
+	}
+
+	to, err := sess.DB().FindEntityById(ctx, edges[0].ToEntity.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, valid := to.Asset.(*oamcon.ContactRecord); valid {
+		return to, nil
+	}
+	return nil, errors.New("failed to cast the ContactRecord entity")
+}
+
+func (h *horizPlugin) lookupContactRecordOrgsAndLocations(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, []*dbt.Entity) {
+	var orgents []*dbt.Entity
+
+	if ents, err := h.getContactRecordOrganizations(sess, cr); err == nil && len(ents) > 0 {
+		for _, ent := range ents {
+			if _, valid := ent.Asset.(*oamorg.Organization); valid {
+				orgents = append(orgents, ent)
+			}
+		}
+	}
+
+	set := stringset.New()
+	defer set.Close()
+
+	var locents []*dbt.Entity
+	for _, o := range orgents {
+		if ents, err := h.getOrganizationLocations(sess, o); err == nil && len(ents) > 0 {
+			for _, ent := range ents {
+				if set.Has(ent.ID) {
+					continue
+				}
+				if _, valid := ent.Asset.(*oamcon.Location); valid {
+					set.Insert(ent.ID)
+					locents = append(locents, ent)
+				}
+			}
+		}
+	}
+
+	if ents, err := h.getContactRecordLocations(sess, cr); err == nil && len(ents) > 0 {
+		for _, ent := range ents {
+			if set.Has(ent.ID) {
+				continue
+			}
+			if _, valid := ent.Asset.(*oamcon.Location); valid {
+				set.Insert(ent.ID)
+				locents = append(locents, ent)
+			}
+		}
+	}
+
+	return orgents, locents
+}
+
+func (h *horizPlugin) getContactRecordOrganizations(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, error) {
+	since, err := support.TTLStartTime(sess.Config(),
+		string(oam.ContactRecord), string(oam.Organization), h.name)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
+	defer cancel()
+
+	edges, err := sess.DB().OutgoingEdges(ctx, cr, since, "organization")
+	if err != nil || len(edges) == 0 {
+		return nil, errors.New("zero organizations found")
+	}
+
+	seconds := 5 * len(edges)
+	octx, cancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
+	defer cancel()
+
+	var results []*dbt.Entity
+	for _, edge := range edges {
+		to, err := sess.DB().FindEntityById(octx, edge.ToEntity.ID)
+		if err != nil {
+			continue
+		}
+
+		if _, valid := to.Asset.(*oamorg.Organization); valid {
+			results = append(results, to)
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("failed to extract the organization")
+	}
+	return results, nil
+}
+
+func (h *horizPlugin) getContactRecordLocations(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, error) {
+	since, err := support.TTLStartTime(sess.Config(),
+		string(oam.ContactRecord), string(oam.Location), h.name)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
+	defer cancel()
+
+	edges, err := sess.DB().OutgoingEdges(ctx, cr, since, "location")
+	if err != nil || len(edges) == 0 {
+		return nil, errors.New("zero locations found")
+	}
+
+	seconds := 5 * len(edges)
+	lctx, cancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
+	defer cancel()
+
+	var results []*dbt.Entity
+	for _, edge := range edges {
+		to, err := sess.DB().FindEntityById(lctx, edge.ToEntity.ID)
+		if err != nil {
+			continue
+		}
+
+		if _, valid := to.Asset.(*oamcon.Location); valid {
+			results = append(results, to)
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("failed to extract the locations")
+	}
+	return results, nil
+}
+
+func (h *horizPlugin) getOrganizationLocations(sess et.Session, o *dbt.Entity) ([]*dbt.Entity, error) {
+	since, err := support.TTLStartTime(sess.Config(),
+		string(oam.Organization), string(oam.Location), h.name)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
+	defer cancel()
+
+	edges, err := sess.DB().OutgoingEdges(ctx, o, since, "hq_address", "location")
+	if err != nil || len(edges) == 0 {
+		return nil, errors.New("zero locations found")
+	}
+
+	seconds := 5 * len(edges)
+	lctx, cancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
+	defer cancel()
+
+	var results []*dbt.Entity
+	for _, edge := range edges {
+		to, err := sess.DB().FindEntityById(lctx, edge.ToEntity.ID)
+		if err != nil {
+			continue
+		}
+
+		if _, valid := to.Asset.(*oamcon.Location); valid {
+			results = append(results, to)
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("failed to extract the locations")
+	}
+	return results, nil
+}
+
+func (h *horizPlugin) addASNetblocksToScope(sess et.Session, asn int) *dbt.Entity {
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
+	defer cancel()
+
+	var as *dbt.Entity
+	if ents, err := sess.DB().FindEntitiesByContent(ctx, oam.AutonomousSystem, time.Time{}, 1, dbt.ContentFilters{
+		"number": asn,
+	}); err == nil && len(ents) == 1 {
+		as = ents[0]
+	}
+	if as == nil {
+		return nil
+	}
+
+	since, err := support.TTLStartTime(sess.Config(), string(oam.AutonomousSystem), string(oam.Netblock), h.name)
+	if err != nil {
+		return as
+	}
+
+	if edges, err := sess.DB().OutgoingEdges(ctx, as, since, "announces"); err == nil && len(edges) > 0 {
+		seconds := 5 * len(edges)
+
+		ctx, cancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
+		defer cancel()
+
+		for _, edge := range edges {
+			if to, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
+				// add the announced netblock to the scope
+				h.enqueueIfOutOfScope(sess, to)
+			}
+		}
+	}
+
+	return as
+}
+
+func (h *horizPlugin) confidence(sess et.Session, atype oam.AssetType) int {
+	tstr := string(atype)
+
+	if matches, err := sess.Config().CheckTransformations(tstr, tstr); err == nil && matches != nil {
+		if conf := matches.Confidence(h.name); conf > 0 {
+			return conf
+		}
+		if conf := matches.Confidence(tstr); conf > 0 {
+			return conf
+		}
+	}
+
+	return -1
+}
+
+func (h *horizPlugin) isEntityInScope(sess et.Session, ent *dbt.Entity) bool {
+	econf := h.confidence(sess, ent.Asset.AssetType())
+	if econf <= 0 {
+		return false
+	}
+
+	if _, conf := sess.Scope().IsAssetInScope(ent.Asset, econf); conf >= econf {
+		return true
+	}
+	return false
+}
+
+func (h *horizPlugin) addToScopeAndEnqueue(sess et.Session, ent *dbt.Entity) {
+	if sess.Scope().Add(ent.Asset) {
+		if econf := h.confidence(sess, ent.Asset.AssetType()); econf > 0 {
+			if a, conf := sess.Scope().IsAssetInScope(ent.Asset, econf); conf >= econf {
+				if strings.EqualFold(a.Key(), ent.Asset.Key()) {
+					_ = sess.Backlog().Enqueue(ent)
+				}
+			}
+		}
+	}
+}
+
+func (h *horizPlugin) enqueueIfOutOfScope(sess et.Session, ent *dbt.Entity) {
+	if !h.isEntityInScope(sess, ent) {
+		h.addToScopeAndEnqueue(sess, ent)
+	}
+}
+
+func (h *horizPlugin) getRegisteredDomainEntity(sess et.Session, record *dbt.Entity) (*dbt.Entity, error) {
+	dr, valid := record.Asset.(*oamreg.DomainRecord)
+	if !valid {
+		return nil, errors.New("failed to cast the DomainRecord")
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if ents, err := sess.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{
+		"name": dr.Domain,
+	}); err == nil && len(ents) == 1 {
+		return ents[0], nil
+	}
+
+	return nil, fmt.Errorf("failed to obtain the registered domain name FQDN for: %s", dr.Domain)
+}
+
+func (h *horizPlugin) getRegisteredNetblockEntity(sess et.Session, record *dbt.Entity) (*dbt.Entity, error) {
+	iprec, valid := record.Asset.(*oamreg.IPNetRecord)
+	if !valid {
+		return nil, errors.New("failed to cast the IPNetRecord")
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if ents, err := sess.DB().FindEntitiesByContent(ctx, oam.Netblock, time.Time{}, 1, dbt.ContentFilters{
+		"cidr": iprec.CIDR.String(),
+	}); err == nil && len(ents) == 1 {
+		return ents[0], nil
+	}
+
+	return nil, fmt.Errorf("failed to obtain the registered CIDR Netblock for: %s", iprec.CIDR.String())
 }

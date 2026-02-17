@@ -1,7 +1,6 @@
 //go:build cgo
-// +build cgo
 
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,16 +15,12 @@ package libpostal
 import "C"
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"unicode/utf8"
 	"unsafe"
 )
-
-type ParserOptions struct {
-	Language string
-	Country  string
-}
 
 var (
 	postalLock           sync.Mutex
@@ -46,11 +41,11 @@ func getDefaultParserOptions() ParserOptions {
 	}
 }
 
-func ParseAddress(address string) ([]ParsedComponent, error) {
-	return ParseAddressOptions(address, parserDefaultOptions)
+func ParseAddress(ctx context.Context, address string) ([]ParsedComponent, error) {
+	return ParseAddressOptions(ctx, address, parserDefaultOptions)
 }
 
-func ParseAddressOptions(address string, options ParserOptions) ([]ParsedComponent, error) {
+func ParseAddressOptions(ctx context.Context, address string, options ParserOptions) ([]ParsedComponent, error) {
 	if !postalLibAvailable {
 		return nil, errors.New(ErrPostalLibNotAvailable)
 	}
@@ -81,19 +76,15 @@ func ParseAddressOptions(address string, options ParserOptions) ([]ParsedCompone
 	}
 
 	cAddressParserResponsePtr := C.libpostal_parse_address(cAddress, cOptions)
-
 	if cAddressParserResponsePtr == nil {
 		return nil, errors.New("failed to parse address")
 	}
-
 	cAddressParserResponse := *cAddressParserResponsePtr
 
 	cNumComponents := cAddressParserResponse.num_components
 	cComponents := cAddressParserResponse.components
 	cLabels := cAddressParserResponse.labels
-
 	numComponents := uint64(cNumComponents)
-
 	parsedComponents := make([]ParsedComponent, numComponents)
 
 	// Accessing a C array
@@ -101,7 +92,7 @@ func ParseAddressOptions(address string, options ParserOptions) ([]ParsedCompone
 	cLabelsPtr := (*[1 << 30](*C.char))(unsafe.Pointer(cLabels))[:numComponents:numComponents]
 
 	var i uint64
-	for i = 0; i < numComponents; i++ {
+	for i = range numComponents {
 		parsedComponents[i] = ParsedComponent{
 			Label: C.GoString(cLabelsPtr[i]),
 			Value: C.GoString(cComponentsPtr[i]),
@@ -109,6 +100,5 @@ func ParseAddressOptions(address string, options ParserOptions) ([]ParsedCompone
 	}
 
 	C.libpostal_address_parser_response_destroy(cAddressParserResponsePtr)
-
 	return parsedComponents, nil
 }

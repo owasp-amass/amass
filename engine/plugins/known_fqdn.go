@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package plugins
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -39,7 +40,7 @@ func (d *knownFQDN) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.name + "-Handler",
-		Priority:     7,
+		Position:     11,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -74,7 +75,10 @@ func (d *knownFQDN) check(e *et.Event) error {
 }
 
 func (d *knownFQDN) lookup(e *et.Event, dom *dbt.Entity) []*dbt.Entity {
-	names, _ := db.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 60*time.Second)
+	defer cancel()
+
+	names, _ := db.FindByFQDNScope(ctx, e.Session.DB(), dom, time.Time{})
 	return names
 }
 

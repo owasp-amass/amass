@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -31,7 +32,7 @@ type wayback struct {
 }
 
 func NewWayback() et.Plugin {
-	limit := rate.Every(5 * time.Second)
+	limit := rate.Every(10 * time.Second)
 
 	return &wayback{
 		name:   "Wayback",
@@ -52,12 +53,13 @@ func (w *wayback) Start(r et.Registry) error {
 	w.log = r.Log().WithGroup("plugin").With("name", w.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   w.check,
+		Plugin:       w,
+		Name:         w.name + "-Handler",
+		Position:     40,
+		MaxInstances: 1,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     w.check,
 	}); err != nil {
 		return err
 	}
@@ -86,9 +88,7 @@ func (w *wayback) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, w.source, since) {
-		names = append(names, w.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, w.source, since) {
 		names = append(names, w.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, w.source)
 	}
@@ -99,13 +99,14 @@ func (w *wayback) check(e *et.Event) error {
 	return nil
 }
 
-func (w *wayback) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), w.source, since)
-}
-
 func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
-	_ = w.rlimit.Wait(context.TODO())
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: w.URL + name})
+	_ = w.rlimit.Wait(e.Session.Ctx())
+	end := fmt.Sprintf("*.%s/*", name)
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	resp, err := http.RequestWebPage(ctx, &http.Request{URL: w.URL + end})
 	if err != nil {
 		return nil
 	}

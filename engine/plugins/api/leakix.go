@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -50,12 +50,13 @@ func (ix *leakix) Start(r et.Registry) error {
 	ix.log = r.Log().WithGroup("plugin").With("name", ix.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     ix,
-		Name:       ix.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   ix.check,
+		Plugin:       ix,
+		Name:         ix.name + "-Handler",
+		Position:     27,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     ix.check,
 	}); err != nil {
 		return err
 	}
@@ -96,9 +97,7 @@ func (ix *leakix) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ix.source, since) {
-		names = append(names, ix.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, ix.source, since) {
 		names = append(names, ix.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, ix.source)
 	}
@@ -109,16 +108,15 @@ func (ix *leakix) check(e *et.Event) error {
 	return nil
 }
 
-func (ix *leakix) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), ix.source, since)
-}
-
 func (ix *leakix) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		_ = ix.rlimit.Wait(context.TODO())
-		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+		_ = ix.rlimit.Wait(e.Session.Ctx())
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		defer cancel()
+
+		resp, err := http.RequestWebPage(ctx, &http.Request{
 			URL:    "https://leakix.net/api/subdomains/" + name,
 			Header: http.Header{"Accept": []string{"application/json"}, "api-key": []string{key}},
 		})

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -33,6 +33,10 @@ func (r *CIDRangerEntry) Source() *et.Source {
 type amassRanger struct {
 	sync.Mutex
 	ranger cidranger.Ranger
+}
+
+func NewAmassRanger() cidranger.Ranger {
+	return &amassRanger{ranger: cidranger.NewPCTrieRanger()}
 }
 
 func (r *amassRanger) Insert(entry cidranger.RangerEntry) error {
@@ -75,8 +79,4 @@ func (r *amassRanger) Len() int {
 	defer r.Unlock()
 
 	return r.ranger.Len()
-}
-
-func NewAmassRanger() cidranger.Ranger {
-	return &amassRanger{ranger: cidranger.NewPCTrieRanger()}
 }

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -50,12 +50,13 @@ func (c *chaos) Start(r et.Registry) error {
 	c.log = r.Log().WithGroup("plugin").With("name", c.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     c,
-		Name:       c.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   c.check,
+		Plugin:       c,
+		Name:         c.name + "-Handler",
+		Position:     21,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     c.check,
 	}); err != nil {
 		return err
 	}
@@ -96,9 +97,7 @@ func (c *chaos) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, c.source, since) {
-		names = append(names, c.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, c.source, since) {
 		names = append(names, c.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, c.source)
 	}
@@ -109,16 +108,15 @@ func (c *chaos) check(e *et.Event) error {
 	return nil
 }
 
-func (c *chaos) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), c.source, since)
-}
-
 func (c *chaos) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		_ = c.rlimit.Wait(context.TODO())
-		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+		_ = c.rlimit.Wait(e.Session.Ctx())
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		defer cancel()
+
+		resp, err := http.RequestWebPage(ctx, &http.Request{
 			URL:    "https://dns.projectdiscovery.io/dns/" + name + "/subdomains",
 			Header: http.Header{"Authorization": []string{key}},
 		})

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,4 +9,9 @@ const ErrPostalLibNotAvailable = "libpostal is not available"
 type ParsedComponent struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
+}
+
+type ParserOptions struct {
+	Language string
+	Country  string
 }

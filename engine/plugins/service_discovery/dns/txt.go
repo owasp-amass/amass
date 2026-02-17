@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -12,11 +13,12 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 type txtHandler struct {
@@ -26,7 +28,7 @@ type txtHandler struct {
 }
 
 func (r *txtHandler) check(e *et.Event) error {
-	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", r.plugin.name)
+	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "Organization", r.plugin.name)
 	if err != nil {
 		return err
 	}
@@ -40,7 +42,7 @@ func (r *txtHandler) check(e *et.Event) error {
 func (r *txtHandler) lookup(e *et.Event, since time.Time) []string {
 	var rdata []string
 
-	if tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record"); err == nil {
+	if tags, err := e.Session.DB().FindEntityTags(context.Background(), e.Entity, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				rdata = append(rdata, prop.Data)
@@ -55,20 +57,18 @@ func (r *txtHandler) store(e *et.Event, records []string) []*dbt.Entity {
 	var orgs []*dbt.Entity
 
 	for _, txt := range records {
-		for prefix, orgInfo := range prefixes {
+		for prefix, oasset := range prefixes {
 			if !strings.HasPrefix(txt, prefix) {
 				continue
 			}
 
-			o, err := support.CreateOrgAsset(e.Session, e.Entity,
-				&general.SimpleRelation{Name: "verified_for"},
-				orgInfo, r.plugin.source)
-
-			if err == nil && o != nil {
-				orgs = append(orgs, o)
+			orgent, err := org.CreateOrgAsset(e.Session, e.Entity,
+				&oamgen.SimpleRelation{Name: "verified_for"}, oasset, r.plugin.source)
+			if err == nil && orgent != nil {
+				orgs = append(orgs, orgent)
 				fqdn := e.Entity.Asset.(*oamdns.FQDN).Name
 				e.Session.Log().Info(fmt.Sprintf("%s has a site verification record for %s: %s",
-					fqdn, orgInfo.Name, txt), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
+					fqdn, oasset.Name, txt), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 			}
 			break
 		}
@@ -79,7 +79,7 @@ func (r *txtHandler) store(e *et.Event, records []string) []*dbt.Entity {
 
 func (r *txtHandler) process(e *et.Event, entities []*dbt.Entity) {
 	for _, entity := range entities {
-		if o, ok := entity.Asset.(*org.Organization); ok && o != nil {
+		if o, ok := entity.Asset.(*oamorg.Organization); ok && o != nil {
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    o.Name,
 				Entity:  entity,
@@ -89,7 +89,7 @@ func (r *txtHandler) process(e *et.Event, entities []*dbt.Entity) {
 	}
 }
 
-var prefixes = map[string]*org.Organization{
+var prefixes = map[string]*oamorg.Organization{
 	"1password-site-verification=":           {Name: "AgileBits Inc.", Jurisdiction: "CA-ON", RegistrationID: "2076960"},
 	"Acumbamail-domain-verification=":        {Name: "Acumbamail SL", Jurisdiction: "ES", RegistrationID: "CR-21870-8"},
 	"astro-domain-verification=":             {Name: "Astronomer, Inc.", Jurisdiction: "US-DE", RegistrationID: "5835307"},
@@ -118,6 +118,7 @@ var prefixes = map[string]*org.Organization{
 	"anthropic-domain-verification-":         {Name: "Anthropic, PBC", Jurisdiction: "US-DE", RegistrationID: "4860621"},
 	"apperio-domain-verification=":           {Name: "PERSUIT Operations Pty Ltd", Jurisdiction: "AU", RegistrationID: "610419700"},
 	"apple-domain-verification=":             {Name: "Apple Inc.", Jurisdiction: "US-CA", RegistrationID: "806592"},
+	"asuid=":                                 {Name: "Google LLC", Jurisdiction: "US-DE", RegistrationID: "3582691"},
 	"atlassian-domain-verification=":         {Name: "Atlassian Corporation Plc", Jurisdiction: "GB", RegistrationID: "08776021"},
 	"autodesk-domain-verification=":          {Name: "Autodesk, Inc.", Jurisdiction: "US-DE", RegistrationID: "2401504"},
 	"botify-site-verification=":              {Name: "Botify", Jurisdiction: "FR", RegistrationID: "519350813"},

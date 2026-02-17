@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package http_probes
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -37,8 +38,7 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 		return nil
 	}
 	if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
-		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) &&
-		!support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
+		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) {
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {
@@ -55,11 +55,7 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		findings = append(findings, fe.lookup(e, e.Entity, since)...)
 	} else {
-		go func() {
-			if findings := append(findings, fe.query(e, e.Entity)...); len(findings) > 0 {
-				fe.process(e, findings)
-			}
-		}()
+		findings = append(findings, fe.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
@@ -72,13 +68,17 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
-	if edges, err := e.Session.Cache().OutgoingEdges(host, since, "port"); err == nil && len(edges) > 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, host, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, fe.plugin.source.Name); err != nil {
+			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, fe.plugin.source.Name); err != nil {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
-				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
+				if srv, err := e.Session.DB().FindEntityById(ctx,
+					edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     host,
 						FromName: host.Asset.Key(),
@@ -95,20 +95,33 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) [
 
 func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	fqdn := host.Asset.(*oamdns.FQDN)
 
+	var count int
+	fch := make(chan []*support.Finding, len(e.Session.Config().Scope.Ports))
 	for _, port := range e.Session.Config().Scope.Ports {
-		addr := fqdn.Name + ":" + strconv.Itoa(port)
+		count++
+		go fe.probeOnePort(e, host, port, fch)
+	}
 
-		proto := "https"
-		if port == 80 || port == 8080 {
-			proto = "http"
+	for range count {
+		if results := <-fch; len(results) > 0 {
+			findings = append(findings, results...)
 		}
-
-		findings = append(findings, fe.plugin.query(e, host, proto+"://"+addr, port)...)
 	}
 
 	return findings
+}
+
+func (fe *fqdnEndpoint) probeOnePort(e *et.Event, host *dbt.Entity, port int, ch chan []*support.Finding) {
+	fqdn := host.Asset.(*oamdns.FQDN)
+	addr := fqdn.Name + ":" + strconv.Itoa(port)
+
+	proto := "https"
+	if port == 80 || port == 8080 {
+		proto = "http"
+	}
+
+	ch <- fe.plugin.query(e, host, proto+"://"+addr, port)
 }
 
 func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding) {

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -23,7 +24,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/account"
 	"github.com/owasp-amass/open-asset-model/financial"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
 )
 
@@ -77,13 +78,16 @@ func (cr *companyRounds) check(e *et.Event) error {
 func (cr *companyRounds) lookup(e *et.Event, ident *dbt.Entity, since time.Time) []*dbt.Entity {
 	var orgent *dbt.Entity
 
-	if edges, err := e.Session.Cache().IncomingEdges(ident, since, "id"); err == nil {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, cr.plugin.source.Name); err != nil || len(tags) == 0 {
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, cr.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					orgent = a
 					break
 				}
@@ -97,12 +101,12 @@ func (cr *companyRounds) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 	}
 
 	var accountents []*dbt.Entity
-	if edges, err := e.Session.Cache().OutgoingEdges(orgent, since, "account"); err == nil {
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent, since, "account"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, cr.plugin.source.Name); err != nil || len(tags) == 0 {
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, cr.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
 				if acc, ok := a.Asset.(*account.Account); ok && acc.Type == account.Checking && acc.Number == "default" {
 					accountents = append(accountents, a)
 				}
@@ -111,12 +115,12 @@ func (cr *companyRounds) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 	}
 
 	for _, ent := range accountents {
-		if edges, err := e.Session.Cache().IncomingEdges(ent, since, "recipient"); err == nil {
+		if edges, err := e.Session.DB().IncomingEdges(ctx, ent, since, "recipient"); err == nil {
 			for _, edge := range edges {
-				if tags, err := e.Session.Cache().GetEdgeTags(edge, since, cr.plugin.source.Name); err != nil || len(tags) == 0 {
+				if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, cr.plugin.source.Name); err != nil || len(tags) == 0 {
 					continue
 				}
-				if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+				if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 					if _, ok := a.Asset.(*financial.FundsTransfer); ok {
 						fundents = append(fundents, a)
 					}
@@ -148,8 +152,8 @@ loop:
 			headers := http.Header{"Content-Type": []string{"application/json"}}
 			headers["Authorization"] = []string{"Bearer " + key}
 
-			_ = cr.plugin.rlimit.Wait(context.TODO())
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			_ = cr.plugin.rlimit.Wait(e.Session.Ctx())
+			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
 			defer cancel()
 
 			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/funding-rounds?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)
@@ -200,10 +204,13 @@ loop:
 func (cr *companyRounds) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 	var orgent *dbt.Entity
 
-	if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
 		for _, edge := range edges {
-			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					orgent = a
 					break
 				}
@@ -220,7 +227,10 @@ func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *co
 	if orgent == nil {
 		return fundents
 	}
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
 
 	for _, round := range funds.FundingRounds {
 		orgacc := cr.orgCheckingAccount(e, orgent)
@@ -244,14 +254,14 @@ func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *co
 			ExchangeDate: round.AnnouncedOn,
 		}
 
-		fundent, err := e.Session.Cache().CreateAsset(f)
+		fundent, err := e.Session.DB().CreateAsset(ctx, f)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the FundsTransfer asset for %s: %s", f.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}
 
-		_, err = e.Session.Cache().CreateEntityProperty(fundent, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, fundent, &general.SourceProperty{
 			Source:     cr.plugin.source.Name,
 			Confidence: cr.plugin.source.Confidence,
 		})
@@ -261,14 +271,14 @@ func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *co
 			continue
 		}
 
-		if err := cr.plugin.createRelation(e.Session, fundent,
+		if err := cr.plugin.createRelation(ctx, e.Session, fundent,
 			general.SimpleRelation{Name: "recipient"}, orgacc, cr.plugin.source.Confidence); err != nil {
 			msg := fmt.Sprintf("failed to create the recipient relation for %s: %s", f.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}
 
-		if err := cr.plugin.createRelation(e.Session, fundent,
+		if err := cr.plugin.createRelation(ctx, e.Session, fundent,
 			general.SimpleRelation{Name: "sender"}, seedacc, cr.plugin.source.Confidence); err != nil {
 			msg := fmt.Sprintf("failed to create the sender relation for %s: %s", f.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
@@ -283,11 +293,14 @@ func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *co
 
 func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	var accountent *dbt.Entity
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 
-	if edges, err := e.Session.Cache().OutgoingEdges(orgent, time.Time{}, "account"); err == nil {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent, time.Time{}, "account"); err == nil {
 		for _, edge := range edges {
-			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
 				if acc, ok := a.Asset.(*account.Account); ok && acc.Type == account.Checking && acc.Number == "default" {
 					accountent = a
 					break
@@ -297,7 +310,7 @@ func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *db
 	}
 
 	if accountent == nil {
-		ent, err := e.Session.Cache().CreateAsset(&account.Account{
+		ent, err := e.Session.DB().CreateAsset(ctx, &account.Account{
 			ID:      uuid.New().String(),
 			Type:    account.Checking,
 			Number:  "default",
@@ -313,7 +326,7 @@ func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *db
 		accountent = ent
 	}
 
-	_, err := e.Session.Cache().CreateEntityProperty(accountent, &general.SourceProperty{
+	_, err := e.Session.DB().CreateEntityProperty(ctx, accountent, &general.SourceProperty{
 		Source:     cr.plugin.source.Name,
 		Confidence: cr.plugin.source.Confidence,
 	})
@@ -323,7 +336,7 @@ func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *db
 		return nil
 	}
 
-	if err := cr.plugin.createRelation(e.Session, orgent,
+	if err := cr.plugin.createRelation(ctx, e.Session, orgent,
 		general.SimpleRelation{Name: "account"}, accountent, cr.plugin.source.Confidence); err != nil {
 		msg := fmt.Sprintf("failed to create the account relation for %s: %s", o.Name, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
@@ -333,8 +346,11 @@ func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *db
 }
 
 func (cr *companyRounds) createSeedAccount(e *et.Event, round *companyFundingRound) *dbt.Entity {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
 	name := fmt.Sprintf("%s:%s", round.Name, round.Stage)
-	accountent, err := e.Session.Cache().CreateAsset(&account.Account{
+	accountent, err := e.Session.DB().CreateAsset(ctx, &account.Account{
 		ID:      name,
 		Type:    account.Checking,
 		Number:  "default",
@@ -347,7 +363,7 @@ func (cr *companyRounds) createSeedAccount(e *et.Event, round *companyFundingRou
 		return nil
 	}
 
-	_, err = e.Session.Cache().CreateEntityProperty(accountent, &general.SourceProperty{
+	_, err = e.Session.DB().CreateEntityProperty(ctx, accountent, &general.SourceProperty{
 		Source:     cr.plugin.source.Name,
 		Confidence: cr.plugin.source.Confidence,
 	})
@@ -363,7 +379,7 @@ func (cr *companyRounds) createSeedAccount(e *et.Event, round *companyFundingRou
 	}
 
 	for _, investor := range investors {
-		if err := cr.plugin.createRelation(e.Session, investor,
+		if err := cr.plugin.createRelation(ctx, e.Session, investor,
 			general.SimpleRelation{Name: "account"}, accountent, cr.plugin.source.Confidence); err != nil {
 			msg := fmt.Sprintf("failed to create the account relation for %s: %s", investor.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
@@ -380,6 +396,9 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 		return investors
 	}
 
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
 	for _, investor := range round.CompanyInvestors {
 		oamid := &general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", AviatoCompanyID, investor.CompanyID),
@@ -387,7 +406,7 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 			Type:     AviatoCompanyID,
 		}
 
-		ident, err := e.Session.Cache().CreateAsset(oamid)
+		ident, err := e.Session.DB().CreateAsset(ctx, oamid)
 		if err != nil || ident == nil {
 			msg := fmt.Sprintf("failed to create the identifier asset for %s: %s", oamid.UniqueID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
@@ -396,13 +415,13 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 
 		var orgent *dbt.Entity
 		// check if the Person asset already exists
-		if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
+		if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
 			for _, edge := range edges {
-				if tags, err := e.Session.Cache().GetEdgeTags(edge, time.Time{}, cr.plugin.source.Name); err != nil || len(tags) == 0 {
+				if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, time.Time{}, cr.plugin.source.Name); err != nil || len(tags) == 0 {
 					continue
 				}
-				if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-					if _, ok := a.Asset.(*org.Organization); ok {
+				if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
+					if _, ok := a.Asset.(*oamorg.Organization); ok {
 						orgent = a
 						break
 					}
@@ -415,15 +434,15 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 		}
 
 		// create the Organization asset
-		o := &org.Organization{Name: investor.Name}
-		orgent, err = support.CreateOrgAsset(e.Session, nil, nil, o, cr.plugin.source)
+		o := &oamorg.Organization{Name: investor.Name}
+		orgent, err = org.CreateOrgAsset(e.Session, nil, nil, o, cr.plugin.source)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Organization asset for %s: %s", o.Name, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}
 
-		_, err = e.Session.Cache().CreateEntityProperty(orgent, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, orgent, &general.SourceProperty{
 			Source:     cr.plugin.source.Name,
 			Confidence: cr.plugin.source.Confidence,
 		})
@@ -433,7 +452,7 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 			continue
 		}
 
-		if err := cr.plugin.createRelation(e.Session, orgent,
+		if err := cr.plugin.createRelation(ctx, e.Session, orgent,
 			general.SimpleRelation{Name: "id"}, ident, cr.plugin.source.Confidence); err != nil {
 			msg := fmt.Sprintf("failed to create the id relation for %s: %s", oamid.UniqueID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
@@ -457,6 +476,9 @@ func (cr *companyRounds) createPersonInvestors(e *et.Event, round *companyFundin
 		return investors
 	}
 
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
 	for _, investor := range round.PersonInvestors {
 		oamid := &general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", AviatoPersonID, investor.PersonID),
@@ -464,7 +486,7 @@ func (cr *companyRounds) createPersonInvestors(e *et.Event, round *companyFundin
 			Type:     AviatoPersonID,
 		}
 
-		ident, err := e.Session.Cache().CreateAsset(oamid)
+		ident, err := e.Session.DB().CreateAsset(ctx, oamid)
 		if err != nil || ident == nil {
 			msg := fmt.Sprintf("failed to create the identifier asset for %s: %s", oamid.UniqueID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
@@ -473,12 +495,12 @@ func (cr *companyRounds) createPersonInvestors(e *et.Event, round *companyFundin
 
 		var personent *dbt.Entity
 		// check if the Person asset already exists
-		if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
+		if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
 			for _, edge := range edges {
-				if tags, err := e.Session.Cache().GetEdgeTags(edge, time.Time{}, cr.plugin.source.Name); err != nil || len(tags) == 0 {
+				if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, time.Time{}, cr.plugin.source.Name); err != nil || len(tags) == 0 {
 					continue
 				}
-				if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+				if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 					if _, ok := a.Asset.(*people.Person); ok {
 						personent = a
 						break
@@ -497,14 +519,14 @@ func (cr *companyRounds) createPersonInvestors(e *et.Event, round *companyFundin
 			continue
 		}
 
-		personent, err = e.Session.Cache().CreateAsset(p)
+		personent, err = e.Session.DB().CreateAsset(ctx, p)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}
 
-		_, err = e.Session.Cache().CreateEntityProperty(personent, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &general.SourceProperty{
 			Source:     cr.plugin.source.Name,
 			Confidence: cr.plugin.source.Confidence,
 		})
@@ -514,7 +536,7 @@ func (cr *companyRounds) createPersonInvestors(e *et.Event, round *companyFundin
 			continue
 		}
 
-		if err := cr.plugin.createRelation(e.Session, personent,
+		if err := cr.plugin.createRelation(ctx, e.Session, personent,
 			general.SimpleRelation{Name: "id"}, ident, cr.plugin.source.Confidence); err != nil {
 			msg := fmt.Sprintf("failed to create the id relation for %s: %s", oamid.UniqueID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))

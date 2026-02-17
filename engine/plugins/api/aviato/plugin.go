@@ -1,13 +1,15 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package aviato
 
 import (
+	"context"
 	"errors"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -35,18 +37,19 @@ func (a *aviato) Name() string {
 func (a *aviato) Start(r et.Registry) error {
 	a.log = r.Log().WithGroup("plugin").With("name", a.name)
 
-	a.companyEnrich = &companyEnrich{
-		name:   a.name + "-Company-Enrich-Handler",
+	a.employees = &employees{
+		name:   a.name + "-Employees-Handler",
 		plugin: a,
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     a,
-		Name:       a.companyEnrich.name,
-		Priority:   7,
-		Transforms: []string{string(oam.Organization)},
-		EventType:  oam.Identifier,
-		Callback:   a.companyEnrich.check,
+		Plugin:       a,
+		Name:         a.employees.name,
+		Position:     41,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Person)},
+		EventType:    oam.Identifier,
+		Callback:     a.employees.check,
 	}); err != nil {
 		return err
 	}
@@ -57,9 +60,10 @@ func (a *aviato) Start(r et.Registry) error {
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:   a,
-		Name:     a.companyRounds.name,
-		Priority: 7,
+		Plugin:       a,
+		Name:         a.companyRounds.name,
+		Position:     42,
+		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.Organization),
 			string(oam.Account),
@@ -71,18 +75,19 @@ func (a *aviato) Start(r et.Registry) error {
 		return err
 	}
 
-	a.employees = &employees{
-		name:   a.name + "-Employees-Handler",
+	a.companyEnrich = &companyEnrich{
+		name:   a.name + "-Company-Enrich-Handler",
 		plugin: a,
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     a,
-		Name:       a.employees.name,
-		Priority:   6,
-		Transforms: []string{string(oam.Person)},
-		EventType:  oam.Identifier,
-		Callback:   a.employees.check,
+		Plugin:       a,
+		Name:         a.companyEnrich.name,
+		Position:     43,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Organization)},
+		EventType:    oam.Identifier,
+		Callback:     a.companyEnrich.check,
 	}); err != nil {
 		return err
 	}
@@ -93,12 +98,13 @@ func (a *aviato) Start(r et.Registry) error {
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     a,
-		Name:       a.companySearch.name,
-		Priority:   6,
-		Transforms: []string{string(oam.Identifier)},
-		EventType:  oam.Organization,
-		Callback:   a.companySearch.check,
+		Plugin:       a,
+		Name:         a.companySearch.name,
+		Position:     41,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Identifier)},
+		EventType:    oam.Organization,
+		Callback:     a.companySearch.check,
 	}); err != nil {
 		return err
 	}
@@ -111,8 +117,8 @@ func (a *aviato) Stop() {
 	a.log.Info("Plugin stopped")
 }
 
-func (a *aviato) createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, conf int) error {
-	edge, err := session.Cache().CreateEdge(&dbt.Edge{
+func (a *aviato) createRelation(ctx context.Context, session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, conf int) error {
+	edge, err := session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel,
 		FromEntity: obj,
 		ToEntity:   subject,
@@ -123,7 +129,7 @@ func (a *aviato) createRelation(session et.Session, obj *dbt.Entity, rel oam.Rel
 		return errors.New("failed to create the edge")
 	}
 
-	_, err = session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+	_, err = session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 		Source:     a.source.Name,
 		Confidence: conf,
 	})

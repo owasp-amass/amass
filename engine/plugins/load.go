@@ -62,7 +62,6 @@ var pluginNewFuncs = []func() et.Plugin{
 	NewIPNetblock,
 	NewJARMFingerprints,
 	NewKnownFQDN,
-	NewVerifiedEmail,
 }
 
 func LoadAndStartPlugins(r et.Registry) error {

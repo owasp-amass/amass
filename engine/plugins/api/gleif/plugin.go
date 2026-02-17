@@ -1,26 +1,32 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package gleif
 
 import (
+	"context"
 	"errors"
-	"time"
+	"log/slog"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"golang.org/x/time/rate"
 )
 
-func NewGLEIF() et.Plugin {
-	limit := rate.Every(3 * time.Second)
+type gleif struct {
+	name    string
+	log     *slog.Logger
+	fuzzy   *fuzzyCompletions
+	related *relatedOrgs
+	source  *et.Source
+}
 
+func NewGLEIF() et.Plugin {
 	return &gleif{
-		name:   "GLEIF",
-		rlimit: rate.NewLimiter(limit, 1),
+		name: "GLEIF",
 		source: &et.Source{
 			Name:       "GLEIF",
 			Confidence: 100,
@@ -39,14 +45,15 @@ func (g *gleif) Start(r et.Registry) error {
 		name:   g.name + "-Fuzzy-Handler",
 		plugin: g,
 	}
-
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     g,
-		Name:       g.fuzzy.name,
-		Priority:   6,
-		Transforms: []string{string(oam.Identifier)},
-		EventType:  oam.Organization,
-		Callback:   g.fuzzy.check,
+		Plugin:       g,
+		Name:         g.fuzzy.name,
+		Position:     48,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Identifier)},
+		EventType:    oam.Organization,
+		Callback:     g.fuzzy.check,
 	}); err != nil {
 		return err
 	}
@@ -55,14 +62,15 @@ func (g *gleif) Start(r et.Registry) error {
 		name:   g.name + "-LEI-Handler",
 		plugin: g,
 	}
-
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     g,
-		Name:       g.related.name,
-		Priority:   5,
-		Transforms: []string{string(oam.Organization)},
-		EventType:  oam.Identifier,
-		Callback:   g.related.check,
+		Plugin:       g,
+		Name:         g.related.name,
+		Position:     48,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Organization)},
+		EventType:    oam.Identifier,
+		Callback:     g.related.check,
 	}); err != nil {
 		return err
 	}
@@ -75,8 +83,8 @@ func (g *gleif) Stop() {
 	g.log.Info("Plugin stopped")
 }
 
-func (g *gleif) createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, conf int) error {
-	edge, err := session.Cache().CreateEdge(&dbt.Edge{
+func (g *gleif) createRelation(ctx context.Context, session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, conf int) error {
+	edge, err := session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel,
 		FromEntity: obj,
 		ToEntity:   subject,
@@ -87,7 +95,7 @@ func (g *gleif) createRelation(session et.Session, obj *dbt.Entity, rel oam.Rela
 		return errors.New("failed to create the edge")
 	}
 
-	_, err = session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+	_, err = session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 		Source:     g.source.Name,
 		Confidence: conf,
 	})

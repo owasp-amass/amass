@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -52,12 +52,13 @@ func (sd *siteDossier) Start(r et.Registry) error {
 	sd.log = r.Log().WithGroup("plugin").With("name", sd.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     sd,
-		Name:       sd.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   sd.check,
+		Plugin:       sd,
+		Name:         sd.name + "-Handler",
+		Position:     37,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     sd.check,
 	}); err != nil {
 		return err
 	}
@@ -86,9 +87,7 @@ func (sd *siteDossier) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, sd.source, since) {
-		names = append(names, sd.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, sd.source, since) {
 		names = append(names, sd.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, sd.source)
 	}
@@ -97,10 +96,6 @@ func (sd *siteDossier) check(e *et.Event) error {
 		sd.process(e, names)
 	}
 	return nil
-}
-
-func (sd *siteDossier) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), sd.source, since)
 }
 
 func (sd *siteDossier) query(e *et.Event, name string) []*dbt.Entity {

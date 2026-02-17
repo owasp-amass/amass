@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,27 +10,24 @@ import (
 	"sync"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	oam "github.com/owasp-amass/open-asset-model"
 )
 
 type registry struct {
 	sync.RWMutex
-	logger    *slog.Logger
-	handlers  map[string]map[int][]*et.Handler
-	pipelines map[string]*et.AssetPipeline
+	log      *slog.Logger
+	handlers map[string]map[int][]*et.Handler
 }
 
 // Create a new instance of Registry.
 func NewRegistry(l *slog.Logger) et.Registry {
 	return &registry{
-		logger:    l,
-		handlers:  make(map[string]map[int][]*et.Handler),
-		pipelines: make(map[string]*et.AssetPipeline),
+		log:      l,
+		handlers: make(map[string]map[int][]*et.Handler),
 	}
 }
 
 func (r *registry) Log() *slog.Logger {
-	return r.logger
+	return r.log
 }
 
 // Register a Plugin Handler on the registry.
@@ -38,7 +35,7 @@ func (r *registry) RegisterHandler(h *et.Handler) error {
 	r.Lock()
 	defer r.Unlock()
 
-	// is the entry currently empty?
+	// is the entry for the requested event type currently empty?
 	if _, found := r.handlers[string(h.EventType)]; !found {
 		r.handlers[string(h.EventType)] = make(map[int][]*et.Handler)
 	}
@@ -60,25 +57,20 @@ loop:
 		return err
 	}
 
-	if h.Priority == 0 {
-		h.Priority = 5
-	} else if h.Priority < 0 {
-		h.Priority = 1
-	} else if h.Priority > 9 {
-		h.Priority = 9
+	if h.Position <= 0 {
+		h.Position = 1
+	} else if h.Position > 50 {
+		h.Position = 50
 	}
 
-	et, p := string(h.EventType), h.Priority
+	et, p := string(h.EventType), h.Position
+	if handlers, found := r.handlers[et][p]; found && len(handlers) > 0 && h.Exclusive {
+		err := fmt.Errorf("handler at position %d already registered for EventType %s", p, et)
+		r.Log().Error(fmt.Sprintf("Failed to register a handler: %v", err),
+			slog.Group("plugin", "name", h.Plugin.Name(), "handler", h.Name))
+		return err
+	}
+
 	r.handlers[et][p] = append(r.handlers[et][p], h)
 	return nil
-}
-
-func (r *registry) GetPipeline(eventType oam.AssetType) (*et.AssetPipeline, error) {
-	r.RLock()
-	defer r.RUnlock()
-
-	if p, found := r.pipelines[string(eventType)]; found {
-		return p, nil
-	}
-	return nil, fmt.Errorf("no handlers registered for the EventType: %s", eventType)
 }

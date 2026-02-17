@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,6 +6,7 @@ package track
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"io"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/tools"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
@@ -155,8 +157,13 @@ func getNewNames(domains []string, since time.Time, db repository.Repository) []
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
-			if n, err := amassdb.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if ents, err := db.FindEntitiesByContent(ctx, oam.FQDN, since, 1, dbt.ContentFilters{
+			"name": d},
+		); err == nil {
+			if n, err := amassdb.FindByFQDNScope(ctx, db, ents[0], since); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
 		}

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/openrdap/rdap"
@@ -33,7 +32,7 @@ func (r *autsys) Name() string {
 func (r *autsys) check(e *et.Event) error {
 	as, ok := e.Entity.Asset.(*network.AutonomousSystem)
 	if !ok {
-		return errors.New("failed to extract the AutonomousSystem asset")
+		return errors.New("failed to cast the AutonomousSystem asset")
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
@@ -45,7 +44,7 @@ func (r *autsys) check(e *et.Event) error {
 	var asset *dbt.Entity
 	var record *rdap.Autnum
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, r.plugin.source, since) {
-		asset = r.lookup(e, strconv.Itoa(as.Number), since)
+		asset = r.lookup(e, as.Number, since)
 	} else {
 		asset, record = r.query(e, e.Entity)
 		support.MarkAssetMonitored(e.Session, e.Entity, r.plugin.source)
@@ -57,22 +56,39 @@ func (r *autsys) check(e *et.Event) error {
 	return nil
 }
 
-func (r *autsys) lookup(e *et.Event, num string, since time.Time) *dbt.Entity {
-	if assets := support.SourceToAssetsWithinTTL(e.Session, num, string(oam.AutnumRecord), r.plugin.source, since); len(assets) > 0 {
-		return assets[0]
+func (r *autsys) lookup(e *et.Event, num int, since time.Time) *dbt.Entity {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	ents, err := e.Session.DB().FindEntitiesByContent(ctx, oam.AutnumRecord, since, 1, dbt.ContentFilters{
+		"number": num,
+	})
+	if err != nil || len(ents) != 1 {
+		return nil
 	}
+	ar := ents[0]
+
+	if tags, err := e.Session.DB().FindEntityTags(ctx, ar,
+		since, r.plugin.source.Name); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if tag.Property.PropertyType() == oam.SourceProperty {
+				return ar
+			}
+		}
+	}
+
 	return nil
 }
 
 func (r *autsys) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.Autnum) {
-	as := asset.Asset.(*network.AutonomousSystem)
-	req := rdap.NewAutnumRequest(uint32(as.Number))
+	_ = r.plugin.rlimit.Wait(e.Session.Ctx())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Minute)
 	defer cancel()
-	req = req.WithContext(ctx)
 
-	_ = r.plugin.rlimit.Wait(context.TODO())
+	as := asset.Asset.(*network.AutonomousSystem)
+	req := rdap.NewAutnumRequest(uint32(as.Number)).WithContext(ctx)
+
 	resp, err := r.plugin.client.Do(req)
 	if err != nil {
 		return nil, nil
@@ -114,14 +130,17 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity) *dbt.E
 		return nil
 	}
 
-	autasset, err := e.Session.Cache().CreateAsset(autrec)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	autasset, err := e.Session.DB().CreateAsset(ctx, autrec)
 	if err == nil && autasset != nil {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     r.plugin.source.Name,
 				Confidence: r.plugin.source.Confidence,
 			})

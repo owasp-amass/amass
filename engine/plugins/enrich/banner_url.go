@@ -1,13 +1,15 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package enrich
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/netip"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -44,11 +46,13 @@ func (bu *bannerURLs) Start(r et.Registry) error {
 	bu.log = r.Log().WithGroup("plugin").With("name", bu.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     bu,
-		Name:       bu.name + "-Handler",
-		Transforms: []string{string(oam.URL)},
-		EventType:  oam.Service,
-		Callback:   bu.check,
+		Plugin:       bu,
+		Name:         bu.name + "-Handler",
+		Position:     10,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.URL)},
+		EventType:    oam.Service,
+		Callback:     bu.check,
 	}); err != nil {
 		return err
 	}
@@ -96,14 +100,14 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 	// TODO: in the future, further investigation of out of scope URLs may be needed
 	if urls := support.ExtractURLsFromString(serv.Output); len(urls) > 0 {
 		for _, u := range urls {
-			if addr, err := netip.ParseAddr(u.Host); err == nil {
+			if u.Host == "" {
+				continue
+			} else if addr, err := netip.ParseAddr(u.Host); err == nil {
 				if _, conf := e.Session.Scope().IsAssetInScope(&oamnet.IPAddress{Address: addr}, 0); conf > 0 {
 					results = append(results, u)
 				}
-			} else {
-				if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: u.Host}, 0); conf > 0 {
-					results = append(results, u)
-				}
+			} else if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: u.Host}, 0); conf > 0 {
+				results = append(results, u)
 			}
 		}
 	}
@@ -114,10 +118,13 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {
 	var assets []*dbt.Entity
 
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	defer cancel()
+
 	for _, u := range urls {
-		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
+		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
 			assets = append(assets, a)
-			_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
+			_, _ = e.Session.DB().CreateEntityProperty(ctx, a, &general.SourceProperty{
 				Source:     bu.source.Name,
 				Confidence: bu.source.Confidence,
 			})
@@ -129,8 +136,10 @@ func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {
 
 func (bu *bannerURLs) process(e *et.Event, assets []*dbt.Entity) {
 	for _, a := range assets {
-		if u, ok := a.Asset.(*oamurl.URL); ok && e.Session.Scope().IsURLInScope(e.Session.Cache(), u) {
-			bu.processOneURL(e, u.Raw, a)
+		if u, ok := a.Asset.(*oamurl.URL); ok {
+			if _, conf := e.Session.Scope().IsAssetInScope(u, 0); conf > 0 {
+				bu.processOneURL(e, u.Raw, a)
+			}
 		}
 	}
 }

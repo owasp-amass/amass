@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -24,6 +24,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/tools"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
@@ -199,7 +200,7 @@ func showData(args *Args, asninfo bool, db repository.Repository) {
 		}
 	}
 
-	names := getNames(context.Background(), domains, asninfo, db)
+	names := getNames(context.Background(), domains, db)
 	if len(names) != 0 && (asninfo || args.Options.IPv4 || args.Options.IPv6) {
 		names = addAddresses(context.Background(), db, names, asninfo, cache)
 	}
@@ -260,7 +261,7 @@ func showData(args *Args, asninfo bool, db repository.Repository) {
 	}
 }
 
-func getNames(ctx context.Context, domains []string, asninfo bool, db repository.Repository) []*amassnet.Output {
+func getNames(ctx context.Context, domains []string, db repository.Repository) []*amassnet.Output {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -271,8 +272,13 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db repository
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
-			if n, err := amassdb.FindByFQDNScope(db, ents[0], qtime); err == nil && len(n) > 0 {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		if ents, err := db.FindEntitiesByContent(ctx, oam.FQDN, qtime, 1, dbt.ContentFilters{
+			"name": d,
+		}); err == nil {
+			if n, err := amassdb.FindByFQDNScope(ctx, db, ents[0], qtime); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
 		}
@@ -300,7 +306,7 @@ func addAddresses(ctx context.Context, db repository.Repository, names []*amassn
 	}
 
 	qtime := time.Time{}
-	if pairs, err := amassnet.NamesToAddrs(db, qtime, namestrs...); err == nil {
+	if pairs, err := amassnet.NamesToAddrs(ctx, db, qtime, namestrs...); err == nil {
 		for _, p := range pairs {
 			addr := p.Addr.Address.String()
 

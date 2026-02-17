@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,10 +16,14 @@ import (
 	"github.com/caffix/stringset"
 	pb "github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/config"
-	"github.com/owasp-amass/amass/v5/engine/api/graphql/client"
+	"github.com/owasp-amass/amass/v5/engine/api/client"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
 	"github.com/owasp-amass/amass/v5/internal/tools"
+	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 const (
@@ -38,18 +42,15 @@ type Args struct {
 	BruteWordListMask *stringset.Set
 	Blacklist         *stringset.Set
 	Domains           *stringset.Set
+	Engine            string
 	Excluded          *stringset.Set
 	Included          *stringset.Set
 	Interface         string
-	MaxDNSQueries     int
-	ResolverQPS       int
-	TrustedQPS        int
 	MaxDepth          int
 	MinForRecursive   int
 	Names             *stringset.Set
 	Ports             afmt.ParseInts
 	Resolvers         *stringset.Set
-	Trusted           *stringset.Set
 	Timeout           int
 	Options           struct {
 		Active       bool
@@ -61,26 +62,22 @@ type Args struct {
 		NoColor      bool
 		NoRecursive  bool
 		Passive      bool
+		Rigid        bool
 		Silent       bool
 		Verbose      bool
 	}
 	Filepaths struct {
-		AllFilePrefix    string
-		AltWordlist      afmt.ParseStrings
-		Blacklist        string
-		BruteWordlist    afmt.ParseStrings
-		ConfigFile       string
-		Directory        string
-		Domains          afmt.ParseStrings
-		ExcludedSrcs     string
-		IncludedSrcs     string
-		JSONOutput       string
-		LogFile          string
-		Names            afmt.ParseStrings
-		Resolvers        afmt.ParseStrings
-		Trusted          afmt.ParseStrings
-		ScriptsDirectory string
-		TermOut          string
+		AllFilePrefix string
+		AltWordlist   afmt.ParseStrings
+		Blacklist     string
+		BruteWordlist afmt.ParseStrings
+		ConfigFile    string
+		Directory     string
+		Domains       afmt.ParseStrings
+		JSONOutput    string
+		LogFile       string
+		Names         afmt.ParseStrings
+		Resolvers     afmt.ParseStrings
 	}
 }
 
@@ -101,13 +98,10 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 	fs.Var(args.Blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
 	fs.Var(args.BruteWordListMask, "wm", "\"hashcat-style\" wordlist masks for DNS brute forcing")
 	fs.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	fs.StringVar(&args.Engine, "engine", "", "URL for the collection engine (Default: http://127.0.0.1:4000)")
 	fs.Var(args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	fs.Var(args.Included, "include", "Data source names separated by commas to be included")
 	fs.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
-	fs.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Deprecated flag to be replaced by dns-qps in version 4.0")
-	fs.IntVar(&args.MaxDNSQueries, "dns-qps", 0, "Maximum number of DNS queries per second across all resolvers")
-	fs.IntVar(&args.ResolverQPS, "rqps", 0, "Maximum number of DNS queries per second for each untrusted resolver")
-	fs.IntVar(&args.TrustedQPS, "trqps", 0, "Maximum number of DNS queries per second for each trusted resolver")
 	fs.IntVar(&args.MaxDepth, "max-depth", 0, "Maximum number of subdomain labels for brute forcing")
 	fs.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
 	fs.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
@@ -127,6 +121,7 @@ func defineOptionFlags(fs *flag.FlagSet, args *Args) {
 	fs.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	fs.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	fs.BoolVar(&args.Options.Passive, "passive", false, "Deprecated since passive is the default setting")
+	fs.BoolVar(&args.Options.Rigid, "rigid", false, "disable scope expansion")
 	fs.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	fs.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -139,14 +134,9 @@ func defineFilepathFlags(fs *flag.FlagSet, args *Args) {
 	fs.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
 	fs.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
 	fs.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
-	fs.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
-	fs.StringVar(&args.Filepaths.IncludedSrcs, "if", "", "Path to a file providing data sources to include")
 	fs.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
 	fs.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
 	fs.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing untrusted DNS resolvers")
-	fs.Var(&args.Filepaths.Trusted, "trf", "Path to a file providing trusted DNS resolvers")
-	fs.StringVar(&args.Filepaths.ScriptsDirectory, "scripts", "", "Path to a directory containing ADS scripts")
-	fs.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
 func CLIWorkflow(cmdName string, clArgs []string) {
@@ -173,18 +163,21 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	}
 
 	// Create the client that will provide a connection to the engine
-	url := "http://127.0.0.1:4000/graphql"
+	url := "http://127.0.0.1:4000"
 	if cfg.EngineAPI != nil && cfg.EngineAPI.URL != "" {
 		url = cfg.EngineAPI.URL
 	}
 
-	client := client.NewClient(url)
-	token, err := client.CreateSession(cfg)
+	c := client.NewClient(url)
+	defer c.Close()
+
+	// Create a new enumeration session on the engine server
+	token, err := c.CreateSession(cfg)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create a session with the Amass engine: %v\n", err)
 		os.Exit(1)
 	}
-	defer client.TerminateSession(token)
+	defer func() { _ = c.TerminateSession(token) }()
 
 	logfile := args.Filepaths.LogFile
 	if logfile == "" {
@@ -201,16 +194,45 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	messages, err := client.Subscribe(token)
+	messages, err := c.Subscribe(token)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to subscribe to the Amass engine log messages: %v\n", err)
 		os.Exit(1)
 	}
 
 	var count int
-	for _, a := range makeAssets(cfg) {
-		if err := client.CreateAsset(*a, token); err == nil {
-			count++
+	// create all assets defined in the scope on the server
+	for _, a := range convertScopeToAssets(cfg.Scope) {
+		if _, err := c.CreateAsset(token, a); err != nil {
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to create asset on the engine: %v\n", err)
+			continue
+		}
+		count++
+	}
+
+	// create the provided DNS names on the server using bulk transfer
+	var fcount int
+	var provFQDNs []oam.Asset
+	for _, a := range cfg.ProvidedNames {
+		fcount++
+		provFQDNs = append(provFQDNs, oamdns.FQDN{Name: a})
+
+		if fcount == client.MaxBulkItems {
+			stored, err := c.CreateAssetsBulk(token, string(oam.FQDN), provFQDNs)
+			if err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "Failed to perform a bulk transfer of assets: %v\n", err)
+			}
+
+			count += stored
+			fcount = 0
+			provFQDNs = provFQDNs[:0]
+		}
+	}
+	if fcount > 0 {
+		if stored, err := c.CreateAssetsBulk(token, string(oam.FQDN), provFQDNs); err != nil {
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to perform a bulk transfer of assets: %v\n", err)
+		} else {
+			count += stored
 		}
 	}
 
@@ -230,12 +252,17 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 			case <-done:
 				return
 			case message := <-messages:
-				tools.WriteLogMessage(l, message)
+				if err := tools.WriteLogMessage(l, message); err != nil {
+					fmt.Println(err.Error())
+				}
 			case <-t.C:
-				if stats, err := client.SessionStats(token); err == nil {
+				if stats, err := c.SessionStats(token); err == nil && stats != nil {
+					stotal := max(count, stats.WorkItemsTotal)
+					scomplete := max(0, stats.WorkItemsCompleted)
+
 					if !args.Options.Silent {
-						progress.SetTotal(int64(stats.WorkItemsTotal))
-						progress.SetCurrent(int64(stats.WorkItemsCompleted))
+						progress.SetTotal(int64(stotal))
+						progress.SetCurrent(int64(scomplete))
 					}
 
 					if stats.WorkItemsCompleted == stats.WorkItemsTotal {
@@ -269,11 +296,12 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	case <-done:
 	case <-interrupt:
 		close(done)
-		return
 	}
 
 	if !args.Options.Silent {
 		progress.Finish()
+		fmt.Printf("\nSession Scope\n")
+		printScope(c, token)
 	}
 }
 
@@ -289,7 +317,6 @@ func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 		Included:          stringset.New(),
 		Names:             stringset.New(),
 		Resolvers:         stringset.New(),
-		Trusted:           stringset.New(),
 	}
 
 	fs := NewFlagset(&args, flag.ContinueOnError)
@@ -336,12 +363,6 @@ func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 	}
 	if args.BruteWordListMask.Len() > 0 {
 		args.BruteWordList.Union(args.BruteWordListMask)
-	}
-	if (args.Excluded.Len() > 0 || args.Filepaths.ExcludedSrcs != "") &&
-		(args.Included.Len() > 0 || args.Filepaths.IncludedSrcs != "") {
-		_, _ = afmt.R.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
-		usage()
-		os.Exit(1)
 	}
 	if err := processInputFiles(&args); err != nil {
 		_, _ = fmt.Fprintf(color.Error, "%v\n", err)
@@ -393,8 +414,8 @@ func (e Args) OverrideConfig(conf *config.Config) error {
 	if e.Filepaths.Directory != "" {
 		conf.Dir = e.Filepaths.Directory
 	}
-	if e.Filepaths.ScriptsDirectory != "" {
-		conf.ScriptsDirectory = e.Filepaths.ScriptsDirectory
+	if e.Engine != "" {
+		conf.EngineAPI = &config.EngAPI{URL: e.Engine}
 	}
 	if e.Names.Len() > 0 {
 		conf.ProvidedNames = e.Names.Slice()
@@ -427,25 +448,40 @@ func (e Args) OverrideConfig(conf *config.Config) error {
 	if e.Blacklist.Len() > 0 {
 		conf.Scope.Blacklist = e.Blacklist.Slice()
 	}
+	if e.Options.Rigid {
+		conf.Rigid = true
+	}
 	if e.Options.Verbose {
 		conf.Verbose = true
-	}
-	if e.ResolverQPS > 0 {
-		conf.ResolversQPS = e.ResolverQPS
-	}
-	if e.TrustedQPS > 0 {
-		conf.TrustedQPS = e.TrustedQPS
 	}
 	if e.Resolvers.Len() > 0 {
 		conf.SetResolvers(e.Resolvers.Slice()...)
 	}
-	if e.Trusted.Len() > 0 {
-		conf.SetTrustedResolvers(e.Trusted.Slice()...)
-	}
-	if e.MaxDNSQueries > 0 {
-		conf.MaxDNSQueries = e.MaxDNSQueries
-	}
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice()...)
 	return nil
+}
+
+func printScope(c *client.Client, token uuid.UUID) {
+	for _, atype := range oam.AssetList {
+		assets, err := c.SessionScope(token, atype)
+		if err != nil {
+			continue
+		}
+
+		fmt.Printf("\n%s:\n\n", atype)
+		for _, a := range assets {
+			name := a.Key()
+
+			if o, valid := a.(*oamorg.Organization); valid {
+				if o.LegalName != "" {
+					name = o.LegalName
+				} else if o.Name != "" {
+					name = o.Name
+				}
+			}
+
+			fmt.Println(name)
+		}
+	}
 }

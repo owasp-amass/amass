@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,11 +10,11 @@ import (
 
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	"github.com/owasp-amass/open-asset-model/contact"
+	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
@@ -25,7 +25,7 @@ func (s *Scope) Add(a oam.Asset) bool {
 	switch v := a.(type) {
 	case *oamdns.FQDN:
 		newentry = s.AddFQDN(v)
-	case *general.Identifier:
+	case *oamgen.Identifier:
 		if domain, found := getEmailDomain(v); found {
 			newentry = s.AddFQDN(&oamdns.FQDN{Name: domain})
 		}
@@ -40,9 +40,7 @@ func (s *Scope) Add(a oam.Asset) bool {
 	case *oamreg.IPNetRecord:
 		newentry = s.AddCIDR(v.CIDR.String())
 	case *oamreg.AutnumRecord:
-		n1 := s.AddOrg(v.Name)
-		n2 := s.AddASN(v.Number)
-		newentry = n1 || n2
+		newentry = s.AddASN(v.Number)
 	case *oamcert.TLSCertificate:
 		newentry = s.AddDomain(v.SubjectCommonName)
 	case *oamurl.URL:
@@ -51,9 +49,9 @@ func (s *Scope) Add(a oam.Asset) bool {
 		} else {
 			newentry = s.AddDomain(v.Host)
 		}
-	case *org.Organization:
+	case *oamorg.Organization:
 		newentry = s.AddOrganization(v)
-	case *contact.Location:
+	case *oamcon.Location:
 		newentry = s.AddLocation(v)
 	}
 
@@ -61,13 +59,18 @@ func (s *Scope) Add(a oam.Asset) bool {
 }
 
 func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
+	// Check blacklist first
+	if s.IsBlacklisted(a) {
+		return nil, 0
+	}
+
 	var accuracy int
 	var match oam.Asset
 
 	switch v := a.(type) {
 	case *oamdns.FQDN:
 		match, accuracy = s.matchesDomain(v)
-	case *general.Identifier:
+	case *oamgen.Identifier:
 		if domain, found := getEmailDomain(v); found {
 			match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: domain})
 		}
@@ -80,41 +83,30 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 	case *oamreg.DomainRecord:
 		match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.Domain})
 		if match == nil || accuracy == 0 {
-			match, accuracy = s.matchesOrg(&org.Organization{Name: v.Name}, conf)
+			match, accuracy = s.matchesOrg(&oamorg.Organization{ID: v.Name, Name: v.Name}, conf)
 		}
 	case *oamreg.IPNetRecord:
 		match, accuracy = s.matchesNetblock(&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type})
 	case *oamreg.AutnumRecord:
 		match, accuracy = s.matchesAutonomousSystem(&oamnet.AutonomousSystem{Number: v.Number})
 		if match == nil || accuracy == 0 {
-			match, accuracy = s.matchesOrg(&org.Organization{Name: v.Name}, conf)
+			match, accuracy = s.matchesOrg(&oamorg.Organization{ID: v.Name, Name: v.Name}, conf)
 		}
 	case *oamcert.TLSCertificate:
 		match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.SubjectCommonName})
 	case *oamurl.URL:
 		match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.Host})
-	case *org.Organization:
+	case *oamorg.Organization:
 		match, accuracy = s.matchesOrg(v, conf)
-	case *contact.Location:
+	case *oamcon.Location:
 		match, accuracy = s.matchesLocation(v, conf)
 	}
 
 	return match, accuracy
 }
 
-func (s *Scope) isBadField(field string) bool {
-	badstrs := []string{"registration", "registry", "redact", "private", "privacy", "available", "domain", "proxy", "liability"}
-
-	for _, bad := range badstrs {
-		if strings.Contains(field, bad) {
-			return true
-		}
-	}
-	return false
-}
-
-func getEmailDomain(email *general.Identifier) (string, bool) {
-	if email == nil || email.Type != general.EmailAddress {
+func getEmailDomain(email *oamgen.Identifier) (string, bool) {
+	if email == nil || email.Type != oamgen.EmailAddress {
 		return "", false
 	}
 
@@ -125,4 +117,44 @@ func getEmailDomain(email *general.Identifier) (string, bool) {
 	}
 
 	return parts[1], true
+}
+
+func (s *Scope) AddBlacklist(name string) {
+	s.blLock.Lock()
+	defer s.blLock.Unlock()
+
+	key := strings.ToLower(strings.TrimSpace(name))
+	if key != "" {
+		s.blacklist[key] = true
+	}
+}
+
+func (s *Scope) IsBlacklisted(a oam.Asset) bool {
+	s.blLock.Lock()
+	defer s.blLock.Unlock()
+
+	var name string
+	switch v := a.(type) {
+	case *oamdns.FQDN:
+		name = strings.ToLower(v.Name)
+	case *oamurl.URL:
+		name = strings.ToLower(v.Host)
+	default:
+		return false
+	}
+
+	if name == "" {
+		return false
+	}
+
+	for bl := range s.blacklist {
+		if strings.HasSuffix(name, bl) {
+			nlen := len(name)
+			blen := len(bl)
+			if nlen == blen || (nlen > blen && name[nlen-blen-1] == '.') {
+				return true
+			}
+		}
+	}
+	return false
 }

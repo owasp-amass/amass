@@ -1,13 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package config
 
 import (
-	"bufio"
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,16 +13,13 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
@@ -380,62 +375,6 @@ func OutputDirectory(dir ...string) string {
 	}
 
 	return ""
-}
-
-// GetListFromFile reads a wordlist text or gzip file and returns the slice of words.
-func GetListFromFile(path string) ([]string, error) {
-	var reader io.Reader
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %v", err)
-	}
-
-	file, err := os.Open(absPath)
-	if err != nil {
-		return nil, fmt.Errorf("error opening the file %s: %v", absPath, err)
-	}
-	defer func() { _ = file.Close() }()
-	reader = file
-
-	// We need to determine if this is a gzipped file or a plain text file, so we
-	// first read the first 512 bytes to pass them down to http.DetectContentType
-	// for mime detection. The file is rewinded before passing it along to the
-	// next reader
-	head := make([]byte, 512)
-	if _, err = file.Read(head); err != nil {
-		return nil, fmt.Errorf("error reading the first 512 bytes from %s: %s", absPath, err)
-	}
-	if _, err = file.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("error rewinding the file %s: %s", absPath, err)
-	}
-
-	// Read the file as gzip if it's actually compressed
-	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
-		gzReader, err := gzip.NewReader(file)
-		if err != nil {
-			return nil, fmt.Errorf("error gz-reading the file %s: %v", absPath, err)
-		}
-		defer func() { _ = gzReader.Close() }()
-		reader = gzReader
-	}
-
-	s, err := getWordList(reader)
-	return s, err
-}
-
-func getWordList(reader io.Reader) ([]string, error) {
-	var words []string
-
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		// Get the next word in the list
-		w := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && w != "" {
-			words = append(words, w)
-		}
-	}
-	return stringset.Deduplicate(words), nil
 }
 
 // JSON returns the JSON encoding of the configuration without escaping HTML characters.

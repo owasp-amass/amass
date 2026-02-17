@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -50,12 +50,13 @@ func (pt *passiveTotal) Start(r et.Registry) error {
 	pt.log = r.Log().WithGroup("plugin").With("name", pt.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     pt,
-		Name:       pt.name + "-Handler",
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.FQDN,
-		Callback:   pt.check,
+		Plugin:       pt,
+		Name:         pt.name + "-Handler",
+		Position:     28,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     pt.check,
 	}); err != nil {
 		return err
 	}
@@ -89,9 +90,7 @@ func (pt *passiveTotal) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, pt.source, since) {
-		names = append(names, pt.lookup(e, fqdn.Name, since)...)
-	} else {
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, pt.source, since) {
 		names = append(names, pt.query(e, fqdn.Name, ds)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, pt.source)
 	}
@@ -100,10 +99,6 @@ func (pt *passiveTotal) check(e *et.Event) error {
 		pt.process(e, names)
 	}
 	return nil
-}
-
-func (pt *passiveTotal) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), pt.source, since)
 }
 
 func (pt *passiveTotal) query(e *et.Event, name string, ds *config.DataSource) []*dbt.Entity {
@@ -123,8 +118,11 @@ loop:
 				url += "&lastId=" + lastid
 			}
 
-			_ = pt.rlimit.Wait(context.TODO())
-			resp, err := http.RequestWebPage(context.TODO(), &http.Request{
+			_ = pt.rlimit.Wait(e.Session.Ctx())
+			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+			defer cancel()
+
+			resp, err := http.RequestWebPage(ctx, &http.Request{
 				URL: url,
 				Auth: &http.BasicAuth{
 					Username: cr.Username,

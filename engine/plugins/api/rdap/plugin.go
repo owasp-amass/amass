@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package rdap
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -20,12 +21,13 @@ import (
 	"github.com/openrdap/rdap/bootstrap/cache"
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/time/rate"
@@ -96,12 +98,14 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		plugin: rd,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     rd,
-		Name:       rd.autsys.name,
-		Priority:   9,
-		Transforms: []string{string(oam.AutnumRecord)},
-		EventType:  oam.AutonomousSystem,
-		Callback:   rd.autsys.check,
+		Plugin:       rd,
+		Name:         rd.autsys.name,
+		Position:     40,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.AutnumRecord)},
+		EventType:    oam.AutonomousSystem,
+		Callback:     rd.autsys.check,
 	}); err != nil {
 		return err
 	}
@@ -121,12 +125,14 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     rd,
-		Name:       rd.autnum.name,
-		Priority:   1,
-		Transforms: rd.autnum.transforms,
-		EventType:  oam.AutnumRecord,
-		Callback:   rd.autnum.check,
+		Plugin:       rd,
+		Name:         rd.autnum.name,
+		Position:     2,
+		Exclusive:    true,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   rd.autnum.transforms,
+		EventType:    oam.AutnumRecord,
+		Callback:     rd.autnum.check,
 	}); err != nil {
 		return err
 	}
@@ -136,12 +142,14 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		plugin: rd,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     rd,
-		Name:       rd.netblock.name,
-		Priority:   9,
-		Transforms: []string{string(oam.IPNetRecord)},
-		EventType:  oam.Netblock,
-		Callback:   rd.netblock.check,
+		Plugin:       rd,
+		Name:         rd.netblock.name,
+		Position:     40,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.IPNetRecord)},
+		EventType:    oam.Netblock,
+		Callback:     rd.netblock.check,
 	}); err != nil {
 		return err
 	}
@@ -161,12 +169,14 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     rd,
-		Name:       rd.ipnet.name,
-		Priority:   1,
-		Transforms: rd.ipnet.transforms,
-		EventType:  oam.IPNetRecord,
-		Callback:   rd.ipnet.check,
+		Plugin:       rd,
+		Name:         rd.ipnet.name,
+		Position:     2,
+		Exclusive:    true,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   rd.ipnet.transforms,
+		EventType:    oam.IPNetRecord,
+		Callback:     rd.ipnet.check,
 	}); err != nil {
 		return err
 	}
@@ -201,7 +211,10 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		return
 	}
 
-	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: u.Raw})
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Minute)
+	defer cancel()
+
+	cr, err := e.Session.DB().CreateAsset(ctx, &contact.ContactRecord{DiscoveredAt: u.Raw})
 	if err != nil || cr == nil {
 		return
 	}
@@ -215,11 +228,9 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	}
 
 	if m.IsMatch(string(oam.URL)) {
-		a, err := e.Session.Cache().CreateAsset(u)
-		if err != nil {
-			return
+		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
+			_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "url"}, src)
 		}
-		_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "url"}, src)
 	}
 
 	v := entity.VCard
@@ -234,32 +245,32 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 
 			addr := strings.Join(strings.Split(s, "\n"), " ")
 			if loc := support.StreetAddressToLocation(addr); loc != nil {
-				if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
-					_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "location"}, src)
+				if a, err := e.Session.DB().CreateAsset(ctx, loc); err == nil && a != nil {
+					_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "location"}, src)
 				}
 			}
 		}
 	}
 	if email := strings.ToLower(v.Email()); m.IsMatch(string(oam.Identifier)) && email != "" {
-		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
+		if a, err := e.Session.DB().CreateAsset(ctx, &general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
 			ID:       email,
 			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
-			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "id"}, src)
+			_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "id"}, src)
 		}
 	}
 	if m.IsMatch(string(oam.Phone)) {
 		if phone := support.PhoneToOAMPhone(v.Tel(), "", v.Country()); phone != nil {
 			phone.Type = contact.PhoneTypeRegular
-			if a, err := e.Session.Cache().CreateAsset(phone); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
+			if a, err := e.Session.DB().CreateAsset(ctx, phone); err == nil && a != nil {
+				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
 			}
 		}
 		if fax := support.PhoneToOAMPhone(v.Fax(), "", v.Country()); fax != nil {
 			fax.Type = contact.PhoneTypeFax
-			if a, err := e.Session.Cache().CreateAsset(fax); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
+			if a, err := e.Session.DB().CreateAsset(ctx, fax); err == nil && a != nil {
+				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
 			}
 		}
 	}
@@ -279,8 +290,8 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	// the organization must come last due to a potential chicken-and-egg problem
 	if kind := strings.Join(prop.Values(), " "); m.IsMatch(string(oam.Person)) && name != "" && kind == "individual" {
 		if p := support.FullNameToPerson(name); p != nil {
-			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
+			if a, err := e.Session.DB().CreateAsset(ctx, p); err == nil && a != nil {
+				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
 				_ = e.Dispatcher.DispatchEvent(&et.Event{
 					Name:    fmt.Sprintf("%s:%s", p.FullName, p.ID),
 					Entity:  a,
@@ -289,11 +300,17 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			}
 		}
 	} else if m.IsMatch(string(oam.Organization)) && kind == "org" {
-		orgent, err := support.CreateOrgAsset(e.Session, cr,
-			&general.SimpleRelation{Name: "organization"}, &org.Organization{Name: name}, src)
+		orgent, err := org.FindOrgByRDAPHandle(e.Session, entity.Handle, src)
+		if err != nil || orgent == nil {
+			orgent, err = org.CreateOrgAsset(e.Session, cr,
+				&general.SimpleRelation{Name: "organization"}, &oamorg.Organization{Name: name}, src)
+			if err == nil {
+				_, _ = org.CreateOrgRDAPHandle(e.Session, orgent, entity.Handle, src)
+			}
+		}
 
 		if err == nil && orgent != nil {
-			o := orgent.Asset.(*org.Organization)
+			o := orgent.Asset.(*oamorg.Organization)
 
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
@@ -320,8 +337,8 @@ func (rd *rdapPlugin) getJSONLink(links []rdap.Link) *url.URL {
 	return url
 }
 
-func (rd *rdapPlugin) createContactEdge(sess et.Session, cr, a *dbt.Entity, rel oam.Relation, src *et.Source) error {
-	edge, err := sess.Cache().CreateEdge(&dbt.Edge{
+func (rd *rdapPlugin) createContactEdge(ctx context.Context, sess et.Session, cr, a *dbt.Entity, rel oam.Relation, src *et.Source) error {
+	edge, err := sess.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel,
 		FromEntity: cr,
 		ToEntity:   a,
@@ -332,7 +349,7 @@ func (rd *rdapPlugin) createContactEdge(sess et.Session, cr, a *dbt.Entity, rel 
 		return errors.New("failed to create the edge")
 	}
 
-	_, err = sess.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+	_, err = sess.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 		Source:     src.Name,
 		Confidence: src.Confidence,
 	})
