@@ -217,7 +217,7 @@ var prefixes = map[string]*oamorg.Organization{
 	"yahoo-verification-key=":                {Name: "Yahoo! Inc.", Jurisdiction: "US-DE", RegistrationID: "7289895"},
 	"yandex-verification=":                   {Name: "YANDEX LLC", Jurisdiction: "RU", RegistrationID: "1027700229193"},
 	"zapier-domain-verification-challenge=":  {Name: "Zapier, Inc.", Jurisdiction: "US-DE", RegistrationID: "5158590"},
-	"zendeskverification=":                   {Name: "Zendesk, Inc.", Jurisdiction: "US-DE", RegistrationID: "4912006"},
+	"zendeskverification=":                   {Name: "Zendesk, Inc.", Jurisdiction: "US-DE", RegistrationID: "4661237"},
 	"zoho-verification=":                     {Name: "Zoho Corporation Pvt. Ltd.", Jurisdiction: "IN", RegistrationID: "U40100TN2010PTC075961"},
 	"zoom-domain-verification":               {Name: "Zoom Communications, Inc.", Jurisdiction: "US-DE", RegistrationID: "4969967"},
 }
