@@ -174,7 +174,8 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 		{resp.Billing, "billing_contact", base + "Billing Contact Info"},
 	}
 	for _, c := range contacts {
-		if c.WhoisContact != nil {
+		if c.WhoisContact != nil &&
+			(c.RelationName != "registrant_contact" || !r.hasPlaceholders(c.WhoisContact)) {
 			r.storeContact(e, c, asset, m)
 		}
 	}
@@ -299,4 +300,24 @@ func (r *domrec) createSimpleEdge(sess et.Session, rel oam.Relation, from, to *d
 			Confidence: r.plugin.source.Confidence,
 		})
 	}
+}
+
+func (r *domrec) hasPlaceholders(contact *whoisparser.Contact) bool {
+	fields := []string{
+		contact.Name,
+		contact.Organization,
+		contact.Street,
+		contact.City,
+		contact.Province,
+		contact.Phone,
+		contact.Fax,
+		contact.Email,
+	}
+
+	for _, field := range fields {
+		if d := DetectRegistrantPlaceholder(field); d.IsPlaceholder {
+			return true
+		}
+	}
+	return false
 }

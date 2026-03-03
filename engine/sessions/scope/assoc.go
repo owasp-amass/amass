@@ -246,8 +246,12 @@ func (s *Scope) awayFromAssetsWithAssociation(assoc *dbt.Entity) ([]*dbt.Entity,
 		outSince = s.ttlStartTime(oam.AutnumRecord, oam.ContactRecord)
 	case oam.TLSCertificate:
 		out = true
-		outRels = append(outRels, "subject_contact")
+		outRels = append(outRels, "common_name", "subject_contact")
+		since1 := s.ttlStartTime(oam.TLSCertificate, oam.FQDN)
 		outSince = s.ttlStartTime(oam.TLSCertificate, oam.ContactRecord)
+		if !since1.IsZero() && since1.Before(outSince) {
+			outSince = since1
+		}
 	case oam.ContactRecord:
 		out = true
 		outRels = append(outRels, "organization", "location")

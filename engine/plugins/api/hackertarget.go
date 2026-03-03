@@ -14,7 +14,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -99,10 +99,14 @@ func (ht *hackerTarget) check(e *et.Event) error {
 
 func (ht *hackerTarget) query(e *et.Event, name string) []*dbt.Entity {
 	_ = ht.rlimit.Wait(e.Session.Ctx())
+	e.Session.NetSem().Acquire()
+
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(ctx, &http.Request{URL: ht.url + name})
+	resp, err := amasshttp.RequestWebPage(ctx,
+		e.Session.Clients().General, &amasshttp.Request{URL: ht.url + name})
+	e.Session.NetSem().Release()
 	if err != nil {
 		return nil
 	}

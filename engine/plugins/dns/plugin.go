@@ -160,7 +160,7 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		Name:         d.reverse.name,
 		Position:     8,
 		Exclusive:    true,
-		MaxInstances: support.MinHandlerInstances,
+		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.IPAddress,
 		Callback:     d.reverse.check,

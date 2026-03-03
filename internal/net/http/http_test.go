@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -18,70 +18,6 @@ import (
 	"github.com/caffix/stringset"
 	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
 )
-
-func TestCopyCookies(t *testing.T) {
-	u, _ := url.Parse("http://owasp.org")
-	DefaultClient.Jar.SetCookies(u, []*http.Cookie{{
-		Name:  "Test",
-		Value: "Cookie",
-	}})
-	CopyCookies("http://owasp.org", "http://example.com")
-
-	u2, _ := url.Parse("http://example.com")
-	if c := DefaultClient.Jar.Cookies(u2); len(c) == 0 || c[0].Value != "Cookie" {
-		t.Error("Failed to copy the cookie")
-	}
-}
-
-func TestCheckCookie(t *testing.T) {
-	type args struct {
-		urlString  string
-		cookieName string
-	}
-	tests := []struct {
-		name string
-		init func()
-		args args
-		want bool
-	}{
-		{
-			name: "basic-success",
-			init: func() {
-				sampleURL, err := url.Parse("http://owasp.org")
-				if err != nil {
-					t.Errorf("CheckCookie() parse error: got error = %v", err)
-				}
-
-				cookies := []*http.Cookie{{Name: "cookie1", Value: "sample cookie value"}}
-				DefaultClient.Jar.SetCookies(sampleURL, cookies)
-
-			},
-			args: args{
-				urlString:  "https://owasp.org",
-				cookieName: "cookie1",
-			},
-			want: true,
-		},
-		{
-			name: "basic-failure",
-			init: func() {},
-			args: args{
-				urlString:  "http://domain.local",
-				cookieName: "cookie2",
-			},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.init()
-			if got := CheckCookie(tt.args.urlString, tt.args.cookieName); got != tt.want {
-				t.Errorf("CheckCookie() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
 
 func TestRequestWebPage(t *testing.T) {
 	name := "caffix"
@@ -114,7 +50,7 @@ func TestRequestWebPage(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	resp, err := RequestWebPage(context.TODO(), &Request{
+	resp, err := RequestWebPage(context.TODO(), DefaultClient, &Request{
 		URL:  ts.URL,
 		Auth: &BasicAuth{name, pass},
 	})
@@ -122,7 +58,7 @@ func TestRequestWebPage(t *testing.T) {
 		t.Error("Failed to detect the bad request")
 	}
 
-	resp, err = RequestWebPage(context.TODO(), &Request{
+	resp, err = RequestWebPage(context.TODO(), DefaultClient, &Request{
 		URL:    ts.URL,
 		Method: "POST",
 		Header: Header{hkey: []string{name}},
@@ -136,7 +72,7 @@ func TestRequestWebPage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	resp, err = RequestWebPage(ctx, &Request{URL: ts.URL})
+	resp, err = RequestWebPage(ctx, DefaultClient, &Request{URL: ts.URL})
 	if err == nil || resp != nil {
 		t.Error("Failed to detect the expired context")
 	}

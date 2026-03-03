@@ -12,14 +12,15 @@ import (
 	"time"
 
 	jarm "github.com/caffix/jarm-go"
-	"github.com/owasp-amass/amass/v5/internal/net"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
 )
 
-func JARMFingerprint(target oam.Asset, portrel *general.PortRelation) (string, error) {
+func JARMFingerprint(sess et.Session, target oam.Asset, portrel *general.PortRelation) (string, error) {
 	var ipv6 bool
 	var host string
 
@@ -40,10 +41,14 @@ func JARMFingerprint(target oam.Asset, portrel *general.PortRelation) (string, e
 
 	var results []string
 	for _, probe := range jarm.GetProbes(host, portrel.PortNumber) {
+		sess.NetSem().Acquire()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		c, err := net.DialContext(ctx, "tcp", addr)
+		dial := amassnet.NewDialContext(5 * time.Second)
+		c, err := dial(ctx, "tcp", addr)
+		sess.NetSem().Release()
 		if err != nil {
 			return "", err
 		}

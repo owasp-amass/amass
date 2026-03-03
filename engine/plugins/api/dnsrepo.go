@@ -15,7 +15,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -110,21 +110,25 @@ func (d *dnsrepo) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		var req *http.Request
+		var req *amasshttp.Request
 
 		if key == "" {
-			req = &http.Request{URL: "https://dnsrepo.noc.org/?domain=" + name}
+			req = &amasshttp.Request{URL: "https://dnsrepo.noc.org/?domain=" + name}
 		} else {
-			req = &http.Request{
+			req = &amasshttp.Request{
 				URL: "https://dnsrepo.noc.org/api/?apikey=" + key + "&search=" + name + "&limit=5000",
 			}
 		}
 
 		_ = d.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 		defer cancel()
 
-		if resp, err := http.RequestWebPage(ctx, req); err == nil {
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, req)
+		e.Session.NetSem().Release()
+		if err == nil {
 			if key == "" {
 				names = append(names, d.parseHTML(e, resp.Body)...)
 			} else {
@@ -146,7 +150,7 @@ func (d *dnsrepo) parseHTML(e *et.Event, body string) []string {
 	for _, sub := range support.ScrapeSubdomainNames(body) {
 		if sub != "" {
 			// if the subdomain is not in scope, skip it
-			name := http.CleanName(sub)
+			name := amasshttp.CleanName(sub)
 			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 				names = append(names, name)
 			}

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -356,10 +357,8 @@ func (c *Config) AddDomain(domain string) {
 	}
 
 	// Check that none of the labels are empty
-	for _, label := range labels {
-		if label == "" {
-			return
-		}
+	if slices.Contains(labels, "") {
+		return
 	}
 
 	// Check that the regular expression map has been initialized
@@ -379,15 +378,7 @@ func (c *Config) AddDomain(domain string) {
 
 func uniqueIntAppend(s []int, e string) []int {
 	if a1, err := strconv.Atoi(e); err == nil {
-		var found bool
-
-		for _, a2 := range s {
-			if a1 == a2 {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(s, a1) {
 			s = append(s, a1)
 		}
 	}

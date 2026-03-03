@@ -16,7 +16,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
 type fqdnEndpoint struct {
@@ -37,7 +37,8 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if !e.Session.Config().Active {
 		return nil
 	}
-	if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
+	if !support.HasDNSRecordType(e, int(dns.TypeCNAME)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeA)) &&
 		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) {
 		return nil
 	}
@@ -68,7 +69,7 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, host, since); err == nil && len(edges) > 0 {
@@ -76,7 +77,7 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) [
 			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, fe.plugin.source.Name); err != nil {
 				continue
 			}
-			if _, ok := edge.Relation.(*general.PortRelation); ok {
+			if _, ok := edge.Relation.(*oamgen.PortRelation); ok {
 				if srv, err := e.Session.DB().FindEntityById(ctx,
 					edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{

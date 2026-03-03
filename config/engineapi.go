@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -90,7 +90,7 @@ func (c *Config) LoadEngineEnvSettings() error {
 		port = pEnv
 	}
 	eng.Port = port
-	path := "graphql"
+	path := ""
 	if pEnv, set := os.LookupEnv(enginePath); set {
 		path = pEnv
 	}
@@ -98,7 +98,7 @@ func (c *Config) LoadEngineEnvSettings() error {
 	if p != "" {
 		u = u[:len(u)-1]
 	}
-	apiURI = scheme + "://" + u + p + h + ":" + port + "/" + path
+	apiURI = scheme + "://" + u + p + h + ":" + port
 	eng.URL = apiURI
 
 	c.EngineAPI = eng

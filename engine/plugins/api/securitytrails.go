@@ -14,8 +14,8 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/dns"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -113,13 +113,16 @@ func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.
 
 	for _, key := range keys {
 		_ = st.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 		defer cancel()
 
-		resp, err := http.RequestWebPage(ctx, &http.Request{
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL:    "https://api.securitytrails.com/v1/domain/" + name + "/subdomains",
-			Header: http.Header{"APIKEY": []string{key}},
+			Header: amasshttp.Header{"APIKEY": []string{key}},
 		})
+		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			continue
 		}
@@ -132,7 +135,7 @@ func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.
 		}
 
 		for _, sub := range result.Subdomains {
-			nstr := strings.ToLower(strings.TrimSpace(dns.RemoveAsteriskLabel(sub + "." + name)))
+			nstr := strings.ToLower(strings.TrimSpace(amassdns.RemoveAsteriskLabel(sub + "." + name)))
 			// if the subdomain is not in scope, skip it
 			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: nstr}, 0); conf > 0 {
 				names = append(names, nstr)

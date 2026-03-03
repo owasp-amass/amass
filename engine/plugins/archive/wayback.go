@@ -15,8 +15,8 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/dns"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -101,12 +101,15 @@ func (w *wayback) check(e *et.Event) error {
 
 func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
 	_ = w.rlimit.Wait(e.Session.Ctx())
-	end := fmt.Sprintf("*.%s/*", name)
+	e.Session.NetSem().Acquire()
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(ctx, &http.Request{URL: w.URL + end})
+	end := fmt.Sprintf("*.%s/*", name)
+	resp, err := amasshttp.RequestWebPage(ctx,
+		e.Session.Clients().General, &amasshttp.Request{URL: w.URL + end})
+	e.Session.NetSem().Release()
 	if err != nil {
 		return nil
 	}
@@ -125,7 +128,7 @@ func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
 		}
 		u := url[0]
 
-		if n := dns.AnySubdomainRegex().FindString(u); n != "" {
+		if n := amassdns.AnySubdomainRegex().FindString(u); n != "" {
 			// if the subdomain is not in scope, skip it
 			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: n}, 0); conf > 0 {
 				subs.Insert(n)

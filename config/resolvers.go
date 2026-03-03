@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 )
 
 // DefaultQueriesPerPublicResolver is the number of queries sent to each public DNS resolver per second.
@@ -54,7 +54,8 @@ var PublicResolvers []string
 // GetPublicDNSResolvers obtains the public DNS server addresses from public-dns.info and assigns them to PublicResolvers.
 func GetPublicDNSResolvers() error {
 	url := "https://public-dns.info/nameservers-all.csv"
-	resp, err := http.RequestWebPage(context.Background(), &http.Request{URL: url})
+	resp, err := amasshttp.RequestWebPage(context.Background(),
+		amasshttp.DefaultClient, &amasshttp.Request{URL: url})
 	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return fmt.Errorf("failed to obtain the Public DNS csv file at %s: %v", url, err)
 	}

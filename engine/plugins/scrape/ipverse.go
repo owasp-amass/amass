@@ -14,7 +14,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -56,6 +56,7 @@ func (v *ipverse) Start(r et.Registry) error {
 		Plugin:       v,
 		Name:         v.name + "-Handler",
 		Position:     30,
+		Exclusive:    true,
 		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.Netblock)},
 		EventType:    oam.AutonomousSystem,
@@ -104,12 +105,15 @@ type record struct {
 
 func (v *ipverse) query(sess et.Session, asset *dbt.Entity) *record {
 	_ = v.rlimit.Wait(sess.Ctx())
+	sess.NetSem().Acquire()
+	as := asset.Asset.(*oamnet.AutonomousSystem)
 
 	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
 
-	as := asset.Asset.(*oamnet.AutonomousSystem)
-	resp, err := http.RequestWebPage(ctx, &http.Request{URL: fmt.Sprintf(v.fmtstr, as.Number)})
+	resp, err := amasshttp.RequestWebPage(ctx,
+		sess.Clients().General, &amasshttp.Request{URL: fmt.Sprintf(v.fmtstr, as.Number)})
+	sess.NetSem().Release()
 	if err != nil || resp.Body == "" {
 		return nil
 	}

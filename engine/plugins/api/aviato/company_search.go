@@ -15,10 +15,10 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
@@ -78,7 +78,7 @@ func (cs *companySearch) lookup(e *et.Event, orgent *dbt.Entity, since time.Time
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-				if id, ok := a.Asset.(*general.Identifier); ok && id != nil && id.Type == AviatoCompanyID {
+				if id, ok := a.Asset.(*oamgen.Identifier); ok && id != nil && id.Type == AviatoCompanyID {
 					return a
 				}
 			}
@@ -94,12 +94,8 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 	var body string
 	success := false
 	for _, key := range apikey {
-		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers := amasshttp.Header{"Content-Type": []string{"application/json"}}
 		headers["Authorization"] = []string{"Bearer " + key}
-
-		_ = cs.plugin.rlimit.Wait(e.Session.Ctx())
-		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
-		defer cancel()
 
 		filters := []map[string]*dslEvalObj{
 			{
@@ -121,12 +117,20 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 			return nil
 		}
 
-		if resp, err := http.RequestWebPage(ctx, &http.Request{
+		_ = cs.plugin.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
+		defer cancel()
+
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL:    "https://data.api.aviato.co/company/search",
 			Method: "POST",
 			Header: headers,
 			Body:   `{"dsl": ` + string(dslJSON) + `}`,
-		}); err == nil {
+		})
+		e.Session.NetSem().Release()
+		if err == nil {
 			if resp.StatusCode == 200 {
 				success = true
 				body = resp.Body
@@ -158,7 +162,7 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 }
 
 func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string) *dbt.Entity {
-	oamid := &general.Identifier{
+	oamid := &oamgen.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", AviatoCompanyID, companyID),
 		ID:       companyID,
 		Type:     AviatoCompanyID,
@@ -174,7 +178,7 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 		return nil
 	}
 
-	_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &general.SourceProperty{
+	_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &oamgen.SourceProperty{
 		Source:     cs.name,
 		Confidence: cs.plugin.source.Confidence,
 	})
@@ -185,7 +189,7 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 	}
 
 	if err := cs.plugin.createRelation(ctx, e.Session, orgent,
-		general.SimpleRelation{Name: "id"}, ident, cs.plugin.source.Confidence); err != nil {
+		oamgen.SimpleRelation{Name: "id"}, ident, cs.plugin.source.Confidence); err != nil {
 		msg := fmt.Sprintf("failed to create the identifier relation for %s: %s", companyID, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 		_ = e.Session.DB().DeleteEntity(ctx, ident.ID)
@@ -195,7 +199,7 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 }
 
 func (cs *companySearch) process(e *et.Event, orgent, ident *dbt.Entity) {
-	id := ident.Asset.(*general.Identifier)
+	id := ident.Asset.(*oamgen.Identifier)
 
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    id.UniqueID,

@@ -7,8 +7,11 @@ package engine
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
+
+	_ "net/http/pprof"
 
 	"github.com/owasp-amass/amass/v5/engine/api/server"
 	"github.com/owasp-amass/amass/v5/engine/dispatcher"
@@ -27,23 +30,27 @@ type Engine struct {
 }
 
 func NewEngine(l *slog.Logger) (*Engine, error) {
+	go func() {
+		_ = http.ListenAndServe("127.0.0.1:6060", nil)
+	}()
+
 	if l == nil {
 		l = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
 
-	mgr := sessions.NewManager(l)
+	reg := registry.NewRegistry(l)
+	mgr := sessions.NewManager(l, reg)
 	if mgr == nil {
 		return nil, errors.New("failed to create the session manager")
 	}
-	reg := registry.NewRegistry(l)
 
 	dis := dispatcher.NewDispatcher(l, reg, mgr)
 	if err := plugins.LoadAndStartPlugins(reg); err != nil {
 		return nil, err
 	}
 
-	srv := server.NewServer(l, dis, mgr)
-	if srv == nil {
+	srv, err := server.NewServer(l, dis, mgr)
+	if err != nil || srv == nil {
 		dis.Shutdown()
 		mgr.Shutdown()
 		return nil, errors.New("failed to create the API server")

@@ -19,7 +19,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -112,12 +112,15 @@ func (g *grepApp) query(e *et.Event, name string) []*dbt.Entity {
 	cont := true
 	for page := 1; cont; page++ {
 		_ = g.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 		defer cancel()
 
-		resp, err := http.RequestWebPage(ctx, &http.Request{
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL: fmt.Sprintf("https://grep.app/api/search?page=%s&q=%s&regexp=true", strconv.Itoa(page), escapedQuery),
 		})
+		e.Session.NetSem().Release()
 		if err != nil {
 			break
 		}

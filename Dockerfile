@@ -1,4 +1,4 @@
-FROM golang:1.25.5-alpine AS build
+FROM golang:1.26.0-alpine AS build
 RUN apk --no-cache add git
 WORKDIR /go/src/github.com/owasp-amass/amass
 COPY . .

@@ -14,8 +14,8 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/dns"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -113,13 +113,16 @@ func (ix *leakix) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 
 	for _, key := range keys {
 		_ = ix.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 		defer cancel()
 
-		resp, err := http.RequestWebPage(ctx, &http.Request{
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL:    "https://leakix.net/api/subdomains/" + name,
-			Header: http.Header{"Accept": []string{"application/json"}, "api-key": []string{key}},
+			Header: amasshttp.Header{"Accept": []string{"application/json"}, "api-key": []string{key}},
 		})
+		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			continue
 		}
@@ -134,7 +137,7 @@ func (ix *leakix) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 		}
 
 		for _, s := range result.Subdomains {
-			name := strings.ToLower(strings.TrimSpace(dns.RemoveAsteriskLabel(s.FQDN)))
+			name := strings.ToLower(strings.TrimSpace(amassdns.RemoveAsteriskLabel(s.FQDN)))
 			// if the subdomain is not in scope, skip it
 			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 				names = append(names, name)

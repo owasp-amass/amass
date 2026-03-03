@@ -16,16 +16,16 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
-	"github.com/owasp-amass/open-asset-model/people"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
+	oampeop "github.com/owasp-amass/open-asset-model/people"
 )
 
 func (ae *employees) check(e *et.Event) error {
-	oamid, ok := e.Entity.Asset.(*general.Identifier)
+	oamid, ok := e.Entity.Asset.(*oamgen.Identifier)
 	if !ok {
 		return errors.New("failed to extract the Identifier asset")
 	} else if oamid.Type != AviatoCompanyID {
@@ -84,7 +84,7 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					orgent = a
 					break
 				}
@@ -103,7 +103,7 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*people.Person); ok {
+				if _, ok := a.Asset.(*oampeop.Person); ok {
 					employents = append(employents, a)
 				}
 			}
@@ -114,7 +114,7 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 }
 
 func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, []*dbt.Entity) {
-	oamid := e.Entity.Asset.(*general.Identifier)
+	oamid := e.Entity.Asset.(*oamgen.Identifier)
 
 	orgent := ae.getAssociatedOrg(e, ident)
 	if orgent == nil {
@@ -130,15 +130,18 @@ func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*db
 loop:
 	for _, key := range apikey {
 		for ; page < total; page++ {
-			headers := http.Header{"Content-Type": []string{"application/json"}}
+			headers := amasshttp.Header{"Content-Type": []string{"application/json"}}
 			headers["Authorization"] = []string{"Bearer " + key}
 
 			_ = ae.plugin.rlimit.Wait(e.Session.Ctx())
+			e.Session.NetSem().Acquire()
+
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
 			defer cancel()
 
 			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)
-			resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
+			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
+			e.Session.NetSem().Release()
 			if err != nil {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, err)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
@@ -195,7 +198,7 @@ func (ae *employees) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entit
 	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
 		for _, edge := range edges {
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					orgent = a
 					break
 				}
@@ -225,7 +228,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 			continue
 		}
 
-		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &oamgen.SourceProperty{
 			Source:     ae.name,
 			Confidence: ae.plugin.source.Confidence,
 		})
@@ -236,7 +239,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 		}
 
 		if err := ae.plugin.createRelation(ctx, e.Session, orgent,
-			general.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
+			oamgen.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
 			employents = append(employents, personent)
 		} else {
 			msg := fmt.Sprintf("failed to create the member relation for %s: %s", p.FullName, err)
@@ -249,7 +252,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 
 func (ae *employees) process(e *et.Event, orgent *dbt.Entity, employents []*dbt.Entity) {
 	for _, employee := range employents {
-		p := employee.Asset.(*people.Person)
+		p := employee.Asset.(*oampeop.Person)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fmt.Sprintf("%s:%s", p.FullName, p.ID),
@@ -257,7 +260,7 @@ func (ae *employees) process(e *et.Event, orgent *dbt.Entity, employents []*dbt.
 			Session: e.Session,
 		})
 
-		o := orgent.Asset.(*org.Organization)
+		o := orgent.Asset.(*oamorg.Organization)
 		e.Session.Log().Info("relationship discovered", "from", o.Name, "relation", "member",
 			"to", p.FullName, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 	}

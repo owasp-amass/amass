@@ -1,25 +1,30 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
-	"github.com/google/uuid"
-	"github.com/owasp-amass/amass/v5/engine/api/client"
+	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
 )
 
 func engineIsRunning() bool {
-	c := client.NewClient("http://127.0.0.1:4000/")
-
-	if _, err := c.SessionStats(uuid.New()); err != nil && err.Error() == "session not found" {
-		return true
+	c, err := client.NewClient("http://127.0.0.1:4000")
+	if err != nil {
+		return false
 	}
-	return false
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	return c.HealthCheck(ctx)
 }
 
 func startEngine() error {

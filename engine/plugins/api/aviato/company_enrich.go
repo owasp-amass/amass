@@ -16,15 +16,15 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 func (ce *companyEnrich) check(e *et.Event) error {
-	oamid, ok := e.Entity.Asset.(*general.Identifier)
+	oamid, ok := e.Entity.Asset.(*oamgen.Identifier)
 	if !ok {
 		return errors.New("failed to extract the Identifier asset")
 	} else if oamid.Type != AviatoCompanyID {
@@ -81,7 +81,7 @@ func (ce *companyEnrich) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					return a
 				}
 			}
@@ -91,7 +91,7 @@ func (ce *companyEnrich) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 }
 
 func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, *companyEnrichResult) {
-	oamid := e.Entity.Asset.(*general.Identifier)
+	oamid := e.Entity.Asset.(*oamgen.Identifier)
 
 	orgent := ce.lookup(e, ident, time.Time{})
 	if orgent == nil {
@@ -102,15 +102,19 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 
 	var enrich *companyEnrichResult
 	for _, key := range apikey {
-		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers := amasshttp.Header{"Content-Type": []string{"application/json"}}
 		headers["Authorization"] = []string{"Bearer " + key}
 
 		_ = ce.plugin.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
 		defer cancel()
 
 		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", url.QueryEscape(oamid.ID))
-		resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
+		resp, err := amasshttp.RequestWebPage(ctx,
+			e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
+		e.Session.NetSem().Release()
 		if err != nil {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
@@ -146,7 +150,7 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 }
 
 func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnrichResult) {
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 
 	o.Active = false
 	if strings.EqualFold(data.Status, "active") {
@@ -162,10 +166,10 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 	if o.LegalName == "" && data.LegalName != "" {
 		o.LegalName = data.LegalName
 
-		oamid := &general.Identifier{
-			UniqueID: fmt.Sprintf("%s:%s", general.LegalName, o.LegalName),
+		oamid := &oamgen.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", oamgen.LegalName, o.LegalName),
 			ID:       o.LegalName,
-			Type:     general.LegalName,
+			Type:     oamgen.LegalName,
 		}
 
 		ident, err := e.Session.DB().CreateAsset(ctx, oamid)
@@ -175,7 +179,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 			return
 		}
 
-		_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &general.SourceProperty{
+		_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &oamgen.SourceProperty{
 			Source:     ce.name,
 			Confidence: ce.plugin.source.Confidence,
 		})
@@ -186,7 +190,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 			return
 		}
 
-		err = ce.plugin.createRelation(ctx, e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
+		err = ce.plugin.createRelation(ctx, e.Session, orgent, oamgen.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the relation for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
@@ -204,7 +208,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 }
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
@@ -212,7 +216,7 @@ func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
 		Session: e.Session,
 	})
 
-	id := ident.Asset.(*general.Identifier)
+	id := ident.Asset.(*oamgen.Identifier)
 	e.Session.Log().Info("relationship discovered", "from", id.UniqueID, "relation", "id",
 		"to", o.Name, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 }

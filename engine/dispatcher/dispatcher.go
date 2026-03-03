@@ -6,8 +6,8 @@ package dispatcher
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -16,36 +16,49 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-type dynamicDispatcher struct {
+type limits struct {
+	MaxQueued    int
+	HighWater    int
+	LowWater     int
+	PerSessBurst int
+}
+
+type dispatcher struct {
 	sync.RWMutex
-	log    *slog.Logger
-	reg    et.Registry
-	mgr    et.SessionManager
-	done   chan struct{}
-	cqueue queue.Queue
-	cchan  chan *et.EventDataElement
-	pools  map[oam.AssetType]*pipelinePool
-	meta   *metaMap
+	log      *slog.Logger
+	reg      et.Registry
+	mgr      et.SessionManager
+	done     chan struct{}
+	wake     chan oam.AssetType
+	cqueue   queue.Queue
+	cchan    chan *et.EventDataElement
+	meta     *metaMap
+	shuffler *rand.Rand
 }
 
 func NewDispatcher(l *slog.Logger, r et.Registry, mgr et.SessionManager) et.Dispatcher {
-	d := &dynamicDispatcher{
-		log:    l,
-		reg:    r,
-		mgr:    mgr,
-		done:   make(chan struct{}),
-		cchan:  make(chan *et.EventDataElement, 1000),
-		cqueue: queue.NewQueue(),
-		pools:  make(map[oam.AssetType]*pipelinePool),
-		meta:   newMetaMap(),
+	// Create a new random source
+	shuffler := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	d := &dispatcher{
+		log:      l,
+		reg:      r,
+		mgr:      mgr,
+		done:     make(chan struct{}),
+		wake:     make(chan oam.AssetType, 1),
+		cchan:    make(chan *et.EventDataElement, 1000),
+		cqueue:   queue.NewQueue(),
+		meta:     newMetaMap(),
+		shuffler: shuffler,
 	}
 
-	go d.runEvents()
+	go d.runPump()
 	go d.updateMetaMap()
+	go d.processCompletedEvents()
 	return d
 }
 
-func (d *dynamicDispatcher) Shutdown() {
+func (d *dispatcher) Shutdown() {
 	// Optional: add pool-level shutdown if you want explicit draining.
 	select {
 	case <-d.done:
@@ -55,53 +68,7 @@ func (d *dynamicDispatcher) Shutdown() {
 	close(d.done)
 }
 
-func (d *dynamicDispatcher) runEvents() {
-	scale := time.NewTicker(5 * time.Second)
-	defer scale.Stop()
-
-	for {
-		select {
-		case <-d.done:
-			return
-		default:
-		}
-
-		select {
-		case <-scale.C:
-			for _, pool := range d.pools {
-				if stats, err := d.snapshotSessBacklogStats(pool.eventTy); err == nil {
-					_ = pool.maybeScale(stats)
-					pool.maybeAdjustFanout(stats)
-				}
-			}
-		case e := <-d.cchan:
-			d.cqueue.Append(e)
-		case <-d.cqueue.Signal():
-			if data, ok := d.cqueue.Next(); ok {
-				if ede, valid := data.(*et.EventDataElement); valid {
-					d.completedCallback(ede)
-				}
-			}
-		}
-	}
-}
-
-func (d *dynamicDispatcher) completedCallback(ede *et.EventDataElement) {
-	// ack the completion in the backlog
-	if err := ede.Event.Session.Backlog().Ack(ede.Event.Entity, false); err == nil {
-		_ = d.meta.DeleteSessionEntry(ede.Event.Session.ID().String(), ede.Event.Entity.ID)
-	}
-
-	if inst, ok := ede.Ref.(*pipelineInstance); ok {
-		inst.onDequeue()
-	}
-
-	if err := ede.Error; err != nil {
-		ede.Event.Session.Log().WithGroup("event").With("name", ede.Event.Name).Error(err.Error())
-	}
-}
-
-func (d *dynamicDispatcher) DispatchEvent(e *et.Event) error {
+func (d *dispatcher) DispatchEvent(e *et.Event) error {
 	if e == nil || e.Entity == nil || e.Session == nil {
 		return errors.New("the event cannot be nil and must include the entity and session")
 	}
@@ -117,19 +84,25 @@ func (d *dynamicDispatcher) DispatchEvent(e *et.Event) error {
 
 	err := e.Session.Backlog().Enqueue(e.Entity)
 	if err != nil {
+		_ = d.meta.DeleteSessionEntry(e.Session.ID().String(), e.Entity.ID)
 		return err
 	}
 
-	atype := e.Entity.Asset.AssetType()
-	pool := d.getOrCreatePool(atype)
-	if pool == nil {
-		return fmt.Errorf("no pipeline pool available for asset type %s", string(atype))
-	}
-
-	return pool.Dispatch(e)
+	return d.signalScheduling(e)
 }
 
-func (d *dynamicDispatcher) ResubmitEvent(e *et.Event) error {
+func (d *dispatcher) signalScheduling(e *et.Event) error {
+	atype := e.Entity.Asset.AssetType()
+	pipe := e.Session.Pipelines()[atype]
+
+	if pipe.Queue.Len() <= int(limitsByAssetType(atype).LowWater) {
+		d.wakePump(atype)
+	}
+
+	return nil
+}
+
+func (d *dispatcher) ResubmitEvent(e *et.Event) error {
 	if e == nil || e.Entity == nil || e.Session == nil {
 		return errors.New("the event cannot be nil and must include the entity and session")
 	}
@@ -144,47 +117,139 @@ func (d *dynamicDispatcher) ResubmitEvent(e *et.Event) error {
 
 	err := e.Session.Backlog().Enqueue(e.Entity)
 	if err != nil {
+		_ = d.meta.DeleteSessionEntry(e.Session.ID().String(), e.Entity.ID)
 		return err
 	}
 
-	atype := e.Entity.Asset.AssetType()
-	pool := d.getOrCreatePool(atype)
-	if pool == nil {
-		return fmt.Errorf("no pipeline pool available for asset type %s", string(atype))
-	}
-
-	return pool.Dispatch(e)
+	return d.signalScheduling(e)
 }
 
-func (d *dynamicDispatcher) getOrCreatePool(atype oam.AssetType) *pipelinePool {
-	d.RLock()
-	pool := d.pools[atype]
-	d.RUnlock()
-	if pool != nil {
-		return pool
-	}
+func (d *dispatcher) processCompletedEvents() {
+	for {
+		select {
+		case <-d.done:
+			return
+		default:
+		}
 
-	d.Lock()
-	defer d.Unlock()
-	// check if the pool was created while waiting
-	if pool = d.pools[atype]; pool != nil {
-		return pool
+		select {
+		case e := <-d.cchan:
+			d.cqueue.Append(e)
+		case <-d.cqueue.Signal():
+			if data, ok := d.cqueue.Next(); ok {
+				if ede, valid := data.(*et.EventDataElement); valid {
+					d.completedCallback(ede)
+				}
+			}
+		}
 	}
-
-	min, max := assetTypeToPoolMinMax(atype)
-	pool = newPipelinePool(d, atype, min, max)
-	d.pools[atype] = pool
-	return pool
 }
 
-func assetTypeToPoolMinMax(atype oam.AssetType) (int, int) {
-	switch atype {
-	case oam.FQDN:
-		return 4, 32
-	case oam.IPAddress:
-		return 4, 32
+func (d *dispatcher) completedCallback(ede *et.EventDataElement) {
+	// ack the completion in the backlog
+	if err := ede.Event.Session.Backlog().Ack(ede.Event.Entity, false); err == nil {
+		_ = d.meta.DeleteSessionEntry(ede.Event.Session.ID().String(), ede.Event.Entity.ID)
+	}
+
+	atype := ede.Event.Entity.Asset.AssetType()
+	if ap, ok := ede.Ref.(*et.AssetPipeline); ok {
+		if ap.Queue.Len() <= int(limitsByAssetType(atype).LowWater) {
+			d.wakePump(atype)
+		}
+	}
+
+	if err := ede.Error; err != nil {
+		ede.Event.Session.Log().WithGroup("event").With("name", ede.Event.Name).Error(err.Error())
+	}
+}
+
+func (d *dispatcher) wakePump(atype oam.AssetType) {
+	select {
+	case d.wake <- atype:
 	default:
-		return 1, 4
+	}
+}
+
+func (d *dispatcher) runPump() {
+	tick := time.NewTicker(10 * time.Second)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-d.done:
+			return
+		case atype := <-d.wake:
+			d.pumpOnce(atype)
+		case <-tick.C:
+			for _, atype := range oam.AssetList {
+				d.pumpOnce(atype)
+			}
+		}
+	}
+}
+
+func (d *dispatcher) pumpOnce(atype oam.AssetType) {
+	limits := limitsByAssetType(atype)
+	if limits == nil {
+		return
+	}
+
+	stats, err := d.snapshotSessBacklogStats(atype)
+	if err != nil {
+		return
+	}
+
+	// build a list of the session IDs
+	sessions := make([]string, 0, len(stats))
+	for sid := range stats {
+		sessions = append(sessions, sid)
+	}
+
+	// shuffle the sessions for random selection
+	d.shuffler.Shuffle(len(sessions), func(i, j int) {
+		sessions[i], sessions[j] = sessions[j], sessions[i]
+	})
+
+	for _, sess := range sessions {
+		s := stats[sess]
+		if s.Queued == 0 {
+			// there are zero entities to claim from the backlog
+			continue
+		}
+
+		pipe := s.Session.Pipelines()[atype]
+		numOfClaims := int(limits.MaxQueued) - pipe.Queue.Len()
+		if numOfClaims <= 0 {
+			continue
+		}
+		numOfClaims = min(numOfClaims, limits.PerSessBurst)
+
+		entities, err := s.Session.Backlog().ClaimNext(atype, numOfClaims)
+		if err != nil {
+			continue
+		}
+
+		for _, ent := range entities {
+			a := ent.Asset
+			name := string(atype) + ": " + a.Key()
+			meta, _ := d.meta.GetEntry(sess, ent.ID)
+
+			event := &et.Event{
+				Name:       name,
+				Entity:     ent,
+				Meta:       meta,
+				Dispatcher: d,
+				Session:    s.Session,
+			}
+
+			data := et.NewEventDataElement(event)
+			data.Exit = d.cchan
+			data.Ref = pipe // keep a ref to the pipeline
+			if err := pipe.Queue.Append(data); err != nil {
+				// entity is returned to the backlog in a queued state
+				_ = s.Session.Backlog().Release(ent, atype, false)
+			}
+		}
 	}
 }
 
@@ -199,7 +264,7 @@ type sessBacklogStats struct {
 
 // snapshotSessBacklogStats returns a point-in-time map of sessions and
 // their current stats from the backlog.
-func (d *dynamicDispatcher) snapshotSessBacklogStats(atype oam.AssetType) (sessStatsMap, error) {
+func (d *dispatcher) snapshotSessBacklogStats(atype oam.AssetType) (sessStatsMap, error) {
 	sessions := d.mgr.GetSessions()
 
 	stats := make(sessStatsMap, len(sessions))
@@ -220,7 +285,7 @@ func (d *dynamicDispatcher) snapshotSessBacklogStats(atype oam.AssetType) (sessS
 	return stats, nil
 }
 
-func (d *dynamicDispatcher) updateMetaMap() {
+func (d *dispatcher) updateMetaMap() {
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
 
@@ -234,16 +299,44 @@ func (d *dynamicDispatcher) updateMetaMap() {
 	}
 }
 
-func (d *dynamicDispatcher) removeKilledSessions() {
-	sessions := d.mgr.GetSessions()
-	if len(sessions) == 0 {
-		return
-	}
-
+func (d *dispatcher) removeKilledSessions() {
 	var sids []string
-	for _, sess := range sessions {
+
+	for _, sess := range d.mgr.GetSessions() {
 		sids = append(sids, sess.ID().String())
 	}
 
 	d.meta.RemoveInactiveSessions(sids)
+}
+
+func limitsByAssetType(atype oam.AssetType) *limits {
+	switch atype {
+	case oam.FQDN:
+		fallthrough
+	case oam.IPAddress:
+		return &limits{
+			MaxQueued:    200,
+			HighWater:    175,
+			LowWater:     100,
+			PerSessBurst: 10,
+		}
+	case oam.Service:
+		fallthrough
+	case oam.TLSCertificate:
+		fallthrough
+	case oam.URL:
+		return &limits{
+			MaxQueued:    100,
+			HighWater:    75,
+			LowWater:     25,
+			PerSessBurst: 5,
+		}
+	}
+
+	return &limits{
+		MaxQueued:    20,
+		HighWater:    15,
+		LowWater:     5,
+		PerSessBurst: 1,
+	}
 }

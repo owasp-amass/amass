@@ -17,6 +17,7 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/owasp-amass/amass/v5/config"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 var (
@@ -35,7 +36,7 @@ func init() {
 	}
 }
 
-func (r *registry) BuildAssetPipeline(atype string) (*et.AssetPipeline, error) {
+func (r *registry) BuildAssetPipeline(ctx context.Context, atype oam.AssetType) (*et.AssetPipeline, error) {
 	var stages []pipeline.Stage
 
 	bufsize := 1
@@ -76,7 +77,7 @@ func (r *registry) BuildAssetPipeline(atype string) (*et.AssetPipeline, error) {
 	}
 
 	go func(p *et.AssetPipeline) {
-		if err := p.Pipeline.ExecuteBuffered(context.TODO(), p.Queue, makeSink(), bufsize); err != nil {
+		if err := p.Pipeline.ExecuteBuffered(ctx, p.Queue, makeSink(), bufsize); err != nil {
 			r.Log().Error(fmt.Sprintf("Pipeline terminated: %v", err), "OAM type", atype)
 		}
 	}(ap)
@@ -90,9 +91,16 @@ func makeSink() pipeline.SinkFunc {
 		if !ok {
 			return errors.New("pipeline sink failed to extract the EventDataElement")
 		}
-		ede.Exit <- ede
+		sendElementOnExit(ede)
 		return nil
 	})
+}
+
+func sendElementOnExit(ede *et.EventDataElement) {
+	select {
+	case ede.Exit <- ede:
+	default:
+	}
 }
 
 func handlerTask(h *et.Handler) pipeline.TaskFunc {
@@ -113,11 +121,11 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 
 		select {
 		case <-ctx.Done():
-			ede.Exit <- ede
+			sendElementOnExit(ede)
 			return nil, nil
 		default:
 			if ede.Event.Session.Done() {
-				ede.Exit <- ede
+				sendElementOnExit(ede)
 				return nil, nil
 			}
 		}

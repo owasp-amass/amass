@@ -39,7 +39,7 @@ type AssetPipeline struct {
 type Registry interface {
 	Log() *slog.Logger
 	RegisterHandler(h *Handler) error
-	BuildAssetPipeline(atype string) (*AssetPipeline, error)
+	BuildAssetPipeline(ctx context.Context, atype oam.AssetType) (*AssetPipeline, error)
 }
 
 type PipelineQueue struct {

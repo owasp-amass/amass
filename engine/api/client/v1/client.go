@@ -2,12 +2,13 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package client
+package v1
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,15 +18,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/owasp-amass/amass/v5/config"
+	apiclient "github.com/owasp-amass/amass/v5/engine/api/client"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-const MaxBulkItems = 5000
+const MaxBulkItems = 1000
 
 type Client struct {
 	base       string
-	httpClient http.Client
+	httpClient *http.Client
 	wsClient   *websocket.Conn
 	done       chan struct{}
 }
@@ -55,12 +58,12 @@ type BulkAddAssetsResponse struct {
 }
 
 // NewClient returns a pointer to a Client struct for the specified server URL.
-func NewClient(url string) *Client {
+func NewClient(url string) (*Client, error) {
 	return &Client{
-		base:       url,
-		httpClient: http.Client{},
+		base:       url + "/api/v1",
+		httpClient: amasshttp.DefaultClient,
 		done:       make(chan struct{}),
-	}
+	}, nil
 }
 
 // Close terminates any open connections associated with the client.
@@ -68,24 +71,34 @@ func (c *Client) Close() {
 	close(c.done)
 }
 
+// HealthCheck returns true when the client was able to reach the server.
+func (c *Client) HealthCheck(ctx context.Context) bool {
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{URL: c.base + "/health"})
+	if err != nil {
+		return false
+	}
+	return resp.StatusCode == http.StatusOK
+}
+
 // Creates a new session on the server with the provided configuration.
-func (c *Client) CreateSession(config *config.Config) (uuid.UUID, error) {
+func (c *Client) CreateSession(ctx context.Context, config *config.Config) (uuid.UUID, error) {
 	raw, err := json.Marshal(config)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
 
-	req, _ := http.NewRequest(http.MethodPost, c.base+"/v1/sessions", bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{
+		Method: http.MethodPost,
+		Body:   string(raw),
+		URL:    c.base + "/sessions",
+		Header: amasshttp.Header{"Content-Type": []string{"application/json"}},
+	})
 	if err != nil {
 		return uuid.UUID{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return uuid.UUID{}, fmt.Errorf("createSession: status=%s", resp.Status)
 		}
@@ -93,7 +106,7 @@ func (c *Client) CreateSession(config *config.Config) (uuid.UUID, error) {
 	}
 
 	var out CreateSessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &out); err != nil {
 		return uuid.UUID{}, err
 	}
 
@@ -101,17 +114,14 @@ func (c *Client) CreateSession(config *config.Config) (uuid.UUID, error) {
 }
 
 // Lists the active session and associated tokens on the server.
-func (c *Client) ListSessions() ([]uuid.UUID, error) {
-	req, _ := http.NewRequest(http.MethodGet, c.base+"/v1/sessions", nil)
-
-	resp, err := c.httpClient.Do(req)
+func (c *Client) ListSessions(ctx context.Context) ([]uuid.UUID, error) {
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{URL: c.base + "/sessions/list"})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("listSessions: status=%s", resp.Status)
 		}
@@ -119,7 +129,7 @@ func (c *Client) ListSessions() ([]uuid.UUID, error) {
 	}
 
 	var out ListSessionsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &out); err != nil {
 		return nil, err
 	}
 
@@ -135,17 +145,17 @@ func (c *Client) ListSessions() ([]uuid.UUID, error) {
 }
 
 // Terminates the session associated with the provided token.
-func (c *Client) TerminateSession(token uuid.UUID) error {
-	req, _ := http.NewRequest(http.MethodDelete, c.base+"/v1/sessions/"+token.String(), nil)
-
-	resp, err := c.httpClient.Do(req)
+func (c *Client) TerminateSession(ctx context.Context, token uuid.UUID) error {
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{
+		Method: http.MethodDelete,
+		URL:    c.base + "/sessions/" + token.String(),
+	})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return fmt.Errorf("terminateSession: status=%s", resp.Status)
 		}
@@ -155,17 +165,15 @@ func (c *Client) TerminateSession(token uuid.UUID) error {
 }
 
 // Retrieves statistics for the session associated with the provided token.
-func (c *Client) SessionStats(token uuid.UUID) (*et.SessionStats, error) {
-	req, _ := http.NewRequest(http.MethodGet, c.base+"/v1/sessions/"+token.String()+"/stats", nil)
-
-	resp, err := c.httpClient.Do(req)
+func (c *Client) SessionStats(ctx context.Context, token uuid.UUID) (*et.SessionStats, error) {
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient,
+		&amasshttp.Request{URL: c.base + "/sessions/" + token.String() + "/stats"})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("%s/stats: status=%s", token.String(), resp.Status)
 		}
@@ -173,38 +181,39 @@ func (c *Client) SessionStats(token uuid.UUID) (*et.SessionStats, error) {
 	}
 
 	var st et.SessionStats
-	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &st); err != nil {
 		return nil, err
 	}
 	return &st, nil
 }
 
 // Retrieves scope for the session associated with the provided token.
-func (c *Client) SessionScope(token uuid.UUID, atype oam.AssetType) ([]oam.Asset, error) {
+func (c *Client) SessionScope(ctx context.Context, token uuid.UUID, atype oam.AssetType) ([]oam.Asset, error) {
 	sessionID := token.String()
 	atypestr := strings.ToLower(string(atype))
-	u := fmt.Sprintf("%s/v1/sessions/%s/scope/%s", c.base, sessionID, atypestr)
-	req, _ := http.NewRequest(http.MethodGet, u, nil)
-
-	resp, err := c.httpClient.Do(req)
+	u := fmt.Sprintf("%s/sessions/%s/scope/%s", c.base, sessionID, atypestr)
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{URL: u})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("%s/scope: status=%s", token.String(), resp.Status)
 		}
 		return nil, fmt.Errorf("%s/scope: status=%s error=%s", token.String(), resp.Status, msg)
 	}
 
-	return decodeAssetsForScopeEndpoint(atype, resp.Body)
+	reader := strings.NewReader(resp.Body)
+	readCloser := io.NopCloser(reader)
+	defer func() { _ = readCloser.Close() }()
+
+	return apiclient.DecodeAssetsForScopeEndpoint(atype, readCloser)
 }
 
 // Creates a new asset on the server associated with the provided token.
-func (c *Client) CreateAsset(token uuid.UUID, asset oam.Asset) (string, error) {
+func (c *Client) CreateAsset(ctx context.Context, token uuid.UUID, asset oam.Asset) (string, error) {
 	atype := strings.ToLower(string(asset.AssetType()))
 	raw, err := asset.JSON()
 	if err != nil {
@@ -212,18 +221,19 @@ func (c *Client) CreateAsset(token uuid.UUID, asset oam.Asset) (string, error) {
 	}
 
 	sessionID := token.String()
-	u := fmt.Sprintf("%s/v1/sessions/%s/assets/%s", c.base, sessionID, atype)
-	req, _ := http.NewRequest(http.MethodPost, u, bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	u := fmt.Sprintf("%s/sessions/%s/assets/%s", c.base, sessionID, atype)
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{
+		URL:    u,
+		Body:   string(raw),
+		Method: http.MethodPost,
+		Header: amasshttp.Header{"Content-Type": []string{"application/json"}},
+	})
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("createAsset: status=%s", resp.Status)
 		}
@@ -231,14 +241,14 @@ func (c *Client) CreateAsset(token uuid.UUID, asset oam.Asset) (string, error) {
 	}
 
 	var r AddAssetResponse
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &r); err != nil {
 		return "", err
 	}
 	return r.EntityID, nil
 }
 
 // Creates multiple assets in bulk on the server associated with the provided token.
-func (c *Client) CreateAssetsBulk(token uuid.UUID, atype string, assets []oam.Asset) (int, error) {
+func (c *Client) CreateAssetsBulk(ctx context.Context, token uuid.UUID, atype string, assets []oam.Asset) (int, error) {
 	atype = strings.ToLower(strings.TrimSpace(atype))
 
 	if atype == "" {
@@ -262,20 +272,20 @@ func (c *Client) CreateAssetsBulk(token uuid.UUID, atype string, assets []oam.As
 	}
 
 	sessionID := token.String()
-	u := fmt.Sprintf("%s/v1/sessions/%s/assets/%s:bulk", c.base, sessionID, atype)
-
 	body, _ := json.Marshal(BulkAddAssetsRequest{Items: items})
-	req, _ := http.NewRequest(http.MethodPost, u, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	u := fmt.Sprintf("%s/sessions/%s/assets/%s:bulk", c.base, sessionID, atype)
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{
+		URL:    u,
+		Body:   string(body),
+		Method: http.MethodPost,
+		Header: amasshttp.Header{"Content-Type": []string{"application/json"}},
+	})
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp)
+		msg, err := readJSONError(resp.Body)
 		if err != nil {
 			return 0, fmt.Errorf("addAssetsBulk: status=%s", resp.Status)
 		}
@@ -283,14 +293,14 @@ func (c *Client) CreateAssetsBulk(token uuid.UUID, atype string, assets []oam.As
 	}
 
 	var out BulkAddAssetsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &out); err != nil {
 		return 0, err
 	}
 	return int(out.Stored), nil
 }
 
 // Subscribe to receive a stream of log messages from the server.
-func (c *Client) Subscribe(token uuid.UUID) (<-chan string, error) {
+func (c *Client) Subscribe(ctx context.Context, token uuid.UUID) (<-chan string, error) {
 	u, err := url.Parse(c.base)
 	if err != nil {
 		return nil, err
@@ -304,9 +314,9 @@ func (c *Client) Subscribe(token uuid.UUID) (<-chan string, error) {
 	}
 
 	sessionID := token.String()
-	u.Path = "/v1/sessions/" + sessionID + "/ws/logs"
+	u.Path += "/sessions/" + sessionID + "/ws/logs"
 
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -340,11 +350,11 @@ func (c *Client) Subscribe(token uuid.UUID) (<-chan string, error) {
 	return ch, nil
 }
 
-func readJSONError(resp *http.Response) (string, error) {
+func readJSONError(content string) (string, error) {
 	var errResp struct {
 		Message string `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+	if err := json.Unmarshal([]byte(content), &errResp); err != nil {
 		return "", err
 	}
 	return errResp.Message, nil
