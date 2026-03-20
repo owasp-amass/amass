@@ -27,3 +27,35 @@ func TestGLEIFGetLEIRecordNilResponseNoPanic(t *testing.T) {
 		require.Nil(t, record)
 	})
 }
+
+func TestGLEIFGetDirectParentRecordNilResponseNoPanic(t *testing.T) {
+	t.Cleanup(func() {
+		requestWebPage = http.RequestWebPage
+	})
+
+	requestWebPage = func(ctx context.Context, r *http.Request) (*http.Response, error) {
+		return nil, nil
+	}
+
+	require.NotPanics(t, func() {
+		record, err := GLEIFGetDirectParentRecord("25490065U2GR0UPXFY63")
+		require.Error(t, err)
+		require.Nil(t, record)
+	})
+}
+
+func TestGLEIFGetDirectChildrenRecordsNilResponseNoPanic(t *testing.T) {
+	t.Cleanup(func() {
+		requestWebPage = http.RequestWebPage
+	})
+
+	requestWebPage = func(ctx context.Context, r *http.Request) (*http.Response, error) {
+		return nil, nil
+	}
+
+	require.NotPanics(t, func() {
+		records, err := GLEIFGetDirectChildrenRecords("INR2EJN1ERAN0W5ZP974")
+		require.Error(t, err)
+		require.Nil(t, records)
+	})
+}

@@ -34,9 +34,12 @@ func GLEIFSearchFuzzyCompletions(name string) (*FuzzyCompletionsResponse, error)
 
 	_ = gleifLimit.Wait(context.TODO())
 	resp, err := requestWebPage(context.TODO(), &http.Request{URL: u})
-	if err != nil || resp.Body == "" {
+	if err != nil {
 		msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
+	}
+	if resp == nil || resp.Body == "" {
+		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: failed to obtain the LEI record for %s", name)
 	}
 
 	var result FuzzyCompletionsResponse
