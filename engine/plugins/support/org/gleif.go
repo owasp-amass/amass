@@ -20,6 +20,7 @@ import (
 )
 
 var gleifLimit *rate.Limiter
+var requestWebPage = http.RequestWebPage
 
 func init() {
 	limit := rate.Every(3 * time.Second)
@@ -32,7 +33,7 @@ func GLEIFSearchFuzzyCompletions(name string) (*FuzzyCompletionsResponse, error)
 	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
 
 	_ = gleifLimit.Wait(context.TODO())
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
+	resp, err := requestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.Body == "" {
 		msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
@@ -54,9 +55,12 @@ func GLEIFGetLEIRecord(id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id
 
 	_ = gleifLimit.Wait(context.TODO())
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
-	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+	resp, err := requestWebPage(context.TODO(), &http.Request{URL: u})
+	if err != nil {
 		return nil, err
+	}
+	if resp == nil || resp.StatusCode != 200 || resp.Body == "" {
+		return nil, fmt.Errorf("failed to obtain LEI record %s", id)
 	}
 
 	var result SingleResponse
@@ -73,9 +77,12 @@ func GLEIFGetDirectParentRecord(id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-parent"
 
 	_ = gleifLimit.Wait(context.TODO())
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
-	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+	resp, err := requestWebPage(context.TODO(), &http.Request{URL: u})
+	if err != nil {
 		return nil, err
+	}
+	if resp == nil || resp.StatusCode != 200 || resp.Body == "" {
+		return nil, fmt.Errorf("failed to obtain direct parent LEI record %s", id)
 	}
 
 	var result SingleResponse
@@ -96,9 +103,12 @@ func GLEIFGetDirectChildrenRecords(id string) ([]*LEIRecord, error) {
 	for i := 1; i <= last && link != ""; i++ {
 		_ = gleifLimit.Wait(context.TODO())
 
-		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
-		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+		resp, err := requestWebPage(context.TODO(), &http.Request{URL: link})
+		if err != nil {
 			return nil, err
+		}
+		if resp == nil || resp.StatusCode != 200 || resp.Body == "" {
+			return nil, fmt.Errorf("failed to obtain direct children LEI records for %s", id)
 		}
 
 		var result MultipleResponse
