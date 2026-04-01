@@ -120,7 +120,7 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 		_ = cs.plugin.rlimit.Wait(e.Session.Ctx())
 		e.Session.NetSem().Acquire()
 
-		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 		defer cancel()
 
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{

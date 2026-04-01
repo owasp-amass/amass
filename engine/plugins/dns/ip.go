@@ -8,12 +8,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/netip"
+	"net"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -123,24 +124,30 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 	defer cancel()
 
 	for _, record := range rr {
-		var addr, ipType string
+		var ip net.IP
+		var ipType string
 
 		switch record.Header().Rrtype {
 		case dns.TypeA:
 			ipType = "IPv4"
-			addr = (record.(*dns.A)).A.String()
+			ip = (record.(*dns.A)).A
 		case dns.TypeAAAA:
 			ipType = "IPv6"
-			addr = (record.(*dns.AAAA)).AAAA.String()
+			ip = (record.(*dns.AAAA)).AAAA
 		default:
 			continue
 		}
 
-		ip, err := e.Session.DB().CreateAsset(ctx, &oamnet.IPAddress{
-			Address: netip.MustParseAddr(addr),
+		addr, valid := amassnet.IPToAddr(ip)
+		if !valid {
+			continue
+		}
+
+		ipaddr, err := e.Session.DB().CreateAsset(ctx, &oamnet.IPAddress{
+			Address: addr,
 			Type:    ipType,
 		})
-		if err != nil || ip == nil {
+		if err != nil || ipaddr == nil {
 			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			continue
 		}
@@ -155,9 +162,9 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 				},
 			},
 			FromEntity: fqdn,
-			ToEntity:   ip,
+			ToEntity:   ipaddr,
 		}); err == nil && edge != nil {
-			ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
+			ips = append(ips, &relIP{rtype: "dns_record", ip: ipaddr})
 			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 				Source:     d.source.Name,
 				Confidence: d.source.Confidence,

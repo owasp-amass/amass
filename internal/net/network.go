@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/big"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -86,36 +87,29 @@ type DialContext func(ctx context.Context, network, addr string) (net.Conn, erro
 
 // NewDialContext performs the dial using global variables (e.g. LocalAddr).
 func NewDialContext(timeout time.Duration) DialContext {
-	d := &net.Dialer{Timeout: timeout}
-
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		_, p, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-
-		port, err := strconv.Atoi(p)
-		if err != nil {
-			return nil, err
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		d := &net.Dialer{
+			Timeout:   timeout,
+			KeepAlive: 30 * time.Second,
 		}
 
 		if LocalAddr != nil {
-			addr, _, err := net.ParseCIDR(LocalAddr.String())
-
-			if err == nil && strings.HasPrefix(network, "tcp") {
-				d.LocalAddr = &net.TCPAddr{
-					IP:   addr,
-					Port: port,
-				}
-			} else if err == nil && strings.HasPrefix(network, "udp") {
-				d.LocalAddr = &net.UDPAddr{
-					IP:   addr,
-					Port: port,
+			if ip := net.ParseIP(LocalAddr.String()); ip != nil {
+				if strings.HasPrefix(network, "tcp") {
+					d.LocalAddr = &net.TCPAddr{
+						IP:   ip,
+						Port: 0, // let kernel choose ephemeral source port
+					}
+				} else if strings.HasPrefix(network, "udp") {
+					d.LocalAddr = &net.UDPAddr{
+						IP:   ip,
+						Port: 0, // let kernel choose ephemeral source port
+					}
 				}
 			}
 		}
 
-		return d.DialContext(ctx, network, addr)
+		return d.DialContext(ctx, network, address)
 	}
 }
 
@@ -127,6 +121,18 @@ func IsIPv4(ip net.IP) bool {
 // IsIPv6 returns true when the provided net.IP address is an IPv6 address.
 func IsIPv6(ip net.IP) bool {
 	return strings.Count(ip.String(), ":") >= 2
+}
+
+// IPToAddr converts a net.IP to netip.Addr, handling both IPv4 and IPv6.
+// Returns an error if the IP is invalid.
+func IPToAddr(ip net.IP) (netip.Addr, bool) {
+	if v4 := ip.To4(); v4 != nil {
+		return netip.AddrFromSlice(v4)
+	}
+	if v16 := ip.To16(); v16 != nil {
+		return netip.AddrFromSlice(v16)
+	}
+	return netip.Addr{}, false
 }
 
 // IsReservedAddress checks if the addr parameter is within one of the address ranges in the ReservedCIDRs slice.

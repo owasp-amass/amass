@@ -155,7 +155,7 @@ loop:
 			_ = cr.plugin.rlimit.Wait(e.Session.Ctx())
 			e.Session.NetSem().Acquire()
 
-			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 			defer cancel()
 
 			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/funding-rounds?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)

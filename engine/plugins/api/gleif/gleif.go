@@ -32,7 +32,7 @@ func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyComple
 	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
 
 	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
@@ -57,7 +57,7 @@ func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id
 
 	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(wctx,
@@ -80,7 +80,7 @@ func GLEIFGetDirectParentRecord(ctx context.Context, id string) (*LEIRecord, err
 	u := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-parent"
 
 	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(wctx,
@@ -106,7 +106,7 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 	link := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
 		_ = gleifLimit.Wait(ctx)
-		wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 
 		resp, err := amasshttp.RequestWebPage(wctx,

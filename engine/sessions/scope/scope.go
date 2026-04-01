@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"strings"
 
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
@@ -42,7 +43,9 @@ func (s *Scope) Add(a oam.Asset) bool {
 	case *oamreg.AutnumRecord:
 		newentry = s.AddASN(v.Number)
 	case *oamcert.TLSCertificate:
-		newentry = s.AddDomain(v.SubjectCommonName)
+		if re := amassdns.AnySubdomainRegex(); re.MatchString(v.SubjectCommonName) {
+			newentry = s.AddDomain(v.SubjectCommonName)
+		}
 	case *oamurl.URL:
 		if ip, err := netip.ParseAddr(v.Host); err == nil {
 			newentry = s.AddAddress(ip.String())
@@ -93,7 +96,9 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 			match, accuracy = s.matchesOrg(&oamorg.Organization{ID: v.Name, Name: v.Name}, conf)
 		}
 	case *oamcert.TLSCertificate:
-		match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.SubjectCommonName})
+		if re := amassdns.AnySubdomainRegex(); re.MatchString(v.SubjectCommonName) {
+			match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.SubjectCommonName})
+		}
 	case *oamurl.URL:
 		match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.Host})
 	case *oamorg.Organization:

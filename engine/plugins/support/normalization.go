@@ -222,17 +222,10 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 		return nil
 	}
 
-	var common string
-	names := ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(cert.Subject.CommonName)))
-	if len(names) == 0 {
-		return nil
-	}
-	common = names[0]
-
 	c := &oamcert.TLSCertificate{
 		Version:               strconv.Itoa(cert.Version),
 		SerialNumber:          cert.SerialNumber.String(),
-		SubjectCommonName:     common,
+		SubjectCommonName:     cert.Subject.CommonName,
 		IssuerCommonName:      cert.Issuer.CommonName,
 		NotBefore:             TimeToJSONString(&cert.NotBefore),
 		NotAfter:              TimeToJSONString(&cert.NotAfter),

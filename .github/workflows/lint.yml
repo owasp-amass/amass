@@ -17,15 +17,15 @@ jobs:
     steps:
       -
         name: setup
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
       -
         name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       -
         name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --timeout=60m

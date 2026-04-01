@@ -98,7 +98,7 @@ func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, por
 	var findings []*support.Finding
 	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe, &amasshttp.Request{URL: target})

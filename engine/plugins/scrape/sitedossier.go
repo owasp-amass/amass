@@ -107,7 +107,7 @@ func (sd *siteDossier) query(e *et.Event, name string) []*dbt.Entity {
 		_ = sd.rlimit.Wait(e.Session.Ctx())
 		e.Session.NetSem().Acquire()
 
-		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 		defer cancel()
 
 		resp, err := amasshttp.RequestWebPage(ctx,

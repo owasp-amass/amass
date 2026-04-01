@@ -103,7 +103,7 @@ func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
 	_ = w.rlimit.Wait(e.Session.Ctx())
 	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 60*time.Second)
 	defer cancel()
 
 	end := fmt.Sprintf("*.%s/*", name)

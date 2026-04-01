@@ -122,7 +122,7 @@ func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 	_ = p.rlimit.Wait(e.Session.Ctx())
 	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
@@ -166,7 +166,7 @@ func (p *Prospeo) accountType(sess et.Session, key string) (int, error) {
 	_ = p.rlimit.Wait(sess.Ctx())
 
 	sess.NetSem().Acquire()
-	rctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
+	rctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(rctx, sess.Clients().General, &amasshttp.Request{
@@ -194,7 +194,7 @@ func (p *Prospeo) count(sess et.Session, domain string, key string) (int, error)
 	_ = p.rlimit.Wait(sess.Ctx())
 
 	sess.NetSem().Acquire()
-	rctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
+	rctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(rctx, sess.Clients().General, &amasshttp.Request{
