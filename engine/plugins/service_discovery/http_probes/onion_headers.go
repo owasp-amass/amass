@@ -7,8 +7,8 @@ package http_probes
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
