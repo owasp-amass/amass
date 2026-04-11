@@ -17,9 +17,9 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/platform"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, plugin, handler string) []*dbt.Entity {
@@ -35,7 +35,7 @@ func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, pl
 	for _, name := range names {
 		if a, err := session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.DB().CreateEntityProperty(ctx, a, &general.SourceProperty{
+			_, _ = session.DB().CreateEntityProperty(ctx, a, &oamgen.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -60,13 +60,13 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 	for _, e := range emails {
 		email := strings.ToLower(e)
 
-		if a, err := session.DB().CreateAsset(ctx, &general.Identifier{
-			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
+		if a, err := session.DB().CreateAsset(ctx, &oamgen.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", oamgen.EmailAddress, email),
 			ID:       email,
-			Type:     general.EmailAddress,
+			Type:     oamgen.EmailAddress,
 		}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.DB().CreateEntityProperty(ctx, a, &general.SourceProperty{
+			_, _ = session.DB().CreateEntityProperty(ctx, a, &oamgen.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -86,7 +86,7 @@ func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
 	ctx, cancel := context.WithTimeout(session.Ctx(), 3*time.Second)
 	defer cancel()
 
-	_, _ = session.DB().CreateEntityProperty(ctx, asset, general.SimpleProperty{
+	_, _ = session.DB().CreateEntityProperty(ctx, asset, oamgen.SimpleProperty{
 		PropertyName:  "last_monitored",
 		PropertyValue: src.Name,
 	})
@@ -111,13 +111,13 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 	return false
 }
 
-func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *platform.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
+func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *oamplat.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
 	var srvs []*dbt.Entity
 
 	ctx, cancel := context.WithTimeout(session.Ctx(), 30*time.Second)
 	defer cancel()
 
-	if rport, ok := rel.(*general.PortRelation); ok && src != nil && serv != nil {
+	if rport, ok := rel.(*oamgen.PortRelation); ok && src != nil && serv != nil {
 		srcs := []*dbt.Entity{src}
 
 		if _, ok := src.Asset.(*oamdns.FQDN); ok {
@@ -137,10 +137,10 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		for _, s := range srcs {
 			if edges, err := session.DB().OutgoingEdges(ctx, s, time.Time{}); err == nil && len(edges) > 0 {
 				for _, edge := range edges {
-					if eport, ok := edge.Relation.(*general.PortRelation); ok &&
+					if eport, ok := edge.Relation.(*oamgen.PortRelation); ok &&
 						eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
 						if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
-							if srv, ok := to.Asset.(*platform.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
+							if srv, ok := to.Asset.(*oamplat.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
 								srvs = append(srvs, to)
 							}
 						}
@@ -154,7 +154,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	for _, srv := range srvs {
 		var num int
 
-		s, valid := srv.Asset.(*platform.Service)
+		s, valid := srv.Asset.(*oamplat.Service)
 		if !valid {
 			continue
 		}

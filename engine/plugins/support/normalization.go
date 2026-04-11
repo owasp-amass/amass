@@ -6,7 +6,9 @@ package support
 
 import (
 	"crypto/x509"
-	"hash/maphash"
+	"encoding/hex"
+	"fmt"
+	"hash/fnv"
 	"net/url"
 	"strconv"
 	"strings"
@@ -16,13 +18,13 @@ import (
 	fnparser "github.com/caffix/fullname_parser"
 	"github.com/nyaruka/phonenumbers"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/people"
-	"github.com/owasp-amass/open-asset-model/platform"
+	oamcon "github.com/owasp-amass/open-asset-model/contact"
+	oampeop "github.com/owasp-amass/open-asset-model/people"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-func FullNameToPerson(raw string) *people.Person {
+func FullNameToPerson(raw string) *oampeop.Person {
 	if raw == "" {
 		return nil
 	}
@@ -51,7 +53,7 @@ func FullNameToPerson(raw string) *people.Person {
 		fullname += ", " + name.Suffix
 	}
 
-	return &people.Person{
+	return &oampeop.Person{
 		ID:         fullname,
 		FullName:   fullname,
 		FirstName:  name.First,
@@ -60,7 +62,7 @@ func FullNameToPerson(raw string) *people.Person {
 	}
 }
 
-func PhoneToOAMPhone(phone, ext, country string) *contact.Phone {
+func PhoneToOAMPhone(phone, ext, country string) *oamcon.Phone {
 	if phone == "" {
 		return nil
 	}
@@ -82,7 +84,7 @@ func PhoneToOAMPhone(phone, ext, country string) *contact.Phone {
 		raw += " Ext. " + ext
 	}
 
-	return &contact.Phone{
+	return &oamcon.Phone{
 		Raw:           raw,
 		E164:          e164,
 		CountryAbbrev: strings.ToUpper(country),
@@ -200,13 +202,19 @@ func TimeToJSONString(t *time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05Z07:00")
 }
 
-func ServiceWithIdentifier(h *maphash.Hash, sessionid, address string) *platform.Service {
-	_, _ = h.WriteString(sessionid + address)
-	serv := &platform.Service{
-		ID: address + strconv.Itoa(int(h.Sum64())),
-	}
-	h.Reset()
-	return serv
+func ServiceWithIdentifier(address, protocol string, port int) *oamplat.Service {
+	name := fmt.Sprintf("%s:%s:%d", address, strings.ToLower(protocol), port)
+
+	return &oamplat.Service{ID: name + "-" + Hash64Hex(name)}
+}
+
+func Hash64Hex(s string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(s))
+	var b [8]byte
+	sum := h.Sum(nil) // 8 bytes
+	copy(b[:], sum)
+	return hex.EncodeToString(b[:]) // 16 hex chars
 }
 
 func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
@@ -214,17 +222,10 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 		return nil
 	}
 
-	var common string
-	names := ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(cert.Subject.CommonName)))
-	if len(names) == 0 {
-		return nil
-	}
-	common = names[0]
-
 	c := &oamcert.TLSCertificate{
 		Version:               strconv.Itoa(cert.Version),
 		SerialNumber:          cert.SerialNumber.String(),
-		SubjectCommonName:     common,
+		SubjectCommonName:     cert.Subject.CommonName,
 		IssuerCommonName:      cert.Issuer.CommonName,
 		NotBefore:             TimeToJSONString(&cert.NotBefore),
 		NotAfter:              TimeToJSONString(&cert.NotAfter),

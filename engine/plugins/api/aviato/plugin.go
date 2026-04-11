@@ -13,7 +13,7 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/general"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	"golang.org/x/time/rate"
 )
 
@@ -46,6 +46,7 @@ func (a *aviato) Start(r et.Registry) error {
 		Plugin:       a,
 		Name:         a.employees.name,
 		Position:     41,
+		Exclusive:    true,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms:   []string{string(oam.Person)},
 		EventType:    oam.Identifier,
@@ -63,6 +64,7 @@ func (a *aviato) Start(r et.Registry) error {
 		Plugin:       a,
 		Name:         a.companyRounds.name,
 		Position:     42,
+		Exclusive:    true,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.Organization),
@@ -84,6 +86,7 @@ func (a *aviato) Start(r et.Registry) error {
 		Plugin:       a,
 		Name:         a.companyEnrich.name,
 		Position:     43,
+		Exclusive:    true,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms:   []string{string(oam.Organization)},
 		EventType:    oam.Identifier,
@@ -101,6 +104,7 @@ func (a *aviato) Start(r et.Registry) error {
 		Plugin:       a,
 		Name:         a.companySearch.name,
 		Position:     41,
+		Exclusive:    true,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms:   []string{string(oam.Identifier)},
 		EventType:    oam.Organization,
@@ -129,7 +133,7 @@ func (a *aviato) createRelation(ctx context.Context, session et.Session, obj *db
 		return errors.New("failed to create the edge")
 	}
 
-	_, err = session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
+	_, err = session.DB().CreateEdgeProperty(ctx, edge, &oamgen.SourceProperty{
 		Source:     a.source.Name,
 		Confidence: conf,
 	})

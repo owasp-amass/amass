@@ -195,14 +195,16 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 
 	if m.IsMatch(string(oam.FQDN)) {
 		if common := t.SubjectCommonName; common != "" {
-			if a, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: common}); err == nil && a != nil {
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: "TLSCertificate: " + t.SerialNumber,
-					To:       a,
-					ToName:   common,
-					Rel:      &general.SimpleRelation{Name: "common_name"},
-				})
+			for _, name := range support.ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(common))) {
+				if a, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && a != nil {
+					findings = append(findings, &support.Finding{
+						From:     asset,
+						FromName: "TLSCertificate: " + t.SerialNumber,
+						To:       a,
+						ToName:   name,
+						Rel:      &general.SimpleRelation{Name: "common_name"},
+					})
+				}
 			}
 		}
 		for _, n := range cert.DNSNames {

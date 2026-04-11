@@ -42,7 +42,10 @@ func (r *txtHandler) check(e *et.Event) error {
 func (r *txtHandler) lookup(e *et.Event, since time.Time) []string {
 	var rdata []string
 
-	if tags, err := e.Session.DB().FindEntityTags(context.Background(), e.Entity, since, "dns_record"); err == nil {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
+	if tags, err := e.Session.DB().FindEntityTags(ctx, e.Entity, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				rdata = append(rdata, prop.Data)

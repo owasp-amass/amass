@@ -12,8 +12,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -34,11 +32,9 @@ const (
 	Accept = "text/html,application/json,application/xhtml+xml,application/xml;q=0.5,*/*;q=0.2"
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
 	AcceptLang       = "en-US,en;q=0.5"
-	defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-	windowsUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-	darwinUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-	httpTimeout      = 10 * time.Second
-	handshakeTimeout = 5 * time.Second
+	defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+	windowsUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+	darwinUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 )
 
 var (
@@ -83,20 +79,21 @@ type BasicAuth struct {
 }
 
 func init() {
-	jar, _ := cookiejar.New(nil)
 	DefaultClient = &http.Client{
-		Timeout: httpTimeout,
+		Timeout: 3 * time.Minute,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           amassnet.DialContext,
+			DialContext:           amassnet.NewDialContext(15 * time.Second),
 			MaxIdleConns:          200,
-			MaxConnsPerHost:       50,
-			IdleConnTimeout:       10 * time.Second,
-			TLSHandshakeTimeout:   handshakeTimeout,
-			ExpectContinueTimeout: 5 * time.Second,
-			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConnsPerHost:   20,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   8 * time.Second,
+			ExpectContinueTimeout: 0,
+			ResponseHeaderTimeout: 15 * time.Second,
+			TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+			DisableCompression:    false,
 		},
-		Jar: jar,
+		Jar: nil,
 	}
 
 	switch runtime.GOOS {
@@ -170,37 +167,15 @@ func RespToAmassResponse(resp *http.Response) *Response {
 	}
 }
 
-// CopyCookies copies cookies from one domain to another. Some of our data
-// sources rely on shared auth tokens and this avoids sending extra requests
-// to have the site reissue cookies for the other domains.
-func CopyCookies(src string, dest string) {
-	srcURL, _ := url.Parse(src)
-	destURL, _ := url.Parse(dest)
-	DefaultClient.Jar.SetCookies(destURL, DefaultClient.Jar.Cookies(srcURL))
-}
-
-// CheckCookie checks if a cookie exists in the cookie jar for a given host
-func CheckCookie(urlString string, cookieName string) bool {
-	cookieURL, _ := url.Parse(urlString)
-	found := false
-	for _, cookie := range DefaultClient.Jar.Cookies(cookieURL) {
-		if cookie.Name == cookieName {
-			found = true
-			break
-		}
-	}
-	return found
-}
-
 // RequestWebPage returns the response headers, body, and status code for the provided URL when successful.
-func RequestWebPage(ctx context.Context, r *Request) (*Response, error) {
+func RequestWebPage(ctx context.Context, client *http.Client, r *Request) (*Response, error) {
 	if r == nil {
 		return nil, errors.New("failed to provide a valid Amass HTTP request")
 	}
 
 	if r.Method == "" {
-		r.Method = "GET"
-	} else if r.Method != "GET" && r.Method != "POST" {
+		r.Method = http.MethodGet
+	} else if r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		return nil, errors.New("failed to provide a valid HTTP method")
 	}
 
@@ -223,7 +198,7 @@ func RequestWebPage(ctx context.Context, r *Request) (*Response, error) {
 		}
 	}
 
-	resp, err := DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -337,10 +312,12 @@ func whichDomain(name string, scope []string) string {
 // TLSConn attempts to make a TLS connection with the host on the given port.
 func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
 	// set the maximum time allowed for making the connection
-	tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
 	// obtain the connection
-	conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	dial := amassnet.NewDialContext(5 * time.Second)
+	conn, err := dial(tCtx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
 	}

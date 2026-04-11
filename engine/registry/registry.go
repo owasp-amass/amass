@@ -10,19 +10,20 @@ import (
 	"sync"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 type registry struct {
 	sync.RWMutex
 	log      *slog.Logger
-	handlers map[string]map[int][]*et.Handler
+	handlers map[oam.AssetType]map[int][]*et.Handler
 }
 
 // Create a new instance of Registry.
 func NewRegistry(l *slog.Logger) et.Registry {
 	return &registry{
 		log:      l,
-		handlers: make(map[string]map[int][]*et.Handler),
+		handlers: make(map[oam.AssetType]map[int][]*et.Handler),
 	}
 }
 
@@ -36,13 +37,13 @@ func (r *registry) RegisterHandler(h *et.Handler) error {
 	defer r.Unlock()
 
 	// is the entry for the requested event type currently empty?
-	if _, found := r.handlers[string(h.EventType)]; !found {
-		r.handlers[string(h.EventType)] = make(map[int][]*et.Handler)
+	if _, found := r.handlers[h.EventType]; !found {
+		r.handlers[h.EventType] = make(map[int][]*et.Handler)
 	}
 	// has this registration been made already?
 	var found bool
 loop:
-	for _, handlers := range r.handlers[string(h.EventType)] {
+	for _, handlers := range r.handlers[h.EventType] {
 		for _, handler := range handlers {
 			if handler.Name == h.Name {
 				found = true
@@ -63,14 +64,14 @@ loop:
 		h.Position = 50
 	}
 
-	et, p := string(h.EventType), h.Position
-	if handlers, found := r.handlers[et][p]; found && len(handlers) > 0 && h.Exclusive {
-		err := fmt.Errorf("handler at position %d already registered for EventType %s", p, et)
+	atype, p := h.EventType, h.Position
+	if handlers, found := r.handlers[atype][p]; found && len(handlers) > 0 && h.Exclusive {
+		err := fmt.Errorf("handler at position %d already registered for EventType %s", p, atype)
 		r.Log().Error(fmt.Sprintf("Failed to register a handler: %v", err),
 			slog.Group("plugin", "name", h.Plugin.Name(), "handler", h.Name))
 		return err
 	}
 
-	r.handlers[et][p] = append(r.handlers[et][p], h)
+	r.handlers[atype][p] = append(r.handlers[atype][p], h)
 	return nil
 }

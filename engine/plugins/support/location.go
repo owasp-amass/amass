@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	biter "github.com/biter777/countries"
@@ -64,6 +65,7 @@ func StreetAddressToLocation(address string) *contact.Location {
 	if address == "" {
 		return nil
 	}
+	address = strings.TrimSpace(address)
 
 	parts, err := postalServerParseAddress(address)
 	if err != nil {
@@ -122,10 +124,10 @@ func postalServerParseAddress(address string) ([]parsedComponent, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	resp, err := amasshttp.RequestWebPage(ctx, &amasshttp.Request{
+	resp, err := amasshttp.RequestWebPage(ctx, amasshttp.DefaultClient, &amasshttp.Request{
 		Method: "POST",
 		URL:    "http://" + postalHost + ":" + postalPort + "/parse",
 		Body:   string(reqJSON),
@@ -142,10 +144,10 @@ func postalServerParseAddress(address string) ([]parsedComponent, error) {
 }
 
 func checkPostalServerHealth() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	if resp, err := amasshttp.RequestWebPage(ctx, &amasshttp.Request{
+	if resp, err := amasshttp.RequestWebPage(ctx, amasshttp.DefaultClient, &amasshttp.Request{
 		URL: "http://" + postalHost + ":" + postalPort + "/health",
 	}); err != nil || resp == nil || resp.StatusCode != http.StatusOK {
 		return false

@@ -85,7 +85,6 @@ func (r *fqdnLookup) lookup(e *et.Event, name string, since time.Time) *dbt.Enti
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -111,12 +110,10 @@ func (r *fqdnLookup) query(e *et.Event, name string, fent *dbt.Entity, src *et.S
 func (r *fqdnLookup) whoisRoutine(sess et.Session, name string, ch chan string) {
 	resp, err := whoisclient.Whois(name)
 	if err != nil {
+		resp = ""
 		msg := fmt.Sprintf("failed to acquire the WHOIS record for %s", name)
 		sess.Log().Error(msg, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
-		ch <- ""
-		return
 	}
-
 	ch <- resp
 }
 

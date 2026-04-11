@@ -8,29 +8,25 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
-	"hash/maphash"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/platform"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 type httpProbing struct {
-	name     string
-	log      *slog.Logger
-	fqdnend  *fqdnEndpoint
-	ipaddr   *ipaddrEndpoint
-	source   *et.Source
-	hash     maphash.Hash
-	servlock sync.Mutex
+	name    string
+	log     *slog.Logger
+	fqdnend *fqdnEndpoint
+	ipaddr  *ipaddrEndpoint
+	source  *et.Source
 }
 
 func NewHTTPProbing() et.Plugin {
@@ -48,7 +44,6 @@ func (hp *httpProbing) Name() string {
 }
 
 func (hp *httpProbing) Start(r et.Registry) error {
-	hp.hash.SetSeed(maphash.MakeSeed())
 	hp.log = r.Log().WithGroup("plugin").With("name", hp.name)
 
 	hp.fqdnend = &fqdnEndpoint{
@@ -101,68 +96,31 @@ func (hp *httpProbing) Stop() {
 
 func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, port int) []*support.Finding {
 	var findings []*support.Finding
+	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
 	defer cancel()
 
-	if resp, err := http.RequestWebPage(ctx, &http.Request{URL: target}); err == nil && resp != nil {
+	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe, &amasshttp.Request{URL: target})
+	e.Session.NetSem().Release()
+
+	if err == nil && resp != nil {
 		findings = append(findings, hp.store(e, resp, entity, port)...)
 	}
 	return findings
 }
 
-func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entity, port int) []*support.Finding {
-	hp.servlock.Lock()
-	defer hp.servlock.Unlock()
-
+func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.Entity, port int) []*support.Finding {
 	addr := entity.Asset.Key()
-	var firstAsset *dbt.Entity
-	var firstCert *x509.Certificate
-	var findings []*support.Finding
-	if resp.TLS != nil && resp.TLS.HandshakeComplete && len(resp.TLS.PeerCertificates) > 0 {
-		var prev *dbt.Entity
-		// traverse the certificate chain
-		for _, cert := range resp.TLS.PeerCertificates {
-			c := support.X509ToOAMTLSCertificate(cert)
-			if c == nil {
-				break
-			}
+	serv := support.ServiceWithIdentifier(addr, "tcp", port)
 
-			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
-			defer cancel()
-
-			a, err := e.Session.DB().CreateAsset(ctx, c)
-			if err != nil {
-				break
-			}
-
-			if prev == nil {
-				firstAsset = a
-				firstCert = cert
-			} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
-				findings = append(findings, &support.Finding{
-					From:     prev,
-					FromName: tls.SerialNumber,
-					To:       a,
-					ToName:   c.SerialNumber,
-					ToMeta:   cert,
-					Rel:      &general.SimpleRelation{Name: "issuing_certificate"},
-				})
-			}
-			prev = a
-		}
-	}
-
-	serv := support.ServiceWithIdentifier(&hp.hash, e.Session.ID().String(), addr)
-	if serv == nil {
-		return findings
-	}
 	serv.Type = "web-service"
 	serv.Output = resp.Body
 	serv.OutputLen = int(resp.Length)
 	serv.Attributes = resp.Header
 
 	var c *oamcert.TLSCertificate
+	firstAsset, firstCert, findings := hp.createCertificates(e.Session, resp)
 	if firstAsset != nil {
 		var valid bool
 		c, valid = firstAsset.Asset.(*oamcert.TLSCertificate)
@@ -171,7 +129,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 		}
 	}
 
-	portrel := &general.PortRelation{
+	portrel := &oamgen.PortRelation{
 		Name:       fmt.Sprintf("tcp_port_%d", port),
 		PortNumber: port,
 		Protocol:   "TCP",
@@ -182,7 +140,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 		return findings
 	}
 
-	serv, valid := s.Asset.(*platform.Service)
+	serv, valid := s.Asset.(*oamplat.Service)
 	if !valid {
 		return findings
 	}
@@ -203,9 +161,58 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 			To:       firstAsset,
 			ToName:   c.SerialNumber,
 			ToMeta:   firstCert,
-			Rel:      &general.SimpleRelation{Name: "certificate"},
+			Rel:      &oamgen.SimpleRelation{Name: "certificate"},
 		})
 	}
-
 	return findings
+}
+
+func (hp *httpProbing) createCertificates(sess et.Session, resp *amasshttp.Response) (*dbt.Entity, *x509.Certificate, []*support.Finding) {
+	var findings []*support.Finding
+
+	if resp.TLS == nil || !resp.TLS.HandshakeComplete {
+		return nil, nil, findings
+	}
+
+	count := len(resp.TLS.PeerCertificates)
+	if count == 0 {
+		return nil, nil, findings
+	}
+
+	dur := time.Duration(count*3) * time.Second
+	ctx, cancel := context.WithTimeout(sess.Ctx(), dur)
+	defer cancel()
+
+	var prev *dbt.Entity
+	var firstAsset *dbt.Entity
+	var firstCert *x509.Certificate
+	// traverse the certificate chain
+	for _, cert := range resp.TLS.PeerCertificates {
+		c := support.X509ToOAMTLSCertificate(cert)
+		if c == nil {
+			break
+		}
+
+		a, err := sess.DB().CreateAsset(ctx, c)
+		if err != nil {
+			break
+		}
+
+		if prev == nil {
+			firstAsset = a
+			firstCert = cert
+		} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
+			findings = append(findings, &support.Finding{
+				From:     prev,
+				FromName: tls.SerialNumber,
+				To:       a,
+				ToName:   c.SerialNumber,
+				ToMeta:   cert,
+				Rel:      &oamgen.SimpleRelation{Name: "issuing_certificate"},
+			})
+		}
+		prev = a
+	}
+
+	return firstAsset, firstCert, findings
 }

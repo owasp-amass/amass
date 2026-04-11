@@ -15,8 +15,8 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/dns"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -54,6 +54,7 @@ func (z *zetalytics) Start(r et.Registry) error {
 		Plugin:       z,
 		Name:         z.name + "-Handler",
 		Position:     32,
+		Exclusive:    true,
 		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -119,10 +120,13 @@ func (z *zetalytics) query(e *et.Event, name string, keys []string) []*dbt.Entit
 			"&token=" + key + "&tsfield=last_seen&start=" + strconv.FormatInt(start, 10)
 
 		_ = z.rlimit.Wait(e.Session.Ctx())
-		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+		e.Session.NetSem().Acquire()
+
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 		defer cancel()
 
-		resp, err := http.RequestWebPage(ctx, &http.Request{URL: url})
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: url})
+		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			continue
 		}
@@ -141,7 +145,7 @@ func (z *zetalytics) query(e *et.Event, name string, keys []string) []*dbt.Entit
 		}
 
 		for _, s := range result.Subdomains {
-			name := strings.ToLower(strings.TrimSpace(dns.RemoveAsteriskLabel(http.CleanName(s.FQDN))))
+			name := strings.ToLower(strings.TrimSpace(amassdns.RemoveAsteriskLabel(amasshttp.CleanName(s.FQDN))))
 			// if the subdomain is not in scope, skip it
 			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 				names.Insert(name)

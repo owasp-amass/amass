@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 )
 
 type parsed struct {
@@ -65,7 +65,7 @@ func ParseAddressOptions(ctx context.Context, address string, options ParserOpti
 		return nil, err
 	}
 
-	resp, err := http.RequestWebPage(ctx, &http.Request{
+	resp, err := amasshttp.RequestWebPage(ctx, amasshttp.DefaultClient, &amasshttp.Request{
 		Method: "POST",
 		URL:    "http://" + postalHost + ":" + postalPort + "/parse",
 		Body:   string(reqJSON),

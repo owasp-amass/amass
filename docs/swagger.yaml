@@ -1,0 +1,560 @@
+basePath: /api/v1
+definitions:
+  config.Credentials:
+    properties:
+      apikey:
+        type: string
+      password:
+        type: string
+      secret:
+        type: string
+      username:
+        type: string
+    type: object
+  config.DataSource:
+    properties:
+      creds:
+        additionalProperties:
+          $ref: '#/definitions/config.Credentials'
+        type: object
+      name:
+        type: string
+      ttl:
+        type: integer
+    type: object
+  config.DataSourceConfig:
+    properties:
+      datasources:
+        items:
+          $ref: '#/definitions/config.DataSource'
+        type: array
+      global_options:
+        additionalProperties:
+          type: integer
+        type: object
+    type: object
+  config.Database:
+    properties:
+      db_name:
+        description: Name of the database
+        type: string
+      host:
+        description: Host of the database
+        type: string
+      options:
+        description: Extra options used while connecting to the database
+        type: string
+      password:
+        description: Password for authentication
+        type: string
+      port:
+        description: Port of the database
+        type: string
+      primary:
+        description: Whether this database is the primary store
+        type: boolean
+      system:
+        description: Database system type (Postgres, MySQL, etc.)
+        type: string
+      url:
+        description: Full URI to the database
+        type: string
+      username:
+        description: Username for authentication
+        type: string
+    type: object
+  config.Scope:
+    properties:
+      asns:
+        description: ASNs specified as in scope
+        items:
+          type: integer
+        type: array
+      blacklist:
+        description: A blacklist of subdomain names that will not be investigated
+        items:
+          type: string
+        type: array
+      cidrs:
+        description: CIDR IPNET
+        items:
+          $ref: '#/definitions/net.IPNet'
+        type: array
+      domains:
+        description: The root domain names that the enumeration will target
+        items:
+          type: string
+        type: array
+      ips:
+        description: IP Net.IP
+        items:
+          items:
+            format: int32
+            type: integer
+          type: array
+        type: array
+      ports:
+        description: The ports checked for certificates
+        items:
+          type: integer
+        type: array
+    type: object
+  config.Transformation:
+    properties:
+      confidence:
+        type: integer
+      exclude:
+        items:
+          type: string
+        type: array
+      priority:
+        type: integer
+      ttl:
+        type: integer
+    type: object
+  github_com_owasp-amass_amass_v5_config.Config:
+    properties:
+      active:
+        description: Determines if zone transfers will be attempted
+        type: boolean
+      alt_worldlist:
+        items:
+          type: string
+        type: array
+      alterations:
+        description: Will discovered subdomain name alterations be generated?
+        type: boolean
+      brute_force:
+        description: Will the enumeration including brute forcing techniques
+        type: boolean
+      database:
+        description: The graph databases used by the system / enumerations
+        items:
+          $ref: '#/definitions/config.Database'
+        type: array
+      datasource_config:
+        allOf:
+        - $ref: '#/definitions/config.DataSourceConfig'
+        description: The data source configurations
+      resolvers:
+        description: Resolver settings
+        items:
+          type: string
+        type: array
+      rigid_boundaries:
+        description: Determines rigidness of the enumeration
+        type: boolean
+      scope:
+        allOf:
+        - $ref: '#/definitions/config.Scope'
+        description: Scope struct that contains ASN, CIDR, Domain, IP, and ports in
+          scope
+      seed:
+        allOf:
+        - $ref: '#/definitions/config.Scope'
+        description: Seed struct that contains the provided names and CIDRs
+      transformations:
+        additionalProperties:
+          $ref: '#/definitions/config.Transformation'
+        description: The Transformations map will contain incoming assets, and what
+          handlers should be called.
+        type: object
+      trusted_resolvers:
+        items:
+          type: string
+        type: array
+      wordlist:
+        description: The list of words to use when generating names
+        items:
+          type: string
+        type: array
+    type: object
+  net.IPNet:
+    properties:
+      ip:
+        description: network number
+        items:
+          format: int32
+          type: integer
+        type: array
+      mask:
+        description: network mask
+        items:
+          format: int32
+          type: integer
+        type: array
+    type: object
+  v1.AddAssetResponse:
+    properties:
+      entityID:
+        type: string
+    type: object
+  v1.BulkAddAssetsRequest:
+    properties:
+      items:
+        items:
+          items:
+            format: int32
+            type: integer
+          type: array
+        type: array
+    type: object
+  v1.BulkAddAssetsResponse:
+    properties:
+      failed:
+        type: integer
+      ingested:
+        type: integer
+      stored:
+        type: integer
+    type: object
+  v1.CreateSessionResponse:
+    properties:
+      sessionToken:
+        type: string
+    type: object
+  v1.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      details:
+        type: string
+      error:
+        type: string
+    type: object
+  v1.HealthCheckResponse:
+    properties:
+      result:
+        type: string
+    type: object
+  v1.ListSessionsResponse:
+    properties:
+      sessionTokens:
+        items:
+          type: string
+        type: array
+    type: object
+  v1.ScopeResponse:
+    properties:
+      data:
+        items:
+          items:
+            format: int32
+            type: integer
+          type: array
+        type: array
+    type: object
+  v1.SessionStatsResponse:
+    properties:
+      workItemsCompleted:
+        type: integer
+      workItemsTotal:
+        type: integer
+    type: object
+info:
+  contact:
+    name: OWASP Amass Project
+    url: https://github.com/owasp-amass/amass
+  description: |-
+    HTTP API for managing Amass Engine sessions and submitting Open Asset Model (OAM) assets.
+    Create a session with an engine config, query session stats/scope, and ingest typed OAM assets (single or bulk).
+    Includes a WebSocket endpoint for streaming session logs.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  termsOfService: https://owasp.org/www-project-amass/
+  title: Amass Engine API (v1)
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: Returns a simple health indicator that the Amass Engine API is
+        running.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.HealthCheckResponse'
+      summary: Health check
+      tags:
+      - system
+  /sessions:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new Amass engine session using the provided configuration
+        JSON.
+      parameters:
+      - description: Engine configuration
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_owasp-amass_amass_v5_config.Config'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/v1.CreateSessionResponse'
+        "400":
+          description: Invalid JSON or invalid configuration
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Failed to create session
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Create a new engine session
+      tags:
+      - sessions
+  /sessions/{session_token}:
+    delete:
+      description: Cancels an active session. Returns no content on success.
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid session token
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Terminate a session
+      tags:
+      - sessions
+  /sessions/{session_token}/assets/{asset_type}:
+    post:
+      consumes:
+      - application/json
+      description: Submits a single OAM asset to the session. The asset type is provided
+        in the URL path; the request body is a raw OAM JSON object without a 'type'
+        field.
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      - description: Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock,
+          location, organization)
+        in: path
+        name: asset_type
+        required: true
+        type: string
+      - description: Raw OAM JSON object (without 'type')
+        in: body
+        name: asset
+        required: true
+        schema:
+          items:
+            format: int32
+            type: integer
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.AddAssetResponse'
+        "400":
+          description: Invalid session token, invalid JSON, or invalid asset object
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Failed to submit the asset
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Add a single asset (typed by path)
+      tags:
+      - assets
+  /sessions/{session_token}/assets/{asset_type}:bulk:
+    post:
+      consumes:
+      - application/json
+      description: Submits multiple OAM assets to the session in one request. The
+        asset type is provided in the URL path. Each item in 'items' is a raw OAM
+        JSON object without a 'type' field.
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      - description: Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock,
+          location, organization)
+        in: path
+        name: asset_type
+        required: true
+        type: string
+      - description: Bulk add request payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.BulkAddAssetsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.BulkAddAssetsResponse'
+        "400":
+          description: Invalid session token, invalid JSON, empty items, or no valid
+            items
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Too many items in bulk request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Server failure (response includes ingested/stored/failed)
+          schema:
+            $ref: '#/definitions/v1.BulkAddAssetsResponse'
+      summary: Add assets in bulk (typed by path)
+      tags:
+      - assets
+  /sessions/{session_token}/scope/{asset_type}:
+    get:
+      description: Returns the scoped assets for the given session and asset type
+        as an array of raw OAM JSON objects.
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      - description: Asset type (e.g., autonomoussystem, fqdn, ipaddress, netblock,
+          location, organization)
+        in: path
+        name: asset_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response contains a 'data' array of raw OAM JSON
+          schema:
+            $ref: '#/definitions/v1.ScopeResponse'
+        "400":
+          description: Invalid session token
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found or scope not found for asset type
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Get session scope for an asset type
+      tags:
+      - scope
+  /sessions/{session_token}/stats:
+    get:
+      description: Returns the current runtime statistics for a session.
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionStatsResponse'
+        "400":
+          description: Invalid session token
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Get session statistics
+      tags:
+      - sessions
+  /sessions/{session_token}/ws/logs:
+    get:
+      description: |-
+        Upgrades the HTTP connection to a WebSocket and streams session log lines as UTF-8 text frames.
+        The server sends periodic ping frames (~30s) and expects pong responses; idle connections may be closed.
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket upgrade)
+          headers:
+            Connection:
+              description: Upgrade
+              type: string
+            Upgrade:
+              description: websocket
+              type: string
+        "400":
+          description: Invalid session token
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Stream session logs (WebSocket)
+      tags:
+      - sessions
+  /sessions/list:
+    get:
+      description: Returns the session tokens for all currently active sessions.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.ListSessionsResponse'
+        "404":
+          description: Zero sessions found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: List active sessions
+      tags:
+      - sessions
+swagger: "2.0"
+tags:
+- description: System endpoints (health, etc.)
+  name: system
+- description: Create, list, inspect, and terminate engine sessions.
+  name: sessions
+- description: Read-only access to the scoped assets loaded into a session.
+  name: scope
+- description: Submit typed OAM assets to a session (single or bulk).
+  name: assets
+- description: WebSocket endpoints (e.g., session log streaming).
+  name: ws

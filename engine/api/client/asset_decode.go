@@ -25,7 +25,7 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-func decodeAssetsForScopeEndpoint(atype oam.AssetType, data io.ReadCloser) ([]oam.Asset, error) {
+func DecodeAssetsForScopeEndpoint(atype oam.AssetType, data io.ReadCloser) ([]oam.Asset, error) {
 	var results []oam.Asset
 
 	switch atype {

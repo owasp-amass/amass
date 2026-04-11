@@ -14,7 +14,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -108,27 +108,30 @@ func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 		return nil
 	}
 
-	rcreds, err := p.accountType(e.Session.Ctx(), key)
+	rcreds, err := p.accountType(e.Session, key)
 	if err != nil || key == "" {
 		return nil
 	}
 
-	count, err := p.count(e.Session.Ctx(), name, key)
+	count, err := p.count(e.Session, name, key)
 	if err != nil {
 		return nil
 	}
 	limit := min(rcreds*50, count)
 
 	_ = p.rlimit.Wait(e.Session.Ctx())
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+	e.Session.NetSem().Acquire()
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(ctx, &http.Request{
+	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 		Method: "POST",
 		Body:   `{"company": "` + name + `", "limit": ` + strconv.Itoa(limit) + `}`,
 		URL:    p.queryurl,
-		Header: http.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
+		Header: amasshttp.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
 	})
+	e.Session.NetSem().Release()
 	if err != nil {
 		return nil
 	}
@@ -159,17 +162,19 @@ func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessEmailsWithSource(e, assets, p.source)
 }
 
-func (p *Prospeo) accountType(ctx context.Context, key string) (int, error) {
-	_ = p.rlimit.Wait(ctx)
+func (p *Prospeo) accountType(sess et.Session, key string) (int, error) {
+	_ = p.rlimit.Wait(sess.Ctx())
 
-	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	sess.NetSem().Acquire()
+	rctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(rctx, &http.Request{
+	resp, err := amasshttp.RequestWebPage(rctx, sess.Clients().General, &amasshttp.Request{
 		Method: "POST",
 		URL:    p.accturl,
-		Header: http.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
+		Header: amasshttp.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
 	})
+	sess.NetSem().Release()
 	if err != nil {
 		return 0, err
 	}
@@ -185,18 +190,20 @@ func (p *Prospeo) accountType(ctx context.Context, key string) (int, error) {
 	return r.Response.RemainingCredits, nil
 }
 
-func (p *Prospeo) count(ctx context.Context, domain string, key string) (int, error) {
-	_ = p.rlimit.Wait(ctx)
+func (p *Prospeo) count(sess et.Session, domain string, key string) (int, error) {
+	_ = p.rlimit.Wait(sess.Ctx())
 
-	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	sess.NetSem().Acquire()
+	rctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(rctx, &http.Request{
+	resp, err := amasshttp.RequestWebPage(rctx, sess.Clients().General, &amasshttp.Request{
 		Method: "POST",
 		Body:   `{"domain": "` + domain + `"}`,
 		URL:    p.counturl,
-		Header: http.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
+		Header: amasshttp.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
 	})
+	sess.NetSem().Release()
 	if err != nil {
 		return 0, err
 	}

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,7 +12,7 @@ import (
 	"path"
 	"time"
 
-	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
+	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
 )
 
 func main() {
@@ -27,7 +27,6 @@ func main() {
 	flag.BoolVar(&help1, "h", false, "Show the program usage message")
 	flag.BoolVar(&help2, "help", false, "Show the program usage message")
 	flag.StringVar(&hostname, "host", "", "Hostname or IP address of the Amass Engine")
-	//flag.BoolVar(&version, "version", false, "Print the version number of this Amass binary")
 	flag.Parse()
 
 	if (help1 || help2) || hostname == "" {
@@ -35,16 +34,17 @@ func main() {
 		flag.PrintDefaults()
 		return
 	}
-	/*if version {
-		fmt.Fprintf(color.Error, "%s\n", format.Version)
-		return
-	}*/
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	c, err := client.NewClient("http://" + hostname + ":4000")
+	if err != nil {
+		os.Exit(1)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	u := "http://" + hostname + ":4000/graphql"
-	if _, err := amasshttp.RequestWebPage(ctx, &amasshttp.Request{URL: u}); err != nil {
+	if !c.HealthCheck(ctx) {
 		// a failure to respond indicates that the server is not yet available
 		os.Exit(1)
 	}

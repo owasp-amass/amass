@@ -15,6 +15,7 @@ import (
 	"github.com/adrg/strutil/metrics"
 	"github.com/caffix/stringset"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -246,8 +247,12 @@ func (s *Scope) awayFromAssetsWithAssociation(assoc *dbt.Entity) ([]*dbt.Entity,
 		outSince = s.ttlStartTime(oam.AutnumRecord, oam.ContactRecord)
 	case oam.TLSCertificate:
 		out = true
-		outRels = append(outRels, "subject_contact")
+		outRels = append(outRels, "common_name", "subject_contact")
+		since1 := s.ttlStartTime(oam.TLSCertificate, oam.FQDN)
 		outSince = s.ttlStartTime(oam.TLSCertificate, oam.ContactRecord)
+		if !since1.IsZero() && since1.Before(outSince) {
+			outSince = since1
+		}
 	case oam.ContactRecord:
 		out = true
 		outRels = append(outRels, "organization", "location")
@@ -401,6 +406,10 @@ func (s *Scope) orgNameSimilarToCommon(o *oamorg.Organization, cert *oamcert.TLS
 	swg.Substitution = metrics.MatchMismatch{
 		Match:    1,
 		Mismatch: -0.5,
+	}
+
+	if re := amassdns.AnySubdomainRegex(); !re.MatchString(cert.SubjectCommonName) {
+		return false
 	}
 
 	dom, err := publicsuffix.EffectiveTLDPlusOne(cert.SubjectCommonName)

@@ -6,6 +6,7 @@ package enum
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -18,7 +19,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/config"
-	"github.com/owasp-amass/amass/v5/engine/api/client"
+	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
 	"github.com/owasp-amass/amass/v5/internal/tools"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -107,7 +109,7 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 	fs.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
 	fs.Var(args.Resolvers, "r", "IP addresses of untrusted DNS resolvers (can be used multiple times)")
 	fs.Var(args.Resolvers, "tr", "IP addresses of trusted DNS resolvers (can be used multiple times)")
-	fs.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
+	fs.IntVar(&args.Timeout, "timeout", 30, "Minutes to run without progress before terminating (Default: 30)")
 }
 
 func defineOptionFlags(fs *flag.FlagSet, args *Args) {
@@ -168,16 +170,23 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		url = cfg.EngineAPI.URL
 	}
 
-	c := client.NewClient(url)
+	c, err := client.NewClient(url)
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create an Amass engine API client: %v\n", err)
+		os.Exit(1)
+	}
 	defer c.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Create a new enumeration session on the engine server
-	token, err := c.CreateSession(cfg)
+	token, err := c.CreateSession(ctx, cfg)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create a session with the Amass engine: %v\n", err)
 		os.Exit(1)
 	}
-	defer func() { _ = c.TerminateSession(token) }()
+	defer func() { _ = c.TerminateSession(context.Background(), token) }()
 
 	logfile := args.Filepaths.LogFile
 	if logfile == "" {
@@ -194,7 +203,10 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	messages, err := c.Subscribe(token)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	messages, err := c.Subscribe(ctx, token)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to subscribe to the Amass engine log messages: %v\n", err)
 		os.Exit(1)
@@ -203,7 +215,10 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	var count int
 	// create all assets defined in the scope on the server
 	for _, a := range convertScopeToAssets(cfg.Scope) {
-		if _, err := c.CreateAsset(token, a); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if _, err := c.CreateAsset(ctx, token, a); err != nil {
 			_, _ = afmt.R.Fprintf(color.Error, "Failed to create asset on the engine: %v\n", err)
 			continue
 		}
@@ -218,7 +233,10 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		provFQDNs = append(provFQDNs, oamdns.FQDN{Name: a})
 
 		if fcount == client.MaxBulkItems {
-			stored, err := c.CreateAssetsBulk(token, string(oam.FQDN), provFQDNs)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			stored, err := c.CreateAssetsBulk(ctx, token, string(oam.FQDN), provFQDNs)
 			if err != nil {
 				_, _ = afmt.R.Fprintf(color.Error, "Failed to perform a bulk transfer of assets: %v\n", err)
 			}
@@ -229,7 +247,10 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		}
 	}
 	if fcount > 0 {
-		if stored, err := c.CreateAssetsBulk(token, string(oam.FQDN), provFQDNs); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if stored, err := c.CreateAssetsBulk(ctx, token, string(oam.FQDN), provFQDNs); err != nil {
 			_, _ = afmt.R.Fprintf(color.Error, "Failed to perform a bulk transfer of assets: %v\n", err)
 		} else {
 			count += stored
@@ -243,7 +264,11 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 
 	done := make(chan struct{}, 1)
 	go func() {
-		var finished int
+		var previous, finished int
+		timeoutDur := time.Duration(args.Timeout) * time.Minute
+
+		term := time.NewTimer(timeoutDur)
+		defer term.Stop()
 		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
 
@@ -256,13 +281,18 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 					fmt.Println(err.Error())
 				}
 			case <-t.C:
-				if stats, err := c.SessionStats(token); err == nil && stats != nil {
-					stotal := max(count, stats.WorkItemsTotal)
-					scomplete := max(0, stats.WorkItemsCompleted)
-
+				if stats, err := getStats(c, token); err == nil && stats != nil {
 					if !args.Options.Silent {
+						stotal := max(count, stats.WorkItemsTotal)
+						scomplete := max(0, stats.WorkItemsCompleted)
+
 						progress.SetTotal(int64(stotal))
 						progress.SetCurrent(int64(scomplete))
+					}
+
+					if comp := stats.WorkItemsCompleted; comp != previous {
+						previous = comp
+						_ = term.Reset(timeoutDur)
 					}
 
 					if stats.WorkItemsCompleted == stats.WorkItemsTotal {
@@ -275,22 +305,12 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 						finished = 0
 					}
 				}
+			case <-term.C:
+				close(done)
+				return
 			}
 		}
 	}()
-
-	if args.Timeout > 0 {
-		go func() {
-			t := time.NewTimer(time.Minute * time.Duration(args.Timeout))
-			defer t.Stop()
-
-			select {
-			case <-done:
-			case <-t.C:
-				close(done)
-			}
-		}()
-	}
 
 	select {
 	case <-done:
@@ -303,6 +323,13 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		fmt.Printf("\nSession Scope\n")
 		printScope(c, token)
 	}
+}
+
+func getStats(c *client.Client, token uuid.UUID) (*et.SessionStats, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	return c.SessionStats(ctx, token)
 }
 
 func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
@@ -464,7 +491,10 @@ func (e Args) OverrideConfig(conf *config.Config) error {
 
 func printScope(c *client.Client, token uuid.UUID) {
 	for _, atype := range oam.AssetList {
-		assets, err := c.SessionScope(token, atype)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		assets, err := c.SessionScope(ctx, token, atype)
 		if err != nil {
 			continue
 		}

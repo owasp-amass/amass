@@ -35,10 +35,13 @@ func (d *dnsApex) check(e *et.Event) error {
 		return nil
 	}
 
-	// determine which domain apex is the parent of this name
+	// determine which domain zone apex is the parent of the entity name
 	var name string
 	best := len(fqdn.Name)
 	for _, n := range d.plugin.getApexList() {
+		if !strings.HasSuffix(fqdn.Name, "."+n) {
+			continue
+		}
 		if idx := strings.Index(fqdn.Name, n); idx != -1 && idx != 0 && idx < best {
 			best = idx
 			name = n

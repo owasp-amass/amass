@@ -129,13 +129,14 @@ type bgpToolsRecord struct {
 }
 
 func (bt *bgpTools) whois(ctx context.Context, ipstr string) (*bgpToolsRecord, error) {
+	dial := amassnet.NewDialContext(3 * time.Second)
 	addr := net.JoinHostPort(bt.addr, strconv.Itoa(bt.port))
 
 	_ = bt.rlimit.Wait(ctx)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	conn, err := amassnet.DialContext(ctx, "tcp", addr)
+	conn, err := dial(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish a connection with the WHOIS server: %v", err)
 	}

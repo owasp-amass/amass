@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,9 +9,14 @@ import (
 	"context"
 	"math/big"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// Maximum number of connections allowed by each process.
+const MaxNetworkConns = 500
 
 // IPv4RE is a regular expression that will match an IPv4 address.
 const IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
@@ -47,6 +52,8 @@ var ReservedCIDRs = []string{
 // The reserved network address ranges
 var reservedAddrRanges []*net.IPNet
 
+type Semaphore chan struct{}
+
 func init() {
 	for _, cidr := range ReservedCIDRs {
 		if _, ipnet, err := net.ParseCIDR(cidr); err == nil {
@@ -55,37 +62,55 @@ func init() {
 	}
 }
 
-// DialContext performs the dial using global variables (e.g. LocalAddr).
-func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	d := &net.Dialer{DualStack: true}
+func NewSemaphore(cap int) Semaphore {
+	sem := make(Semaphore, cap)
 
-	_, p, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
+	for range cap {
+		sem <- struct{}{}
 	}
 
-	port, err := strconv.Atoi(p)
-	if err != nil {
-		return nil, err
+	return sem
+}
+
+func (r Semaphore) Acquire() {
+	<-r
+}
+
+func (r Semaphore) Release() {
+	select {
+	case r <- struct{}{}:
+	default:
 	}
+}
 
-	if LocalAddr != nil {
-		addr, _, err := net.ParseCIDR(LocalAddr.String())
+type DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 
-		if err == nil && strings.HasPrefix(network, "tcp") {
-			d.LocalAddr = &net.TCPAddr{
-				IP:   addr,
-				Port: port,
-			}
-		} else if err == nil && strings.HasPrefix(network, "udp") {
-			d.LocalAddr = &net.UDPAddr{
-				IP:   addr,
-				Port: port,
+// NewDialContext performs the dial using global variables (e.g. LocalAddr).
+func NewDialContext(timeout time.Duration) DialContext {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		d := &net.Dialer{
+			Timeout:   timeout,
+			KeepAlive: 30 * time.Second,
+		}
+
+		if LocalAddr != nil {
+			if ip := net.ParseIP(LocalAddr.String()); ip != nil {
+				if strings.HasPrefix(network, "tcp") {
+					d.LocalAddr = &net.TCPAddr{
+						IP:   ip,
+						Port: 0, // let kernel choose ephemeral source port
+					}
+				} else if strings.HasPrefix(network, "udp") {
+					d.LocalAddr = &net.UDPAddr{
+						IP:   ip,
+						Port: 0, // let kernel choose ephemeral source port
+					}
+				}
 			}
 		}
-	}
 
-	return d.DialContext(ctx, network, addr)
+		return d.DialContext(ctx, network, address)
+	}
 }
 
 // IsIPv4 returns true when the provided net.IP address is an IPv4 address.
@@ -96,6 +121,18 @@ func IsIPv4(ip net.IP) bool {
 // IsIPv6 returns true when the provided net.IP address is an IPv6 address.
 func IsIPv6(ip net.IP) bool {
 	return strings.Count(ip.String(), ":") >= 2
+}
+
+// IPToAddr converts a net.IP to netip.Addr, handling both IPv4 and IPv6.
+// Returns an error if the IP is invalid.
+func IPToAddr(ip net.IP) (netip.Addr, bool) {
+	if v4 := ip.To4(); v4 != nil {
+		return netip.AddrFromSlice(v4)
+	}
+	if v16 := ip.To16(); v16 != nil {
+		return netip.AddrFromSlice(v16)
+	}
+	return netip.Addr{}, false
 }
 
 // IsReservedAddress checks if the addr parameter is within one of the address ranges in the ReservedCIDRs slice.

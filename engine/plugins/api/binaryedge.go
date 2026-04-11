@@ -16,7 +16,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -118,13 +118,16 @@ loop:
 	for _, key := range keys {
 		for pagenum <= 500 {
 			_ = be.rlimit.Wait(e.Session.Ctx())
-			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
+			e.Session.NetSem().Acquire()
+
+			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 			defer cancel()
 
-			resp, err := http.RequestWebPage(ctx, &http.Request{
-				Header: http.Header{"X-KEY": []string{key}},
+			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
+				Header: amasshttp.Header{"X-KEY": []string{key}},
 				URL:    "https://api.binaryedge.io/v2/query/domains/subdomain/" + name + "?page=" + strconv.Itoa(pagenum),
 			})
+			e.Session.NetSem().Release()
 			if err != nil || resp.Body == "" {
 				break
 			}

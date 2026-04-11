@@ -10,22 +10,22 @@ jobs:
     strategy:
       matrix:
         os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
-        go-version: [ "1.25.5" ]
+        go-version: [ "1.26.0" ]
     runs-on: ${{ matrix.os }}
     env:
       CGO_ENABLED: 0
     steps:
       -
         name: setup
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
       -
         name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       -
         name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --timeout=60m

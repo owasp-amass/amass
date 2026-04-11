@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -24,16 +25,32 @@ import (
 	"github.com/yl2chen/cidranger"
 )
 
+type SessionPipelines map[oam.AssetType]*AssetPipeline
+
+type SessionSemaphone interface {
+	Acquire()
+	Release()
+}
+
+type SessionHTTPClients struct {
+	General *http.Client
+	Probe   *http.Client
+	Crawl   *http.Client
+}
+
 type Session interface {
 	ID() uuid.UUID
 	Ctx() context.Context
 	Log() *slog.Logger
 	PubSub() *pubsub.Logger
+	NetSem() SessionSemaphone
 	Config() *config.Config
 	Scope() Scope
 	StartTime() time.Time
 	DB() repository.Repository
 	Backlog() Backlog
+	Pipelines() SessionPipelines
+	Clients() *SessionHTTPClients
 	CIDRanger() cidranger.Ranger
 	TmpDir() string
 	Stats() *SessionStats

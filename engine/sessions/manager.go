@@ -27,19 +27,21 @@ import (
 type manager struct {
 	sync.RWMutex
 	logger   *slog.Logger
+	registry et.Registry
 	sessions map[uuid.UUID]et.Session
 }
 
 // NewManager: creates a new session storage.
-func NewManager(l *slog.Logger) et.SessionManager {
+func NewManager(l *slog.Logger, reg et.Registry) et.SessionManager {
 	return &manager{
 		logger:   l,
+		registry: reg,
 		sessions: make(map[uuid.UUID]et.Session),
 	}
 }
 
 func (r *manager) NewSession(cfg *config.Config) (et.Session, error) {
-	s, err := CreateSession(cfg)
+	s, err := CreateSession(r, r.registry, cfg)
 	if err == nil {
 		err = r.AddSession(s)
 
@@ -74,32 +76,17 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	}
 	s.Kill()
 
-	t := time.NewTicker(500 * time.Millisecond)
-	defer t.Stop()
-
-	for range t.C {
-		ss := s.Stats()
-		ss.Lock()
-		total := ss.WorkItemsTotal
-		completed := ss.WorkItemsCompleted
-		ss.Unlock()
-		if completed >= total {
-			break
-		}
-	}
-
 	r.Lock()
-	defer r.Unlock()
+	delete(r.sessions, id)
+	r.Unlock()
 
-	if backlog := r.sessions[id].Backlog(); backlog != nil {
+	time.Sleep(10 * time.Second)
+	if backlog := s.Backlog(); backlog != nil {
 		if err := backlog.Close(); err != nil {
 			s.Log().Error(fmt.Sprintf("failed to close the backlog for session %s: %v", id, err))
 		}
 	}
-	if s, ok := r.sessions[id].(*Session); ok {
-		s.ranger = nil
-	}
-	if dir := r.sessions[id].TmpDir(); dir != "" {
+	if dir := s.TmpDir(); dir != "" {
 		_ = os.RemoveAll(dir)
 	}
 	if db := s.DB(); db != nil {
@@ -107,9 +94,7 @@ func (r *manager) CancelSession(id uuid.UUID) {
 			s.Log().Error(fmt.Sprintf("failed to close the database for session %s: %v", id, err))
 		}
 	}
-
 	s.PubSub().Close()
-	delete(r.sessions, id)
 }
 
 func (r *manager) GetSessions() []et.Session {
@@ -133,6 +118,13 @@ func (r *manager) GetSession(id uuid.UUID) et.Session {
 		return s
 	}
 	return nil
+}
+
+func (r *manager) NumOfSessions() int {
+	r.RLock()
+	defer r.RUnlock()
+
+	return len(r.sessions)
 }
 
 // Shutdown: cleans all sessions from a session storage and shutdown the session storage.

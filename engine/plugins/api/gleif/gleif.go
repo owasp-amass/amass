@@ -13,7 +13,7 @@ import (
 	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/net/http"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"golang.org/x/time/rate"
@@ -32,10 +32,10 @@ func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyComple
 	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
 
 	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(wctx, &http.Request{URL: u})
+	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.Body == "" {
 		msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
@@ -57,10 +57,11 @@ func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id
 
 	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(wctx, &http.Request{URL: u})
+	resp, err := amasshttp.RequestWebPage(wctx,
+		amasshttp.DefaultClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
 	}
@@ -79,10 +80,11 @@ func GLEIFGetDirectParentRecord(ctx context.Context, id string) (*LEIRecord, err
 	u := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-parent"
 
 	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := http.RequestWebPage(wctx, &http.Request{URL: u})
+	resp, err := amasshttp.RequestWebPage(wctx,
+		amasshttp.DefaultClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
 	}
@@ -104,10 +106,11 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 	link := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
 		_ = gleifLimit.Wait(ctx)
-		wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 
-		resp, err := http.RequestWebPage(wctx, &http.Request{URL: link})
+		resp, err := amasshttp.RequestWebPage(wctx,
+			amasshttp.DefaultClient, &amasshttp.Request{URL: link})
 		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 			return nil, err
 		}

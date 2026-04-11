@@ -15,7 +15,7 @@ type Logger struct {
 	sync.Mutex
 	done       chan struct{}  // Channel to signal closure of the logger.
 	q          queue.Queue    // Embeds a queue for managing log messages.
-	subscribed []chan *string // Channel used to communicate log messages.
+	subscribed []chan *string // Channels used to communicate log messages.
 }
 
 // NewLogger initializes and returns a new instance of Logger.
@@ -57,6 +57,11 @@ func (l *Logger) Close() {
 	close(l.done)
 	// drain the queue
 	l.q.Process(func(any) {})
+
+	l.Lock()
+	defer l.Unlock()
+
+	// Close all subscribed channels to signal that no more messages will be sent.
 	for _, ch := range l.subscribed {
 		close(ch)
 	}
@@ -70,23 +75,27 @@ func (l *Logger) broadcastMessages() {
 		case <-l.q.Signal():
 		}
 
-		l.q.Process(func(e any) {
-			msg, ok := e.(string)
-			if !ok {
-				return
-			}
+		l.q.Process(l.msgToSubscribers)
+	}
+}
 
-			l.Lock()
-			defer l.Unlock()
+func (l *Logger) msgToSubscribers(e any) {
+	msg, ok := e.(string)
+	if !ok {
+		return
+	}
 
-			for _, ch := range l.subscribed {
-				select {
-				case ch <- &msg:
-				default:
-					go l.send(ch, msg)
-				}
-			}
-		})
+	l.Lock()
+	defer l.Unlock()
+
+	for _, ch := range l.subscribed {
+		select {
+		case <-l.done:
+			return
+		case ch <- &msg:
+		default:
+			go l.send(ch, msg)
+		}
 	}
 }
 

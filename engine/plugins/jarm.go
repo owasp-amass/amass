@@ -15,9 +15,9 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/platform"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 type jarmPlugin struct {
@@ -64,7 +64,7 @@ func (j *jarmPlugin) Stop() {
 }
 
 func (j *jarmPlugin) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*platform.Service)
+	_, ok := e.Entity.Asset.(*oamplat.Service)
 	if !ok {
 		return errors.New("failed to extract the Service asset")
 	}
@@ -116,7 +116,7 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, e.Entity, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			portrel, ok := edge.Relation.(*general.PortRelation)
+			portrel, ok := edge.Relation.(*oamgen.PortRelation)
 			if !ok {
 				continue
 			}
@@ -130,7 +130,7 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 						}
 						targets = append([]*fingerprint{t}, targets...)
 					}
-				case *network.IPAddress:
+				case *oamnet.IPAddress:
 					if portrel.Protocol == "TCP" {
 						targets = append(targets, &fingerprint{
 							asset: e.Entity,
@@ -144,8 +144,8 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 
 	var results []*fingerprint
 	for _, target := range targets {
-		portrel := target.port.Relation.(*general.PortRelation)
-		if fp, err := support.JARMFingerprint(target.asset.Asset, portrel); err == nil && fp != "" {
+		portrel := target.port.Relation.(*oamgen.PortRelation)
+		if fp, err := support.JARMFingerprint(e.Session, target.asset.Asset, portrel); err == nil && fp != "" {
 			results = append(results, &fingerprint{
 				asset: target.asset,
 				port:  target.port,
@@ -164,7 +164,7 @@ func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
 	defer cancel()
 
 	for _, fp := range fps {
-		_, _ = e.Session.DB().CreateEdgeProperty(ctx, fp.port, &general.SimpleProperty{
+		_, _ = e.Session.DB().CreateEdgeProperty(ctx, fp.port, &oamgen.SimpleProperty{
 			PropertyName:  "JARM",
 			PropertyValue: fp.hash,
 		})
