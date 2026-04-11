@@ -8,15 +8,17 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amnhttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -51,7 +53,7 @@ func (oh *onionHeaders) Start(r et.Registry) error {
 		Position:     10,
 		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.URL)},
-		EventType:    oam.Service,
+		EventType:    oam.URL,
 		Callback:     oh.check,
 	}); err != nil {
 		return err
@@ -66,19 +68,23 @@ func (oh *onionHeaders) Stop() {
 }
 
 func (oh *onionHeaders) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*platform.Service)
+	u, ok := e.Entity.Asset.(*oamurl.URL)
 	if !ok {
-		return errors.New("failed to extract the Service asset")
+		return errors.New("failed to extract the URL asset")
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Service), string(oam.URL), oh.name)
+	if parsed, err := url.Parse(u.Raw); err == nil && strings.HasSuffix(strings.ToLower(parsed.Host), ".onion") {
+		return nil
+	}
+
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.URL), string(oam.URL), oh.name)
 	if err != nil {
 		return err
 	}
 
 	var urls []*dbt.Entity
 	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, oh.source, since) {
-		urls = append(urls, oh.query(e, e.Entity)...)
+		urls = append(urls, oh.query(e, u)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, oh.source)
 	}
 
@@ -88,11 +94,20 @@ func (oh *onionHeaders) check(e *et.Event) error {
 	return nil
 }
 
-func (oh *onionHeaders) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
-	serv := asset.Asset.(*platform.Service)
+func (oh *onionHeaders) query(e *et.Event, u *oamurl.URL) []*dbt.Entity {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 8*time.Second)
+	defer cancel()
+
+	resp, err := amnhttp.RequestWebPage(ctx, &amnhttp.Request{URL: u.Raw})
+	if err != nil || resp == nil {
+		return nil
+	}
 
 	var results []*oamurl.URL
-	if vals, ok := serv.Attributes["Onion-Location"]; ok {
+	for k, vals := range http.Header(resp.Header) {
+		if !strings.EqualFold(k, "Onion-Location") {
+			continue
+		}
 		for _, val := range vals {
 			if u := extractOnionURL(val); u != nil {
 				results = append(results, u)
