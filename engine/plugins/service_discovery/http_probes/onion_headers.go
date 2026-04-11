@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -98,13 +99,23 @@ func (oh *onionHeaders) query(e *et.Event, u *oamurl.URL) []*dbt.Entity {
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 8*time.Second)
 	defer cancel()
 
-	resp, err := amnhttp.RequestWebPage(ctx, &amnhttp.Request{URL: u.Raw})
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.Raw, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", amnhttp.UserAgent)
+	req.Header.Set("Accept", amnhttp.Accept)
+	req.Header.Set("Accept-Language", amnhttp.AcceptLang)
+
+	resp, err := amnhttp.DefaultClient.Do(req)
 	if err != nil || resp == nil {
 		return nil
 	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	var results []*oamurl.URL
-	for k, vals := range http.Header(resp.Header) {
+	for k, vals := range resp.Header {
 		if !strings.EqualFold(k, "Onion-Location") {
 			continue
 		}
