@@ -4,6 +4,11 @@
 *.so
 *.dylib
 
+# Output from Amass tooling
+*.json
+*.log
+*.html
+
 # Test binary, build with `go test -c`
 *.test
 

@@ -1,23 +1,31 @@
+version: 2
 project_name: amass
 
 before:
   hooks:
-  - go mod download
+  - go mod tidy
 
 builds:
   -
-    main: ./cmd/amass/
+    main: ./cmd/amass
     binary: amass
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/owasp-amass/amass/v5/internal/afmt.Version=v{{ .Version }}
     goos:
       - windows
       - linux
       - darwin
-      - freebsd
     goarch:
       - amd64
       - 386
       - arm
       - arm64
+    goarm:
+      - 6
+      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -29,34 +37,16 @@ builds:
         goarch: arm
       - goos: windows
         goarch: arm64
-      - goos: freebsd
-        goarch: arm
 
 archives:
   -
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "darwin" }}macos
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     wrap_in_directory: true
-    format: zip
     files:
       - LICENSE
       - README.md
-      - examples/config.yaml
-      - examples/datasources.yaml
-
-sboms:
-  - documents:
-      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}.bom.json"
-    artifacts: binary
-    cmd: cyclonedx-gomod
-    env:
-      - GOOS={{ .Os }}
-      - GOARCH={{ .Arch }}
-    args: [ "app", "-main", "cmd/amass", "-licenses", "-packages", "-json", "-output", "$document", "../" ]
+      - resources/config.yaml
+      - resources/datasources.yaml
 
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"
@@ -72,22 +62,3 @@ release:
   github:
     owner: owasp-amass
     name: amass
-
-brews:
-  -
-    name: amass
-    repository:
-      owner: owasp-amass
-      name: homebrew-amass
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    url_template: "https://github.com/owasp-amass/amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    commit_author:
-      name: caffix
-      email: caffix@users.noreply.github.com
-    folder: Formula
-    homepage: "https://owasp.org/www-project-amass/"
-    description: "In-depth Attack Surface Mapping and Asset Discovery"
-    test: |
-      system "#{bin}/amass --version"
-    install: |
-      bin.install "amass"

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2023. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -26,183 +26,159 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path"
+	"time"
 
-	"github.com/caffix/service"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/datasrcs"
-	"github.com/owasp-amass/amass/v4/format"
-	amassnet "github.com/owasp-amass/amass/v4/net"
-	"github.com/owasp-amass/amass/v4/systems"
-	"github.com/owasp-amass/config/config"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/internal/afmt"
+	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
+	"github.com/owasp-amass/amass/v5/internal/assoc"
+	"github.com/owasp-amass/amass/v5/internal/enum"
+	"github.com/owasp-amass/amass/v5/internal/subs"
+	"github.com/owasp-amass/amass/v5/internal/tools"
+	"github.com/owasp-amass/amass/v5/internal/track"
+	"github.com/owasp-amass/amass/v5/internal/viz"
 )
 
 const (
-	mainUsageMsg         = "intel|enum [options]"
-	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.yaml"
-	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
-	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
+	usageMsg string = "[assoc|engine|enum|subs|track|viz] [options]"
 )
 
-var (
-	// Colors used to ease the reading of program output
-	g       = color.New(color.FgHiGreen)
-	r       = color.New(color.FgHiRed)
-	fgR     = color.New(color.FgRed)
-	fgY     = color.New(color.FgYellow)
-	yellow  = color.New(color.FgHiYellow).SprintFunc()
-	green   = color.New(color.FgHiGreen).SprintFunc()
-	blue    = color.New(color.FgHiBlue).SprintFunc()
-	magenta = color.New(color.FgHiMagenta).SprintFunc()
-	white   = color.New(color.FgHiWhite).SprintFunc()
-)
+type Args struct {
+	Help    bool
+	Version bool
+}
 
-func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	format.PrintBanner()
-	g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
-	cmdFlagSet.PrintDefaults()
-	g.Fprintln(color.Error, errBuf.String())
+type subDesc struct {
+	Name        string
+	Description string
+}
 
-	if msg == mainUsageMsg {
-		g.Fprintf(color.Error, "\nSubcommands: \n\n")
-		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
-		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-	}
-
-	g.Fprintln(color.Error)
-	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
-	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
-	g.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
+var subcommands = []subDesc{
+	{"assoc", assoc.Description},
+	{"engine", ae.Description},
+	{"enum", enum.Description},
+	{"subs", subs.Description},
+	{"track", track.Description},
+	{"viz", viz.Description},
 }
 
 func main() {
-	var version, help1, help2 bool
-	mainFlagSet := flag.NewFlagSet("amass", flag.ContinueOnError)
+	var args Args
+	fs := flag.NewFlagSet("amass", flag.ContinueOnError)
+
+	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
+	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
+	fs.BoolVar(&args.Version, "version", false, "Print the Amass version number")
 
 	defaultBuf := new(bytes.Buffer)
-	mainFlagSet.SetOutput(defaultBuf)
+	fs.SetOutput(defaultBuf)
 
-	mainFlagSet.BoolVar(&help1, "h", false, "Show the program usage message")
-	mainFlagSet.BoolVar(&help2, "help", false, "Show the program usage message")
-	mainFlagSet.BoolVar(&version, "version", false, "Print the version number of this Amass binary")
+	var usage = func() {
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, defaultBuf.String())
+			_, _ = afmt.G.Fprintf(color.Error, "Subcommands: \n\n")
+			for _, sub := range subcommands {
+				_, _ = afmt.G.Fprintf(color.Error, "\t%-5s\t%s\n", sub.Name, sub.Description)
+			}
+			_, _ = afmt.G.Fprintln(color.Error)
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and subcommands")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
+	}
 
 	if len(os.Args) < 2 {
-		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
+		usage()
 		return
 	}
-	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		usage()
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	if help1 || help2 {
-		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
+	if args.Help {
+		usage()
 		return
 	}
-	if version {
-		fmt.Fprintf(color.Error, "%s\n", format.Version)
+	if args.Version {
+		_, _ = afmt.G.Fprintf(color.Error, "%s\n", afmt.Version)
 		return
 	}
 
-	switch os.Args[1] {
-	case "enum":
-		runEnumCommand(os.Args[2:])
-	case "intel":
-		runIntelCommand(os.Args[2:])
-	case "help":
-		runHelpCommand(os.Args[2:])
-	default:
-		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
+	// Ensure the output directory exists
+	if err := tools.CreateOutputDirectory(""); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the output directory: %v\n", err)
 		os.Exit(1)
 	}
-}
 
-// GetAllSourceInfo returns the output for the 'list' flag.
-func GetAllSourceInfo(cfg *config.Config) []string {
-	if cfg == nil {
-		cfg = config.NewConfig()
-	}
-
-	sys, err := systems.NewLocalSystem(cfg)
-	if err != nil {
-		return []string{}
-	}
-	defer func() { _ = sys.Shutdown() }()
-
-	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys))
-	if err := sys.SetDataSources(srcs); err != nil {
-		return []string{}
-	}
-	return DataSourceInfo(srcs, sys)
-}
-
-// DataSourceInfo acquires the information for data sources used by the provided System.
-func DataSourceInfo(all []service.Service, sys systems.System) []string {
-	var names []string
-
-	names = append(names, fmt.Sprintf("%-35s%-35s%s", blue("Data Source"), blue("| Type"), blue("| Available")))
-	var line string
-	for i := 0; i < 8; i++ {
-		line += blue("----------")
-	}
-	names = append(names, line)
-
-	available := sys.DataSources()
-	for _, src := range all {
-		var avail string
-
-		for _, a := range available {
-			if src.String() == a.String() {
-				avail = "*"
-				break
-			}
-		}
-
-		names = append(names, fmt.Sprintf("%-35s  %-35s  %s",
-			green(src.String()), yellow(src.Description()), yellow(avail)))
-	}
-
-	return names
-}
-
-func createOutputDirectory(cfg *config.Config) {
-	// Prepare output file paths
-	dir := config.OutputDirectory(cfg.Dir)
+	dir := config.OutputDirectory("")
 	if dir == "" {
-		r.Fprintln(color.Error, "Failed to obtain the output directory")
+		_, _ = afmt.R.Fprintln(color.Error, "failed to obtain the path for the output directory")
 		os.Exit(1)
 	}
-	// If the directory does not yet exist, create it
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
+
+	// Ensure the default config files exist
+	if err := tools.CreateDefaultConfigFiles(dir); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the default config files: %v\n", err)
+		os.Exit(1)
+	}
+
+	cmdName := fmt.Sprintf("%s %s", path.Base(os.Args[0]), os.Args[1])
+	switch os.Args[1] {
+	case "assoc":
+		assoc.CLIWorkflow(cmdName, os.Args[2:])
+	case "engine":
+		if engineIsRunning() {
+			_, _ = afmt.R.Fprintf(color.Error, "The Amass engine is already running.\n")
+			os.Exit(1)
+		}
+
+		ae.CLIWorkflow(cmdName, os.Args[2:])
+	case "enum":
+		// The engine must be started before running the enum command
+		if !engineIsRunning() {
+			if err := startEngine(); err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "Failed to start the Amass engine: %v\n", err)
+				os.Exit(1)
+			}
+			// Give the engine time to start
+			if err := waitForEngineResponse(); err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine did not respond: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		enum.CLIWorkflow(cmdName, os.Args[2:])
+	case "subs":
+		subs.CLIWorkflow(cmdName, os.Args[2:])
+	case "track":
+		track.CLIWorkflow(cmdName, os.Args[2:])
+	case "viz":
+		viz.CLIWorkflow(cmdName, os.Args[2:])
+	default:
+		usage()
+		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])
 		os.Exit(1)
 	}
 }
 
-func assignNetInterface(iface *net.Interface) error {
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return fmt.Errorf("network interface '%s' has no assigned addresses", iface.Name)
-	}
+func waitForEngineResponse() error {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
 
-	var best net.Addr
-	for _, addr := range addrs {
-		if a, ok := addr.(*net.IPNet); ok {
-			if best == nil {
-				best = a
-			}
-			if amassnet.IsIPv4(a.IP) {
-				best = a
-				break
-			}
+	for range 60 {
+		<-t.C
+		if engineIsRunning() {
+			return nil
 		}
 	}
-
-	if best == nil {
-		return fmt.Errorf("network interface '%s' does not have assigned IP addresses", iface.Name)
-	}
-
-	amassnet.LocalAddr = best
-	return nil
+	return fmt.Errorf("the Amass engine did not respond within the timeout period")
 }

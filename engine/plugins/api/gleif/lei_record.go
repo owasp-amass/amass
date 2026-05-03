@@ -1,0 +1,60 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package gleif
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	dbt "github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/general"
+)
+
+func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei *general.Identifier, conf int) (*dbt.Entity, error) {
+	ctx, cancel := context.WithTimeout(session.Ctx(), 30*time.Second)
+	defer cancel()
+
+	if id, err := session.DB().CreateAsset(ctx, lei); err == nil && id != nil {
+		_, _ = session.DB().CreateEntityProperty(ctx, id, &general.SourceProperty{
+			Source:     g.source.Name,
+			Confidence: conf,
+		})
+		if orgent != nil {
+			if err := g.createRelation(ctx, session, orgent, general.SimpleRelation{Name: "id"}, id, conf); err != nil {
+				return nil, err
+			}
+		}
+		return id, nil
+	}
+
+	return nil, errors.New("failed to create the Identifier asset")
+}
+
+func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *LEIRecord, conf int) (*dbt.Entity, error) {
+	return g.createLEIIdentifier(e.Session, orgent, &general.Identifier{
+		UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, lei.ID),
+		ID:             lei.ID,
+		Type:           general.LEICode,
+		Status:         lei.Attributes.Registration.Status,
+		CreationDate:   lei.Attributes.Registration.InitialRegistrationDate,
+		UpdatedDate:    lei.Attributes.Registration.LastUpdateDate,
+		ExpirationDate: lei.Attributes.Registration.NextRenewalDate,
+	}, conf)
+}
+
+func (g *gleif) buildAddrFromLEIAddress(addr *LEIAddress) string {
+	street := strings.Join(addr.AddressLines, " ")
+
+	province := addr.Region
+	if parts := strings.Split(province, "-"); len(parts) > 1 {
+		province = parts[1]
+	}
+
+	return fmt.Sprintf("%s %s %s %s %s", street, addr.City, province, addr.PostalCode, addr.Country)
+}

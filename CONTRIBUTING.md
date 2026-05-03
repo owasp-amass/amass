@@ -1,10 +1,12 @@
 # Contributing
 
-Thank you for considering making contributions to Amass! Start by taking a look at the [open issues](https://github.com/owasp-amass/amass/issues) for things we need help with!
+Thank you for considering making contributions to the OWASP Amass Project! Start by joining our [Discord server](https://discord.gg/ANTyEDUXt5), taking a look at the [Documentation](https://owasp-amass.github.io/docs/), and checking out the [open issues](https://github.com/owasp-amass/amass/issues) for things we need help with!
 
 Please follow standard github best practices: fork the repo, branch from the tip of develop, make some commits, and submit a pull request to develop. 
 
 Please make sure to use `gofmt` before every commit - the easiest way to do this is have your editor run it for you upon saving a file. Otherwise, run the following command in the project root directory: `go fmt ./...`
+
+It is recommended that you use the Golang Linter before every commit, to help you catch errors and to write clean code: `golangci-lint run ./...`
 
 ## Forking
 
@@ -22,15 +24,15 @@ For instance, to create a fork and work on a branch of it, user 'foo' would:
   * `git remote add origin git@github.com:foo/amass.git`
 
 Now `origin` refers to the foo fork and `upstream` refers to the OWASP version.
-So foo can `git push -u origin master` to update his/her fork, and make pull requests to OWASP from there.
+So foo can `git push -u origin develop` to update his/her fork, and make pull requests to OWASP from there.
 Of course, replace `foo` with your git handle.
 
 To pull in updates from the original repo, run
 
     * `git fetch upstream`
-    * `git rebase upstream/master` (or whatever branch you want)
+    * `git rebase upstream/main` (or whatever branch you want)
 
-Please don't make Pull Requests to `master`.
+Please do not make pull requests to `main`.
 
 ### Development Procedure:
 - the latest state of development is on `develop`
