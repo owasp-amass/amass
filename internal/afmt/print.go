@@ -30,9 +30,6 @@ const Banner = `        .+++:.            :                             .+++.
         +o&&&&+.                                                    +oooo.`
 
 const (
-	// Version is used to display the current version of Amass.
-	Version = "v5.1.1"
-
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
 
@@ -42,6 +39,13 @@ const (
 	// The URL to the Amass Project's Discord server.
 	DiscordInvitation string = "https://discord.gg/ANTyEDUXt5"
 )
+
+// Version is used to display the current version of Amass. It is a `var`
+// (rather than a `const`) so release builds can override it via
+//   -ldflags "-X github.com/owasp-amass/amass/v5/internal/afmt.Version=..."
+// from .goreleaser.yaml using the actual git tag, instead of relying on
+// every release remembering to bump this string by hand.
+var Version = "v5.1.1"
 
 var (
 	// Colors used to ease the reading of program output

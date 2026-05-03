@@ -11,6 +11,9 @@ builds:
     binary: amass
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/owasp-amass/amass/v5/internal/afmt.Version=v{{ .Version }}
     goos:
       - windows
       - linux
