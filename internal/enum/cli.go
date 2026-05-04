@@ -148,6 +148,10 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		return
 	}
 
+	// Surface configuration that v5 currently parses but does not act on, so users
+	// don't silently get less than they asked for. See issue #1122.
+	warnUnsupportedConfig(cfg, color.Error)
+
 	if err := tools.CreateOutputDirectory(cfg.Dir); err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the output directory: %v\n", err)
 		os.Exit(1)
@@ -487,6 +491,30 @@ func (e Args) OverrideConfig(conf *config.Config) error {
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice()...)
 	return nil
+}
+
+// warnUnsupportedConfig writes a warning to out for every configuration option
+// that v5 parses but does not currently act on, so users don't silently get
+// less than they asked for. See https://github.com/owasp-amass/amass/issues/1122.
+//
+// At present:
+//
+//   - Wordlist brute forcing (-brute, -w/-wm, and the bruteforce.* YAML keys)
+//     is parsed and stored on the config but no engine plugin reads it. The
+//     v4 brute_forcing.ads script has not yet been ported to a v5 plugin, and
+//     the BruteForcing toggle currently only gates FQDN-Alterations.
+//
+// Each warning is a single line so users see it even with quiet log levels.
+func warnUnsupportedConfig(cfg *config.Config, out io.Writer) {
+	if cfg == nil {
+		return
+	}
+	if cfg.BruteForcing && len(cfg.Wordlist) > 0 {
+		_, _ = afmt.Y.Fprintln(out,
+			"warning: wordlist brute forcing (-brute / bruteforce.wordlists) is not implemented in v5 yet; "+
+				"-brute currently only gates FQDN alterations and the supplied wordlist is ignored. "+
+				"Track https://github.com/owasp-amass/amass/issues/1122 for status.")
+	}
 }
 
 func printScope(c *client.Client, token uuid.UUID) {
