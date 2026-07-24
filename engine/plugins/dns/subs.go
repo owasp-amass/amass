@@ -145,6 +145,11 @@ func (d *dnsSubs) traverse(e *et.Event, dom string, fqdn *dbt.Entity, since time
 	for labels := strings.Split(sub, "."); dlen <= len(labels); labels = labels[1:] {
 		sub = strings.TrimSpace(strings.Join(labels, "."))
 
+		// respect the blacklist instead of feeding excluded names back into the engine
+		if e.Session.Scope().IsBlacklisted(&oamdns.FQDN{Name: sub}) {
+			continue
+		}
+
 		// no need to check subdomains already evaluated
 		if d.fqdnAvailable(e, sub) {
 			results := d.lookup(e, sub, since)
