@@ -107,7 +107,9 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 }
 
 func selectLogger(dir string) (*slog.Logger, error) {
-	filename := fmt.Sprintf("amass_engine_%s.log", time.Now().Format("2006-01-02T15:04:05"))
+	// Colons are illegal in filenames on Windows, so avoid the default
+	// RFC 3339-style separator when building the log filename.
+	filename := fmt.Sprintf("amass_engine_%s.log", time.Now().Format("2006-01-02T15-04-05"))
 
 	if dir != "" {
 		return tools.NewFileLogger(dir, filename)
