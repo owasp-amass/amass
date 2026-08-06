@@ -124,12 +124,7 @@ func (r *ipaddrEndpoint) probeOnePort(e *et.Event, ipaddr *dbt.Entity, port int,
 	}
 	addr := a + ":" + strconv.Itoa(port)
 
-	proto := "https"
-	if port == 80 || port == 8080 {
-		proto = "http"
-	}
-
-	ch <- r.plugin.query(e, ipaddr, proto+"://"+addr, port)
+	ch <- r.plugin.query(e, ipaddr, portScheme(port)+"://"+addr, port)
 }
 
 func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding) {

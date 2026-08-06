@@ -21,6 +21,13 @@ import (
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
+func portScheme(port int) string {
+	if port == 80 || port == 8080 {
+		return "http"
+	}
+	return "https"
+}
+
 type httpProbing struct {
 	name    string
 	log     *slog.Logger
@@ -119,13 +126,19 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 	serv.OutputLen = int(resp.Length)
 	serv.Attributes = resp.Header
 
+	// resp.TLS may come from a cross-scheme redirect, so only trust it on HTTPS ports.
 	var c *oamcert.TLSCertificate
-	firstAsset, firstCert, findings := hp.createCertificates(e.Session, resp)
-	if firstAsset != nil {
-		var valid bool
-		c, valid = firstAsset.Asset.(*oamcert.TLSCertificate)
-		if !valid {
-			return findings
+	var firstAsset *dbt.Entity
+	var firstCert *x509.Certificate
+	var findings []*support.Finding
+	if portScheme(port) == "https" {
+		firstAsset, firstCert, findings = hp.createCertificates(e.Session, resp)
+		if firstAsset != nil {
+			var valid bool
+			c, valid = firstAsset.Asset.(*oamcert.TLSCertificate)
+			if !valid {
+				return findings
+			}
 		}
 	}
 

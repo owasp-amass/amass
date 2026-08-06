@@ -117,12 +117,7 @@ func (fe *fqdnEndpoint) probeOnePort(e *et.Event, host *dbt.Entity, port int, ch
 	fqdn := host.Asset.(*oamdns.FQDN)
 	addr := fqdn.Name + ":" + strconv.Itoa(port)
 
-	proto := "https"
-	if port == 80 || port == 8080 {
-		proto = "http"
-	}
-
-	ch <- fe.plugin.query(e, host, proto+"://"+addr, port)
+	ch <- fe.plugin.query(e, host, portScheme(port)+"://"+addr, port)
 }
 
 func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding) {
