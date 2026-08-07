@@ -13,6 +13,14 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 > You can find additional installation instructions and documentation in the [Amass Docs](https://owasp-amass.github.io/docs) repo.
 
+### CLI note (v4 → v5)
+
+Amass **v5** changed the command surface. Binary releases no longer ship the old
+`db` / `track` (and related) subcommands from earlier major versions. Always run
+`amass -h` (and `amass <subcommand> -h`) against the binary you installed, and
+prefer the [current Amass Docs](https://owasp-amass.github.io/docs) over blog
+posts or READMEs written for v3/v4.
+
 ## Corporate Supporters
 
 [![WhoisXML API Logo](https://raw.githubusercontent.com/owasp-amass/docs/master/images/supporters/whoisxmlapi_logo.png)](https://www.whoisxmlapi.com/)
