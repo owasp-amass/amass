@@ -17,7 +17,7 @@ func JSONLogToRecord(logstr string) (slog.Record, error) {
 	j := make(map[string]any)
 	// unmarshal the log message sent from the engine session
 	if err := json.Unmarshal([]byte(logstr), &j); err != nil {
-		return slog.Record{}, errors.New("failed to unmarchal the JSON")
+		return slog.Record{}, errors.New("failed to unmarshal the JSON")
 	}
 
 	ltime := time.Now()
