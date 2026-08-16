@@ -7,6 +7,7 @@ package enum
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/config"
@@ -58,8 +59,19 @@ func processInputFiles(args *Args) error {
 	if err := getList([]string{args.Filepaths.Blacklist}, "blacklist", args.Blacklist); err != nil {
 		return err
 	}
-	if err := getList(args.Filepaths.Names, "subdomain names", args.Names); err != nil {
-		return err
+	// The subdomain names file (-nf) only supplies supplementary names discovered by other
+	// means; unlike the other input files it's optional, so a missing, empty, or otherwise
+	// unparseable file shouldn't abort the whole enumeration. Warn and continue instead.
+	for _, p := range args.Filepaths.Names {
+		if p == "" {
+			continue
+		}
+		list, err := config.GetListFromFile(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to parse the subdomain names file: %v\n", err)
+			continue
+		}
+		args.Names.InsertMany(list...)
 	}
 	if err := getList(args.Filepaths.Domains, "domain names", args.Domains); err != nil {
 		return err
