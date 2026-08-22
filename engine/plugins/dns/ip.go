@@ -74,6 +74,16 @@ func (d *dnsIP) check(e *et.Event) error {
 			} else if _, conf2 := e.Session.Scope().IsAssetInScope(fqdn, 0); conf2 > 0 {
 				size = d.plugin.firstSweepSize
 			}
+			// Fail-closed: active IP sweeps generate DNS for each new IP;
+			// when active egress is required but unavailable, refuse to
+			// expand the sweep so no traffic leaks to the default resolver.
+			if size > 0 && e.Session.Config().Active &&
+				e.Session.Config().ActiveStrict && e.Session.ActiveEgress() == nil {
+				e.Session.Log().Warn("skipping active IP sweep: no active egress configured",
+					"ip", ip.Address.String(),
+					slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+				size = 0
+			}
 			if size > 0 {
 				support.IPAddressSweep(e, ip, d.source, size, sweepCallback)
 			}

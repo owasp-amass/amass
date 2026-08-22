@@ -96,14 +96,33 @@ func (hp *httpProbing) Stop() {
 
 func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, port int) []*support.Finding {
 	var findings []*support.Finding
-	e.Session.NetSem().Acquire()
 
+	// Service probes only ever run when -active is set, so this client must
+	// be the active-egress client. If the operator did not configure
+	// -active-proxy AND -active-strict is on, session creation already
+	// failed; if they opted out of strict mode, fall through to the legacy
+	// Probe client (which is the documented "softer default" behavior).
+	client := e.Session.Clients().Active
+	if client == nil {
+		if e.Session.Config().ActiveStrict {
+			e.Session.Log().Error("refusing active HTTP probe: no active egress configured",
+				"target", target)
+			return findings
+		}
+		client = e.Session.Clients().Probe
+	}
+
+	e.Session.NetSem().Acquire()
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
 	defer cancel()
 
-	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe, &amasshttp.Request{URL: target})
+	resp, err := amasshttp.RequestWebPage(ctx, client, &amasshttp.Request{URL: target})
 	e.Session.NetSem().Release()
 
+	if err != nil {
+		e.Session.Log().Error("active HTTP probe failed",
+			"target", target, "active_proxy", e.Session.Config().ActiveProxy, "error", err.Error())
+	}
 	if err == nil && resp != nil {
 		findings = append(findings, hp.store(e, resp, entity, port)...)
 	}

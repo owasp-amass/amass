@@ -39,6 +39,19 @@ func JARMFingerprint(sess et.Session, target oam.Asset, portrel *general.PortRel
 	}
 	addr += ":" + strconv.Itoa(portrel.PortNumber)
 
+	// JARM is an active-only fingerprinting probe (it dials the target
+	// directly), so it MUST go through the active egress profile when one
+	// is configured. Fall back to the legacy direct dialer only if the
+	// operator explicitly opted out of strict mode.
+	var dial amassnet.DialContext
+	if ae := sess.ActiveEgress(); ae != nil {
+		dial = ae.DialContext
+	} else if sess.Config().ActiveStrict {
+		return "", amassnet.ErrNoActiveEgress
+	} else {
+		dial = amassnet.NewDialContext(5 * time.Second)
+	}
+
 	var results []string
 	for _, probe := range jarm.GetProbes(host, portrel.PortNumber) {
 		sess.NetSem().Acquire()
@@ -46,10 +59,11 @@ func JARMFingerprint(sess et.Session, target oam.Asset, portrel *general.PortRel
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		dial := amassnet.NewDialContext(5 * time.Second)
 		c, err := dial(ctx, "tcp", addr)
 		sess.NetSem().Release()
 		if err != nil {
+			sess.Log().Error("active JARM dial failed",
+				"target", addr, "active_proxy", sess.Config().ActiveProxy, "error", err.Error())
 			return "", err
 		}
 		defer func() { _ = c.Close() }()

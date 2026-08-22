@@ -110,6 +110,28 @@ type Config struct {
 	// Determines if zone transfers will be attempted
 	Active bool `yaml:"active,omitempty" json:"active,omitempty"`
 
+	// ActiveProxy is the runtime proxy URL through which all -active traffic
+	// (HTTP probes, raw TLS/JARM dials and active-derived DNS) must egress.
+	// Passive traffic (data sources, general/crawl clients, default resolvers)
+	// is unaffected and continues to use existing/default networking behavior.
+	// Supported schemes are dependent on the egress profile builder
+	// (typically http://, https:// and socks5://).
+	ActiveProxy string `yaml:"active_proxy,omitempty" json:"active_proxy,omitempty"`
+
+	// ActiveStrict, when true, causes the engine to refuse to start an active
+	// run that has no ActiveProxy configured (fail-closed). This is the
+	// default to satisfy enterprise egress-segregation policies. Operators
+	// who explicitly want the legacy behavior of routing active traffic out
+	// of the default network can set this to false.
+	ActiveStrict bool `yaml:"active_strict" json:"active_strict"`
+
+	// ActiveDNSResolver is the host:port of the DNS resolver that
+	// active-derived DNS queries (e.g. PTR lookups for active sweeps) are
+	// sent to over the active egress. Empty falls back to the default
+	// (see internal/net.DefaultActiveResolver). Only TCP DNS is used,
+	// because the active egress is typically TCP-only.
+	ActiveDNSResolver string `yaml:"active_dns_resolver,omitempty" json:"active_dns_resolver,omitempty"`
+
 	// Determines rigidness of the enumeration
 	Rigid bool `yaml:"rigid_boundaries" json:"rigid_boundaries"`
 
@@ -209,6 +231,7 @@ func NewConfig() *Config {
 		MinForWordFlip:      2,
 		EditDistance:        1,
 		Recursive:           true,
+		ActiveStrict:        true,
 		MinimumTTL:          1440,
 		ResolversQPS:        DefaultQueriesPerPublicResolver,
 		TrustedQPS:          DefaultQueriesPerBaselineResolver,
@@ -240,6 +263,18 @@ func (c *Config) CheckSettings() error {
 	}
 	if c.Passive && c.Active {
 		return errors.New("active enumeration cannot be performed without DNS resolution")
+	}
+
+	if c.Active {
+		if c.ActiveProxy != "" {
+			if perr := validateActiveProxyURL(c.ActiveProxy); perr != nil {
+				return perr
+			}
+		} else if c.ActiveStrict {
+			return errors.New("active mode is enabled but no active_proxy is configured: " +
+				"set -active-proxy / active_proxy: in the YAML, or pass -active-strict=false " +
+				"to allow active traffic over the default egress (not recommended)")
+		}
 	}
 
 	c.Wordlist, err = ExpandMaskWordlist(c.Wordlist)
@@ -293,6 +328,7 @@ func (c *Config) LoadSettings(path string) error {
 		c.loadTransformSettings,
 		c.loadEngineSettings,
 		c.loadActiveSettings,
+		c.loadActiveProxySettings,
 		c.loadRigidSettings,
 	}
 	for _, load := range loads {

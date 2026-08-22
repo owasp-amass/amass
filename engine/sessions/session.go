@@ -63,9 +63,18 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 		cfg = config.NewConfig()
 	}
 
-	clients, err := NewClients(len(cfg.Scope.Ports))
+	clients, err := NewClients(len(cfg.Scope.Ports), cfg.ActiveProxy)
 	if err != nil {
 		return nil, err
+	}
+
+	// Fail-closed at session creation: if active mode is requested with
+	// strict policy on but no usable active egress was built, refuse the
+	// session rather than silently leaking active traffic out the default
+	// network.
+	if cfg.Active && cfg.ActiveStrict && clients.ActiveEgress == nil {
+		clients.CloseIdleConnections()
+		return nil, fmt.Errorf("active mode requires an active_proxy when ActiveStrict is on; refusing to create session")
 	}
 
 	startTime := time.Now()
@@ -171,7 +180,18 @@ func (s *Session) Clients() *et.SessionHTTPClients {
 		General: s.clients.General,
 		Probe:   s.clients.Probe,
 		Crawl:   s.clients.Crawl,
+		Active:  s.clients.Active,
 	}
+}
+
+// ActiveEgress returns the operator-specified active egress profile, or nil
+// when no active proxy is configured. Active-only code paths must use this
+// (or s.Clients().Active) instead of the default dialers.
+func (s *Session) ActiveEgress() *amassnet.ActiveEgress {
+	if s.clients == nil {
+		return nil
+	}
+	return s.clients.ActiveEgress
 }
 
 func (s *Session) CIDRanger() cidranger.Ranger {

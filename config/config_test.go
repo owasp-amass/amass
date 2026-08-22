@@ -168,7 +168,7 @@ func TestMarshalJSON(t *testing.T) {
 
 	// Test case 1: MarshalJSON returns the expected JSON bytes
 	t.Run("MarshalJSON returns the expected JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"active_strict":true,"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		got, err := c.JSON()
 		if err != nil {
@@ -187,7 +187,7 @@ func TestMarshalJSON(t *testing.T) {
 	}
 	// Test case 2: MarshalJSON unescapes HTML entities in the JSON bytes
 	t.Run("MarshalJSON unescapes HTML entities in the JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"active_strict":true,"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		expectedString := string(expected)
 		got, err := c.JSON()

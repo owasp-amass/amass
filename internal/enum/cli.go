@@ -54,19 +54,26 @@ type Args struct {
 	Ports             afmt.ParseInts
 	Resolvers         *stringset.Set
 	Timeout           int
-	Options           struct {
-		Active       bool
-		Alterations  bool
-		BruteForcing bool
-		DemoMode     bool
-		ListSources  bool
-		NoAlts       bool
-		NoColor      bool
-		NoRecursive  bool
-		Passive      bool
-		Rigid        bool
-		Silent       bool
-		Verbose      bool
+	ActiveProxy       string
+	// ActiveStrict is parsed via a separate flagset because it must be
+	// distinguished from "unset" (the user did not override the default).
+	// Use Options.ActiveStrictSet to tell whether ActiveStrict came from
+	// the command line; otherwise the config-level default applies.
+	Options struct {
+		Active          bool
+		ActiveStrict    bool
+		ActiveStrictSet bool
+		Alterations     bool
+		BruteForcing    bool
+		DemoMode        bool
+		ListSources     bool
+		NoAlts          bool
+		NoColor         bool
+		NoRecursive     bool
+		Passive         bool
+		Rigid           bool
+		Silent          bool
+		Verbose         bool
 	}
 	Filepaths struct {
 		AllFilePrefix string
@@ -104,6 +111,8 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 	fs.Var(args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	fs.Var(args.Included, "include", "Data source names separated by commas to be included")
 	fs.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
+	fs.StringVar(&args.ActiveProxy, "active-proxy", "",
+		"Proxy URL (http://, https://, socks5://, socks5h://) used for ALL -active egress")
 	fs.IntVar(&args.MaxDepth, "max-depth", 0, "Maximum number of subdomain labels for brute forcing")
 	fs.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
 	fs.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
@@ -116,6 +125,8 @@ func defineOptionFlags(fs *flag.FlagSet, args *Args) {
 	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
 	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
 	fs.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
+	fs.BoolVar(&args.Options.ActiveStrict, "active-strict", true,
+		"When -active is set, refuse to run if no -active-proxy is configured (default true)")
 	fs.BoolVar(&args.Options.BruteForcing, "brute", false, "Execute brute forcing after searches")
 	fs.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
 	fs.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
@@ -374,6 +385,13 @@ func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
+	// Track which flags the operator actually supplied so we can distinguish
+	// "user explicitly disabled active-strict" from "default true wins".
+	fs.Visit(func(fl *flag.Flag) {
+		if fl.Name == "active-strict" {
+			args.Options.ActiveStrictSet = true
+		}
+	})
 	if args.Help {
 		usage()
 		return nil, &args
@@ -416,6 +434,18 @@ func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 	if !cfg.Active && len(args.Ports) > 0 {
 		_, _ = afmt.R.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
+	}
+	if cfg.Active && cfg.ActiveProxy == "" && cfg.ActiveStrict {
+		_, _ = afmt.R.Fprintln(color.Error,
+			"-active was set but no -active-proxy is configured. The default policy "+
+				"is fail-closed: refuse to send active traffic out of the default egress. "+
+				"Either pass -active-proxy <url> or pass -active-strict=false to opt out.")
+		os.Exit(1)
+	}
+	if cfg.ActiveProxy != "" && !cfg.Active {
+		_, _ = afmt.Y.Fprintln(color.Error,
+			"-active-proxy was provided but -active is not enabled. Active proxy is only "+
+				"used for active-mode traffic; passive traffic continues to use default egress.")
 	}
 	if len(cfg.Domains()) == 0 {
 		_, _ = afmt.R.Fprintln(color.Error, "Configuration error: No root domain names were provided")
@@ -471,6 +501,13 @@ func (e Args) OverrideConfig(conf *config.Config) error {
 	if e.Options.Active {
 		conf.Active = true
 		conf.Passive = false
+	}
+	if e.ActiveProxy != "" {
+		conf.ActiveProxy = e.ActiveProxy
+	}
+	// Only override the strict default when the operator actually passed the flag.
+	if e.Options.ActiveStrictSet {
+		conf.ActiveStrict = e.Options.ActiveStrict
 	}
 	if e.Blacklist.Len() > 0 {
 		conf.Scope.Blacklist = e.Blacklist.Slice()

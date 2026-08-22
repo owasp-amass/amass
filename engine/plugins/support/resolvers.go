@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/resolve/conn"
 	"github.com/owasp-amass/resolve/pool"
 	"github.com/owasp-amass/resolve/selectors"
@@ -92,6 +94,53 @@ var baselineResolvers = []baseline{
 
 var trusted *pool.Pool
 var detector *wildcards.Detector
+
+// PerformActiveQuery is the active-egress counterpart to PerformQuery.
+//
+// It performs a DNS query over the session's active egress (TCP-DNS through
+// the operator-configured proxy) and is used by every -active code path
+// whose DNS traffic must NOT leak through the default resolver pool. When
+// the session has no active egress configured, PerformActiveQuery returns
+// amassnet.ErrNoActiveEgress and the caller MUST treat that as a hard
+// failure — no fallback to PerformQuery.
+//
+// The returned answer set is filtered to records of qtype, matching
+// PerformQuery's behavior so call sites can swap one for the other based
+// on event provenance.
+func PerformActiveQuery(ctx context.Context, sess et.Session, name string, qtype uint16) ([]dns.RR, error) {
+	ae := sess.ActiveEgress()
+	if ae == nil || ae.DialContext == nil {
+		return nil, amassnet.ErrNoActiveEgress
+	}
+
+	msg := utils.QueryMsg(name, qtype)
+	if qtype == dns.TypePTR {
+		msg = utils.ReverseMsg(name)
+	}
+
+	resp, err := amassnet.ActiveDNSExchange(ctx, ae.DialContext, sess.Config().ActiveDNSResolver, msg)
+	if err != nil {
+		sess.Log().Error("active DNS exchange failed",
+			"name", name, "active_proxy", sess.Config().ActiveProxy, "error", err.Error())
+		return nil, err
+	}
+	if resp == nil {
+		return nil, ErrFailedMaxDNSAttempts
+	}
+	switch resp.Rcode {
+	case dns.RcodeNameError:
+		return nil, ErrNameDoesNotExist
+	case dns.RcodeSuccess:
+		if len(resp.Answer) == 0 {
+			return nil, ErrNoRecordOfThisType
+		}
+		if rr := utils.AnswersByType(resp, qtype); len(rr) > 0 {
+			return rr, nil
+		}
+		return nil, ErrNoRecordOfThisType
+	}
+	return nil, errors.New("unexpected response from active DNS")
+}
 
 func PerformQuery(ctx context.Context, name string, qtype uint16) ([]dns.RR, error) {
 	for i := 1; i <= 10; i++ {

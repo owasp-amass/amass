@@ -114,5 +114,15 @@ func (h *horaddr) performSweep(e *et.Event, ip *oamnet.IPAddress) {
 		size = 64
 	}
 
+	// Fail-closed: when active is on and strict, refuse the horizontal
+	// sweep when no active egress is configured (it would cause DNS for
+	// each adjacent IP to be sent via the default resolver pool).
+	if e.Session.Config().Active &&
+		e.Session.Config().ActiveStrict && e.Session.ActiveEgress() == nil {
+		e.Session.Log().Warn("skipping active horizontal sweep: no active egress configured",
+			"ip", ip.Address.String())
+		return
+	}
+
 	support.IPAddressSweep(e, ip, h.plugin.source, size, h.plugin.submitIPAddress)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/pubsub"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -36,6 +37,11 @@ type SessionHTTPClients struct {
 	General *http.Client
 	Probe   *http.Client
 	Crawl   *http.Client
+	// Active is the HTTP client that MUST be used for every -active service
+	// probe. It egresses through the operator-configured active proxy. Nil
+	// when no active proxy is configured — call sites must treat that as
+	// fail-closed.
+	Active *http.Client
 }
 
 type Session interface {
@@ -51,6 +57,11 @@ type Session interface {
 	Backlog() Backlog
 	Pipelines() SessionPipelines
 	Clients() *SessionHTTPClients
+	// ActiveEgress returns the egress profile that MUST be used by every
+	// -active code path (HTTP probes, raw TLS/JARM dials, active-derived
+	// DNS). Returns nil when no active_proxy is configured; in that case
+	// active operations are expected to fail closed.
+	ActiveEgress() *amassnet.ActiveEgress
 	CIDRanger() cidranger.Ranger
 	TmpDir() string
 	Stats() *SessionStats
