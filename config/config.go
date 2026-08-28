@@ -95,13 +95,15 @@ type Config struct {
 	MaxDepth int `yaml:"-" json:"-"`
 
 	// Will discovered subdomain name alterations be generated?
+	// The generator flags cross the wire to the engine, so they cannot be
+	// json:"-": alterations.go gates every generator on one of them.
 	Alterations    bool     `yaml:"-" json:"alterations,omitempty"`
-	FlipWords      bool     `yaml:"-" json:"-"`
-	FlipNumbers    bool     `yaml:"-" json:"-"`
-	AddWords       bool     `yaml:"-" json:"-"`
-	AddNumbers     bool     `yaml:"-" json:"-"`
-	MinForWordFlip int      `yaml:"-" json:"-"`
-	EditDistance   int      `yaml:"-" json:"-"`
+	FlipWords      bool     `yaml:"-" json:"flip_words"`
+	FlipNumbers    bool     `yaml:"-" json:"flip_numbers"`
+	AddWords       bool     `yaml:"-" json:"add_words"`
+	AddNumbers     bool     `yaml:"-" json:"add_numbers"`
+	MinForWordFlip int      `yaml:"-" json:"min_for_word_flip"`
+	EditDistance   int      `yaml:"-" json:"edit_distance"`
 	AltWordlist    []string `yaml:"-" json:"alt_worldlist,omitempty"`
 
 	// Only access the data sources for names and return results?
