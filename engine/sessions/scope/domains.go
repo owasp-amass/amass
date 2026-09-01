@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Scope) AddFQDN(fqdn *dns.FQDN) bool {
-	if fqdn.Name == "" {
+	if fqdn.Name == "" || s.IsBlacklisted(fqdn) {
 		return false
 	}
 
