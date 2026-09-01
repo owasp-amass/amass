@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: "OWASP Amass Discord Community"
+    url: "https://discord.gg/ANTyEDUXt5"
+    about: "Join the official community Discord for discussions, questions, and support."
+  - name: "Official Documentation"
+    url: "https://owasp-amass.github.io/docs/"
+    about: "Read user guides, configuration references, and developer documentation."
+  - name: "OWASP Project Page"
+    url: "https://owasp.org/www-project-amass/"
+    about: "Learn more about the OWASP Amass flagship project."
