@@ -113,7 +113,40 @@ func (j *jsmon) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		for page := 1; ; page++ {
+		_ = j.rlimit.Wait(e.Session.Ctx())
+		e.Session.NetSem().Acquire()
+
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
+			URL:    "https://subdomains.jsmon.sh/api/domain/" + name,
+			Header: amasshttp.Header{"Api-Key": []string{key}},
+		})
+		cancel()
+		e.Session.NetSem().Release()
+		if err != nil {
+			continue
+		}
+
+		var result struct {
+			Domain     string   `json:"domain"`
+			Total      int      `json:"total"`
+			Page       int      `json:"page"`
+			TotalPages int      `json:"total_pages"`
+			Subdomains []string `json:"subdomains"`
+		}
+		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+			continue
+		}
+
+		for _, sub := range result.Subdomains {
+			n := amassdns.RemoveAsteriskLabel(sub)
+			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: n}, 0); conf > 0 {
+				names = append(names, strings.ToLower(strings.TrimSpace(n)))
+			}
+		}
+
+		for page := 2; page <= result.TotalPages; page++ {
 			_ = j.rlimit.Wait(e.Session.Ctx())
 			e.Session.NetSem().Acquire()
 
@@ -129,13 +162,6 @@ func (j *jsmon) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 				break
 			}
 
-			var result struct {
-				Domain     string   `json:"domain"`
-				Total      int      `json:"total"`
-				Page       int      `json:"page"`
-				TotalPages int      `json:"total_pages"`
-				Subdomains []string `json:"subdomains"`
-			}
 			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 				break
 			}
@@ -145,10 +171,6 @@ func (j *jsmon) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 				if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: n}, 0); conf > 0 {
 					names = append(names, strings.ToLower(strings.TrimSpace(n)))
 				}
-			}
-
-			if page >= result.TotalPages || len(result.Subdomains) == 0 {
-				break
 			}
 		}
 		break
