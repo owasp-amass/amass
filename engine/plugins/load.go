@@ -23,6 +23,7 @@ import (
 )
 
 var pluginNewFuncs = []func() et.Plugin{
+	api.NewBeVigil,
 	api.NewBinaryEdge,
 	api.NewChaos,
 	api.NewCrtsh,
