@@ -31,6 +31,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewHackerTarget,
 	//api.NewHunterIO,
 	api.NewLeakIX,
+	api.NewNetlas,
 	api.NewPassiveTotal,
 	api.NewProspeo,
 	api.NewSecurityTrails,
