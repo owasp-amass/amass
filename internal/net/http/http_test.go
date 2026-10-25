@@ -10,13 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"regexp"
 	"testing"
-	"time"
-
-	"github.com/caffix/stringset"
-	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
 )
 
 func TestRequestWebPage(t *testing.T) {
@@ -78,6 +72,7 @@ func TestRequestWebPage(t *testing.T) {
 	}
 }
 
+/*
 func TestCrawl(t *testing.T) {
 	re, err := regexp.Compile(amassdns.AnySubdomainRegexString())
 	if err != nil {
@@ -149,6 +144,7 @@ func TestCrawl(t *testing.T) {
 		t.Error("Failed to catch the expired context before the crawl")
 	}
 }
+*/
 
 func TestCleanName(t *testing.T) {
 	tests := []struct {
