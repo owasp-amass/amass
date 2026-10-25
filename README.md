@@ -2,7 +2,6 @@
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
 [![GitHub Release](https://img.shields.io/github/release/owasp-amass/amass)](https://github.com/owasp-amass/amass/releases/latest)
-[![Go Report](https://goreportcard.com/badge/github.com/owasp-amass/amass)](https://goreportcard.com/report/github.com/owasp-amass/amass)
 [![CodeFactor](https://www.codefactor.io/repository/github/owasp-amass/amass/badge)](https://www.codefactor.io/repository/github/owasp-amass/amass)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/ANTyEDUXt5)
