@@ -16,15 +16,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
-	"github.com/geziyor/geziyor"
-	"github.com/geziyor/geziyor/client"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
-	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
@@ -207,92 +202,103 @@ func RequestWebPage(ctx context.Context, client *http.Client, r *Request) (*Resp
 
 // Crawl will spider the web page at the URL argument looking while staying within the scope provided.
 func Crawl(ctx context.Context, u string, scope []string, max int, callback func(*Request, *Response)) error {
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("the context expired")
-	default:
-	}
+	return fmt.Errorf("the context expired")
+	/*
+	   select {
+	   case <-ctx.Done():
 
-	var count int
-	var m sync.Mutex
-	filter := bf.NewDefaultStableBloomFilter(10000, 0.01)
-	defer filter.Reset()
-	attrs := []string{"action", "cite", "data", "formaction",
-		"href", "longdesc", "poster", "src", "srcset", "xmlns"}
-	tags := []string{"a", "area", "audio", "base", "blockquote", "button",
-		"embed", "form", "frame", "frameset", "html", "iframe", "img", "input",
-		"ins", "link", "noframes", "object", "q", "script", "source", "track", "video"}
+	   	return fmt.Errorf("the context expired")
 
-	g := geziyor.NewGeziyor(&geziyor.Options{
-		StartURLs:             []string{u},
-		RobotsTxtDisabled:     true,
-		UserAgent:             UserAgent,
-		LogDisabled:           true,
-		ConcurrentRequests:    5,
-		RequestDelay:          50 * time.Millisecond,
-		RequestDelayRandomize: true,
-		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+	   default:
+	   }
 
-			process := func(n string) {
-				u, err := r.Request.URL.Parse(n)
-				if err != nil {
-					return
-				}
-				if host := u.Hostname(); host == "" || whichDomain(host, scope) == "" {
-					return
-				}
+	   var count int
+	   var m sync.Mutex
+	   filter := bf.NewDefaultStableBloomFilter(10000, 0.01)
+	   defer filter.Reset()
+	   attrs := []string{"action", "cite", "data", "formaction",
 
-				m.Lock()
-				if s := u.String(); s != "" && !filter.Test([]byte(s)) {
-					count++
-					// Be sure the crawl has not exceeded the maximum links to be followed
-					if max <= 0 || count < max {
-						filter.Add([]byte(s))
-						g.Get(s, g.Opt.ParseFunc)
-					}
-				}
-				m.Unlock()
-			}
-			tag := func(i int, s *goquery.Selection) {
-				for _, attr := range attrs {
-					if name, ok := s.Attr(attr); ok {
-						process(name)
-					}
-				}
-			}
-			for _, t := range tags {
-				r.HTMLDoc.Find(t).Each(tag)
-			}
+	   	"href", "longdesc", "poster", "src", "srcset", "xmlns"}
 
-			callback(ReqToAmassRequest(r.Request.Request), &Response{
-				Status:     r.Status,
-				StatusCode: r.StatusCode,
-				Proto:      r.Proto,
-				ProtoMajor: r.ProtoMajor,
-				ProtoMinor: r.ProtoMinor,
-				Header:     HdrToAmassHeader(r.Header),
-				Body:       string(r.Body),
-				Length:     r.ContentLength,
-				TLS:        r.TLS,
-			})
-		},
-	})
-	g.Client = client.NewClient(&client.Options{
-		MaxBodySize:    50 * 1024 * 1024, // 50MB
-		RetryTimes:     2,
-		RetryHTTPCodes: []int{408, 500, 502, 503, 504, 522, 524},
-	})
-	g.Client.Client = DefaultClient
+	   tags := []string{"a", "area", "audio", "base", "blockquote", "button",
 
-	g.Start()
-	return nil
+	   	"embed", "form", "frame", "frameset", "html", "iframe", "img", "input",
+	   	"ins", "link", "noframes", "object", "q", "script", "source", "track", "video"}
+
+	   	g := geziyor.NewGeziyor(&geziyor.Options{
+	   		StartURLs:             []string{u},
+	   		RobotsTxtDisabled:     true,
+	   		UserAgent:             UserAgent,
+	   		LogDisabled:           true,
+	   		ConcurrentRequests:    5,
+	   		RequestDelay:          50 * time.Millisecond,
+	   		RequestDelayRandomize: true,
+	   		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
+	   			select {
+	   			case <-ctx.Done():
+	   				return
+	   			default:
+	   			}
+
+	   			process := func(n string) {
+	   				u, err := r.Request.URL.Parse(n)
+	   				if err != nil {
+	   					return
+	   				}
+	   				if host := u.Hostname(); host == "" || whichDomain(host, scope) == "" {
+	   					return
+	   				}
+
+	   				m.Lock()
+	   				if s := u.String(); s != "" && !filter.Test([]byte(s)) {
+	   					count++
+	   					// Be sure the crawl has not exceeded the maximum links to be followed
+	   					if max <= 0 || count < max {
+	   						filter.Add([]byte(s))
+	   						g.Get(s, g.Opt.ParseFunc)
+	   					}
+	   				}
+	   				m.Unlock()
+	   			}
+	   			tag := func(i int, s *goquery.Selection) {
+	   				for _, attr := range attrs {
+	   					if name, ok := s.Attr(attr); ok {
+	   						process(name)
+	   					}
+	   				}
+	   			}
+	   			for _, t := range tags {
+	   				r.HTMLDoc.Find(t).Each(tag)
+	   			}
+
+	   			callback(ReqToAmassRequest(r.Request.Request), &Response{
+	   				Status:     r.Status,
+	   				StatusCode: r.StatusCode,
+	   				Proto:      r.Proto,
+	   				ProtoMajor: r.ProtoMajor,
+	   				ProtoMinor: r.ProtoMinor,
+	   				Header:     HdrToAmassHeader(r.Header),
+	   				Body:       string(r.Body),
+	   				Length:     r.ContentLength,
+	   				TLS:        r.TLS,
+	   			})
+	   		},
+	   	})
+
+	   	g.Client = client.NewClient(&client.Options{
+	   		MaxBodySize:    50 * 1024 * 1024, // 50MB
+	   		RetryTimes:     2,
+	   		RetryHTTPCodes: []int{408, 500, 502, 503, 504, 522, 524},
+	   	})
+
+	   g.Client.Client = DefaultClient
+
+	   g.Start()
+	   return nil
+	*/
 }
 
+/*
 func whichDomain(name string, scope []string) string {
 	n := strings.TrimSpace(name)
 
@@ -308,6 +314,7 @@ func whichDomain(name string, scope []string) string {
 	}
 	return ""
 }
+*/
 
 // TLSConn attempts to make a TLS connection with the host on the given port.
 func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
