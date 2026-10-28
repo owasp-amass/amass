@@ -58,51 +58,46 @@ func NamesToAddrs(ctx context.Context, db repository.Repository, since time.Time
 	}
 
 	var results []*NameAddrPair
-	// get the IPs associated with SRV, NS, and MX records
-loop:
 	for _, fqdn := range fqdns {
-		if edges, err := db.OutgoingEdges(ctx, fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
-			for _, edge := range edges {
-				switch v := edge.Relation.(type) {
-				case *oamdns.BasicDNSRelation:
-					if v.Header.RRType == 1 || v.Header.RRType == 28 {
-						if ip, err := getAddr(ctx, db, edge.ToEntity, since); err == nil {
-							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*oamdns.FQDN),
-								Addr: ip,
-							})
-							continue loop
-						}
-					} else if v.Header.RRType == 5 {
-						if ip, err := cnameQuery(ctx, db, edge.ToEntity, since); err == nil {
-							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*oamdns.FQDN),
-								Addr: ip,
-							})
-							continue loop
-						}
-					}
-				case *oamdns.PrefDNSRelation:
-					if v.Header.RRType == 2 || v.Header.RRType == 15 {
-						if ip, err := oneMoreName(ctx, db, edge.ToEntity, since); err == nil {
-							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*oamdns.FQDN),
-								Addr: ip,
-							})
-							continue loop
-						}
-					}
-				case *oamdns.SRVDNSRelation:
-					if v.Header.RRType == 33 {
-						if ip, err := oneMoreName(ctx, db, edge.ToEntity, since); err == nil {
-							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*oamdns.FQDN),
-								Addr: ip,
-							})
-							continue loop
-						}
-					}
+		edges, err := db.OutgoingEdges(ctx, fqdn, since, "dns_record")
+		if err != nil || len(edges) == 0 {
+			continue
+		}
+
+		name, ok := fqdn.Asset.(*oamdns.FQDN)
+		if !ok {
+			continue
+		}
+
+		// Prefer addresses attached directly to this name, independent of edge order.
+		if appendDirectAddrs(ctx, db, fqdn, edges, since, &results) {
+			continue
+		}
+
+		// A CNAME is the next-best match; avoid falling back to unrelated infrastructure
+		// records when the alias chain has a resolvable address.
+		if appendCNAMEAddrs(ctx, db, fqdn, edges, since, &results) {
+			continue
+		}
+
+		// Preserve legacy MX/NS/SRV fallback only when the name and its aliases have no IP.
+		for _, edge := range edges {
+			switch v := edge.Relation.(type) {
+			case *oamdns.PrefDNSRelation:
+				if v.Header.RRType != 2 && v.Header.RRType != 15 {
+					continue
 				}
+			case *oamdns.SRVDNSRelation:
+				if v.Header.RRType != 33 {
+					continue
+				}
+			default:
+				continue
+			}
+
+			if ip, err := oneMoreName(ctx, db, edge.ToEntity, since); err == nil {
+				results = append(results, &NameAddrPair{FQDN: name, Addr: ip})
+				break
 			}
 		}
 	}
@@ -158,4 +153,42 @@ loop:
 	}
 
 	return nil, errors.New("failed to traverse the aliases")
+}
+
+func appendDirectAddrs(ctx context.Context, db repository.Repository, fqdn *dbt.Entity, edges []*dbt.Edge, since time.Time, results *[]*NameAddrPair) bool {
+	found := false
+	name, ok := fqdn.Asset.(*oamdns.FQDN)
+	if !ok {
+		return false
+	}
+	for _, edge := range edges {
+		rel, ok := edge.Relation.(*oamdns.BasicDNSRelation)
+		if !ok || (rel.Header.RRType != 1 && rel.Header.RRType != 28) {
+			continue
+		}
+		if ip, err := getAddr(ctx, db, edge.ToEntity, since); err == nil {
+			*results = append(*results, &NameAddrPair{FQDN: name, Addr: ip})
+			found = true
+		}
+	}
+	return found
+}
+
+func appendCNAMEAddrs(ctx context.Context, db repository.Repository, fqdn *dbt.Entity, edges []*dbt.Edge, since time.Time, results *[]*NameAddrPair) bool {
+	found := false
+	name, ok := fqdn.Asset.(*oamdns.FQDN)
+	if !ok {
+		return false
+	}
+	for _, edge := range edges {
+		rel, ok := edge.Relation.(*oamdns.BasicDNSRelation)
+		if !ok || rel.Header.RRType != 5 {
+			continue
+		}
+		if ip, err := cnameQuery(ctx, db, edge.ToEntity, since); err == nil {
+			*results = append(*results, &NameAddrPair{FQDN: name, Addr: ip})
+			found = true
+		}
+	}
+	return found
 }
