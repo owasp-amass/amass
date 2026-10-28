@@ -56,24 +56,13 @@ func (bt *bgpTools) Name() string {
 func (bt *bgpTools) Start(r et.Registry) error {
 	bt.log = r.Log().WithGroup("plugin").With("name", bt.name)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	rr, err := support.PerformQuery(ctx, "bgp.tools", dns.TypeA)
-	if err != nil {
-		return fmt.Errorf("failed to obtain the BGPTools IP address: %v", err)
-	} else if len(rr) == 0 {
-		return errors.New("failed to obtain the BGPTools IP address")
-	}
-
-	for _, record := range rr {
-		if record.Header().Rrtype == dns.TypeA {
-			bt.addr = strings.TrimSpace((record.(*dns.A)).A.String())
-			break
-		}
-	}
+	bt.addr = bt.resolveServer(ctx)
 	if bt.addr == "" {
-		return errors.New("failed to obtain the BGPTools IP address")
+		bt.log.Warn("Failed to obtain the BGPTools IP address; plugin disabled")
+		return nil
 	}
 
 	bt.netblock = &netblock{
@@ -116,6 +105,32 @@ func (bt *bgpTools) Start(r et.Registry) error {
 
 func (bt *bgpTools) Stop() {
 	bt.log.Info("Plugin stopped")
+}
+
+func (bt *bgpTools) resolveServer(ctx context.Context) string {
+	// First, attempt resolution using the trusted resolver pool
+	if rr, err := support.PerformQuery(ctx, "bgp.tools", dns.TypeA); err == nil && len(rr) > 0 {
+		for _, record := range rr {
+			if record.Header().Rrtype == dns.TypeA {
+				if a, ok := record.(*dns.A); ok && a != nil {
+					if addr := strings.TrimSpace(a.A.String()); addr != "" {
+						return addr
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to standard system DNS resolver in environments where direct UDP to public resolvers is blocked
+	if addrs, err := net.DefaultResolver.LookupIP(ctx, "ip4", "bgp.tools"); err == nil && len(addrs) > 0 {
+		for _, ip := range addrs {
+			if ip4 := ip.To4(); ip4 != nil {
+				return ip4.String()
+			}
+		}
+	}
+
+	return ""
 }
 
 type bgpToolsRecord struct {
