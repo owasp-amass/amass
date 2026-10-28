@@ -1,0 +1,69 @@
+name: "Data Source Request"
+description: "Request a new OSINT API or data source integration for Amass"
+title: "[DataSource]: "
+labels: ["enhancement", "data-sources"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose adding a new data source or OSINT API to the Amass engine.
+
+  - type: input
+    id: source-name
+    attributes:
+      label: Data Source Name
+      description: What is the name of the service / data source?
+      placeholder: "e.g., Shodan, RapidDNS, Lunar Exposure"
+    validations:
+      required: true
+
+  - type: input
+    id: docs-url
+    attributes:
+      label: API Documentation URL
+      description: Link to the official API documentation and signup page.
+      placeholder: "https://example.com/api/docs"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth-type
+    attributes:
+      label: Authentication Requirements
+      description: What type of authentication is required?
+      options:
+        - Completely Free (No API Key Required)
+        - Free Tier Available (Requires Free API Key / Registration)
+        - Paid / Commercial Only
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: data-types
+    attributes:
+      label: Data Provided
+      description: What types of assets and information does this source provide?
+      options:
+        - label: Subdomains / FQDNs
+        - label: IP Addresses / Netblocks
+        - label: ASNs / BGP Data
+        - label: WHOIS / Registration Records
+        - label: TLS / Certificate Transparency
+        - label: Other (describe below)
+
+  - type: textarea
+    id: sample-request
+    attributes:
+      label: Example Query & Response
+      description: Provide an example HTTP request and response snippet (JSON, text, or CSV) if available.
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-notes
+    attributes:
+      label: Additional Notes
+      description: Rate limits, terms of service restrictions, or implementation considerations.
+    validations:
+      required: false

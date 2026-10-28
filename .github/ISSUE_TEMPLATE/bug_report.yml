@@ -1,0 +1,86 @@
+name: "Bug Report"
+description: "File a bug report or report unexpected behavior in OWASP Amass"
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please fill out the sections below to help the maintainers diagnose and resolve the issue quickly.
+        
+        Before submitting, please ensure you are using the latest version of Amass and check existing open issues to avoid duplicates.
+
+  - type: input
+    id: version
+    attributes:
+      label: Amass Version
+      description: What version of Amass are you running? (Run `amass -version` or specify commit hash)
+      placeholder: "e.g., v5.0.1 or commit 30f5d5e"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System / Platform
+      description: What operating system / environment are you running Amass on?
+      options:
+        - Linux (Ubuntu / Debian / Kali / Arch / Fedora)
+        - macOS (Apple Silicon arm64)
+        - macOS (Intel x86_64)
+        - Windows
+        - Docker Container
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go Version
+      description: If building from source, which Go version is installed? (Run `go version`)
+      placeholder: "e.g., go version go1.26.1 darwin/arm64"
+    validations:
+      required: false
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command & Arguments
+      description: What exact command did you execute? (Please sanitize any private domain names or API keys)
+      placeholder: "e.g., amass enum -d example.com -passive"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: Clear and concise description of what the bug is and what happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Terminal Output
+      description: Paste any relevant terminal logs, stack traces, or error output.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, configuration snippets, or screenshots about the problem.
+    validations:
+      required: false
