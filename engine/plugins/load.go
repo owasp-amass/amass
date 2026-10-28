@@ -27,6 +27,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewChaos,
 	api.NewCrtsh,
 	api.NewDNSRepo,
+	api.NewFullHunt,
 	api.NewGrepApp,
 	api.NewHackerTarget,
 	//api.NewHunterIO,
