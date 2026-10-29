@@ -78,8 +78,14 @@ datasources:
 #        apikey: null
 #  - name: Detectify
 #    creds:
-#      account: 
+#      account:
 #        apikey: null
+#  - name: DomainsProject
+#    ttl: 1440
+#    creds:
+#      account:
+#        username: null
+#        password: null
 #  - name: FOFA
 #    ttl: 10080
 #    creds:
