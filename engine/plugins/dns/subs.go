@@ -321,11 +321,17 @@ func (d *dnsSubs) process(e *et.Event, results []*relSubs) {
 			continue
 		}
 
-		_ = e.Dispatcher.DispatchEvent(&et.Event{
+		ev := &et.Event{
 			Name:    fname.Name,
 			Entity:  finding.alias,
 			Session: e.Session,
-		})
+		}
+		// propagate the DNS record type so downstream handlers
+		// (e.g. dnsApex) know this FQDN has DNS records
+		if finding.rtype == "dns_record" {
+			support.AddDNSRecordType(ev, int(dns.TypeNS))
+		}
+		_ = e.Dispatcher.DispatchEvent(ev)
 
 		tname, ok := finding.target.Asset.(*oamdns.FQDN)
 		if !ok || tname == nil {
