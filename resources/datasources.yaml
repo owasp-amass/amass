@@ -121,9 +121,14 @@ datasources:
 #    creds:
 #      account: 
 #        apikey: null
+#  - name: Jsmon
+#    ttl: 4320
+#    creds:
+#      account:
+#        apikey: null
 #  - name: LeakIX
 #    creds:
-#      account: 
+#      account:
 #        apikey: null
 #  - name: Netlas
 #    creds:
