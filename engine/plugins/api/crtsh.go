@@ -36,7 +36,7 @@ func NewCrtsh() et.Plugin {
 		name:   "crt.sh",
 		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
-			Name:       "HackerTarget",
+			Name:       "crt.sh",
 			Confidence: 100,
 		},
 	}
