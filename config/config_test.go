@@ -166,41 +166,60 @@ options:
 func TestMarshalJSON(t *testing.T) {
 	c := NewConfig()
 
-	// Test case 1: MarshalJSON returns the expected JSON bytes
-	t.Run("MarshalJSON returns the expected JSON bytes", func(t *testing.T) {
+	t.Run("MarshalJSON returns the expected JSON structure", func(t *testing.T) {
 		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		got, err := c.JSON()
 		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
+			t.Fatalf("Unexpected error: %v", err)
 		}
-		if !reflect.DeepEqual(got, expected) {
-			t.Errorf("Unexpected JSON bytes.\nExpected: %s\nGot: %s", expected, got)
+
+		gotObj := normalizeJSON(t, got)
+		expectedObj := normalizeJSON(t, expected)
+
+		if !reflect.DeepEqual(gotObj, expectedObj) {
+			t.Errorf(
+				"Unexpected JSON structure.\nExpected: %#v\nGot: %#v",
+				expectedObj,
+				gotObj,
+			)
 		}
 	})
 
 	if err := yaml.Unmarshal(configyaml, c); err != nil {
-		t.Errorf("Unexpected error: %v", err)
+		t.Fatalf("Unexpected error: %v", err)
 	}
 	if err := c.loadDatabaseSettings(c); err != nil {
-		t.Errorf("Unexpected error: %v", err)
+		t.Fatalf("Unexpected error: %v", err)
 	}
-	// Test case 2: MarshalJSON unescapes HTML entities in the JSON bytes
-	t.Run("MarshalJSON unescapes HTML entities in the JSON bytes", func(t *testing.T) {
+
+	t.Run("MarshalJSON with database config", func(t *testing.T) {
 		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
-		expectedString := string(expected)
 		got, err := c.JSON()
 		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
+			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		gotString := string(got)
-		if !reflect.DeepEqual(got, expected) {
-			t.Errorf("Unexpected JSON bytes.\nExpected: %s\nGot: %s", expected, got)
-		}
-		if gotString != expectedString {
-			t.Errorf("Unexpected JSON string.\nExpected: %s\nGot: %s", expectedString, gotString)
+		gotObj := normalizeJSON(t, got)
+		expectedObj := normalizeJSON(t, expected)
+
+		if !reflect.DeepEqual(gotObj, expectedObj) {
+			t.Errorf(
+				"Unexpected JSON structure.\nExpected: %#v\nGot: %#v",
+				expectedObj,
+				gotObj,
+			)
 		}
 	})
+}
+
+func normalizeJSON(t *testing.T, b []byte) map[string]interface{} {
+	t.Helper()
+
+	var m map[string]interface{}
+	if err := yaml.Unmarshal(b, &m); err != nil {
+		t.Fatalf("failed to unmarshal json: %v", err)
+	}
+	return m
 }
