@@ -21,6 +21,10 @@ import (
 )
 
 func (s *Scope) Add(a oam.Asset) bool {
+	if s.IsBlacklisted(a) {
+		return false
+	}
+
 	var newentry bool
 
 	switch v := a.(type) {
@@ -144,6 +148,14 @@ func (s *Scope) IsBlacklisted(a oam.Asset) bool {
 		name = strings.ToLower(v.Name)
 	case *oamurl.URL:
 		name = strings.ToLower(v.Host)
+	case *oamgen.Identifier:
+		if domain, found := getEmailDomain(v); found {
+			name = strings.ToLower(domain)
+		}
+	case *oamreg.DomainRecord:
+		name = strings.ToLower(v.Domain)
+	case *oamcert.TLSCertificate:
+		name = strings.ToLower(v.SubjectCommonName)
 	default:
 		return false
 	}

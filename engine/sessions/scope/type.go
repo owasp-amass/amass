@@ -57,6 +57,9 @@ func CreateFromConfigScope(sess et.Session) et.Scope {
 	scope := New(sess)
 	config := sess.Config()
 
+	for _, bl := range config.Scope.Blacklist {
+		scope.AddBlacklist(bl)
+	}
 	for _, d := range config.Domains() {
 		scope.AddDomain(d)
 	}
@@ -68,9 +71,6 @@ func CreateFromConfigScope(sess et.Session) et.Scope {
 	}
 	for _, asn := range config.Scope.ASNs {
 		scope.AddASN(asn)
-	}
-	for _, bl := range config.Scope.Blacklist {
-		scope.AddBlacklist(bl)
 	}
 	return scope
 }
