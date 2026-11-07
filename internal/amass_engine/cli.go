@@ -107,7 +107,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 }
 
 func selectLogger(dir string) (*slog.Logger, error) {
-	filename := fmt.Sprintf("amass_engine_%s.log", time.Now().Format("2006-01-02T15:04:05"))
+	filename := fmt.Sprintf("amass_engine_%s.log", time.Now().Format("2006-01-02T15-04-05"))
 
 	if dir != "" {
 		return tools.NewFileLogger(dir, filename)
