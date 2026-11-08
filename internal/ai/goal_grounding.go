@@ -113,7 +113,6 @@ func applyExplicitRelationGrounding(goal InvestigationGoal,hint explicitRelation
  if !ok{return goal,false}
  goal.Relationships=rels
  goal.PathRule=hint.Rule
- goal.groundingNote=fmt.Sprintf("schema-grounded explicit relationship labels: %s (%s)",strings.Join(hint.Labels,", "),hint.Rule)
  return goal,true
 }
 
