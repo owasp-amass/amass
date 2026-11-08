@@ -16,6 +16,8 @@ type InvestigationGoal struct {
  TargetTypes []string `json:"target_types"`
  Direction string `json:"direction"`
  Purpose string `json:"purpose"` // connected or ultimate_parent
+ Relationships []GoalRelation `json:"relationships,omitempty"`
+ PathRule string `json:"path_rule,omitempty"`
 }
 
 type AdaptiveOptions struct {
@@ -71,6 +73,7 @@ func validateGoal(goal InvestigationGoal,catalog []RelationshipSchema,selectors 
  if len(goal.TargetTypes)>64{return errors.New("too many target types")}
  if !allowed[goal.Subject.Type]{return fmt.Errorf("unknown OAM subject type %q",goal.Subject.Type)}
  for _,kind:=range goal.TargetTypes{if !allowed[kind]{return fmt.Errorf("unknown OAM target type %q",kind)}}
+ if err:=validGoalRelations(goal.Relationships,goal.PathRule,catalog);err!=nil{return err}
  if goal.Purpose=="ultimate_parent"{
   if len(goal.TargetTypes)!=1 || goal.TargetTypes[0]!="Organization"{return errors.New("ultimate_parent requires Organization targets")}
   if goal.Direction!="both"{return errors.New("ultimate_parent requires bidirectional graph exploration")}
@@ -97,14 +100,18 @@ func(a Agent) planGoal(ctx context.Context,question string)(InvestigationGoal,er
 
  relations:=a.Runner.Catalog.Relations()
  prompt:=`You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
-Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected"}.
+Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}.
+The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
+When the user requests particular relationship semantics, select the actual relevant relationship types, including all intermediate asset types. "path_rule" may be "" (no constraints), "any" (at least one listed relationship in the witnessed path), "all" (every listed relationship appears in the path), or "ordered" (listed relationships in order; intermediate hops allowed).
+Use relationships:[] and path_rule:"" for broad exploration. Do not require specific labels for queries that only request connectivity.
+Example: for a parent organization question, choose purpose "ultimate_parent", targets ["Organization"], and relationships:[] unless the question explicitly specifies additional relationship conditions.
 Use purpose "ultimate_parent" ONLY when the question asks for the highest or ultimate parent organization. For this purpose, target_types MUST be ["Organization"] and direction MUST be "both".
 Otherwise use purpose "connected". The user's starting asset may have ANY registered OAM type. Use type/field/value from the SELECTOR CATALOG, or type/entity_id if that identifier was supplied by the user. Organization can use its own name, legal_name, unique_id or jurisdiction-qualified registration_id fields. Copy identifiers exactly from the user, do NOT fabricate names, corporate suffixes, identifiers or jurisdictions.
 For a non-Organization, use {"type":"FQDN","field":"name","value":"example.org"} (with the actual indexed type/field), NEVER subject.name. Do not output a "fields" array or echo the selector catalog.
 Choose target_types from the catalog based on the answer requested. Set [] if the question is broad and exploratory.
 All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
 SELECTOR CATALOG:
-`+compactSelectorCatalog(selectors)+"\nALL AVAILABLE OAM TARGET TYPES: "+strings.Join(allTypes,",")
+`+compactSelectorCatalog(selectors)+"\nALL AVAILABLE OAM TARGET TYPES: "+strings.Join(allTypes,",")+"\nOAM RELATIONSHIP CATALOG:\n"+compactRelationshipCatalog(relations)
  history:=[]Message{{Role:"system",Text:prompt},{Role:"user",Text:question}}
  for attempt:=0;attempt<3;attempt++{
   response,err:=a.Model.Generate(ctx,history,nil)
@@ -114,7 +121,7 @@ SELECTOR CATALOG:
   if err==nil{err=validateGoal(goal,relations,selectors)}
   if err==nil{return goal,nil}
   if attempt==2{return zero,fmt.Errorf("invalid investigation goal after 3 attempts: %w",err)}
-  history=append(history,Message{Role:"assistant",Text:response.Text},Message{Role:"user",Text:"Goal rejected: "+err.Error()+". Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose)."})
+  history=append(history,Message{Role:"assistant",Text:response.Text},Message{Role:"user",Text:"Goal rejected: "+err.Error()+". Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule)."})
  }
  return zero,errors.New("goal planner exhausted attempts")
 }
@@ -124,9 +131,11 @@ SELECTOR CATALOG:
 // prevents a sibling organization from becoming a parent merely because it
 // is reachable through the graph.
 func eligibleAdaptivePaths(goal InvestigationGoal,paths []PlanMatch)[]PlanMatch{
- if goal.Purpose!="ultimate_parent"{return paths}
+ qualified:=make([]PlanMatch,0,len(paths))
+ for _,p:=range paths{if pathSatisfiesGoal(p,goal.Relationships,goal.PathRule){qualified=append(qualified,p)}}
+ if goal.Purpose!="ultimate_parent"{return qualified}
  candidates:=make([]PlanMatch,0,len(paths))
- for _,p:=range paths{
+ for _,p:=range qualified{
   if len(p.Nodes)==0 || p.Nodes[len(p.Nodes)-1].Type!="Organization"{continue}
   first:=-1
   for i,n:=range p.Nodes{if n.Type=="Organization"{first=i;break}}
