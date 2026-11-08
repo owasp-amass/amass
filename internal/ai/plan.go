@@ -136,6 +136,64 @@ func selectorCorrectionHint(subject PlanSubject, selectors []AssetSearchSchema) 
 	return "The subject type must be registered in the OAM selector catalog."
 }
 
+// canonicalizeSelectorFields accepts one narrowly defined alternate JSON
+// representation used by some local models: subject.fields={"name":"host.example"}.
+// The single field must appear in the authoritative selector catalog. Any
+// unsupported, ambiguous, or additional keys remain subject to strict JSON
+// validation; this is not general-purpose schema coercion.
+func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte,error) {
+	var envelope map[string]json.RawMessage
+	if err:=json.Unmarshal(raw,&envelope);err!=nil{return raw,nil}
+	subjectRaw,ok:=envelope["subject"]
+	if !ok{return raw,nil}
+	var subject map[string]json.RawMessage
+	if err:=json.Unmarshal(subjectRaw,&subject);err!=nil{return raw,nil}
+	fieldsRaw,ok:=subject["fields"]
+	if !ok{return raw,nil}
+	var typ string
+	if err:=json.Unmarshal(subject["type"],&typ);err!=nil{return raw,nil}
+	if subject["field"]!=nil || subject["value"]!=nil ||
+		subject["name"]!=nil || subject["entity_id"]!=nil ||
+		subject["legal_name"]!=nil || subject["unique_id"]!=nil ||
+		subject["registration_id"]!=nil {return raw,nil}
+	var fields map[string]json.RawMessage
+	if err:=json.Unmarshal(fieldsRaw,&fields);err!=nil || len(fields)!=1{return raw,nil}
+	var field,value string
+	for f,v:=range fields {
+		field=f
+		if err:=json.Unmarshal(v,&value);err!=nil || value=="" {return raw,nil}
+	}
+	allowed:=false
+	for _,schema:=range schemas {
+		if schema.Type!=typ {continue}
+		for _,f:=range schema.Fields {if f==field {allowed=true;break}}
+	}
+	if !allowed {return raw,nil}
+	subject["field"],_ = json.Marshal(field)
+	subject["value"],_ = json.Marshal(value)
+	delete(subject,"fields")
+	envelope["subject"],_ = json.Marshal(subject)
+	converted,err:=json.Marshal(envelope)
+	if err!=nil{return nil,err}
+	return converted,nil
+}
+
+func parseTypedPlanWithSelectors(raw string, selectors []AssetSearchSchema) (TypedPlan,error) {
+	var plan TypedPlan
+	raw=strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "\x60\x60\x60") {
+		raw=strings.TrimPrefix(raw,"\x60\x60\x60json")
+		raw=strings.TrimPrefix(raw,"\x60\x60\x60")
+		raw=strings.TrimSuffix(strings.TrimSpace(raw),"\x60\x60\x60")
+	}
+	data,err:=canonicalizeSelectorFields([]byte(strings.TrimSpace(raw)),selectors)
+	if err!=nil{return plan,err}
+	if err:=decodeStrict(data,&plan);err!=nil{
+		return plan,fmt.Errorf("model did not return a valid typed JSON plan: %w",err)
+	}
+	return plan,nil
+}
+
 func parseTypedPlan(raw string) (TypedPlan, error) {
 	var plan TypedPlan
 	raw = strings.TrimSpace(raw)
@@ -171,6 +229,9 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		"Organization: {\"type\":\"Organization\",\"name\":\"Acme Holdings Inc.\"}. " +
 		"Do NOT omit field or value for FQDN, URL, IPAddress or any other non-Organization type. " +
 		"Choose exact indexed selector keys from the SELECTOR CATALOG, not guessed keys. " +
+		"IMPORTANT: The selector catalog is input metadata only. NEVER echo fields arrays, a fields property, or catalog entries into your output. "+
+		"Your subject may contain only type, field, value, entity_id, name, legal_name, unique_id, registration_id and jurisdiction. "+
+		"Each hop may contain only direction, label, relation_type and destination_type. No other JSON keys are allowed. " +
 		"Treat the request as an investigation over STORED graph relationships, not general knowledge. " +
 		"Only choose transitions appearing in the catalog. Each hop begins at the previous hop's destination type. " +
 		"For incoming hops reverse the permitted source/destination types. Prefer the shortest meaningful path (maximum 3 hops). " +
@@ -188,7 +249,7 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		response, err := a.Model.Generate(ctx, conversation, nil)
 		if err != nil {return zero, err}
 		if len(response.Calls)>0 {return zero, errors.New("planner attempted a tool call instead of returning typed JSON")}
-		plan, err := parseTypedPlan(response.Text)
+		plan, err := parseTypedPlanWithSelectors(response.Text,selectors)
 		if err==nil {
 			plan.Subject=normalizePlannedSubject(plan.Subject,selectors)
 			err=validatePlanWithSelectors(plan,catalog,selectors,a.Runner.Limits)
@@ -198,6 +259,10 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 			return zero,fmt.Errorf("unable to produce valid OAM query plan after %d attempts: %w",maxPlanAttempts,err)
 		}
 		hint:=selectorCorrectionHint(plan.Subject,selectors)
+		if strings.Contains(err.Error(),`json: unknown field "fields"`) {
+			hint="You returned an unsupported key named fields. The output subject MUST use singular field and value strings, "+
+				"not a fields array or catalog object. "+hint
+		}
 		conversation=append(conversation,Message{Role:"assistant",Text:response.Text},
 			Message{Role:"user",Text:"Your plan is invalid: "+err.Error()+". "+
 				"Correct the subject first. "+hint+" "+
