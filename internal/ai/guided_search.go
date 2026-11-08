@@ -19,6 +19,8 @@ type GuidedSearchRequest struct {
 	PreferredLabels []string
 	MaxPathsPerAsset int
 	MaxExpansions int
+	Relationships []GoalRelation
+	PathRule string
 }
 
 type GuidedFrontier struct {
@@ -131,6 +133,7 @@ func NewGuidedExplorer(ctx context.Context,graph Graph,catalog SchemaCatalog,lim
 		if !s.knownTypes[t]{return nil,fmt.Errorf("unregistered target OAM type %q",t)}
 		s.targets[t]=true
 	}
+	if err:=validGoalRelations(req.Relationships,req.PathRule,catalog.Relations());err!=nil{return nil,err}
 	if err:=s.Focus(req.PreferredLabels,nil);err!=nil{return nil,err}
 	// Precompute an undirected type-distance heuristic. A type absent from
 	// the shortest schema route is not excluded: actual edges remain decisive.
@@ -317,7 +320,7 @@ func(s *GuidedExplorer)Advance(ctx context.Context,batch int)(bool,error){
 			s.seenPath[path.PathID]=true
 			s.perAsset[nextID]++
 			s.frontier=append(s.frontier,guidedPath{match:path})
-			if len(s.targets)==0||s.targets[next.Type]{
+			if (len(s.targets)==0||s.targets[next.Type]) && pathSatisfiesGoal(path,s.req.Relationships,s.req.PathRule){
 				s.out.Matches=append(s.out.Matches,path)
 				s.matches++
 				if s.perAsset[nextID]>1 {s.alternates++}
