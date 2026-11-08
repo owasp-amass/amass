@@ -19,7 +19,7 @@ import (
 func TestAdapterBoundedTraversalOnSQLite(t *testing.T) {
     repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "bounded-adapter.db"))
     if err != nil { t.Fatal(err) }
-    defer repo.Close()
+    defer func() { _ = repo.Close() }()
     if _, ok := repo.(interface {
         ReadEdgesLimited(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, bool, error)
     }); !ok {
