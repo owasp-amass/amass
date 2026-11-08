@@ -32,6 +32,10 @@ type GraphSearchResult struct {
     Exhausted bool `json:"exhausted"`
     Truncated bool `json:"truncated"`
     Reason string `json:"reason,omitempty"`
+    Mode string `json:"mode,omitempty"`
+    ExpandedPaths int `json:"expanded_paths,omitempty"`
+    AlternativeMatches int `json:"alternative_matches,omitempty"`
+    AlternativePathsSkipped int `json:"alternative_paths_skipped,omitempty"`
 }
 type graphSearchStep struct {
     asset Asset
