@@ -43,6 +43,10 @@ func TestGuidedSearchRetainsAlternativePathsToSameAsset(t *testing.T){
  if len(a.Edges)!=2 || len(b.Edges)!=2 || a.PathID==b.PathID || a.Nodes[2].ID!="org" || b.Nodes[2].ID!="org"{
   t.Fatalf("distinct, witnessed paths to same organization not retained: %+v",result.Matches)
  }
+ for _,path:=range result.Matches{
+  t.Logf("WITNESSED ROUTE path_id=%s depth=%d via=%s target=%s",path.PathID,len(path.Edges),path.Nodes[1].ID,path.Nodes[len(path.Nodes)-1].ID)
+ }
+ t.Logf("GRAPH COVERAGE nodes=%d edges=%d alternatives=%d exhausted=%t",result.VisitedNodes,result.VisitedEdges,result.AlternativeMatches,result.Exhausted)
  if result.VisitedNodes!=4 || result.VisitedEdges!=4 {t.Fatalf("unexpected coverage: %+v",result)}
 }
 
@@ -114,7 +118,8 @@ func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T){
  r:=e.Result()
  found:=false
  for _,p:=range r.Matches{if len(p.Edges)==15&&p.Nodes[len(p.Nodes)-1].ID=="a15"{found=true}}
- if !found||r.Truncated||!r.Exhausted{t.Fatalf("15-hop graph path not found: %+v",r)}
+ if !found||r.Truncated||!r.Exhausted{t.Fatalf("15-hop graph path not found: %+v",r) t.Logf("LONG PATH verified maximum depth=15, edges=%d, expanded=%d",r.VisitedEdges,r.ExpandedPaths)
+}
 }
 
 func TestGuidedSelectionRequiresPathIDForAmbiguousAsset(t *testing.T){
