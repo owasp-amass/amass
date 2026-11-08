@@ -47,6 +47,7 @@ type PlanHop struct {
 type PlanMatch struct {
 	Nodes []Asset `json:"nodes"`
 	Edges []Relation `json:"edges"`
+	PathID string `json:"path_id,omitempty"`
 }
 type partialPath struct {
 	nodes []Asset
