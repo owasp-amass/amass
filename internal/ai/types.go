@@ -75,11 +75,11 @@ type Limits struct {
 }
 
 func DefaultLimits() Limits {
-	return Limits{MaxDepth: 3, MaxNodes: 100, MaxEdges: 200, MaxPerNode: 40, MaxFind: 50,
+	return Limits{MaxDepth: 16, MaxNodes: 100, MaxEdges: 200, MaxPerNode: 40, MaxFind: 50,
 		MaxEvidence: 50, MaxToolCalls: 10, MaxToolBytes: 64000}
 }
 func (l Limits) Validate() error {
-	if l.MaxDepth < 1 || l.MaxDepth > 6 || l.MaxNodes < 1 || l.MaxNodes > 2000 ||
+	if l.MaxDepth < 1 || l.MaxDepth > 32 || l.MaxNodes < 1 || l.MaxNodes > 2000 ||
 		l.MaxEdges < 1 || l.MaxEdges > 4000 || l.MaxPerNode < 1 || l.MaxPerNode > 500 ||
 		l.MaxFind < 1 || l.MaxFind > 1000 || l.MaxEvidence < 1 || l.MaxEvidence > 500 ||
 		l.MaxToolCalls < 1 || l.MaxToolCalls > 40 || l.MaxToolBytes < 1024 || l.MaxToolBytes > 1048576 {
