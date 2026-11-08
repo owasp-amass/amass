@@ -337,7 +337,14 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  dossier,err:=EvaluatePathEvidence(ctx,a.Runner.Graph,a.Runner.Limits,candidates)
  if err!=nil{out.Incomplete=true;out.recordTrace(evidenceStarted,InvestigationTraceEvent{Stage:"evidence_inspection",InputPaths:len(candidates),Incomplete:true,Detail:err.Error()});return out,fmt.Errorf("evaluate OAM source provenance: %w",err)}
  recordCount:=0
- for _,p:=range dossier.Paths{for _,edge:=range p.Edges{recordCount+=len(edge.Records)}}
+ seenEvidenceEdges:=map[string]bool{}
+ for _,p:=range dossier.Paths{
+  for _,edge:=range p.Edges{
+   if seenEvidenceEdges[edge.EdgeID]{continue}
+   seenEvidenceEdges[edge.EdgeID]=true
+   recordCount+=len(edge.Records)
+  }
+ }
  out.recordTrace(evidenceStarted,InvestigationTraceEvent{Stage:"evidence_inspection",InputPaths:len(candidates),OutputPaths:len(dossier.Paths),EdgeEvidenceLookups:dossier.InspectedEdges,EvidenceRecords:recordCount,Incomplete:dossier.Truncated,Detail:dossier.Reason})
  out.EvidenceDossier=&dossier
  selectionStarted:=time.Now()
