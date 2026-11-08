@@ -104,6 +104,7 @@ func(a Agent) planGoal(ctx context.Context,question string)(InvestigationGoal,er
  sort.Strings(allTypes)
 
  relations:=a.Runner.Catalog.Relations()
+ explicitHint,explicit:=explicitRelationLabels(question,relations)
  prompt:=`You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
 Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}.
 The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
@@ -117,16 +118,41 @@ Choose target_types from the catalog based on the answer requested. Set [] if th
 All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
 SELECTOR CATALOG:
 `+compactSelectorCatalog(selectors)+"\nALL AVAILABLE OAM TARGET TYPES: "+strings.Join(allTypes,",")+"\nOAM RELATIONSHIP CATALOG:\n"+compactRelationshipCatalog(relations)
+ if explicit{
+  // Promote user-named OAM labels above model-assumed WHOIS/DNS hops.
+  // Exact transition types are still grounded only after a typed root and
+  // target have been provided and independently validated.
+  prompt+="\nExplicit relationship labels in the user question: "+strings.Join(explicitHint.Labels,", ")+
+   ". Avoid unrelated registration and WHOIS hops. If multiple relations are requested, "+
+   "retain each named label. The application will verify and resolve any ambiguity against OAM schema.\n"
+ }
  history:=[]Message{{Role:"system",Text:prompt},{Role:"user",Text:question}}
  for attempt:=0;attempt<3;attempt++{
   response,err:=a.Model.Generate(ctx,history,nil)
   if err!=nil{return zero,err}
   if len(response.Calls)!=0{return zero,errors.New("goal planner requested a tool call")}
   goal,err:=parseGoal(response.Text,selectors)
+  if err==nil && explicit {
+   // Validate selectors, target types, traversal direction and purpose
+   // BEFORE replacing any hallucinated relationship list. An invalid
+   // subject or invented target cannot be repaired using schema grounding.
+   base:=goal
+   base.Relationships=nil
+   base.PathRule=""
+   if baseErr:=validateGoal(base,relations,selectors);baseErr!=nil {
+    err=baseErr
+   }else if repaired,ok:=applyExplicitRelationGrounding(base,explicitHint,relations);ok {
+    goal=repaired
+   }else{
+    // No unique OAM schema path satisfies all explicitly named labels.
+    // Do not silently drop user constraints or accept an unrelated path.
+    err=fmt.Errorf("explicit relationship labels %q have no unique schema path from %s to %v",strings.Join(explicitHint.Labels,", "),base.Subject.Type,base.TargetTypes)
+   }
+  }
   if err==nil{err=validateGoal(goal,relations,selectors)}
   if err==nil{return goal,nil}
   if attempt==2{return zero,fmt.Errorf("invalid investigation goal after 3 attempts: %w",err)}
-  history=append(history,Message{Role:"assistant",Text:response.Text},Message{Role:"user",Text:"Goal rejected: "+err.Error()+". Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule)."})
+  history=append(history,Message{Role:"assistant",Text:response.Text},Message{Role:"user",Text:"Goal rejected: "+err.Error()+". Re-read the user's actual question; honor explicitly named relationship labels rather than unrelated registration/WHOIS edges. Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule)."})
  }
  return zero,errors.New("goal planner exhausted attempts")
 }
