@@ -223,3 +223,44 @@ func TestNormalizationDoesNotGuessUnsupportedSelectors(t *testing.T){
 		}
 	}
 }
+
+func TestPlanParserCanonicalizesSingleFieldObject(t *testing.T) {
+    raw:=`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"}},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`
+    p,err:=parseTypedPlanWithSelectors(raw,testOAMCatalog.SearchFields())
+    if err!=nil{t.Fatal(err)}
+    if p.Subject.Type!="URL" || p.Subject.Field!="url" || p.Subject.Value!="https://tech.acme.example/"{
+        t.Fatalf("unexpected normalized subject: %+v",p.Subject)
+    }
+    if err:=validatePlanWithSelectors(p,testOAMCatalog.Relations(),testOAMCatalog.SearchFields(),DefaultLimits());err!=nil{
+        t.Fatalf("normalized plan rejected: %v",err)
+    }
+}
+func TestPlanParserRejectsUntrustedFieldCatalogs(t *testing.T) {
+    tests:=[]string{
+        `{"subject":{"type":"URL","fields":["url"]},"hops":[]}`,
+        `{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/","scheme":"https"}},"hops":[]}`,
+        `{"subject":{"type":"URL","fields":{"invented":"https://tech.acme.example/"}},"hops":[]}`,
+        `{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"unexpected":true},"hops":[]}`,
+        `{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"value":"https://elsewhere.example/" },"hops":[]}`,
+    }
+    for _,raw:=range tests{
+        if _,err:=parseTypedPlanWithSelectors(raw,testOAMCatalog.SearchFields());err==nil{
+            t.Fatalf("unexpectedly accepted malformed plan: %s",raw)
+        }
+    }
+}
+func TestPlannerCorrectsUnexpectedFields(t *testing.T){
+    model:=&inspectingPlannerModel{replies:[]string{
+        `{"subject":{"type":"URL","fields":["url"]},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
+        `{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
+    }}
+    runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+    got,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What FQDN is associated with the URL https://tech.acme.example/?")
+    if err!=nil || got.Incomplete || len(got.Matches)!=1 || model.calls!=2{
+        t.Fatalf("retry failed: result=%+v err=%v calls=%d",got,err,model.calls)
+    }
+    retry:=model.requests[1][len(model.requests[1])-1].Text
+    if !strings.Contains(retry,"unsupported key named fields") || !strings.Contains(retry,"singular field and value"){
+        t.Fatalf("retry prompt not specific enough: %s",retry)
+    }
+}
