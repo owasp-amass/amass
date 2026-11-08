@@ -8,6 +8,7 @@ import (
  "fmt"
  "sort"
  "strings"
+ "time"
 )
 
 // InvestigationGoal describes a requested result, not a predicted fixed-hop path.
@@ -276,9 +277,12 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  if a.Model==nil || a.Runner.Graph==nil || a.Runner.Catalog==nil{return out,errors.New("model, graph, and OAM catalog required")}
  if strings.TrimSpace(question)==""{return out,errors.New("question required")}
  if err:=a.Runner.Limits.Validate();err!=nil{return out,err}
+ planStarted:=time.Now()
  goal,err:=a.planGoal(ctx,question)
- if err!=nil{out.Incomplete=true;return out,err}
+ if err!=nil{out.Incomplete=true;out.recordTrace(planStarted,InvestigationTraceEvent{Stage:"goal_planning",Incomplete:true,Detail:err.Error()});return out,err}
+ out.recordTrace(planStarted,InvestigationTraceEvent{Stage:"goal_planning"})
  out.Goal=&goal
+ resolveStarted:=time.Now()
  var root Asset
  if goal.Subject.UsesOrganizationResolution(){
   args,_:=json.Marshal(struct{OrganizationQuery; Limit int `json:"limit"`}{OrganizationQuery:goal.Subject.OrganizationQuery(),Limit:10})
@@ -312,9 +316,12 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
   }
   root=resolution.Candidates[0].Asset
  }
+ out.recordTrace(resolveStarted,InvestigationTraceEvent{Stage:"resolve_asset",Detail:root.Type})
  if a.Runner.Limits.MaxToolCalls<2{out.Incomplete=true;return out,errors.New("two graph tool operations must be permitted")}
+ searchStarted:=time.Now()
  search,err:=a.guidedInvestigation(ctx,question,goal,root,opts,&out)
- if err!=nil{out.Incomplete=true;return out,err}
+ if err!=nil{out.Incomplete=true;out.recordTrace(searchStarted,InvestigationTraceEvent{Stage:"guided_search",Incomplete:true,Detail:err.Error()});return out,err}
+ out.recordTrace(searchStarted,InvestigationTraceEvent{Stage:"guided_search",OutputPaths:len(search.Matches),GraphNodes:search.VisitedNodes,GraphEdges:search.VisitedEdges,PathExpansions:search.ExpandedPaths,Incomplete:search.Truncated,Detail:search.Reason})
  out.ToolCalls++
  out.Search=&search
  obs,_:=json.Marshal(struct{
@@ -326,11 +333,17 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  }{len(search.Matches),search.VisitedNodes,search.VisitedEdges,search.Truncated,search.Reason})
  out.Observations=append(out.Observations,Observation{Tool:"search_graph",CallID:"adaptive-search",Result:string(obs)})
  candidates:=eligibleAdaptivePaths(goal,search.Matches)
+ evidenceStarted:=time.Now()
  dossier,err:=EvaluatePathEvidence(ctx,a.Runner.Graph,a.Runner.Limits,candidates)
- if err!=nil{out.Incomplete=true;return out,fmt.Errorf("evaluate OAM source provenance: %w",err)}
+ if err!=nil{out.Incomplete=true;out.recordTrace(evidenceStarted,InvestigationTraceEvent{Stage:"evidence_inspection",InputPaths:len(candidates),Incomplete:true,Detail:err.Error()});return out,fmt.Errorf("evaluate OAM source provenance: %w",err)}
+ recordCount:=0
+ for _,p:=range dossier.Paths{for _,edge:=range p.Edges{recordCount+=len(edge.Records)}}
+ out.recordTrace(evidenceStarted,InvestigationTraceEvent{Stage:"evidence_inspection",InputPaths:len(candidates),OutputPaths:len(dossier.Paths),EdgeEvidenceLookups:dossier.InspectedEdges,EvidenceRecords:recordCount,Incomplete:dossier.Truncated,Detail:dossier.Reason})
  out.EvidenceDossier=&dossier
+ selectionStarted:=time.Now()
  selected,err:=a.chooseAdaptivePathsWithEvidence(ctx,question,goal,candidates,&dossier)
- if err!=nil{out.Incomplete=true;return out,err}
+ if err!=nil{out.Incomplete=true;out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),Incomplete:true,Detail:err.Error()});return out,err}
+ out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),OutputPaths:len(selected),Incomplete:len(selected)==0})
  out.Matches=selected
  out.EvidenceIncomplete=dossier.Truncated
  assessed:=map[string]PathEvidence{}
