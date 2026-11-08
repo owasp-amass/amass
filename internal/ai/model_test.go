@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+	"errors"
 )
 
 func TestCompatibleModelToolCalls(t *testing.T) {
@@ -30,5 +32,18 @@ func TestCompatibleModelToolCalls(t *testing.T) {
 	}
 	if len(response.Calls) != 1 || response.Calls[0].Name != "get_asset" {
 		t.Fatalf("calls=%+v", response.Calls)
+	}
+}
+
+func TestCompatibleModelHonorsConfiguredClientTimeout(t *testing.T) {
+	server:=httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter,r *http.Request){
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	client:=&http.Client{Timeout:50*time.Millisecond}
+	_,err:=(CompatibleModel{Endpoint:server.URL,ModelName:"slow-test-model",Client:client}).
+		Generate(context.Background(),[]Message{{Role:"user",Text:"hello"}},nil)
+	if !errors.Is(err,context.DeadlineExceeded) {
+		t.Fatalf("expected configured HTTP timeout, got %v",err)
 	}
 }

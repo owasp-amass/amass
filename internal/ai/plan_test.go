@@ -264,3 +264,29 @@ func TestPlannerCorrectsUnexpectedFields(t *testing.T){
         t.Fatalf("retry prompt not specific enough: %s",retry)
     }
 }
+
+func TestCompactCatalogPreservesAllTransitions(t *testing.T) {
+	rows:=[]RelationshipSchema{
+		{SourceType:"URL",Label:"domain",RelationType:"SimpleRelation",DestinationType:"FQDN"},
+		{SourceType:"Organization",Label:"subsidiary",RelationType:"SimpleRelation",DestinationType:"Organization"},
+		{SourceType:"Organization",Label:"subsidiary",RelationType:"SimpleRelation",DestinationType:"Organization"},
+		{SourceType:"Organization",Label:"website",RelationType:"SimpleRelation",DestinationType:"URL"},
+	}
+	compact:=compactRelationshipCatalog(rows)
+	if !strings.Contains(compact,"URL|domain|SimpleRelation|FQDN") ||
+		!strings.Contains(compact,"Organization|subsidiary|SimpleRelation|Organization") {
+		t.Fatalf("compact catalog dropped graph transitions: %s",compact)
+	}
+	if strings.Count(compact,"Organization|subsidiary|SimpleRelation|Organization")!=1 {
+		t.Fatalf("duplicate transition not grouped: %s",compact)
+	}
+	compactAgain:=compactRelationshipCatalog([]RelationshipSchema{rows[2],rows[0],rows[3],rows[1]})
+	if compactAgain!=compact {t.Fatalf("catalog output depends on relation order:\n%s\n%s",compact,compactAgain)}
+	selector:=compactSelectorCatalog([]AssetSearchSchema{
+		{Type:"URL",Fields:[]string{"scheme","url"}},
+		{Type:"FQDN",Fields:[]string{"name"}},
+	})
+	if !strings.Contains(selector,"FQDN: name") || !strings.Contains(selector,"URL: scheme,url") {
+		t.Fatalf("compact selectors lost type-specific fields: %s",selector)
+	}
+}

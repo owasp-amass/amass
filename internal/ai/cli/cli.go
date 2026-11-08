@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, aliasesPath string
 	var scanLimit int
+	var modelTimeout, investigationTimeout time.Duration
 	var classifierReview bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
@@ -49,8 +51,16 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&classifierPath, "classifier-model", "", "Optional local linear model JSON (untrained weights should not be used for production decisions)")
 	fs.BoolVar(&classifierReview, "classifier-review", false, "Permit review-only triage without invoking a generative model; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
+	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute, "Maximum time per model request (e.g., 4m for local Ollama)")
+	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute, "Maximum total time for a single investigation")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if modelTimeout < 5*time.Second || modelTimeout > 15*time.Minute {
+		return errors.New("-model-timeout must be between 5s and 15m")
+	}
+	if investigationTimeout < modelTimeout || investigationTimeout > 30*time.Minute {
+		return errors.New("-investigation-timeout must be at least -model-timeout and no more than 30m")
 	}
 	if fs.NArg() != 1 {
 		return errors.New("usage: amass ai [flags] ask|mcp|infer|scan")
@@ -78,7 +88,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	}
 	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases}
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
@@ -112,12 +122,12 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if endpoint == "" {
 			endpoint = "http://127.0.0.1:11434/v1/chat/completions"
 		}
-		provider = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv)}
+		provider = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}}
 	case "anthropic":
 		if endpoint == "" {
 			endpoint = "https://api.anthropic.com/v1/messages"
 		}
-		provider = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv)}
+		provider = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}}
 	default:
 		return fmt.Errorf("unknown model provider %q", providerName)
 	}

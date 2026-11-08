@@ -123,3 +123,24 @@ for the selected asset type and an example of the required structure.
 The planner permits up to three generation attempts. Plans are only executed
 after strict OAM selector and relationship validation. A failed plan does
 not imply an asset or relationship is absent from the Asset Database.
+
+## Inference latency with local Ollama
+
+The OpenAI-compatible HTTP client used to impose a fixed 90-second request
+timeout, while the AI CLI had a two-minute total investigation deadline.
+Local models can exceed these limits when processing larger schema catalogs.
+The planner now groups identical OAM relationship transitions and sends a
+compact source/label/relation-type/destination catalog, without relaxing the
+authoritative validator's exact OAM checks.
+
+You can increase both bounded durations for slower local inference:
+
+```sh
+amass ai -model qwen3:8b -model-timeout 4m -investigation-timeout 12m \
+  -question "Which URL assets are related to tech.acme.example?" ask
+```
+
+Defaults are 3 minutes per model request and 8 minutes overall. The limits
+accept 5s–15m and model-timeout–30m, respectively. Repeated model calls share
+the overall investigation deadline; an expired inference request does not
+establish that an OAM asset or relationship is absent.

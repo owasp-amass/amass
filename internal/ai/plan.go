@@ -208,6 +208,54 @@ func parseTypedPlan(raw string) (TypedPlan, error) {
 	return plan, nil
 }
 
+// compactRelationshipCatalog keeps the authoritative transition set intact
+// but avoids repeating long JSON property names for every OAM relation.
+// The model sees source|label|relation_type|destinations. All plan validation
+// still uses the original unfiltered RelationshipSchema values.
+func compactRelationshipCatalog(catalog []RelationshipSchema) string {
+	groups:=map[string]map[string]bool{}
+	for _,rel:=range catalog {
+		key:=rel.SourceType+"|"+rel.Label+"|"+rel.RelationType
+		if groups[key]==nil {groups[key]=map[string]bool{}}
+		groups[key][rel.DestinationType]=true
+	}
+	keys:=make([]string,0,len(groups))
+	for k:=range groups {keys=append(keys,k)}
+	sort.Strings(keys)
+	var b strings.Builder
+	b.WriteString("source|label|relation_type|destinations (comma-separated); incoming hops reverse source and destination:\n")
+	for _,key:=range keys {
+		var dest []string
+		for d:=range groups[key] {dest=append(dest,d)}
+		sort.Strings(dest)
+		b.WriteString(key)
+		b.WriteString("|")
+		b.WriteString(strings.Join(dest,","))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// compactSelectorCatalog describes the indexed selector fields without
+// encouraging models to copy a JSON "fields" property into the plan.
+func compactSelectorCatalog(catalog []AssetSearchSchema) string {
+	rows:=make([]AssetSearchSchema,len(catalog))
+	copy(rows,catalog)
+	sort.Slice(rows,func(i,j int)bool{return rows[i].Type<rows[j].Type})
+	var b strings.Builder
+	b.WriteString("asset_type: valid selector field names; entity_id works for every type:\n")
+	for _,entry:=range rows {
+		fields:=append([]string(nil),entry.Fields...)
+		sort.Strings(fields)
+		if len(fields)==0 {fields=[]string{"(entity_id only)"}}
+		b.WriteString(entry.Type)
+		b.WriteString(": ")
+		b.WriteString(strings.Join(fields,","))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, error) {
 	var zero TypedPlan
 	if a.Runner.Catalog == nil {
@@ -216,10 +264,8 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 	catalog := a.Runner.Catalog.Relations()
 	var selectors []AssetSearchSchema
 	if c,ok:=a.Runner.Catalog.(AssetSearchCatalog);ok {selectors=c.SearchFields()}
-	rawCatalog, err := json.Marshal(catalog)
-	if err != nil { return zero, err }
-	rawSelectors,err:=json.Marshal(selectors)
-	if err!=nil{return zero,err}
+	compactRelations:=compactRelationshipCatalog(catalog)
+	compactSelectors:=compactSelectorCatalog(selectors)
 	system := "You are an OWASP Open Asset Model query planner. Return ONLY one JSON object (no markdown). " +
 		"Format: {\"subject\":{...},\"hops\":[{\"direction\":\"out or in\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}. " +
 		"Subject examples (use the type that the question starts with): " +
@@ -241,8 +287,8 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		"Use legal_name only for explicitly stated legal names, unique_id only for explicitly stated OAM IDs, and registration_id only when both registration number and jurisdiction are given. " +
 		"Preserve the user-supplied organization string without inventing suffixes, aliases or jurisdictions. " +
 		"Do not invent labels or add confidence claims. If you cannot construct a valid plan, return empty hops. " +
-		"OAM RELATIONSHIP CATALOG: " + string(rawCatalog) +
-		" OAM SELECTOR CATALOG: "+string(rawSelectors)
+		"OAM RELATIONSHIP CATALOG (compact):\n"+compactRelations +
+		" OAM SELECTOR CATALOG (compact):\n"+compactSelectors
 	conversation := []Message{{Role:"system",Text:system},{Role:"user",Text:question}}
 	const maxPlanAttempts=3
 	for attempt:=0; attempt<maxPlanAttempts; attempt++ {
