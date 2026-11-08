@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: Apache-2.0
+package ai
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+)
+
+type ToolSpec struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+type ToolRunner struct {
+	Graph  Graph
+	Limits Limits
+}
+
+func objectSchema(required []string, properties map[string]any) map[string]any {
+	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+}
+func stringProp(desc string) map[string]any {
+	return map[string]any{"type": "string", "description": desc}
+}
+func integerProp(desc string) map[string]any {
+	return map[string]any{"type": "integer", "description": desc}
+}
+func Specs() []ToolSpec {
+	return []ToolSpec{
+		{"get_asset", "Retrieve one asset by its database ID", objectSchema([]string{"id"}, map[string]any{"id": stringProp("OAM database asset ID")})},
+		{"find_assets", "List assets by an exact OAM asset type and optional RFC3339 last-seen lower bound", objectSchema([]string{"type"}, map[string]any{"type": stringProp("e.g. Organization, FQDN, Service"), "since": stringProp("RFC3339 lower bound, not first-seen"), "limit": integerProp("Maximum results")})},
+		{"walk_relations", "Bounded graph traversal from a known asset ID", objectSchema([]string{"start_id"}, map[string]any{"start_id": stringProp("Root asset ID"), "direction": stringProp("in, out, or both"), "label": stringProp("Exact relation label, optional"), "depth": integerProp("Graph hops"), "since": stringProp("RFC3339 last-seen lower bound")})},
+		{"get_evidence", "Retrieve tags/properties for an asset ID or relation ID", objectSchema([]string{"id"}, map[string]any{"id": stringProp("Asset or edge ID"), "limit": integerProp("Maximum evidence records")})},
+		{"render_graph", "Generate a Mermaid diagram for a bounded OAM neighborhood", objectSchema([]string{"start_id"}, map[string]any{"start_id": stringProp("Root asset ID"), "direction": stringProp("in, out or both"), "label": stringProp("Optional relation label"), "depth": integerProp("Graph hops"), "since": stringProp("RFC3339 lower bound")})},
+	}
+}
+func decodeStrict(data []byte, value any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return errors.New("unexpected trailing JSON")
+	}
+	return nil
+}
+func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) (json.RawMessage, error) {
+	if r.Graph == nil {
+		return nil, errors.New("graph not configured")
+	}
+	if err := r.Limits.Validate(); err != nil {
+		return nil, err
+	}
+	var result any
+	switch name {
+	case "get_asset":
+		var a struct {
+			ID string `json:"id"`
+		}
+		if err := decodeStrict(args, &a); err != nil {
+			return nil, err
+		}
+		if a.ID == "" {
+			return nil, errors.New("id required")
+		}
+		v, err := r.Graph.GetAsset(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		result = v
+	case "find_assets":
+		var a struct {
+			Type  string `json:"type"`
+			Since string `json:"since"`
+			Limit int    `json:"limit"`
+		}
+		if err := decodeStrict(args, &a); err != nil {
+			return nil, err
+		}
+		if a.Type == "" {
+			return nil, errors.New("type required")
+		}
+		since, err := DateSince(a.Since)
+		if err != nil {
+			return nil, err
+		}
+		if a.Limit == 0 {
+			a.Limit = r.Limits.MaxFind
+		}
+		if a.Limit < 1 || a.Limit > r.Limits.MaxFind {
+			return nil, fmt.Errorf("limit exceeds %d", r.Limits.MaxFind)
+		}
+		v, err := r.Graph.FindAssets(ctx, a.Type, since, a.Limit)
+		if err != nil {
+			return nil, err
+		}
+		result = v
+	case "walk_relations":
+		var a WalkRequest
+		if err := decodeStrict(args, &a); err != nil {
+			return nil, err
+		}
+		v, err := Walk(ctx, r.Graph, r.Limits, a)
+		if err != nil {
+			return nil, err
+		}
+		result = v
+	case "render_graph":
+		var a WalkRequest
+		if err := decodeStrict(args, &a); err != nil {
+			return nil, err
+		}
+		v, err := Walk(ctx, r.Graph, r.Limits, a)
+		if err != nil {
+			return nil, err
+		}
+		result = map[string]any{"mermaid": Mermaid(v), "truncated": v.Truncated, "reason": v.Reason}
+	case "get_evidence":
+		var a struct {
+			ID    string `json:"id"`
+			Limit int    `json:"limit"`
+		}
+		if err := decodeStrict(args, &a); err != nil {
+			return nil, err
+		}
+		if a.ID == "" {
+			return nil, errors.New("id required")
+		}
+		if a.Limit == 0 {
+			a.Limit = r.Limits.MaxEvidence
+		}
+		if a.Limit < 1 || a.Limit > r.Limits.MaxEvidence {
+			return nil, errors.New("evidence limit exceeds policy")
+		}
+		v, err := r.Graph.Evidence(ctx, a.ID, a.Limit)
+		if err != nil {
+			return nil, err
+		}
+		result = v
+	default:
+		return nil, fmt.Errorf("tool %q is not allowed", name)
+	}
+	b, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > r.Limits.MaxToolBytes {
+		return nil, errors.New("result exceeds tool byte budget; narrow the query")
+	}
+	return b, nil
+}

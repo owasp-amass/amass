@@ -32,6 +32,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v5/config"
+	aicli "github.com/owasp-amass/amass/v5/internal/ai/cli"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
 	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
 	"github.com/owasp-amass/amass/v5/internal/assoc"
@@ -43,7 +44,7 @@ import (
 )
 
 const (
-	usageMsg string = "[assoc|engine|enum|subs|track|viz] [options]"
+	usageMsg string = "[ai|assoc|engine|enum|subs|track|viz] [options]"
 )
 
 type Args struct {
@@ -57,6 +58,7 @@ type subDesc struct {
 }
 
 var subcommands = []subDesc{
+	{"ai", aicli.Description},
 	{"assoc", assoc.Description},
 	{"engine", ae.Description},
 	{"enum", enum.Description},
@@ -133,6 +135,8 @@ func main() {
 
 	cmdName := fmt.Sprintf("%s %s", path.Base(os.Args[0]), os.Args[1])
 	switch os.Args[1] {
+	case "ai":
+		aicli.CLIWorkflow(cmdName, os.Args[2:])
 	case "assoc":
 		assoc.CLIWorkflow(cmdName, os.Args[2:])
 	case "engine":

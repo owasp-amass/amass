@@ -8,6 +8,7 @@ FROM alpine:latest
 RUN apk --no-cache add bash ca-certificates
 RUN apk --no-cache --update upgrade
 COPY --from=build /go/bin/amass /bin/amass
+COPY --from=build /go/bin/amass-ai-mcp /bin/amass-ai-mcp
 COPY --from=build /go/bin/oam_enum /bin/enum
 COPY --from=build /go/bin/amass_engine /bin/engine
 COPY --from=build /go/bin/ae_isready /bin/ae_isready
