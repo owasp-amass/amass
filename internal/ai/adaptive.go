@@ -320,11 +320,18 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  dossier,err:=EvaluatePathEvidence(ctx,a.Runner.Graph,a.Runner.Limits,candidates)
  if err!=nil{out.Incomplete=true;return out,fmt.Errorf("evaluate OAM source provenance: %w",err)}
  out.EvidenceDossier=&dossier
- out.EvidenceIncomplete=dossier.Truncated
- for _,p:=range dossier.Paths{if p.Status!="multiple_source_tags_on_each_edge"{out.EvidenceIncomplete=true}}
  selected,err:=a.chooseAdaptivePathsWithEvidence(ctx,question,goal,candidates,&dossier)
  if err!=nil{out.Incomplete=true;return out,err}
  out.Matches=selected
+ out.EvidenceIncomplete=dossier.Truncated
+ assessed:=map[string]PathEvidence{}
+ for _,p:=range dossier.Paths{assessed[p.PathID]=p}
+ for _,path:=range selected{
+  id:=path.PathID
+  if id==""{id=WitnessPathID(path)}
+  ev,ok:=assessed[id]
+  if !ok||ev.Status!="multiple_source_tags_on_each_edge"{out.EvidenceIncomplete=true}
+ }
  out.Incomplete=search.Truncated || len(selected)==0
  if len(selected)==0{
   out.Answer="No sufficiently supported answer was identified in the witnessed OAM paths. This does not prove that the requested relationship is absent."
