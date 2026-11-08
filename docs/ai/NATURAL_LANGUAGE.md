@@ -30,7 +30,13 @@ Example intermediate plan for a multi-hop investigation:
 This architecture reduces hallucinated relationship labels without claiming
 that any given model will always produce a valid plan. The current planner
 starts from Organization names only; other asset types can appear as
-destination types. Source matching is exact. A later increment can add
+destination types. Entity-name lookup first tries the exact Organization name, then checks a
+single terminal-period variant (e.g. `Inc` and `Inc.`) using bounded
+repository queries. Multiple matching organization IDs remain ambiguous;
+the resolver never silently chooses one. This does not constitute general
+fuzzy matching or entity resolution across aliases and legal names.
+
+Other source-name variations remain exact. A later increment can add
 generalized typed entity resolution and explicit ambiguity handling.
 
 For MCP clients, the read-only `describe_oam_schema` tool exposes

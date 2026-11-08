@@ -211,35 +211,59 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 var _ ai.BoundedGraph = Adapter{}
 
 
-// LookupOrganizations uses an exact, typed content filter to avoid retrieving
-// an arbitrary page of the graph when a question names an organization.
+// LookupOrganizations performs bounded, typed lookups with a conservative
+// punctuation fallback. It never scans the repository, and never silently
+// selects among multiple plausible legal entities.
 func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int) ([]ai.Asset, error) {
 	if a.Repo == nil {
 		return nil, errors.New("missing OAM repository")
 	}
-	if name == "" || limit < 1 || limit > 10 {
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" || len(name) > 256 || limit < 1 || limit > 10 {
 		return nil, errors.New("invalid organization lookup parameters")
 	}
-	entities, err := a.Repo.FindEntitiesByContent(ctx, oam.Organization, time.Time{}, limit, dbt.ContentFilters{"name": name})
-	if err != nil {
-		// PostgreSQL currently reports an empty content query as this
-		// repository error. Treat it as an ordinary no-match result, not
-		// a database failure. Other errors are never suppressed.
-		if strings.TrimSpace(err.Error()) == "zero entities found" {
-			return []ai.Asset{}, nil
+
+	// Models sometimes remove a final period from a company name (e.g.,
+	// "Inc." -> "Inc"). Try both exact forms using indexed content queries.
+	// This is intentionally not fuzzy matching: other punctuation and
+	// arbitrary string similarity are NOT accepted as an entity identity.
+	variants := []string{name}
+	if strings.HasSuffix(name, ".") {
+		variants = append(variants, strings.TrimSuffix(name, "."))
+	} else {
+		variants = append(variants, name+".")
+	}
+
+	out := make([]ai.Asset, 0, limit)
+	seen := make(map[string]bool, limit)
+	for _, candidate := range variants {
+		if candidate == "" || len(out) >= limit {
+			break
 		}
-		return nil, err
-	}
-	if len(entities) > limit {
-		return nil, errors.New("repository exceeded organization lookup limit")
-	}
-	out := make([]ai.Asset, 0, len(entities))
-	for _, entity := range entities {
-		a, err := convert(entity)
+		remaining := limit - len(out)
+		entities, err := a.Repo.FindEntitiesByContent(ctx, oam.Organization,
+			time.Time{}, remaining, dbt.ContentFilters{"name": candidate})
 		if err != nil {
+			// PostgreSQL reports an empty content query as a sentinel error.
+			// Other repository failures must never be mistaken for no matches.
+			if strings.TrimSpace(err.Error()) == "zero entities found" {
+				continue
+			}
 			return nil, err
 		}
-		out = append(out, a)
+		if len(entities) > remaining {
+			return nil, errors.New("repository exceeded organization lookup limit")
+		}
+		for _, entity := range entities {
+			asset, err := convert(entity)
+			if err != nil {
+				return nil, err
+			}
+			if !seen[asset.ID] {
+				seen[asset.ID] = true
+				out = append(out, asset)
+			}
+		}
 	}
 	return out, nil
 }
