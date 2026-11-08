@@ -116,9 +116,8 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evidence, error) {
 	if ent, err := a.Repo.FindEntityById(ctx, id); err == nil {
 		tags, err := a.Repo.FindEntityTags(ctx, ent, time.Time{})
-		if err != nil {
-			return nil, err
-		}
+		if emptyTagLookup(err) {return []ai.Evidence{},nil}
+		if err != nil {return nil,err}
 		out := make([]ai.Evidence, 0)
 		for _, tag := range tags {
 			if tag == nil || tag.Property == nil {
@@ -137,9 +136,8 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 		return nil, err
 	}
 	tags, err := a.Repo.FindEdgeTags(ctx, edge, time.Time{})
-	if err != nil {
-		return nil, err
-	}
+	if emptyTagLookup(err) {return []ai.Evidence{},nil}
+	if err != nil {return nil,err}
 	out := make([]ai.Evidence, 0)
 	for _, tag := range tags {
 		if tag == nil || tag.Property == nil {
@@ -154,6 +152,22 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 	return out, nil
 }
 
+// emptyTagLookup recognizes only exact repository-specific empty-result
+// messages. Asset Database currently returns ordinary errors for missing
+// tags instead of a shared sentinel. Do NOT treat arbitrary lookup errors
+// as absence: storage, authentication, and decoding failures remain fatal.
+func emptyTagLookup(err error) bool {
+ if err==nil {return false}
+ switch strings.TrimSpace(err.Error()) {
+ case "no tags found for edge", // sqlite
+      "no tags found for entity", // postgres (edge-tag reader)
+      "no edge tags found", // neo4j
+      "zero tags found": // neo4j
+  return true
+ }
+ return false
+}
+
 // EdgeEvidence always queries the relation namespace. Entity and edge
 // identifiers may be identical; a generic FindEntityById-first lookup cannot
 // safely be used for source-level relationship attribution.
@@ -163,7 +177,10 @@ func (a Adapter) EdgeEvidence(ctx context.Context,id string,limit int)([]ai.Evid
  edge,err:=a.Repo.FindEdgeById(ctx,id)
  if err!=nil{return nil,fmt.Errorf("resolve exact edge for evidence: %w",err)}
  tags,err:=a.Repo.FindEdgeTags(ctx,edge,time.Time{})
- if err!=nil{return nil,err}
+ if emptyTagLookup(err) {
+  return []ai.Evidence{},nil
+ }
+ if err!=nil{return nil,fmt.Errorf("read edge %s provenance tags: %w",id,err)}
  out:=make([]ai.Evidence,0,min(len(tags),limit))
  for _,tag:=range tags{
   if tag==nil||tag.Property==nil{continue}
