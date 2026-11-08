@@ -1,0 +1,44 @@
+name: ai-integration-checks
+
+on:
+  push:
+    branches:
+      - feature/ai-investigation-inference
+  pull_request:
+    paths:
+      - 'internal/ai/**'
+      - 'cmd/amass-ai-mcp/**'
+      - 'cmd/amass/main.go'
+      - 'Dockerfile'
+      - '.github/workflows/ai-integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: AI and CLI tests
+        run: go test -race ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
+      - name: Build all Amass executables
+        run: go build ./...
+      - name: Vet AI integration
+        run: go vet ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build development image (no publish)
+        run: docker build -t amass-ai:ci .
+      - name: Verify expected binaries
+        run: |
+          docker run --rm --entrypoint /bin/sh amass-ai:ci -c 'test -x /bin/amass && test -x /bin/amass-ai-mcp'
