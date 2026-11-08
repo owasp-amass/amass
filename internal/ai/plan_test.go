@@ -11,6 +11,13 @@ import (
 type planCatalog []RelationshipSchema
 
 func (c planCatalog) Relations() []RelationshipSchema { return c }
+func (c planCatalog) SearchFields() []AssetSearchSchema {
+	return []AssetSearchSchema{
+		{Type:"Organization",Fields:[]string{"name","legal_name","unique_id"}},
+		{Type:"URL",Fields:[]string{"url"}},
+		{Type:"FQDN",Fields:[]string{"name"}},
+	}
+}
 
 var testOAMCatalog = planCatalog{
 	{SourceType: "Organization", Label: "subsidiary", RelationType: "SimpleRelation", DestinationType: "Organization"},
@@ -27,6 +34,19 @@ func (g plannedGraph) LookupOrganizations(_ context.Context, name string, _ int)
 	return []Asset{g.assets["parent"]}, nil
 }
 
+func (g plannedGraph) ResolveAsset(_ context.Context, selector AssetSelector, _ int)(AssetResolution,error){
+	result:=AssetResolution{Query:selector,Status:"not_found",Candidates:[]OrganizationCandidate{}}
+	for _,asset:=range g.assets {
+		if asset.Type!=selector.Type {continue}
+		if selector.EntityID==asset.ID ||
+			selector.Type=="URL" && selector.Field=="url" && selector.Value==asset.Key ||
+			selector.Type=="FQDN" && selector.Field=="name" && selector.Value==asset.Key {
+			result.Candidates=append(result.Candidates,OrganizationCandidate{Asset:asset,Matches:[]ResolutionMatch{{Field:selector.Field,Value:selector.Value}}})
+		}
+	}
+	if len(result.Candidates)==1{result.Status="matched"}else if len(result.Candidates)>1{result.Status="ambiguous"}
+	return result,nil
+}
 func (g plannedGraph) ResolveOrganizations(_ context.Context, q OrganizationQuery, _ int) (OrganizationResolution,error) {
 	result:=OrganizationResolution{Query:q,Status:"not_found",Candidates:[]OrganizationCandidate{}}
 	if q.Name=="Acme Holdings Inc." || q.LegalName=="Acme Holdings Inc." || q.UniqueID=="synthetic-acme-holdings" {
@@ -43,12 +63,14 @@ func examplePlannedGraph() plannedGraph {
 			"europe": {ID: "europe", Type: "Organization", Key: "synthetic-acme-europe", Content: map[string]any{"name":"Acme Europe GmbH"}},
 			"website-tech": {ID: "website-tech", Type: "URL", Key: "https://tech.acme.example/", Content: map[string]any{"url":"https://tech.acme.example/"}},
 			"website-europe": {ID: "website-europe", Type: "URL", Key: "https://eu.acme.example/", Content: map[string]any{"url":"https://eu.acme.example/"}},
+			"fqdn-tech": {ID: "fqdn-tech", Type: "FQDN", Key: "tech.acme.example", Content: map[string]any{"name":"tech.acme.example"}},
 		},
 		links: []Relation{
 			{ID: "e1", FromID: "parent", ToID: "tech", Label: "subsidiary", Type: "SimpleRelation"},
 			{ID: "e2", FromID: "parent", ToID: "europe", Label: "subsidiary", Type: "SimpleRelation"},
 			{ID: "e3", FromID: "tech", ToID: "website-tech", Label: "website", Type: "SimpleRelation"},
 			{ID: "e4", FromID: "europe", ToID: "website-europe", Label: "website", Type: "SimpleRelation"},
+			{ID:"e5",FromID:"website-tech",ToID:"fqdn-tech",Label:"domain",Type:"SimpleRelation"},
 		},
 	}}
 }
@@ -107,4 +129,31 @@ func TestSchemaCatalogTool(t *testing.T){
 	var rows []RelationshipSchema
 	if err:=json.Unmarshal(raw,&rows);err!=nil{t.Fatal(err)}
 	if len(rows)!=2{t.Fatalf("expected two schema relations, got %d",len(rows))}
+}
+
+func TestFQDNAsRootAndIncomingURLDomainEdge(t *testing.T){
+	model:=&plannerModel{replies:[]string{`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`}}
+	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"Which URLs refer to the domain tech.acme.example?")
+	if err!=nil || out.Incomplete || len(out.Matches)!=1 || out.Matches[0].Nodes[1].Key!="https://tech.acme.example/"{
+		t.Fatalf("FQDN root error: %+v err=%v",out,err)
+	}
+	if out.AssetResolution==nil || out.AssetResolution.Status!="matched" {t.Fatalf("missing typed root resolution: %+v",out.AssetResolution)}
+}
+func TestURLAsRootAndOutgoingDomainEdge(t *testing.T){
+	model:=&plannerModel{replies:[]string{
+		`{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`}}
+	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What FQDN is associated with https://tech.acme.example/?")
+	if err!=nil || out.Incomplete || len(out.Matches)!=1 || out.Matches[0].Nodes[1].Key!="tech.acme.example"{
+		t.Fatalf("URL root error: %+v err=%v",out,err)
+	}
+}
+func TestGenericSelectorRejectsUnsupportedFields(t *testing.T){
+	if err:=validatePlanWithSelectors(TypedPlan{
+		Subject:PlanSubject{Type:"FQDN",Field:"domain",Value:"tech.acme.example"},
+		Hops:[]PlanHop{{Direction:"in",Label:"domain",RelationType:"SimpleRelation",DestinationType:"URL"}},
+	},testOAMCatalog.Relations(),testOAMCatalog.SearchFields(),DefaultLimits());err==nil{
+		t.Fatal("unsupported FQDN selector should fail validation")
+	}
 }

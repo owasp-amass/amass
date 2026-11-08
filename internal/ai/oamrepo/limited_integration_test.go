@@ -11,6 +11,7 @@ import (
     "github.com/owasp-amass/asset-db/repository/sqlite3"
     dbt "github.com/owasp-amass/asset-db/types"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
+    oamurl "github.com/owasp-amass/open-asset-model/url"
     oamgen "github.com/owasp-amass/open-asset-model/general"
     oamorg "github.com/owasp-amass/open-asset-model/org"
     "github.com/owasp-amass/amass/v5/internal/ai"
@@ -128,4 +129,32 @@ func TestResolveOrganizationNativeIdentifiersAndSourcedAliasSQLite(t *testing.T)
             }
         })
     }
+}
+
+func TestResolveFQDNAndURLOnSQLite(t *testing.T){
+	repo,err:=assetdb.New(sqlite3.SQLite,filepath.Join(t.TempDir(),"resolve-assets.db"))
+	if err!=nil{t.Fatal(err)}
+	defer func(){_ = repo.Close()}()
+	ctx,cancel:=context.WithTimeout(context.Background(),20*time.Second)
+	defer cancel()
+	fqdn,err:=repo.CreateAsset(ctx,&oamdns.FQDN{Name:"test.example"})
+	if err!=nil{t.Fatal(err)}
+	url,err:=repo.CreateAsset(ctx,&oamurl.URL{Raw:"https://test.example/",Scheme:"https",Host:"test.example",Path:"/"})
+	if err!=nil{t.Fatal(err)}
+	adapter:=Adapter{Repo:repo}
+	cases:=[]struct{selector ai.AssetSelector;id string}{
+		{ai.AssetSelector{Type:"FQDN",Field:"name",Value:"test.example"},fqdn.ID},
+		{ai.AssetSelector{Type:"FQDN",Field:"name",Value:"TEST.EXAMPLE."},fqdn.ID},
+		{ai.AssetSelector{Type:"URL",Field:"url",Value:"https://test.example/"},url.ID},
+		{ai.AssetSelector{Type:"URL",EntityID:url.ID},url.ID},
+	}
+	for _,tc:=range cases {
+		got,err:=adapter.ResolveAsset(ctx,tc.selector,10)
+		if err!=nil || got.Status!="matched" || len(got.Candidates)!=1 || got.Candidates[0].Asset.ID!=tc.id{
+			t.Fatalf("selector=%+v result=%+v err=%v",tc.selector,got,err)
+		}
+	}
+	if _,err:=adapter.ResolveAsset(ctx,ai.AssetSelector{Type:"FQDN",Field:"unknown",Value:"x"},10);err==nil{
+		t.Fatal("invalid selector field accepted")
+	}
 }

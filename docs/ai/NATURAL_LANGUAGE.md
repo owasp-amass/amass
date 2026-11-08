@@ -1,6 +1,6 @@
 # Typed OAM query planning and entity resolution (experimental)
 
-The AI planner accepts natural language, obtains valid OAM relationship transitions from
+The AI planner accepts natural language and supports **all registered OAM asset types as query starting points**, obtaining valid relationship transitions from
 `oam.AssetList`, `oam.GetAssetOutgoingRelations`, and `oam.GetTransformAssetTypes`,
 and returns a bounded (1–3-hop) typed query plan. All transitions are checked
 against the authoritative OAM taxonomy before read-only execution. No hardcoded
@@ -74,11 +74,38 @@ ownership or attribution.
 
 ### Current boundaries
 
-Starting entity type is currently `Organization`; other OAM assets are
-valid traversal destinations. Graph traversal and candidate results are
-bounded. The explicit alias file is a local configuration mechanism;
+The planner can begin at any registered OAM asset type. Graph traversal and candidate results are bounded. The explicit alias file is a local configuration mechanism;
 a future design may integrate persistent alias evidence and automated
 identity-candidate generation with analyst review.
 
-For MCP clients, `describe_oam_schema` exposes valid OAM relationship
-transitions and `resolve_organization` provides typed resolution.
+For MCP clients, `describe_oam_schema` exposes valid OAM relationships,
+`describe_asset_selectors` exposes indexed search fields for every registered
+asset type, and `resolve_asset` performs bounded, type-checked lookup.
+`resolve_organization` remains available for entity names and aliases.
+
+## Starting from any OAM asset type
+
+A plan can use `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"}}`
+or `{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"}}`,
+as well as `{"subject":{"type":"FQDN","entity_id":"42"}}` for an explicit
+database entity ID supplied by the user. IDs must never be invented.
+
+Example beginning with a domain:
+
+```json
+{
+  "subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},
+  "hops":[
+    {"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}
+  ]
+}
+```
+
+Indexable fields vary by OAM asset type. `ContactRecord` currently
+requires an explicit `entity_id` because its available content filter,
+`discovered_at`, is not an identity key. This also demonstrates why
+domain names, URLs, IP addresses, ASN numbers, certificates, organizations,
+and other OAM assets must not share a single untyped name resolver.
+The content-filter selector catalog must stay aligned with the
+Asset Database repository schema. Unsupported selectors fail closed.
+

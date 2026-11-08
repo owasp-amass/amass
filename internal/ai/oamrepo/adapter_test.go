@@ -2,6 +2,7 @@
 package oamrepo
 
 import (
+    oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
 	"testing"
 )
@@ -33,4 +34,13 @@ func TestOAMCatalogContainsSubsidiaryWebsitePaths(t *testing.T) {
 	check("Organization", "subsidiary", "SimpleRelation", "Organization")
 	check("Organization", "website", "SimpleRelation", "URL")
 	check("URL", "domain", "SimpleRelation", "FQDN")
+}
+
+func TestEveryOAMAssetHasARegisteredRootSelector(t *testing.T){
+	schemas:=(Catalog{}).SearchFields()
+	byType:=map[string]bool{}
+	for _,schema:=range schemas {byType[schema.Type]=true}
+	for _,assetType:=range oam.AssetList {
+		if !byType[string(assetType)] {t.Errorf("missing selector schema for %s",assetType)}
+	}
 }
