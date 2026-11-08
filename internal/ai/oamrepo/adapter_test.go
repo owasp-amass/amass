@@ -17,3 +17,20 @@ func TestSourceIdentityExcludesConfidence(t *testing.T) {
 		t.Fatal("non-source properties counted as independent provenance")
 	}
 }
+
+func TestOAMCatalogContainsSubsidiaryWebsitePaths(t *testing.T) {
+	relations := (Catalog{}).Relations()
+	check := func(source, label, relationType, destination string) {
+		t.Helper()
+		for _, r := range relations {
+			if r.SourceType == source && r.Label == label &&
+				r.RelationType == relationType && r.DestinationType == destination {
+				return
+			}
+		}
+		t.Fatalf("OAM catalog missing %s -%s(%s)-> %s", source, label, relationType, destination)
+	}
+	check("Organization", "subsidiary", "SimpleRelation", "Organization")
+	check("Organization", "website", "SimpleRelation", "URL")
+	check("URL", "domain", "SimpleRelation", "FQDN")
+}
