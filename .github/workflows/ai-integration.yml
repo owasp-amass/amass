@@ -46,3 +46,24 @@ jobs:
       - name: Verify expected binaries
         run: |
           docker run --rm --entrypoint /bin/sh amass-ai:ci -c 'test -x /bin/amass && test -x /bin/amass-ai-mcp'
+
+  paired-assetdb:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: owasp-amass/asset-db
+          ref: feature/ai-investigation-inference
+          path: asset-db
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify against bounded-query Asset Database branch
+        run: |
+          go mod edit -replace=github.com/owasp-amass/asset-db=./asset-db
+          go test -v ./internal/ai/oamrepo -run '^TestAdapterBoundedTraversalOnSQLite$' -count=1
+          go test ./internal/ai/...
