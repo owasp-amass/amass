@@ -31,6 +31,7 @@ type Investigation struct {
 	Collection   *CollectionPlan `json:"collection,omitempty"`
 	Diagram      string `json:"diagram,omitempty"`
 	Matches      []PlanMatch `json:"matches,omitempty"`
+	AnswerGroups []AnswerGroup `json:"answer_groups,omitempty"`
 	Resolution *OrganizationResolution `json:"resolution,omitempty"`
 	AssetResolution *AssetResolution `json:"asset_resolution,omitempty"`
 	Answer       string        `json:"answer"`
