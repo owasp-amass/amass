@@ -197,7 +197,8 @@ Paths can have different lengths and different paths can reach the SAME asset. E
    // witnessed path. Otherwise the model must disambiguate by path ID.
    for _,assetID:=range selection.SelectedAssetIDs{
     pathIDs:=byAsset[assetID]
-    if len(pathIDs)!=1 {err=fmt.Errorf("asset ID %q has %d witnessed paths; select an exact path_id instead",assetID,len(pathIDs));break}
+    if len(pathIDs)==0 {err=fmt.Errorf("asset ID %q was not witnessed",assetID);break}
+    if len(pathIDs)>1 {err=fmt.Errorf("asset ID %q has %d witnessed paths; select an exact path_id instead",assetID,len(pathIDs));break}
     ids=append(ids,pathIDs[0])
    }
   }
