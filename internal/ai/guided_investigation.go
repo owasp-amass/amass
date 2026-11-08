@@ -7,6 +7,7 @@ import (
  "fmt"
  "sort"
  "strings"
+ "time"
 )
 
 type guidedAdvice struct {
@@ -101,8 +102,10 @@ func(a Agent) guidedInvestigation(ctx context.Context,question string,goal Inves
   if err!=nil{return e.Result(),err}
   if done{break}
   if rounds>0 && stage<rounds && len(e.Pending(7))>=7 {
+   guidanceStarted:=time.Now()
    advice,adviceErr:=a.askGuidance(ctx,question,goal,e)
    stage++
+   out.recordTrace(guidanceStarted,InvestigationTraceEvent{Stage:"frontier_guidance",InputPaths:len(e.Pending(16)),Incomplete:adviceErr!=nil,Detail:func()string{if adviceErr!=nil{return adviceErr.Error()};return "validated model priorities"}()})
    if adviceErr!=nil {
     out.Observations=append(out.Observations,Observation{Tool:"guide_graph",CallID:fmt.Sprintf("advice-%d",stage),Error:adviceErr.Error()})
    }else{
