@@ -168,10 +168,20 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if question == "" {
 			return errors.New("-question required")
 		}
-		result, err := (ai.Agent{Model: provider, Runner: runner}).Ask(ctx, question)
+		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth:graphDepth,MaxMatches:graphMatches})
 		if err != nil {
 			return err
 		}
+		if outputFormat=="text" {
+			_, err = fmt.Fprintln(out, result.Answer)
+			return err
+		}
+		if outputFormat=="mermaid" {
+			if result.Diagram=="" {return fmt.Errorf("investigation did not produce a diagram: %s",result.Answer)}
+			_, err=fmt.Fprint(out,result.Diagram)
+			return err
+		}
+		if outputFormat!="json" {return errors.New("-format must be json, text, or mermaid")}
 		pretty, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return err
