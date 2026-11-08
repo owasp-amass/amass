@@ -25,7 +25,7 @@ type AdaptiveOptions struct {
  MaxMatches int
  MaxPathsPerAsset int
  MaxExpansions int
- GuidanceRounds int // 0 uses a small bounded default; negative disables model guidance
+ GuidanceRounds int // 0 disables optional intermediate guidance; positive values 1..3
 }
 
 type adaptiveSelection struct {
