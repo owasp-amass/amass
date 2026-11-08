@@ -112,7 +112,7 @@ jq '{
   mode:.search.mode,
   depths:[.matches[]|(.edges|length)],
   selected_paths:[.matches[]|{path_id,asset:(.nodes[-1].content.name // .nodes[-1].key)}],
-  found:.search.matches|length,
+  found:(.search.matches|length),
   expanded:.search.expanded_paths,
   alternatives:.search.alternative_matches,
   alternatives_skipped:.search.alternative_paths_skipped,
