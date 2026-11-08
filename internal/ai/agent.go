@@ -35,6 +35,7 @@ type Investigation struct {
 	AssetResolution *AssetResolution `json:"asset_resolution,omitempty"`
 	Answer       string        `json:"answer"`
 	Observations []Observation `json:"observations"`
+	Trace []InvestigationTraceEvent `json:"trace,omitempty"`
 	Incomplete   bool          `json:"incomplete"`
 	PlanStoppedAtHop int `json:"plan_stopped_at_hop,omitempty"`
 	ToolCalls    int           `json:"tool_calls"`
