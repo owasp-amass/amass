@@ -221,3 +221,21 @@ func TestAgentRejectsAnswerAfterFailedTools(t *testing.T) {
 		t.Fatal("model supplied ungrounded answer following failed tool")
 	}
 }
+
+
+type collidingEvidenceGraph struct{fakeGraph}
+func (g collidingEvidenceGraph) Evidence(ctx context.Context,id string,limit int)([]Evidence,error){
+ return []Evidence{{ID:"asset-tag",SubjectID:id,SourceID:"asset-only",Kind:"SourceProperty"}},nil
+}
+func (g collidingEvidenceGraph) EdgeEvidence(ctx context.Context,id string,limit int)([]Evidence,error){
+ return []Evidence{{ID:"edge-tag",SubjectID:id,SourceID:"edge-only",Kind:"SourceProperty"}},nil
+}
+func TestGetEdgeEvidenceUsesExactRelationNamespace(t *testing.T){
+ runner:=ToolRunner{Graph:collidingEvidenceGraph{fakeGraph:graph()},Limits:DefaultLimits()}
+ raw,err:=runner.Run(context.Background(),"get_edge_evidence",json.RawMessage(`{"id":"1","limit":8}`))
+ if err!=nil{t.Fatal(err)}
+ if !strings.Contains(string(raw),"edge-tag")||strings.Contains(string(raw),"asset-tag"){
+  t.Fatalf("typed edge evidence returned asset tags for colliding identifier: %s",raw)
+ }
+ t.Logf("exact edge evidence with colliding ID: %s",raw)
+}
