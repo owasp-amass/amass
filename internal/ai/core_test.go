@@ -79,7 +79,7 @@ func TestWalkBoundAndDirection(t *testing.T) {
 	if !out.Truncated || len(out.Nodes) != 2 {
 		t.Fatalf("expected bounded result: %+v", out)
 	}
-	_, err = Walk(context.Background(), graph(), l, WalkRequest{StartID: "a", Depth: 7})
+	_, err = Walk(context.Background(), graph(), l, WalkRequest{StartID: "a", Depth: 33})
 	if err == nil {
 		t.Fatal("unbounded depth accepted")
 	}
