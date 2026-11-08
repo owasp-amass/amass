@@ -49,6 +49,16 @@ func (g fakeGraph) Edges(_ context.Context, id, dir, label string, _ time.Time) 
 	}
 	return out, nil
 }
+func (g fakeGraph) EdgesLimited(ctx context.Context, id, dir, label string, since time.Time, limit int) ([]Relation, bool, error) {
+	edges, err := g.Edges(ctx, id, dir, label, since)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(edges) > limit {
+		return edges[:limit], true, nil
+	}
+	return edges, false, nil
+}
 func (g fakeGraph) Evidence(_ context.Context, id string, limit int) ([]Evidence, error) {
 	v := g.evidence[id]
 	if len(v) > limit {
@@ -201,7 +211,6 @@ func (m *failedToolModel) Generate(_ context.Context, _ []Message, _ []ToolSpec)
 	}
 	return Response{Text: "The domain belongs to Acme."}, nil
 }
-
 func TestAgentRejectsAnswerAfterFailedTools(t *testing.T) {
 	m := &failedToolModel{}
 	_, err := (Agent{Model: m, Runner: ToolRunner{Graph: graph(), Limits: DefaultLimits()}}).Ask(context.Background(), "Who owns the domain?")

@@ -109,3 +109,13 @@ func TestRejectIncompatibleFeatureSchema(t *testing.T) {
 		t.Fatalf("feature schema mismatch accepted, err=%v, calls=%d", err, model.calls)
 	}
 }
+
+// A graph without server-side bounded reads must not be traversed by an agent.
+type legacyUnboundedGraph struct{ Graph }
+
+func TestWalkRequiresBoundedReader(t *testing.T) {
+	_, err := Walk(context.Background(), legacyUnboundedGraph{Graph: graph()}, DefaultLimits(), WalkRequest{StartID: "a"})
+	if err == nil {
+		t.Fatal("agent accepted unbounded graph traversal")
+	}
+}

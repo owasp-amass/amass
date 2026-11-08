@@ -163,3 +163,47 @@ func AllowedRelation(subject, label, object string) bool {
 	// AI proposes SimpleRelation only in this initial implementation.
 	return oam.ValidRelationship(oam.AssetType(subject), label, oam.SimpleRelation, oam.AssetType(object))
 }
+
+// EdgesLimited requires a repository that implements server-side SQL bounds.
+// The current released asset-db dependency may not implement it yet; graph
+// walks must fail closed until the bounded API is released or pinned.
+func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, since time.Time, limit int) ([]ai.Relation, bool, error) {
+	if a.Repo == nil {
+		return nil, false, errors.New("missing repository")
+	}
+	bounded, ok := a.Repo.(interface {
+		ReadEdgesLimited(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, bool, error)
+	})
+	if !ok {
+		return nil, false, errors.New("asset-db version lacks bounded edge reader; upgrade the repository dependency")
+	}
+	ent, err := a.Repo.FindEntityById(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	var labels []string
+	if label != "" {
+		labels = []string{label}
+	}
+	edges, more, err := bounded.ReadEdgesLimited(ctx, ent, direction, since, limit, labels...)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(edges) > limit {
+		return nil, false, errors.New("repository violated bounded edge limit")
+	}
+	out := make([]ai.Relation, 0, len(edges))
+	for _, e := range edges {
+		if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
+			return nil, false, errors.New("malformed bounded edge")
+		}
+		dir := "out"
+		if e.ToEntity.ID == id {
+			dir = "in"
+		}
+		out = append(out, ai.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID, Label: e.Relation.Label(), Type: string(e.Relation.RelationType()), Direction: dir, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen})
+	}
+	return out, more, nil
+}
+
+var _ ai.BoundedGraph = Adapter{}

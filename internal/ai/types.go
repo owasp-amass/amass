@@ -45,6 +45,12 @@ type Graph interface {
 	Evidence(context.Context, string, int) ([]Evidence, error)
 }
 
+// BoundedGraph is the database-backed capability required by agent walks.
+// Unsupported repositories fail closed rather than materializing all edges.
+type BoundedGraph interface {
+	EdgesLimited(context.Context, string, string, string, time.Time, int) ([]Relation, bool, error)
+}
+
 type Limits struct {
 	MaxDepth     int
 	MaxNodes     int
@@ -120,6 +126,10 @@ func Walk(ctx context.Context, graph Graph, l Limits, r WalkRequest) (WalkResult
 	if err != nil {
 		return out, err
 	}
+	limited, ok := graph.(BoundedGraph)
+	if !ok {
+		return out, errors.New("graph repository lacks bounded edge queries")
+	}
 	a, err := graph.GetAsset(ctx, r.StartID)
 	if err != nil {
 		return out, err
@@ -141,12 +151,14 @@ func Walk(ctx context.Context, graph Graph, l Limits, r WalkRequest) (WalkResult
 		if current.depth >= r.Depth {
 			continue
 		}
-		edges, err := graph.Edges(ctx, current.id, r.Direction, r.Label, since)
+		edges, more, err := limited.EdgesLimited(ctx, current.id, r.Direction, r.Label, since, l.MaxPerNode)
 		if err != nil {
 			return out, err
 		}
 		if len(edges) > l.MaxPerNode {
-			edges = edges[:l.MaxPerNode]
+			return out, errors.New("bounded graph adapter violated row limit")
+		}
+		if more {
 			out.Truncated = true
 			out.Reason = "per-node edge limit"
 		}
