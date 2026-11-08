@@ -424,7 +424,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 	for _,path:=range paths {out.Matches=append(out.Matches,PlanMatch{Nodes:path.nodes,Edges:path.edges})}
 	sort.Slice(out.Matches,func(i,j int)bool{return formatMatch(out.Matches[i])<formatMatch(out.Matches[j])})
 	if len(out.Matches)==0 {
-		out.Answer=fmt.Sprintf("No matching %d-hop OAM relationship paths were returned for %q by this database; this does not prove the relationships do not exist.",len(plan.Hops),plan.Subject.Name)
+		out.Answer=fmt.Sprintf("No matching %d-hop OAM relationship paths were returned for %s by this database; this does not prove the relationships do not exist.",len(plan.Hops),formatPlanSubject(plan.Subject))
 	} else {
 		segments:=make([]string,0,len(out.Matches))
 		for _,match:=range out.Matches {segments=append(segments,formatMatch(match))}
@@ -435,9 +435,20 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 }
 
 func formatMatch(p PlanMatch) string {
+	if len(p.Nodes)==0{return ""}
 	parts:=[]string{humanAsset(p.Nodes[0])}
 	for i,e:=range p.Edges {
-		parts=append(parts,fmt.Sprintf("--%s [edge %s]--> %s",e.Label,e.ID,humanAsset(p.Nodes[i+1])))
+		if i+1>=len(p.Nodes){break}
+		current,next:=p.Nodes[i],p.Nodes[i+1]
+		switch {
+		case e.FromID==current.ID && e.ToID==next.ID:
+			parts=append(parts,fmt.Sprintf("--%s [edge %s]--> %s",e.Label,e.ID,humanAsset(next)))
+		case e.ToID==current.ID && e.FromID==next.ID:
+			parts=append(parts,fmt.Sprintf("<--%s [edge %s]-- %s",e.Label,e.ID,humanAsset(next)))
+		default:
+			// Malformed edge endpoints must not be presented as a directed claim.
+			parts=append(parts,fmt.Sprintf("--%s [edge %s]-- %s (direction unknown)",e.Label,e.ID,humanAsset(next)))
+		}
 	}
 	return strings.Join(parts," ")
 }
@@ -474,4 +485,14 @@ func resolutionAnswer(status string, candidates []OrganizationCandidate) string 
 		return "Ambiguous asset identity; specify an explicit entity_id or a more selective typed field. Candidates: "+strings.Join(choices,"; ")
 	default:return "Unable to resolve the starting asset safely."
 	}
+}
+
+func formatPlanSubject(subject PlanSubject) string {
+	if subject.EntityID!="" {return fmt.Sprintf("%s entity_id %q",subject.Type,subject.EntityID)}
+	if subject.Value!="" {return fmt.Sprintf("%s %s=%q",subject.Type,subject.Field,subject.Value)}
+	if subject.Name!="" {return fmt.Sprintf("%s %q",subject.Type,subject.Name)}
+	if subject.LegalName!="" {return fmt.Sprintf("%s legal_name=%q",subject.Type,subject.LegalName)}
+	if subject.UniqueID!="" {return fmt.Sprintf("%s unique_id=%q",subject.Type,subject.UniqueID)}
+	if subject.RegistrationID!="" {return fmt.Sprintf("%s registration_id=%q in %q",subject.Type,subject.RegistrationID,subject.Jurisdiction)}
+	return subject.Type
 }

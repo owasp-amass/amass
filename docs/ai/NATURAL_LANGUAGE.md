@@ -144,3 +144,12 @@ Defaults are 3 minutes per model request and 8 minutes overall. The limits
 accept 5s–15m and model-timeout–30m, respectively. Repeated model calls share
 the overall investigation deadline; an expired inference request does not
 establish that an OAM asset or relationship is absent.
+
+## Relationship direction in answers
+
+Answer paths render arrows using the stored edge endpoints, not the query
+traversal order. For example, when starting at an FQDN and walking an
+incoming `domain` relationship, the answer renders
+`FQDN <--domain-- URL` because the stored OAM edge is directed
+`URL --domain--> FQDN`. This prevents inverse traversal from being
+mistaken for the direction of the asserted relationship.

@@ -290,3 +290,28 @@ func TestCompactCatalogPreservesAllTransitions(t *testing.T) {
 		t.Fatalf("compact selectors lost type-specific fields: %s",selector)
 	}
 }
+
+func TestFormattedMatchPreservesIncomingEdgeDirection(t *testing.T) {
+	graph:=examplePlannedGraph()
+	incoming:=PlanMatch{
+		Nodes:[]Asset{graph.assets["fqdn-tech"],graph.assets["website-tech"]},
+		Edges:[]Relation{{ID:"e5",FromID:"website-tech",ToID:"fqdn-tech",Label:"domain",Type:"SimpleRelation"}},
+	}
+	got:=formatMatch(incoming)
+	if !strings.Contains(got,"<--domain [edge e5]-- https://tech.acme.example/"){
+		t.Fatalf("incoming graph edge rendered with wrong direction: %s",got)
+	}
+	outgoing:=PlanMatch{
+		Nodes:[]Asset{graph.assets["website-tech"],graph.assets["fqdn-tech"]},
+		Edges:incoming.Edges,
+	}
+	if got:=formatMatch(outgoing);!strings.Contains(got,"--domain [edge e5]--> tech.acme.example"){
+		t.Fatalf("outgoing graph edge rendered with wrong direction: %s",got)
+	}
+}
+func TestFormattedSubjectForGenericRootWithoutMatches(t *testing.T){
+	root:=PlanSubject{Type:"FQDN",Field:"name",Value:"tech.acme.example"}
+	if got:=formatPlanSubject(root);!strings.Contains(got,"tech.acme.example") {
+		t.Fatalf("generic subject identifier omitted: %s",got)
+	}
+}
