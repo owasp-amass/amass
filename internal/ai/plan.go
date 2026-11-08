@@ -96,6 +96,46 @@ func validatePlanWithSelectors(plan TypedPlan, catalog []RelationshipSchema, sel
 	return nil
 }
 
+// normalizePlannedSubject repairs only an unambiguous *structural* omission:
+// some models encode FQDN or other assets with an indexed "name" field as
+// {"type":"FQDN","name":"host.example"}, reusing Organization syntax.
+// If and only if the selected asset's schema has an indexed "name" field,
+// move that name into the generic typed selector. This does not guess a
+// missing value, choose an entity, or recognize natural-language phrases.
+func normalizePlannedSubject(subject PlanSubject, selectors []AssetSearchSchema) PlanSubject {
+	if subject.Type=="Organization" || subject.Name=="" ||
+		subject.EntityID!="" || subject.Value!="" ||
+		subject.LegalName!="" || subject.UniqueID!="" ||
+		subject.RegistrationID!="" || subject.Jurisdiction!="" {
+		return subject
+	}
+	for _,schema:=range selectors {
+		if schema.Type!=subject.Type {continue}
+		for _,field:=range schema.Fields {
+			if field=="name" && (subject.Field=="" || subject.Field=="name") {
+				subject.Field="name"
+				subject.Value=subject.Name
+				subject.Name=""
+				return subject
+			}
+		}
+	}
+	return subject
+}
+
+func selectorCorrectionHint(subject PlanSubject, selectors []AssetSearchSchema) string {
+	for _,schema:=range selectors {
+		if schema.Type!=subject.Type {continue}
+		return fmt.Sprintf("For subject type %q, the valid indexed fields are %q. "+
+			"Specify both subject.field and subject.value (copy the exact identifier "+
+			"from the user question), or specify a user-provided subject.entity_id. "+
+			"Do not use subject.name for a non-Organization type. "+
+			"Example FQDN selector: {\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"host.example\"}. "+
+			"Do not invent an identifier.",subject.Type,schema.Fields)
+	}
+	return "The subject type must be registered in the OAM selector catalog."
+}
+
 func parseTypedPlan(raw string) (TypedPlan, error) {
 	var plan TypedPlan
 	raw = strings.TrimSpace(raw)
@@ -122,8 +162,15 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 	if err != nil { return zero, err }
 	rawSelectors,err:=json.Marshal(selectors)
 	if err!=nil{return zero,err}
-	system := "You are an OWASP Open Asset Model query planner. Return ONLY a JSON object, without markdown, matching " +
-		"{\"subject\":{\"type\":\"Organization\",\"name\":\"EXACT company name\"},\"hops\":[{\"direction\":\"out\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}. " +
+	system := "You are an OWASP Open Asset Model query planner. Return ONLY one JSON object (no markdown). " +
+		"Format: {\"subject\":{...},\"hops\":[{\"direction\":\"out or in\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}. " +
+		"Subject examples (use the type that the question starts with): " +
+		"FQDN: {\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"tech.acme.example\"}; " +
+		"URL: {\"type\":\"URL\",\"field\":\"url\",\"value\":\"https://tech.acme.example/\"}; " +
+		"IPAddress: {\"type\":\"IPAddress\",\"field\":\"address\",\"value\":\"192.0.2.1\"}; " +
+		"Organization: {\"type\":\"Organization\",\"name\":\"Acme Holdings Inc.\"}. " +
+		"Do NOT omit field or value for FQDN, URL, IPAddress or any other non-Organization type. " +
+		"Choose exact indexed selector keys from the SELECTOR CATALOG, not guessed keys. " +
 		"Treat the request as an investigation over STORED graph relationships, not general knowledge. " +
 		"Only choose transitions appearing in the catalog. Each hop begins at the previous hop's destination type. " +
 		"For incoming hops reverse the permitted source/destination types. Prefer the shortest meaningful path (maximum 3 hops). " +
@@ -136,16 +183,26 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		"OAM RELATIONSHIP CATALOG: " + string(rawCatalog) +
 		" OAM SELECTOR CATALOG: "+string(rawSelectors)
 	conversation := []Message{{Role:"system",Text:system},{Role:"user",Text:question}}
-	for attempt:=0; attempt<2; attempt++ {
+	const maxPlanAttempts=3
+	for attempt:=0; attempt<maxPlanAttempts; attempt++ {
 		response, err := a.Model.Generate(ctx, conversation, nil)
 		if err != nil {return zero, err}
 		if len(response.Calls)>0 {return zero, errors.New("planner attempted a tool call instead of returning typed JSON")}
 		plan, err := parseTypedPlan(response.Text)
-		if err==nil {err=validatePlanWithSelectors(plan,catalog,selectors,a.Runner.Limits)}
+		if err==nil {
+			plan.Subject=normalizePlannedSubject(plan.Subject,selectors)
+			err=validatePlanWithSelectors(plan,catalog,selectors,a.Runner.Limits)
+		}
 		if err==nil {return plan,nil}
-		if attempt==1 {return zero, fmt.Errorf("unable to produce valid OAM query plan: %w",err)}
+		if attempt==maxPlanAttempts-1 {
+			return zero,fmt.Errorf("unable to produce valid OAM query plan after %d attempts: %w",maxPlanAttempts,err)
+		}
+		hint:=selectorCorrectionHint(plan.Subject,selectors)
 		conversation=append(conversation,Message{Role:"assistant",Text:response.Text},
-			Message{Role:"user",Text:"That proposed plan is invalid: "+err.Error()+". Correct the plan using only the OAM relationship catalog, with exact labels, directions and destination types. Output JSON only."})
+			Message{Role:"user",Text:"Your plan is invalid: "+err.Error()+". "+
+				"Correct the subject first. "+hint+" "+
+				"Then validate each hop using the OAM RELATIONSHIP CATALOG, including direction and destination type. "+
+				"Return the COMPLETE corrected JSON plan only."})
 	}
 	return zero, errors.New("query planner exhausted correction attempts")
 }

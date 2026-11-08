@@ -109,3 +109,17 @@ and other OAM assets must not share a single untyped name resolver.
 The content-filter selector catalog must stay aligned with the
 Asset Database repository schema. Unsupported selectors fail closed.
 
+
+## Typed planner correction and small-model compatibility
+
+Smaller local models sometimes reuse the Organization-style `name` field
+for FQDNs. If the selected OAM asset type explicitly supports an indexed
+`name` field, the planner may normalize that **structured plan field** into
+`{"field":"name","value":"..."}`. This does not rewrite the input question,
+create aliases, or infer missing entity values. For all other incomplete
+selectors, the model receives a targeted retry listing the indexed fields
+for the selected asset type and an example of the required structure.
+
+The planner permits up to three generation attempts. Plans are only executed
+after strict OAM selector and relationship validation. A failed plan does
+not imply an asset or relationship is absent from the Asset Database.

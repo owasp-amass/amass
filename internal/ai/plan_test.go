@@ -157,3 +157,69 @@ func TestGenericSelectorRejectsUnsupportedFields(t *testing.T){
 		t.Fatal("unsupported FQDN selector should fail validation")
 	}
 }
+
+// This reproduces the Ollama failure reported during a real FQDN-root query.
+// The model reused the Organization "name" key for a non-Organization type;
+// the indexed OAM selector catalog makes the correction unambiguous.
+func TestPlannerNormalizesFQDNNameToIndexedSelector(t *testing.T){
+	model:=&plannerModel{replies:[]string{
+		`{"subject":{"type":"FQDN","name":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
+	}}
+	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),
+		"Which URL assets have a domain relationship pointing to the FQDN tech.acme.example?")
+	if err!=nil || out.Incomplete || model.calls!=1 || len(out.Matches)!=1 {
+		t.Fatalf("FQDN normalization failed: %+v err=%v model calls=%d",out,err,model.calls)
+	}
+	if out.Plan.Subject.Field!="name" || out.Plan.Subject.Value!="tech.acme.example" || out.Plan.Subject.Name!=""{
+		t.Fatalf("subject not canonicalized: %+v",out.Plan.Subject)
+	}
+	if out.Matches[0].Nodes[1].Key!="https://tech.acme.example/"{
+		t.Fatalf("wrong URL destination: %+v",out.Matches)
+	}
+}
+
+type inspectingPlannerModel struct {
+	calls int
+	requests [][]Message
+	replies []string
+}
+func (m *inspectingPlannerModel) Generate(_ context.Context, messages []Message, _ []ToolSpec)(Response,error){
+	m.requests=append(m.requests,append([]Message{},messages...))
+	i:=m.calls
+	m.calls++
+	if i>=len(m.replies){i=len(m.replies)-1}
+	return Response{Text:m.replies[i]},nil
+}
+func TestPlannerRetriesMissingTypedSelectorWithFocusedGuidance(t *testing.T){
+	model:=&inspectingPlannerModel{replies:[]string{
+		`{"subject":{"type":"FQDN"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
+		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
+	}}
+	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),
+		"Which URL assets have a domain relationship pointing to the FQDN tech.acme.example?")
+	if err!=nil || out.Incomplete || len(out.Matches)!=1 || model.calls!=2 {
+		t.Fatalf("focused retry failed: %+v err=%v calls=%d",out,err,model.calls)
+	}
+	if len(model.requests[1])<4 || !strings.Contains(model.requests[1][3].Text,"subject.field") ||
+		!strings.Contains(model.requests[1][3].Text,"subject.value") {
+		t.Fatalf("retry omitted selector-specific correction: %+v",model.requests[1])
+	}
+}
+
+func TestNormalizationDoesNotGuessUnsupportedSelectors(t *testing.T){
+	schema:=testOAMCatalog.SearchFields()
+	cases:=[]PlanSubject{
+		{Type:"URL",Name:"https://tech.acme.example/"},
+		{Type:"FQDN",Field:"url",Name:"tech.acme.example"},
+		{Type:"FQDN"},
+	}
+	for _,candidate:=range cases{
+		got:=normalizePlannedSubject(candidate,schema)
+		if got.Field!=candidate.Field || got.Value!=candidate.Value ||
+			got.Name!=candidate.Name {
+			t.Fatalf("should not infer selector for %+v, got %+v",candidate,got)
+		}
+	}
+}
