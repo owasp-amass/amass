@@ -55,6 +55,7 @@ func Specs() []ToolSpec {
 		{"find_assets", "List assets by an exact OAM asset type and optional RFC3339 last-seen lower bound", objectSchema([]string{"type"}, map[string]any{"type": stringProp("e.g. Organization, FQDN, Service"), "since": stringProp("RFC3339 lower bound, not first-seen"), "limit": integerProp("Maximum results")})},
 		{"walk_relations", "Bounded graph traversal from a known asset ID", objectSchema([]string{"start_id"}, map[string]any{"start_id": stringProp("Root asset ID"), "direction": stringProp("in, out, or both"), "label": stringProp("Exact relation label, optional"), "depth": integerProp("Graph hops"), "since": stringProp("RFC3339 last-seen lower bound")})},
 		{"get_evidence", "Retrieve tags/properties for an asset ID or relation ID", objectSchema([]string{"id"}, map[string]any{"id": stringProp("Asset or edge ID"), "limit": integerProp("Maximum evidence records")})},
+		{"get_edge_evidence", "Retrieve source and property tags for an exact OAM relation ID; never confuses an edge ID with an asset ID", objectSchema([]string{"id"}, map[string]any{"id": stringProp("Exact OAM edge ID"), "limit": integerProp("Maximum provenance records")})},
 		{"render_graph", "Generate a Mermaid diagram for a bounded OAM neighborhood", objectSchema([]string{"start_id"}, map[string]any{"start_id": stringProp("Root asset ID"), "direction": stringProp("in, out or both"), "label": stringProp("Optional relation label"), "depth": integerProp("Graph hops"), "since": stringProp("RFC3339 lower bound")})},
 	}
 }
@@ -226,6 +227,20 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 			return nil, err
 		}
 		result = map[string]any{"mermaid": Mermaid(v), "truncated": v.Truncated, "reason": v.Reason}
+	case "get_edge_evidence":
+		var a struct {
+			ID string `json:"id"`
+			Limit int `json:"limit"`
+		}
+		if err:=decodeStrict(args,&a);err!=nil{return nil,err}
+		if a.ID==""{return nil,errors.New("edge id required")}
+		if a.Limit==0{a.Limit=r.Limits.MaxEvidence}
+		if a.Limit<1||a.Limit>r.Limits.MaxEvidence{return nil,errors.New("evidence limit exceeds policy")}
+		reader,ok:=r.Graph.(EdgeEvidenceReader)
+		if !ok{return nil,errors.New("graph adapter lacks explicit edge-evidence support")}
+		v,err:=reader.EdgeEvidence(ctx,a.ID,a.Limit)
+		if err!=nil{return nil,err}
+		result=v
 	case "get_evidence":
 		var a struct {
 			ID    string `json:"id"`
