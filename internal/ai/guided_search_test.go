@@ -54,6 +54,14 @@ func TestGuidedSearchCannotUseInventedRelationPriorities(t *testing.T){
  if err:=e.Focus([]string{"invented-ownership-relation"},nil);err==nil{t.Fatal("invented relation label accepted")}
  if err:=e.Focus([]string{"website"},[]string{"not-in-frontier"});err==nil{t.Fatal("invented asset ID accepted")}
  if err:=e.Focus([]string{"website"},[]string{"f"});err!=nil{t.Fatal(err)}
+ pending:=e.Pending(1)
+ if len(pending)!=1{t.Fatal("expected initial frontier")}
+ if err:=e.FocusAll([]string{"website"},[]string{"f"},[]string{"invented-path"});err==nil{
+  t.Fatal("invented pending path accepted")
+ }
+ if e.preferPaths["invented-path"]{t.Fatal("invalid advice changed priority state")}
+ if err:=e.FocusAll([]string{"website"},[]string{"f"},[]string{pending[0].PathID});err!=nil{t.Fatal(err)}
+ if !e.preferPaths[pending[0].PathID]{t.Fatal("valid path priority not applied")}
 }
 
 func TestGuidedSearchMarksAlternativeRouteLimitAsPartial(t *testing.T){
