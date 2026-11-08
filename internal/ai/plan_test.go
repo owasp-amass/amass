@@ -118,7 +118,7 @@ func TestUnknownOrganizationIsIncompleteNotError(t *testing.T){
 	m:=&plannerModel{replies:[]string{`{"subject":{"type":"Organization","name":"Unknown Corp."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"}]}`}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
 	result,err:=(Agent{Model:m,Runner:runner}).Ask(context.Background(),"What subsidiaries does Unknown Corp. have?")
-	if err!=nil || !result.Incomplete || !strings.Contains(result.Answer,"No Organization matched") {
+	if err!=nil || !result.Incomplete || !strings.Contains(result.Answer,"No asset matched") {
 		t.Fatalf("no-match response: %+v err=%v",result,err)
 	}
 }
