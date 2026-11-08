@@ -4,6 +4,7 @@ package oamrepo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -14,9 +15,13 @@ import (
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
-type Adapter struct{ Repo repository.Repository }
+type Adapter struct {
+	Repo repository.Repository
+	Aliases []ai.OrganizationAlias
+}
 
 func (a Adapter) GetAsset(ctx context.Context, id string) (ai.Asset, error) {
 	if a.Repo == nil {
@@ -267,6 +272,133 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	}
 	return out, nil
 }
+
+
+// ResolveOrganizations generates field-specific candidate matches using only
+// bounded repository content filters. Alias metadata must be explicitly supplied
+// from a curated source; neither aliases nor names imply legal ownership.
+func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.OrganizationQuery, limit int) (ai.OrganizationResolution, error) {
+    result:=ai.OrganizationResolution{Query:query,Candidates:[]ai.OrganizationCandidate{},Status:"not_found"}
+    if a.Repo==nil {return result,errors.New("missing OAM repository")}
+    if err:=query.Validate();err!=nil {return result,err}
+    if limit<1 || limit>10 {return result,errors.New("candidate limit must be 1..10")}
+
+    // Exact database lookup only. A second bounded query permits a
+    // terminal-period variant, which models frequently omit. Fuzzy
+    // similarity, suffix removal and unrestricted table scans are prohibited.
+    variants:=func(s string) []string {
+        s=strings.Join(strings.Fields(s)," ")
+        if strings.HasSuffix(s,".") {return []string{s,strings.TrimSuffix(s,".")}}
+        return []string{s,s+"."}
+    }
+    matches:=map[string]*ai.OrganizationCandidate{}
+    tooMany:=false
+    add:=func(ent *dbt.Entity,field,value,source string) error {
+        asset,err:=convert(ent)
+        if err!=nil {return err}
+        // Make jurisdiction a strict identity constraint if supplied.
+        var org oamorg.Organization
+        raw,err:=json.Marshal(asset.Content)
+        if err!=nil {return err}
+        if err:=json.Unmarshal(raw,&org);err!=nil {return err}
+        if query.Jurisdiction!="" && org.Jurisdiction!=query.Jurisdiction {return nil}
+        c,exists:=matches[asset.ID]
+        if !exists {
+            if len(matches)>=limit {
+                tooMany=true
+                return nil
+            }
+            c=&ai.OrganizationCandidate{Asset:asset,Matches:[]ai.ResolutionMatch{}}
+            matches[asset.ID]=c
+        }
+        for _,m:=range c.Matches {
+            if m.Field==field && m.Value==value && m.Source==source {return nil}
+        }
+        c.Matches=append(c.Matches,ai.ResolutionMatch{Field:field,Value:value,Source:source})
+        return nil
+    }
+    queryBy:=func(field,value,source string) error {
+        filters:=dbt.ContentFilters{field:value}
+        if field=="registration_id" {filters["jurisdiction"]=query.Jurisdiction}
+        // Each lookup requests one extra candidate for truncation detection.
+        // Any overflow prevents automatic selection.
+        rows,err:=a.Repo.FindEntitiesByContent(ctx,oam.Organization,time.Time{},limit+1,filters)
+        if err!=nil {
+            if strings.TrimSpace(err.Error())=="zero entities found" {return nil}
+            return err
+        }
+        if len(rows)>limit {tooMany=true}
+        for _,ent:=range rows {
+            if err:=add(ent,field,value,source);err!=nil {return err}
+        }
+        return nil
+    }
+    switch {
+    case query.UniqueID!="":
+        if err:=queryBy("unique_id",query.UniqueID,"");err!=nil{return result,err}
+    case query.RegistrationID!="":
+        if err:=queryBy("registration_id",query.RegistrationID,"");err!=nil{return result,err}
+    case query.LegalName!="":
+        for _,v:=range variants(query.LegalName) {
+            if err:=queryBy("legal_name",v,"");err!=nil{return result,err}
+        }
+    case query.Name!="":
+        for _,v:=range variants(query.Name) {
+            for _,field:=range []string{"name","legal_name"} {
+                if err:=queryBy(field,v,"");err!=nil{return result,err}
+            }
+        }
+        // Resolve explicitly documented trade or historic aliases only.
+        // Alias rows point to an existing OAM unique_id; their source is
+        // returned in the candidate provenance. No alias is auto-created.
+        for _,alias:=range a.Aliases {
+            if ai.NormalizeOrganizationAlias(alias.Alias)!=ai.NormalizeOrganizationAlias(query.Name) {continue}
+            if query.Jurisdiction!="" && alias.Jurisdiction!="" && alias.Jurisdiction!=query.Jurisdiction {continue}
+            if err:=queryByAlias(alias,queryBy,add,ctx,a.Repo,limit);err!=nil{return result,err}
+        }
+    }
+    for _,candidate:=range matches {result.Candidates=append(result.Candidates,*candidate)}
+    sort.Slice(result.Candidates,func(i,j int)bool{return result.Candidates[i].Asset.ID<result.Candidates[j].Asset.ID})
+    for i:=range result.Candidates {
+        sort.Slice(result.Candidates[i].Matches,func(j,k int)bool{
+            a,b:=result.Candidates[i].Matches[j],result.Candidates[i].Matches[k]
+            if a.Field!=b.Field{return a.Field<b.Field}
+            if a.Value!=b.Value{return a.Value<b.Value}
+            return a.Source<b.Source
+        })
+    }
+    switch {
+    case tooMany: result.Status="truncated";result.Truncated=true
+    case len(result.Candidates)==0:result.Status="not_found"
+    case len(result.Candidates)==1:result.Status="matched"
+    default: result.Status="ambiguous"
+    }
+    return result,nil
+}
+
+// Alias-specific lookup retains the actual curated source rather than
+// mislabeling an alias as a database-exact name match.
+func queryByAlias(alias ai.OrganizationAlias, _ func(string,string,string) error,
+    add func(*dbt.Entity,string,string,string)error, ctx context.Context,
+    repo repository.Repository, limit int) error {
+    rows,err:=repo.FindEntitiesByContent(ctx,oam.Organization,time.Time{},limit+1,dbt.ContentFilters{"unique_id":alias.UniqueID})
+    if err!=nil {
+        if strings.TrimSpace(err.Error())=="zero entities found" {return nil}
+        return err
+    }
+    for _,ent:=range rows {
+        // An alias jurisdiction must agree with the actual OAM entity.
+        if alias.Jurisdiction!="" {
+            org,ok:=ent.Asset.(*oamorg.Organization)
+            if !ok{return errors.New("alias target is not an Organization")}
+            if org.Jurisdiction!=alias.Jurisdiction {continue}
+        }
+        if err:=add(ent,"alias",alias.Alias,alias.Source);err!=nil{return err}
+    }
+    return nil
+}
+
+var _ ai.OrganizationResolver = Adapter{}
 
 var _ ai.OrganizationLookup = Adapter{}
 
