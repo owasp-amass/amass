@@ -4,6 +4,7 @@ package ai
 import (
  "context"
  "sort"
+ "strings"
 )
 
 // AnswerGroup keeps the preferred explanation separate from all alternative
@@ -11,6 +12,7 @@ import (
 // preference for presentation, never a probability of correctness.
 type AnswerGroup struct {
  AssetID string `json:"asset_id"`
+ SemanticSignature string `json:"semantic_signature"`
  AssetType string `json:"asset_type"`
  Display string `json:"display"`
  PreferredPathID string `json:"preferred_path_id"`
@@ -24,14 +26,37 @@ type AnswerGroup struct {
 // earlier target node, paths continuing to other targets are related context
 // rather than the closest answer to that goal. No model/heuristic can erase
 // those paths from search.matches or evidence_dossier.
+// pathSemanticSignature encodes both stored edge type and traversal
+// orientation. Only witnesses with the same signature are automatically
+// compared by source-tag coverage. Different graph meanings must not
+// disappear behind one representative destination.
+func pathSemanticSignature(path PlanMatch)string{
+ var b strings.Builder
+ for i,e:=range path.Edges{
+  if i>0{b.WriteByte('|')}
+  b.WriteString(e.Label)
+  b.WriteByte('/')
+  b.WriteString(e.Type)
+  b.WriteByte('/')
+  if i<len(path.Nodes) && e.FromID==path.Nodes[i].ID {b.WriteString("out")}else{b.WriteString("in")}
+ }
+ return b.String()
+}
+
 func(a Agent) selectAnswerPaths(ctx context.Context,question string,goal InvestigationGoal,paths []PlanMatch,dossier *EvidenceDossier)([]PlanMatch,[]AnswerGroup,bool,error){
  groups:=map[string][]PlanMatch{}
  typeInfo:=map[string]Asset{}
+ groupAsset:=map[string]string{}
+ groupSignature:=map[string]string{}
  for _,path:=range paths{
   if len(path.Nodes)==0{continue}
   last:=path.Nodes[len(path.Nodes)-1]
-  groups[last.ID]=append(groups[last.ID],path)
+  signature:=pathSemanticSignature(path)
+  key:=last.ID+"\x00"+signature
+  groups[key]=append(groups[key],path)
   typeInfo[last.ID]=last
+  groupAsset[key]=last.ID
+  groupSignature[key]=signature
  }
  byEvidence:=map[string]PathEvidence{}
  if dossier!=nil{for _,p:=range dossier.Paths{byEvidence[p.PathID]=p}}
@@ -41,8 +66,9 @@ func(a Agent) selectAnswerPaths(ctx context.Context,question string,goal Investi
  var summaries []AnswerGroup
  var representatives []PlanMatch
  direct:=map[string]bool{}
- for _,id:=range ids{
-  options:=groups[id]
+ for _,groupKey:=range ids{
+  id:=groupAsset[groupKey]
+  options:=groups[groupKey]
   candidates:=make([]adaptiveCandidate,0,len(options))
   byPath:=map[string]PlanMatch{}
   for _,p:=range options{
@@ -76,19 +102,19 @@ func(a Agent) selectAnswerPaths(ctx context.Context,question string,goal Investi
    }
   }
   summary:=AnswerGroup{
-   AssetID:id,AssetType:typeInfo[id].Type,Display:humanAsset(typeInfo[id]),
+   AssetID:id,SemanticSignature:groupSignature[groupKey],AssetType:typeInfo[id].Type,Display:humanAsset(typeInfo[id]),
    PreferredPathID:best.PathID,AlternativePathIDs:[]string{},DirectToGoal:isDirect,
   }
   for _,c:=range candidates[1:]{summary.AlternativePathIDs=append(summary.AlternativePathIDs,c.PathID)}
   summaries=append(summaries,summary)
-  direct[id]=isDirect
+  direct[best.PathID]=isDirect
   representatives=append(representatives,best)
  }
  // Context is retained in summaries and full evidence; prefer minimum
  // semantically completed routes when at least one exists.
  var primary []PlanMatch
  for _,p:=range representatives{
-  if goal.Purpose=="connected"&&len(goal.Relationships)>0 && !direct[p.Nodes[len(p.Nodes)-1].ID]{continue}
+  if goal.Purpose=="connected"&&len(goal.Relationships)>0 && !direct[p.PathID]{continue}
   primary=append(primary,p)
  }
  if len(primary)==0{primary=representatives}
