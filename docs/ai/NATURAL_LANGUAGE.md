@@ -1,50 +1,84 @@
-# Typed OAM query planning (experimental)
+# Typed OAM query planning and entity resolution (experimental)
 
-The `amass ai ask` command now uses an OAM-aware, provider-neutral
-planning layer. There are no hardcoded natural-language question patterns
-in the active CLI path.
+The AI planner accepts natural language, obtains valid OAM relationship transitions from
+`oam.AssetList`, `oam.GetAssetOutgoingRelations`, and `oam.GetTransformAssetTypes`,
+and returns a bounded (1–3-hop) typed query plan. All transitions are checked
+against the authoritative OAM taxonomy before read-only execution. No hardcoded
+natural-language patterns are used.
 
-1. The model receives a machine-readable taxonomy generated from
-   `oam.AssetList`, `oam.GetAssetOutgoingRelations`, and
-   `oam.GetTransformAssetTypes`.
-2. The model returns a strictly validated typed plan containing an
-   Organization name and 1–3 directed OAM relationship transitions.
-3. Invalid labels, relation types, destinations, directions, or hop counts
-   are rejected. The planner has one opportunity to correct an invalid plan.
-4. Amass resolves the organization name, executes bounded graph queries,
-   and generates answers deterministically from returned asset/edge IDs.
-5. Empty, ambiguous, or truncated queries are explicitly qualified.
+## Entity resolution
 
-Example intermediate plan for a multi-hop investigation:
+OAM's existing `Organization` asset provides `unique_id`, `name`,
+`legal_name`, `jurisdiction` and `registration_id`. The resolver
+uses indexed, typed Asset Database filters over those fields. A plan's
+`subject` includes `type: "Organization"` and exactly one of
+`name`, `legal_name`, `unique_id`, or `registration_id`.
+Registration identifiers require a jurisdiction; an optional jurisdiction
+also disambiguates name-based queries.
+
+For display names, the resolver searches both `name` and `legal_name`.
+For names and legal names, only the final-period variant is additionally
+considered. Arbitrary edit-distance matches, suffix stripping and unbounded
+table scans are not used.
+
+The `resolve_organization` tool returns a status of `matched`,
+`ambiguous`, `not_found`, or `truncated`, with candidate OAM
+entity IDs and match provenance. Multiple candidates never cause
+automatic selection. A query with no matching organization is
+`incomplete`; it cannot prove the absence of relationships.
+
+### Explicitly sourced aliases
+
+Trade names and historical names are loaded from an optional, local,
+read-only JSON file using `-organization-aliases /path/to/aliases.json`:
 
 ```json
 {
-  "subject": {"type":"Organization","name":"Acme Holdings Inc."},
-  "hops": [
-    {"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"},
-    {"direction":"out","label":"website","relation_type":"SimpleRelation","destination_type":"URL"}
+  "aliases": [
+    {
+      "alias": "Acme Group",
+      "unique_id": "synthetic-acme-holdings",
+      "jurisdiction": "US-NY",
+      "source": "curated-registry-record-001"
+    }
   ]
 }
 ```
 
-This architecture reduces hallucinated relationship labels without claiming
-that any given model will always produce a valid plan. The current planner
-starts from Organization names only; other asset types can appear as
-destination types. Entity-name lookup first tries the exact Organization name, then checks a
-single terminal-period variant (e.g. `Inc` and `Inc.`) using bounded
-repository queries. Multiple matching organization IDs remain ambiguous;
-the resolver never silently chooses one. This does not constitute general
-fuzzy matching or entity resolution across aliases and legal names.
+Replace the example values with identifiers and sources you have actually
+verified. An alias maps to an existing Organization `unique_id`; it does
+not create an OAM asset or relationship. The source is included in
+the returned candidate's match provenance. Aliases must have an explicit
+source and resolve to a matching existing entity. The JSON file is limited
+to 1 MiB and 1000 aliases. No external lookup is performed.
 
-Other source-name variations remain exact. A later increment can add
-generalized typed entity resolution and explicit ambiguity handling.
+The JSON schema is a configuration format for the AI resolver, not a
+change to the OAM `Organization` asset schema.
 
-For MCP clients, the read-only `describe_oam_schema` tool exposes
-the same OAM taxonomy and can be scoped by `source_type`.
+### Example
 
-The previous regex-based direct-subsidiary path has been removed.
-OAM relationships are never auto-written by the planner.
+```json
+{
+  "subject": {"type": "Organization", "name": "Acme Holdings Inc."},
+  "hops": [
+    {"direction": "out", "label": "subsidiary", "relation_type": "SimpleRelation", "destination_type": "Organization"},
+    {"direction": "out", "label": "website", "relation_type": "SimpleRelation", "destination_type": "URL"}
+  ]
+}
+```
 
-**Safety:** OAM records remain untrusted evidence. Schema validation
-guarantees type/label consistency, not truth of ownership claims.
-No database modifications are made by this capability.
+The model generates a candidate plan; Go validates and executes it.
+The agent never writes inferred relationships. Entity matches and graph
+paths provide evidence of stored OAM records, not independent proof of
+ownership or attribution.
+
+### Current boundaries
+
+Starting entity type is currently `Organization`; other OAM assets are
+valid traversal destinations. Graph traversal and candidate results are
+bounded. The explicit alias file is a local configuration mechanism;
+a future design may integrate persistent alias evidence and automated
+identity-candidate generation with analyst review.
+
+For MCP clients, `describe_oam_schema` exposes valid OAM relationship
+transitions and `resolve_organization` provides typed resolution.

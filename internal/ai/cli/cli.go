@@ -33,7 +33,7 @@ func CLIWorkflow(_ string, args []string) {
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs := flag.NewFlagSet("ai", flag.ContinueOnError)
 	fs.SetOutput(errout)
-	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath string
+	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, aliasesPath string
 	var scanLimit int
 	var classifierReview bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
@@ -45,6 +45,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&question, "question", "", "Natural-language question")
 	fs.StringVar(&journalPath, "journal", "", "Inference proposal journal path")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
+	fs.StringVar(&aliasesPath, "organization-aliases", "", "Optional JSON file with explicitly sourced organization alias mappings (read-only)")
 	fs.StringVar(&classifierPath, "classifier-model", "", "Optional local linear model JSON (untrained weights should not be used for production decisions)")
 	fs.BoolVar(&classifierReview, "classifier-review", false, "Permit review-only triage without invoking a generative model; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
@@ -67,7 +68,15 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return errors.New("unable to open OAM database")
 	}
 	defer repo.Close()
-	graph := oamrepo.Adapter{Repo: repo}
+	var aliases []ai.OrganizationAlias
+	if aliasesPath!="" {
+		f,err:=os.Open(aliasesPath)
+		if err!=nil{return fmt.Errorf("open organization aliases: %w",err)}
+		aliases,err=ai.LoadOrganizationAliases(f)
+		_ = f.Close()
+		if err!=nil{return fmt.Errorf("load organization aliases: %w",err)}
+	}
+	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases}
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

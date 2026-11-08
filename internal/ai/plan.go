@@ -156,7 +156,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 			var names []string
 			for _,c:=range resolution.Candidates {
 				var sources []string
-				for _,m:=range c.Matches {sources=append(sources,m.Field+"="+m.Value)}
+				for _,m:=range c.Matches {if m.Source!="" {sources=append(sources,m.Field+"="+m.Value+" [source: "+m.Source+"]")} else {sources=append(sources,m.Field+"="+m.Value)}}
 				names=append(names,humanAsset(c.Asset)+" ["+strings.Join(sources,", ")+"]")
 			}
 			out.Answer="Multiple Organization candidates matched; specify an explicit unique_id or jurisdiction-qualified registration_id. Candidates: "+strings.Join(names,"; ")

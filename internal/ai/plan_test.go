@@ -27,6 +27,14 @@ func (g plannedGraph) LookupOrganizations(_ context.Context, name string, _ int)
 	return []Asset{g.assets["parent"]}, nil
 }
 
+func (g plannedGraph) ResolveOrganizations(_ context.Context, q OrganizationQuery, _ int) (OrganizationResolution,error) {
+	result:=OrganizationResolution{Query:q,Status:"not_found",Candidates:[]OrganizationCandidate{}}
+	if q.Name=="Acme Holdings Inc." || q.LegalName=="Acme Holdings Inc." || q.UniqueID=="synthetic-acme-holdings" {
+		result.Status="matched"
+		result.Candidates=[]OrganizationCandidate{{Asset:g.assets["parent"],Matches:[]ResolutionMatch{{Field:"name",Value:"Acme Holdings Inc."}}}}
+	}
+	return result,nil
+}
 func examplePlannedGraph() plannedGraph {
 	return plannedGraph{fakeGraph{
 		assets: map[string]Asset{
@@ -88,7 +96,7 @@ func TestUnknownOrganizationIsIncompleteNotError(t *testing.T){
 	m:=&plannerModel{replies:[]string{`{"subject":{"type":"Organization","name":"Unknown Corp."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"}]}`}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
 	result,err:=(Agent{Model:m,Runner:runner}).Ask(context.Background(),"What subsidiaries does Unknown Corp. have?")
-	if err!=nil || !result.Incomplete || !strings.Contains(result.Answer,"No exact Organization name match") {
+	if err!=nil || !result.Incomplete || !strings.Contains(result.Answer,"No Organization matched") {
 		t.Fatalf("no-match response: %+v err=%v",result,err)
 	}
 }

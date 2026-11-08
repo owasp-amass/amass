@@ -354,7 +354,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
         for _,alias:=range a.Aliases {
             if ai.NormalizeOrganizationAlias(alias.Alias)!=ai.NormalizeOrganizationAlias(query.Name) {continue}
             if query.Jurisdiction!="" && alias.Jurisdiction!="" && alias.Jurisdiction!=query.Jurisdiction {continue}
-            if err:=queryByAlias(alias,queryBy,add,ctx,a.Repo,limit);err!=nil{return result,err}
+            if err:=queryByAlias(alias,add,ctx,a.Repo,limit);err!=nil{return result,err}
         }
     }
     for _,candidate:=range matches {result.Candidates=append(result.Candidates,*candidate)}
@@ -378,7 +378,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 
 // Alias-specific lookup retains the actual curated source rather than
 // mislabeling an alias as a database-exact name match.
-func queryByAlias(alias ai.OrganizationAlias, _ func(string,string,string) error,
+func queryByAlias(alias ai.OrganizationAlias,
     add func(*dbt.Entity,string,string,string)error, ctx context.Context,
     repo repository.Repository, limit int) error {
     rows,err:=repo.FindEntitiesByContent(ctx,oam.Organization,time.Time{},limit+1,dbt.ContentFilters{"unique_id":alias.UniqueID})
