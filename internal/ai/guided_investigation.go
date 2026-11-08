@@ -70,8 +70,15 @@ func(a Agent) guidedInvestigation(ctx context.Context,question string,goal Inves
  req:=GuidedSearchRequest{GraphSearchRequest:GraphSearchRequest{
   StartID:root.ID,TargetTypes:goal.TargetTypes,Direction:goal.Direction,
   MaxDepth:opts.MaxDepth,MaxMatches:opts.MaxMatches,
- },MaxPathsPerAsset:opts.MaxPathsPerAsset,MaxExpansions:opts.MaxExpansions}
+ },MaxPathsPerAsset:opts.MaxPathsPerAsset,MaxExpansions:opts.MaxExpansions,
+  Relationships:goal.Relationships,PathRule:goal.PathRule}
  if req.MaxDepth==0{req.MaxDepth=a.Runner.Limits.MaxDepth}
+ if len(goal.Relationships)>0{
+  seen:=map[string]bool{}
+  for _,rel:=range goal.Relationships{
+   if !seen[rel.Label] {req.PreferredLabels=append(req.PreferredLabels,rel.Label);seen[rel.Label]=true}
+  }
+ }
  if goal.Purpose=="ultimate_parent"{
   // Existing authoritative OAM subsidiary direction: parent -> child.
   // This is only a ranking preference, never a filter.
