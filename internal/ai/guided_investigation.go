@@ -84,9 +84,7 @@ func(a Agent) guidedInvestigation(ctx context.Context,question string,goal Inves
  e,err:=NewGuidedExplorer(ctx,a.Runner.Graph,a.Runner.Catalog,a.Runner.Limits,req)
  if err!=nil{return GraphSearchResult{},err}
  rounds:=opts.GuidanceRounds
- if rounds==0{rounds=2}
- if rounds<0{rounds=0}
- if rounds>3{return GraphSearchResult{},fmt.Errorf("guidance rounds must be 0..3")}
+ if rounds<0||rounds>3{return GraphSearchResult{},fmt.Errorf("guidance rounds must be 0..3")}
  // Expand the initial root and a few nearby paths before soliciting advice.
  // On tiny synthetic fixtures, avoid paying for unnecessary model requests.
  stage:=0
