@@ -26,8 +26,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: AI and CLI tests
-        run: go test -race ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
+      - name: AI, configuration and CLI tests
+        run: go test -race ./config ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
       - name: Build all Amass executables
         # Amass uses libpostal behind CGO; production Docker builds disable CGO.
         # Race-enabled AI tests above intentionally continue to use CGO.
@@ -66,4 +66,4 @@ jobs:
         run: |
           go mod edit -replace=github.com/owasp-amass/asset-db=./asset-db
           go test -v ./internal/ai/oamrepo -run '^TestAdapterBoundedTraversalOnSQLite$' -count=1
-          go test ./internal/ai/...
+          go test ./config ./internal/ai/...
