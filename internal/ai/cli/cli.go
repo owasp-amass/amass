@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"net/http"
 	"os"
 	"strings"
@@ -39,10 +40,11 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
 	var modelTimeout, investigationTimeout time.Duration
-	var classifierReview bool
+	var classifierReview,allowHTTP bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&endpoint, "endpoint", "", "Provider endpoint (defaults depend on provider)")
+	fs.BoolVar(&allowHTTP, "allow-http", false, "Explicitly allow plaintext HTTP inference for a trusted internal endpoint")
 	fs.StringVar(&providerName, "provider", "compatible", "Model provider: compatible or anthropic")
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
@@ -89,6 +91,38 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if err := config.AcquireConfig(dir, configPath, cfg); err != nil && configPath != "" {
 		return fmt.Errorf("load Amass config: %w", err)
 	}
+	// Settings precedence: explicit flags > AMASS_AI_* environment >
+	// YAML ai: section > CLI defaults. No AI service starts implicitly.
+	explicitFlags:=map[string]bool{}
+	fs.Visit(func(f *flag.Flag){explicitFlags[f.Name]=true})
+	var fileAI config.AISettings
+	if cfg.AI!=nil{fileAI=*cfg.AI}
+	effective,err:=config.ResolveAISettings(fileAI,os.LookupEnv)
+	if err!=nil{return fmt.Errorf("load AI settings: %w",err)}
+	if !explicitFlags["provider"] && effective.Provider!=""{providerName=effective.Provider}
+	if !explicitFlags["endpoint"] && effective.Endpoint!=""{endpoint=effective.Endpoint}
+	if !explicitFlags["model"] && effective.Model!=""{modelName=effective.Model}
+	if !explicitFlags["api-key-env"] && effective.APIKeyEnv!=""{keyEnv=effective.APIKeyEnv}
+	if !explicitFlags["allow-http"]{allowHTTP=effective.AllowHTTP}
+	if !explicitFlags["classifier-model"] && effective.ClassifierModel!=""{classifierPath=effective.ClassifierModel}
+	if !explicitFlags["classifier-review"]{classifierReview=effective.ClassifierReview}
+	if !explicitFlags["depth"] && effective.MaxDepth!=0{graphDepth=effective.MaxDepth}
+	if !explicitFlags["max-matches"] && effective.MaxMatches!=0{graphMatches=effective.MaxMatches}
+	if !explicitFlags["max-paths-per-asset"] && effective.MaxPathsPerAsset!=0{graphAlternates=effective.MaxPathsPerAsset}
+	if !explicitFlags["max-expansions"] && effective.MaxExpansions!=0{graphExpansions=effective.MaxExpansions}
+	if !explicitFlags["guidance-rounds"]{guidanceRounds=effective.GuidanceRounds}
+	if !explicitFlags["model-timeout"] && effective.ModelTimeout!=""{
+		value,err:=time.ParseDuration(effective.ModelTimeout)
+		if err!=nil{return err}
+		modelTimeout=value
+	}
+	if !explicitFlags["investigation-timeout"] && effective.InvestigationTimeout!=""{
+		value,err:=time.ParseDuration(effective.InvestigationTimeout)
+		if err!=nil{return err}
+		investigationTimeout=value
+	}
+	if modelTimeout<5*time.Second||modelTimeout>15*time.Minute{return errors.New("model timeout must be between 5s and 15m")}
+	if investigationTimeout<modelTimeout||investigationTimeout>30*time.Minute{return errors.New("investigation timeout must be at least model timeout and at most 30m")}
 	repo := tools.OpenGraphDatabase(cfg)
 	if repo == nil {
 		return errors.New("unable to open OAM database")
@@ -161,9 +195,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	default:
 		return fmt.Errorf("unknown model provider %q", providerName)
 	}
-	if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://127.0.0.1:") && !strings.HasPrefix(endpoint, "http://localhost:") {
-		return errors.New("remote model endpoint must use HTTPS")
-	}
+	if err:=validateModelEndpoint(endpoint,allowHTTP);err!=nil{return err}
 	switch operation {
 	case "scan":
 		return scan(ctx, graph, provider, modelName, journalPath, scanLimit, localClassifier, classifierReview, out)
@@ -271,5 +303,21 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		_, err = fmt.Fprintln(out, string(result))
 		return err
 	}
+	return nil
+}
+
+
+// validateModelEndpoint prevents accidental plaintext transmission of graph
+// evidence. In-container HTTP to Ollama requires explicit opt-in.
+func validateModelEndpoint(endpoint string,allowHTTP bool)error{
+	u,err:=url.Parse(endpoint)
+	if err!=nil{return fmt.Errorf("invalid inference endpoint: %w",err)}
+	if u.User!=nil || u.Host=="" || u.Hostname()=="" || u.Fragment!=""{
+		return errors.New("inference endpoint must have a hostname and no URL credentials or fragment")
+	}
+	if u.Scheme=="https"{return nil}
+	if u.Scheme!="http"{return errors.New("inference endpoint must use HTTPS or explicitly permitted HTTP")}
+	if u.Hostname()=="localhost" || u.Hostname()=="127.0.0.1" || u.Hostname()=="::1"{return nil}
+	if !allowHTTP{return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_AI_ALLOW_HTTP=true for a trusted internal endpoint")}
 	return nil
 }
