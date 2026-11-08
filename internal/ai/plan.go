@@ -102,7 +102,7 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 	rawCatalog, err := json.Marshal(catalog)
 	if err != nil { return zero, err }
 	system := "You are an OWASP Open Asset Model query planner. Return ONLY a JSON object, without markdown, matching " +
-		"{\"subject\":{\"type\":\"Organization\",\"name\":\"EXACT company name\"},\"hops\":[{\"direction\":\"out\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}.  +
+		"{\"subject\":{\"type\":\"Organization\",\"name\":\"EXACT company name\"},\"hops\":[{\"direction\":\"out\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}. " +
 		"Treat the request as an investigation over STORED graph relationships, not general knowledge. " +
 		"Only choose transitions appearing in the catalog. Each hop begins at the previous hop's destination type. " +
 		"For incoming hops reverse the permitted source/destination types. Prefer the shortest meaningful path (maximum 3 hops). " +
