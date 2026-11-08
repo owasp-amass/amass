@@ -370,6 +370,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 	paths:=[]partialPath{{nodes:[]Asset{root}}}
 	edgesSeen:=map[string]bool{}
 	nodesSeen:=map[string]bool{root.ID:true}
+	stoppedAtHop:=0
 	for hopIndex,step:=range plan.Hops {
 		next:=make([]partialPath,0)
 		for _,path:=range paths {
@@ -418,19 +419,34 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 			}
 		}
 		paths=next
-		if len(paths)==0 {break}
+		if len(paths)==0 {
+			// A missing intermediate edge means subsequent planned hops were
+			// never evaluated. This is not a completed investigation of the
+			// requested target, even though the graph query itself succeeded.
+			if hopIndex<len(plan.Hops)-1 {
+				stoppedAtHop=hopIndex+1
+				out.PlanStoppedAtHop=stoppedAtHop
+				out.Incomplete=true
+			}
+			break
+		}
 	}
 	out.Matches=make([]PlanMatch,0,len(paths))
 	for _,path:=range paths {out.Matches=append(out.Matches,PlanMatch{Nodes:path.nodes,Edges:path.edges})}
 	sort.Slice(out.Matches,func(i,j int)bool{return formatMatch(out.Matches[i])<formatMatch(out.Matches[j])})
-	if len(out.Matches)==0 {
+	if stoppedAtHop>0 {
+		hop:=plan.Hops[stoppedAtHop-1]
+		out.Answer=fmt.Sprintf("The proposed %d-hop OAM path stopped at hop %d (%s %s, relation type %s) because no matching edges were returned. "+
+			"Later hops were not executed; the requested target remains unresolved. Other valid OAM paths may exist.",
+			len(plan.Hops),stoppedAtHop,hop.Direction,hop.Label,hop.RelationType)
+	} else if len(out.Matches)==0 {
 		out.Answer=fmt.Sprintf("No matching %d-hop OAM relationship paths were returned for %s by this database; this does not prove the relationships do not exist.",len(plan.Hops),formatPlanSubject(plan.Subject))
 	} else {
 		segments:=make([]string,0,len(out.Matches))
 		for _,match:=range out.Matches {segments=append(segments,formatMatch(match))}
 		out.Answer=fmt.Sprintf("Found %d matching OAM path(s): %s. Results reflect stored graph relationships, not independent ownership verification.",len(segments),strings.Join(segments,"; "))
 	}
-	if out.Incomplete {out.Answer+=" The traversal was truncated; results may be incomplete."}
+	if out.Incomplete && stoppedAtHop==0 {out.Answer+=" The traversal was truncated or otherwise budget-limited; results may be incomplete."}
 	return out,nil
 }
 

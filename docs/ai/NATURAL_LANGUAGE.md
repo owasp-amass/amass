@@ -153,3 +153,16 @@ incoming `domain` relationship, the answer renders
 `FQDN <--domain-- URL` because the stored OAM edge is directed
 `URL --domain--> FQDN`. This prevents inverse traversal from being
 mistaken for the direction of the asserted relationship.
+
+## Empty intermediate hops and unresolved questions
+
+A schema-valid multi-hop plan can still choose the wrong graph path.
+If a proposed path has no edges at an intermediate hop, the remaining hops
+cannot be executed. The CLI marks the investigation `incomplete: true`,
+reports `plan_stopped_at_hop`, and explicitly warns that other OAM paths
+may exist. A one-hop search with no matching edges is not automatically
+classified as truncated. None of these outcomes proves the absence of an
+asset elsewhere in the graph. Finding an ultimate parent organization
+requires graph-aware alternative-path planning and recursive traversal of
+corporate hierarchy relations; this is **not** implemented by the current
+fixed-hop planner.

@@ -315,3 +315,28 @@ func TestFormattedSubjectForGenericRootWithoutMatches(t *testing.T){
 		t.Fatalf("generic subject identifier omitted: %s",got)
 	}
 }
+
+func TestIntermediateHopWithoutEdgesIsUnresolved(t *testing.T) {
+	model:=&plannerModel{replies:[]string{
+		`{"subject":{"type":"URL","field":"url","value":"https://eu.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"},{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
+	}}
+	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"Find the URLs linked through the domain of https://eu.acme.example/")
+	if err!=nil {t.Fatal(err)}
+	if !out.Incomplete || out.PlanStoppedAtHop!=1 || out.ToolCalls!=2 || len(out.Matches)!=0 {
+		t.Fatalf("unresolved intermediate query appeared complete: %+v",out)
+	}
+	if !strings.Contains(out.Answer,"Later hops were not executed") || !strings.Contains(out.Answer,"Other valid OAM paths may exist") {
+		t.Fatalf("answer does not explain plan exhaustion: %s",out.Answer)
+	}
+}
+func TestSingleHopNoMatchIsQualifiedButNotTruncated(t *testing.T) {
+	model:=&plannerModel{replies:[]string{
+		`{"subject":{"type":"URL","field":"url","value":"https://eu.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
+	}}
+	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
+	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What FQDN is linked to https://eu.acme.example/?")
+	if err!=nil || out.Incomplete || out.PlanStoppedAtHop!=0 || len(out.Matches)!=0{
+		t.Fatalf("single-hop empty search misclassified: %+v err=%v",out,err)
+	}
+}

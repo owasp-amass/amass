@@ -30,6 +30,7 @@ type Investigation struct {
 	Answer       string        `json:"answer"`
 	Observations []Observation `json:"observations"`
 	Incomplete   bool          `json:"incomplete"`
+	PlanStoppedAtHop int `json:"plan_stopped_at_hop,omitempty"`
 	ToolCalls    int           `json:"tool_calls"`
 }
 type Agent struct {
