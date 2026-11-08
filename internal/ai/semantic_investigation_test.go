@@ -27,6 +27,18 @@ func TestAdaptiveQuestionUsesGenericRelationshipGoalAndSourceDossier(t *testing.
   t.Fatalf("missing source-level report or incorrect completeness for untagged edges: %+v",result)
  }
  if result.Incomplete{t.Fatal("database graph match should be complete separately from provenance incompleteness")}
+ stages:=map[string]InvestigationTraceEvent{}
+ for _,event:=range result.Trace{stages[event.Stage]=event}
+ for _,stage:=range []string{"goal_planning","resolve_asset","guided_search","evidence_inspection","path_selection"}{
+  if _,ok:=stages[stage];!ok{t.Fatalf("missing execution trace stage %q: %+v",stage,result.Trace)}
+ }
+ if stages["evidence_inspection"].EdgeEvidenceLookups!=3 || stages["evidence_inspection"].EvidenceRecords!=0 {
+  t.Fatalf("source-level tracing should count three distinct untagged edge reads: %+v",stages["evidence_inspection"])
+ }
+ if stages["guided_search"].GraphNodes==0||stages["guided_search"].PathExpansions==0{
+  t.Fatalf("guided search trace lacks real traversal metrics: %+v",stages["guided_search"])
+ }
+ t.Logf("TRACE: %+v",result.Trace)
  if !strings.Contains(result.Answer,"Source-level support is incomplete"){
   t.Fatalf("no source uncertainty warning: %s",result.Answer)
  }
