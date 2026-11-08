@@ -105,6 +105,17 @@ func(a Agent) planGoal(ctx context.Context,question string)(InvestigationGoal,er
 
  relations:=a.Runner.Catalog.Relations()
  explicitHint,explicit:=explicitRelationLabels(question,relations)
+ // When the user explicitly names relationship types, only those
+ // transitions need to be presented to the model. Full schema validation
+ // and execution still use the entire OAM catalog. This reduces the
+ // prompt size for smaller local models without changing permissions.
+ promptRelations:=relations
+ if explicit{
+  selected:=map[string]bool{}
+  for _,label:=range explicitHint.Labels{selected[label]=true}
+  promptRelations=make([]RelationshipSchema,0)
+  for _,rel:=range relations{if selected[strings.ToLower(rel.Label)]{promptRelations=append(promptRelations,rel)}}
+ }
  prompt:=`You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
 Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}.
 The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
@@ -117,7 +128,7 @@ For a non-Organization, use {"type":"FQDN","field":"name","value":"example.org"}
 Choose target_types from the catalog based on the answer requested. Set [] if the question is broad and exploratory.
 All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
 SELECTOR CATALOG:
-`+compactSelectorCatalog(selectors)+"\nALL AVAILABLE OAM TARGET TYPES: "+strings.Join(allTypes,",")+"\nOAM RELATIONSHIP CATALOG:\n"+compactRelationshipCatalog(relations)
+`+compactSelectorCatalog(selectors)+"\nALL AVAILABLE OAM TARGET TYPES: "+strings.Join(allTypes,",")+"\nOAM RELATIONSHIP CATALOG:\n"+compactRelationshipCatalog(promptRelations)
  if explicit{
   // Promote user-named OAM labels above model-assumed WHOIS/DNS hops.
   // Exact transition types are still grounded only after a typed root and
