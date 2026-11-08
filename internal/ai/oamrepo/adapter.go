@@ -154,6 +154,28 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 	return out, nil
 }
 
+// EdgeEvidence always queries the relation namespace. Entity and edge
+// identifiers may be identical; a generic FindEntityById-first lookup cannot
+// safely be used for source-level relationship attribution.
+func (a Adapter) EdgeEvidence(ctx context.Context,id string,limit int)([]ai.Evidence,error){
+ if a.Repo==nil{return nil,errors.New("missing OAM repository")}
+ if id==""||limit<1||limit>500{return nil,errors.New("invalid edge evidence query or limit")}
+ edge,err:=a.Repo.FindEdgeById(ctx,id)
+ if err!=nil{return nil,fmt.Errorf("resolve exact edge for evidence: %w",err)}
+ tags,err:=a.Repo.FindEdgeTags(ctx,edge,time.Time{})
+ if err!=nil{return nil,err}
+ out:=make([]ai.Evidence,0,min(len(tags),limit))
+ for _,tag:=range tags{
+  if tag==nil||tag.Property==nil{continue}
+  if len(out)>=limit{break}
+  out=append(out,ai.Evidence{ID:tag.ID,SubjectID:id,SourceID:source(tag.Property),
+   Kind:string(tag.Property.PropertyType()),Property:tag.Property,LastSeen:tag.LastSeen})
+ }
+ return out,nil
+}
+
+var _ ai.EdgeEvidenceReader = Adapter{}
+
 // Source identity is only assigned to explicitly typed provenance properties.
 // Other properties are evidence but do not establish independent sources.
 func source(p oam.Property) string {
