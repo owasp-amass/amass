@@ -79,3 +79,32 @@ func (j *Journal) History() ([]json.RawMessage, error) {
 	}
 	return lines, s.Err()
 }
+
+// TriageEvent is a human-review candidate, not a trusted OAM relation.
+// It contains only stable identifiers and verified evidence references.
+type TriageEvent struct {
+	SubjectID      string    `json:"subject_id"`
+	ObjectID       string    `json:"object_id"`
+	EvidenceIDs    []string  `json:"evidence_ids"`
+	SourceIDs      []string  `json:"source_ids"`
+	ModelID        string    `json:"model_id"`
+	FeatureVersion string    `json:"feature_version"`
+	At             time.Time `json:"at"`
+}
+
+// SubmitTriage records a local classifier's review decision without creating a
+// proposal. It must not be interpreted as acceptance of an OAM relationship.
+func (j *Journal) SubmitTriage(c Candidate, r RoutingResult) error {
+	if r.Decision != "review" || r.Prediction == nil || len(r.Provenance.SourceIDs) < 2 ||
+		c.SubjectID == "" || c.ObjectID == "" || c.SubjectID == c.ObjectID {
+		return errors.New("invalid review-only triage event")
+	}
+	return j.append("triage", TriageEvent{
+		SubjectID: c.SubjectID, ObjectID: c.ObjectID,
+		EvidenceIDs:    r.Provenance.EvidenceIDs,
+		SourceIDs:      r.Provenance.SourceIDs,
+		ModelID:        r.Prediction.ModelID,
+		FeatureVersion: r.Prediction.FeatureVersion,
+		At:             time.Now().UTC(),
+	})
+}

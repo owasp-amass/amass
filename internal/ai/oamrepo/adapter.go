@@ -153,7 +153,7 @@ func source(p oam.Property) string {
 	if p.PropertyType() != oam.SourceProperty {
 		return ""
 	}
-	return p.Name() + ":" + p.Value()
+	return p.Name()
 }
 
 var _ ai.Graph = Adapter{}

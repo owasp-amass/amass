@@ -2,123 +2,172 @@
 package ai
 
 import (
- "context"
- "errors"
- "fmt"
- "sort"
+	"context"
+	"errors"
+	"fmt"
+	"sort"
 
- "github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 )
+
+// EvidenceSummary records the provenance that was available to the router.
+// Distinct source IDs are an approximation, NOT proof of source independence.
+type EvidenceSummary struct {
+	EvidenceIDs      []string `json:"evidence_ids"`
+	SourceIDs        []string `json:"source_ids"`
+	SourceProperties int      `json:"source_properties"`
+	Unattributed     int      `json:"unattributed"`
+}
 
 const OrganizationFeatureVersion = "oam-provenance-v1"
 const OrganizationClassificationTask = "organization_relation"
 
-// Source identities describe recorded provenance, not proven independence.
-type EvidenceSummary struct {
- EvidenceIDs []string `json:"evidence_ids"`
- SourceIDs []string `json:"source_ids"`
- SourceProperties int `json:"source_properties"`
- Unattributed int `json:"unattributed"`
-}
-
-// ExtractProvenanceFeatures must receive evidence IDs checked against the OAM
-// database by its caller. It deliberately does not interpret untrusted text.
+// ExtractProvenanceFeatures produces bounded, non-semantic features exclusively
+// from supplied, repository-verified OAM evidence. No model is asked to parse
+// arbitrary web, DNS, or certificate text as an instruction.
+// The caller MUST verify evidence IDs against the Asset Database first.
 func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, error) {
- var out EvidenceSummary
- if c.SubjectID == "" || c.ObjectID == "" || c.SubjectID == c.ObjectID {
-  return classify.Input{},out,errors.New("invalid candidate endpoints")
- }
- if len(c.AllowedLabels)==0 || len(c.Evidence)>100 {
-  return classify.Input{},out,errors.New("invalid taxonomy or evidence count")
- }
- seen:=map[string]string{}
- sources:=map[string]bool{}
- for _,ev:=range c.Evidence {
-  if ev.ID=="" {return classify.Input{},out,errors.New("evidence without ID")}
-  if previous,ok:=seen[ev.ID];ok {
-   if previous!=ev.SourceID {return classify.Input{},out,fmt.Errorf("conflicting provenance for evidence %q",ev.ID)}
-   continue
-  }
-  seen[ev.ID]=ev.SourceID
-  if ev.SourceID=="" {out.Unattributed++} else {sources[ev.SourceID]=true}
-  if ev.Kind=="SourceProperty" && ev.SourceID!="" {out.SourceProperties++}
- }
- for id:=range seen {out.EvidenceIDs=append(out.EvidenceIDs,id)}
- for id:=range sources {out.SourceIDs=append(out.SourceIDs,id)}
- sort.Strings(out.EvidenceIDs);sort.Strings(out.SourceIDs)
- n:=len(seen)
- fraction:=func(a,b int)float64{if b==0{return 0};return float64(a)/float64(b)}
- input:=classify.Input{Task:OrganizationClassificationTask,Features:map[string]float64{
-  "distinct_sources":minNumber(float64(len(sources))/3,1),
-  "evidence_count":minNumber(float64(n)/8,1),
-  "source_property_fraction":fraction(out.SourceProperties,n),
-  "unattributed_fraction":fraction(out.Unattributed,n),
- }}
- return input,out,nil
+	var out EvidenceSummary
+	if c.SubjectID == "" || c.ObjectID == "" || c.SubjectID == c.ObjectID {
+		return classify.Input{}, out, errors.New("invalid candidate endpoints")
+	}
+	if len(c.AllowedLabels) == 0 || len(c.Evidence) > 100 {
+		return classify.Input{}, out, errors.New("invalid candidate taxonomy or evidence count")
+	}
+	evidenceIDs := make(map[string]string)
+	sources := make(map[string]bool)
+	for _, ev := range c.Evidence {
+		if ev.ID == "" {
+			return classify.Input{}, out, errors.New("evidence without ID")
+		}
+		if prior, ok := evidenceIDs[ev.ID]; ok {
+			if prior != ev.SourceID {
+				return classify.Input{}, out, fmt.Errorf("conflicting provenance for evidence %q", ev.ID)
+			}
+			continue
+		}
+		evidenceIDs[ev.ID] = ev.SourceID
+		if ev.SourceID == "" {
+			out.Unattributed++
+		} else {
+			sources[ev.SourceID] = true
+		}
+		if ev.Kind == "SourceProperty" && ev.SourceID != "" {
+			out.SourceProperties++
+		}
+	}
+	for id := range evidenceIDs {
+		out.EvidenceIDs = append(out.EvidenceIDs, id)
+	}
+	for id := range sources {
+		out.SourceIDs = append(out.SourceIDs, id)
+	}
+	sort.Strings(out.EvidenceIDs)
+	sort.Strings(out.SourceIDs)
+	n := len(evidenceIDs)
+	denom := float64(n)
+	var fraction float64
+	if n > 0 {
+		fraction = float64(out.SourceProperties) / denom
+	}
+	input := classify.Input{Task: OrganizationClassificationTask, Features: map[string]float64{
+		"distinct_sources":         minFloat(float64(len(sources))/3, 1),
+		"evidence_count":           minFloat(float64(n)/8, 1),
+		"source_property_fraction": fraction,
+		"unattributed_fraction":    frac(out.Unattributed, n),
+	}}
+	return input, out, nil
 }
-func minNumber(a,b float64)float64{if a<b{return a};return b}
 
-// Default policy never skips candidates based on uncalibrated predictions.
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+func frac(part, whole int) float64 {
+	if whole == 0 {
+		return 0
+	}
+	return float64(part) / float64(whole)
+}
+
+// RoutingPolicy is conservative: the default does not permit local negative
+// skips. Even with calibrated predictions, explicit authorization is required.
 type RoutingPolicy struct {
- AllowLocalReview bool
- AllowCalibratedSkip bool
-}
-type RoutingResult struct {
- Decision string `json:"decision"`
- Reason string `json:"reason"`
- Prediction *classify.Prediction `json:"prediction,omitempty"`
- Provenance EvidenceSummary `json:"provenance"`
- Proposal *Proposal `json:"proposal,omitempty"`
- UsedGenerativeModel bool `json:"used_generative_model"`
+	AllowLocalReview    bool
+	AllowCalibratedSkip bool
 }
 
-// AnalyzeRouted is read-only: local review results are triage-only, and the
-// existing Inferrer.Analyze generates separately validated proposals.
-func (i Inferrer) AnalyzeRouted(ctx context.Context,c Candidate,model classify.Classifier,policy RoutingPolicy)(RoutingResult,error){
- var result RoutingResult
- if err:=ctx.Err();err!=nil{return result,err}
- if i.MinSources<2{return result,errors.New("minimum distinct sources must be >= 2")}
- input,provenance,err:=ExtractProvenanceFeatures(c)
- if err!=nil{return result,err}
- result.Provenance=provenance
- if len(provenance.SourceIDs)<i.MinSources{
-  result.Decision="needs_evidence"
-  result.Reason="insufficient attributed sources; no model request made"
-  return result,nil
- }
- if model!=nil{
-  prediction,err:=model.Classify(ctx,input)
-  if err!=nil{return result,fmt.Errorf("classifier: %w",err)}
-  if prediction.FeatureVersion!=OrganizationFeatureVersion {
-   return result,fmt.Errorf("classifier feature version %q does not match %q",prediction.FeatureVersion,OrganizationFeatureVersion)
-  }
-  result.Prediction=&prediction
-  if prediction.Decision=="review" && policy.AllowLocalReview {
-   result.Decision="review"
-   result.Reason="human review required; no OAM relationship proposed or accepted"
-   return result,nil
-  }
-  if prediction.Decision=="skip" && prediction.ScoreKind=="calibrated_probability" && policy.AllowCalibratedSkip {
-   result.Decision="skip"
-   result.Reason="explicit calibrated triage policy; not proof of non-ownership"
-   return result,nil
-  }
- }
- if i.Model==nil {
-  result.Decision="escalate"
-  result.Reason="generative model required"
-  return result,nil
- }
- result.UsedGenerativeModel=true
- proposal,err:=i.Analyze(ctx,c)
- if err!=nil{return result,err}
- if proposal==nil {
-  result.Decision="no_proposal"
-  result.Reason="generative model returned no supported relation"
-  return result,nil
- }
- result.Decision="proposed"
- result.Reason="proposal requires review and is not a trusted OAM edge"
- result.Proposal=proposal
- return result,nil
+type RoutingResult struct {
+	Decision            string               `json:"decision"` // needs_evidence, review, skip, escalate, proposed, no_proposal
+	Reason              string               `json:"reason"`
+	Prediction          *classify.Prediction `json:"prediction,omitempty"`
+	Provenance          EvidenceSummary      `json:"provenance"`
+	Proposal            *Proposal            `json:"proposal,omitempty"`
+	UsedGenerativeModel bool                 `json:"used_generative_model"`
+}
+
+// AnalyzeRouted runs cheap classification first, escalating when needed.
+// It never inserts OAM relationships. The caller decides how to persist a
+// review-only routing result or an LLM proposal.
+func (i Inferrer) AnalyzeRouted(ctx context.Context, c Candidate, classifier classify.Classifier, policy RoutingPolicy) (RoutingResult, error) {
+	var out RoutingResult
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
+	if i.MinSources < 2 {
+		return out, errors.New("minimum independent sources must be >= 2")
+	}
+	input, summary, err := ExtractProvenanceFeatures(c)
+	if err != nil {
+		return out, err
+	}
+	out.Provenance = summary
+	if len(summary.SourceIDs) < i.MinSources {
+		out.Decision = "needs_evidence"
+		out.Reason = "not enough distinct attributed sources; no generative request made"
+		return out, nil
+	}
+	if classifier != nil {
+		prediction, err := classifier.Classify(ctx, input)
+		if err != nil {
+			return out, fmt.Errorf("classify candidate: %w", err)
+		}
+		// Enforce feature schema agreement, even for custom classifier adapters.
+		if prediction.FeatureVersion != OrganizationFeatureVersion {
+			return out, fmt.Errorf("classifier feature version %q does not match %q", prediction.FeatureVersion, OrganizationFeatureVersion)
+		}
+		out.Prediction = &prediction
+		if prediction.Decision == "review" && policy.AllowLocalReview {
+			out.Decision = "review"
+			out.Reason = "classifier triage: analyst review required; no relationship has been proposed or accepted"
+			return out, nil
+		}
+		if prediction.Decision == "skip" && prediction.ScoreKind == "calibrated_probability" && policy.AllowCalibratedSkip {
+			out.Decision = "skip"
+			out.Reason = "calibrated classifier triage under explicit skip policy; not a statement of non-ownership"
+			return out, nil
+		}
+		// Uncalibrated negatives ALWAYS escalate; classifier output is not evidence.
+	}
+	if i.Model == nil {
+		out.Decision = "escalate"
+		out.Reason = "generative model required to investigate this candidate"
+		return out, nil
+	}
+	out.UsedGenerativeModel = true
+	proposal, err := i.Analyze(ctx, c)
+	if err != nil {
+		return out, err
+	}
+	if proposal == nil {
+		out.Decision = "no_proposal"
+		out.Reason = "generative model found no supported relationship"
+		return out, nil
+	}
+	out.Decision = "proposed"
+	out.Reason = "proposal requires policy validation or human review"
+	out.Proposal = proposal
+	return out, nil
 }

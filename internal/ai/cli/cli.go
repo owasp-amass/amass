@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 	"github.com/owasp-amass/amass/v5/internal/ai/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 	"github.com/owasp-amass/amass/v5/internal/tools"
@@ -31,8 +33,9 @@ func CLIWorkflow(_ string, args []string) {
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs := flag.NewFlagSet("ai", flag.ContinueOnError)
 	fs.SetOutput(errout)
-	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath string
+	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath string
 	var scanLimit int
+	var classifierReview bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&endpoint, "endpoint", "", "Provider endpoint (defaults depend on provider)")
@@ -42,6 +45,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&question, "question", "", "Natural-language question")
 	fs.StringVar(&journalPath, "journal", "", "Inference proposal journal path")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
+	fs.StringVar(&classifierPath, "classifier-model", "", "Optional local linear model JSON (untrained weights should not be used for production decisions)")
+	fs.BoolVar(&classifierReview, "classifier-review", false, "Permit review-only triage without invoking a generative model; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -71,6 +76,24 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		cancel()
 		return (mcp.Server{Runner: runner}).Serve(context.Background(), in, out)
 	}
+	if classifierReview && classifierPath == "" {
+		return errors.New("-classifier-review requires -classifier-model")
+	}
+	var localClassifier classify.Classifier
+	if classifierPath != "" {
+		raw, err := os.ReadFile(classifierPath)
+		if err != nil {
+			return err
+		}
+		model, err := classify.Load(bytes.NewReader(raw))
+		if err != nil {
+			return fmt.Errorf("load local classifier: %w", err)
+		}
+		if model.FeatureVersion != ai.OrganizationFeatureVersion || model.Task != ai.OrganizationClassificationTask {
+			return errors.New("classifier model has incompatible task or feature version")
+		}
+		localClassifier = model
+	}
 	if modelName == "" {
 		return errors.New("-model required")
 	}
@@ -94,7 +117,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	}
 	switch operation {
 	case "scan":
-		return scan(ctx, graph, provider, modelName, journalPath, scanLimit, out)
+		return scan(ctx, graph, provider, modelName, journalPath, scanLimit, localClassifier, classifierReview, out)
 	case "ask":
 		if question == "" {
 			return errors.New("-question required")
@@ -167,18 +190,22 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		}
 		c.AllowedLabels = allowed
 		inferrer := ai.Inferrer{Model: provider, Plugin: "entity-resolution", ModelID: modelName, MinSources: 2}
-		proposal, err := inferrer.Analyze(ctx, c)
+		routing, err := inferrer.AnalyzeRouted(ctx, c, localClassifier, ai.RoutingPolicy{AllowLocalReview: classifierReview})
 		if err != nil {
 			return err
 		}
-		if proposal == nil {
-			_, err = fmt.Fprintln(out, "no supported relation proposed")
-			return err
+		journal := &ai.Journal{Path: journalPath}
+		if routing.Decision == "review" {
+			if err := journal.SubmitTriage(c, routing); err != nil {
+				return err
+			}
 		}
-		if err := (&ai.Journal{Path: journalPath}).Submit(*proposal); err != nil {
-			return err
+		if routing.Proposal != nil {
+			if err := journal.Submit(*routing.Proposal); err != nil {
+				return err
+			}
 		}
-		result, err := json.MarshalIndent(proposal, "", "  ")
+		result, err := json.MarshalIndent(routing, "", "  ")
 		if err != nil {
 			return err
 		}
