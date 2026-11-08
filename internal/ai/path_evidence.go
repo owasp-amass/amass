@@ -7,6 +7,8 @@ import (
  "sort"
  "strings"
  "time"
+
+ oam "github.com/owasp-amass/open-asset-model"
 )
 
 // SourceRecord describes a tag attached to one exact OAM graph relation.
@@ -62,6 +64,8 @@ func EvaluatePathEvidence(ctx context.Context,graph Graph,limits Limits,paths []
  out:=EvidenceDossier{Paths:make([]PathEvidence,0,len(paths)),EdgeLookupsLimit:min(40,limits.MaxEdges),RecordsPerEdgeLimit:min(8,limits.MaxEvidence)}
  if graph==nil{return out,fmt.Errorf("graph evidence interface required")}
  if err:=limits.Validate();err!=nil{return out,err}
+ reader,ok:=graph.(EdgeEvidenceReader)
+ if !ok{return out,fmt.Errorf("explicit edge evidence reader required (asset and edge identifiers can overlap)")}
  if len(paths)>limits.MaxFind{return out,fmt.Errorf("path evidence request exceeds bounded find limit")}
  cache:=map[string]EdgeEvidence{}
  for _,p:=range paths{
@@ -83,7 +87,7 @@ func EvaluatePathEvidence(ctx context.Context,graph Graph,limits Limits,paths []
     }else{
      // Ask for an extra tag to distinguish a complete answer from a
      // truncated evidence record set. The graph adapter enforces bounds.
-     records,err:=graph.Evidence(ctx,edge.ID,out.RecordsPerEdgeLimit+1)
+     records,err:=reader.EdgeEvidence(ctx,edge.ID,out.RecordsPerEdgeLimit+1)
      if err!=nil{return out,fmt.Errorf("read evidence for OAM edge %s: %w",edge.ID,err)}
      if len(records)>out.RecordsPerEdgeLimit{
       records=records[:out.RecordsPerEdgeLimit]
@@ -98,7 +102,9 @@ func EvaluatePathEvidence(ctx context.Context,graph Graph,limits Limits,paths []
       if record.ID==""{return out,fmt.Errorf("evidence tag missing ID on edge %q",edge.ID)}
       if seen[record.ID]{continue}
       seen[record.ID]=true
-      tag:=SourceRecord{EvidenceID:record.ID,EdgeID:edge.ID,SourceID:strings.TrimSpace(record.SourceID),Kind:record.Kind,LastSeen:record.LastSeen}
+      sourceID:=""
+      if record.Kind==string(oam.SourceProperty){sourceID=strings.TrimSpace(record.SourceID)}
+      tag:=SourceRecord{EvidenceID:record.ID,EdgeID:edge.ID,SourceID:sourceID,Kind:record.Kind,LastSeen:record.LastSeen}
       item.Records=append(item.Records,tag)
       if tag.SourceID==""{item.UnattributedTags++}else{sources[tag.SourceID]=true}
      }
