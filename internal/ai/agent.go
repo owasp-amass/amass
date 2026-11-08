@@ -26,6 +26,8 @@ type Investigation struct {
 	Plan         *TypedPlan   `json:"plan,omitempty"`
 	Goal         *InvestigationGoal `json:"goal,omitempty"`
 	Search       *GraphSearchResult `json:"search,omitempty"`
+	EvidenceDossier *EvidenceDossier `json:"evidence_dossier,omitempty"`
+	EvidenceIncomplete bool `json:"evidence_incomplete,omitempty"`
 	Collection   *CollectionPlan `json:"collection,omitempty"`
 	Diagram      string `json:"diagram,omitempty"`
 	Matches      []PlanMatch `json:"matches,omitempty"`
