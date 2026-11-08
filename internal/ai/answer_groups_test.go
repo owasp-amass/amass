@@ -68,3 +68,33 @@ func TestAnswerGroupingKeepsIndirectOrganizationsAsContext(t *testing.T){
  for _,g:=range groups{if !g.DirectToGoal{contextual++}}
  if contextual!=2{t.Fatalf("expected parent and sibling to remain contextual: %+v",groups)}
 }
+
+
+func TestAnswerGroupingDoesNotCollapseDifferentRelationshipMeanings(t *testing.T){
+ root:=Asset{ID:"f",Type:"FQDN",Key:"demo.example"}
+ url:=Asset{ID:"u",Type:"URL",Key:"https://demo.example"}
+ org:=Asset{ID:"o",Type:"Organization",Key:"synthetic-org"}
+ first:=PlanMatch{Nodes:[]Asset{root,url,org},Edges:[]Relation{
+  {ID:"domain-edge",FromID:"u",ToID:"f",Label:"domain",Type:"SimpleRelation"},
+  {ID:"website-edge",FromID:"o",ToID:"u",Label:"website",Type:"SimpleRelation"},
+ }}
+ second:=PlanMatch{Nodes:[]Asset{root,org},Edges:[]Relation{
+  {ID:"verified-edge",FromID:"f",ToID:"o",Label:"verified_for",Type:"SimpleRelation"},
+ }}
+ first.PathID=WitnessPathID(first)
+ second.PathID=WitnessPathID(second)
+ model:=&plannerModel{replies:[]string{
+  `{"selected_path_ids":["`+first.PathID+`"]}`,
+ }}
+ selected,groups,deterministic,err:=(Agent{Model:model}).selectAnswerPaths(context.Background(),
+  "Which organization has a documented website versus verified-for relationship?",
+  InvestigationGoal{Purpose:"connected"},[]PlanMatch{first,second},nil)
+ if err!=nil{t.Fatal(err)}
+ if deterministic||model.calls!=1||len(groups)!=2||len(selected)!=1{
+  t.Fatalf("heterogeneous relationships must remain model-selectable: groups=%+v selected=%+v calls=%d",groups,selected,model.calls)
+ }
+ if groups[0].SemanticSignature==groups[1].SemanticSignature{
+  t.Fatalf("different relationship meanings were collapsed: %+v",groups)
+ }
+ if selected[0].PathID!=first.PathID{t.Fatalf("model selected wrong witnessed route: %+v",selected)}
+}
