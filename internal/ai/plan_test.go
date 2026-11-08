@@ -91,7 +91,7 @@ const websitePlan = `{"subject":{"type":"Organization","name":"Acme Holdings Inc
 func TestTypedPlannerMultiHopReturnsBothWebsites(t *testing.T){
 	model:=&plannerModel{replies:[]string{websitePlan}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What websites are associated with subsidiaries of Acme Holdings Inc.?")
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),"What websites are associated with subsidiaries of Acme Holdings Inc.?")
 	if err!=nil{t.Fatal(err)}
 	if out.Incomplete || model.calls!=1 || out.ToolCalls!=4 || len(out.Matches)!=2 {
 		t.Fatalf("unexpected planned result: %+v, calls %d",out,model.calls)
@@ -111,13 +111,13 @@ func TestPlannerCorrectsWrongLabels(t *testing.T){
 	bad:=`{"subject":{"type":"Organization","name":"Acme Holdings Inc."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"},{"direction":"out","label":"hosted-on","relation_type":"SimpleRelation","destination_type":"URL"}]}`
 	m:=&plannerModel{replies:[]string{bad,websitePlan}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	result,err:=(Agent{Model:m,Runner:runner}).Ask(context.Background(),"Show subsidiary websites")
+	result,err:=(Agent{Model:m,Runner:runner}).AskPlanned(context.Background(),"Show subsidiary websites")
 	if err!=nil || len(result.Matches)!=2 || m.calls!=2 {t.Fatalf("correction failed: %+v err=%v calls=%d",result,err,m.calls)}
 }
 func TestUnknownOrganizationIsIncompleteNotError(t *testing.T){
 	m:=&plannerModel{replies:[]string{`{"subject":{"type":"Organization","name":"Unknown Corp."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"}]}`}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	result,err:=(Agent{Model:m,Runner:runner}).Ask(context.Background(),"What subsidiaries does Unknown Corp. have?")
+	result,err:=(Agent{Model:m,Runner:runner}).AskPlanned(context.Background(),"What subsidiaries does Unknown Corp. have?")
 	if err!=nil || !result.Incomplete || !strings.Contains(result.Answer,"No asset matched") {
 		t.Fatalf("no-match response: %+v err=%v",result,err)
 	}
@@ -134,7 +134,7 @@ func TestSchemaCatalogTool(t *testing.T){
 func TestFQDNAsRootAndIncomingURLDomainEdge(t *testing.T){
 	model:=&plannerModel{replies:[]string{`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"Which URLs refer to the domain tech.acme.example?")
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),"Which URLs refer to the domain tech.acme.example?")
 	if err!=nil || out.Incomplete || len(out.Matches)!=1 || out.Matches[0].Nodes[1].Key!="https://tech.acme.example/"{
 		t.Fatalf("FQDN root error: %+v err=%v",out,err)
 	}
@@ -144,7 +144,7 @@ func TestURLAsRootAndOutgoingDomainEdge(t *testing.T){
 	model:=&plannerModel{replies:[]string{
 		`{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What FQDN is associated with https://tech.acme.example/?")
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),"What FQDN is associated with https://tech.acme.example/?")
 	if err!=nil || out.Incomplete || len(out.Matches)!=1 || out.Matches[0].Nodes[1].Key!="tech.acme.example"{
 		t.Fatalf("URL root error: %+v err=%v",out,err)
 	}
@@ -166,7 +166,7 @@ func TestPlannerNormalizesFQDNNameToIndexedSelector(t *testing.T){
 		`{"subject":{"type":"FQDN","name":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
 	}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),
 		"Which URL assets have a domain relationship pointing to the FQDN tech.acme.example?")
 	if err!=nil || out.Incomplete || model.calls!=1 || len(out.Matches)!=1 {
 		t.Fatalf("FQDN normalization failed: %+v err=%v model calls=%d",out,err,model.calls)
@@ -197,7 +197,7 @@ func TestPlannerRetriesMissingTypedSelectorWithFocusedGuidance(t *testing.T){
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
 	}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),
 		"Which URL assets have a domain relationship pointing to the FQDN tech.acme.example?")
 	if err!=nil || out.Incomplete || len(out.Matches)!=1 || model.calls!=2 {
 		t.Fatalf("focused retry failed: %+v err=%v calls=%d",out,err,model.calls)
@@ -255,7 +255,7 @@ func TestPlannerCorrectsUnexpectedFields(t *testing.T){
         `{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
     }}
     runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-    got,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What FQDN is associated with the URL https://tech.acme.example/?")
+    got,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),"What FQDN is associated with the URL https://tech.acme.example/?")
     if err!=nil || got.Incomplete || len(got.Matches)!=1 || model.calls!=2{
         t.Fatalf("retry failed: result=%+v err=%v calls=%d",got,err,model.calls)
     }
@@ -321,7 +321,7 @@ func TestIntermediateHopWithoutEdgesIsUnresolved(t *testing.T) {
 		`{"subject":{"type":"URL","field":"url","value":"https://eu.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"},{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
 	}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"Find the URLs linked through the domain of https://eu.acme.example/")
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),"Find the URLs linked through the domain of https://eu.acme.example/")
 	if err!=nil {t.Fatal(err)}
 	if !out.Incomplete || out.PlanStoppedAtHop!=1 || out.ToolCalls!=2 || len(out.Matches)!=0 {
 		t.Fatalf("unresolved intermediate query appeared complete: %+v",out)
@@ -335,7 +335,7 @@ func TestSingleHopNoMatchIsQualifiedButNotTruncated(t *testing.T) {
 		`{"subject":{"type":"URL","field":"url","value":"https://eu.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
 	}}
 	runner:=ToolRunner{Graph:examplePlannedGraph(),Limits:DefaultLimits(),Catalog:testOAMCatalog}
-	out,err:=(Agent{Model:model,Runner:runner}).Ask(context.Background(),"What FQDN is linked to https://eu.acme.example/?")
+	out,err:=(Agent{Model:model,Runner:runner}).AskPlanned(context.Background(),"What FQDN is linked to https://eu.acme.example/?")
 	if err!=nil || out.Incomplete || out.PlanStoppedAtHop!=0 || len(out.Matches)!=0{
 		t.Fatalf("single-hop empty search misclassified: %+v err=%v",out,err)
 	}
