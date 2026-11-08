@@ -24,6 +24,10 @@ type Observation struct {
 }
 type Investigation struct {
 	Plan         *TypedPlan   `json:"plan,omitempty"`
+	Goal         *InvestigationGoal `json:"goal,omitempty"`
+	Search       *GraphSearchResult `json:"search,omitempty"`
+	Collection   *CollectionPlan `json:"collection,omitempty"`
+	Diagram      string `json:"diagram,omitempty"`
 	Matches      []PlanMatch `json:"matches,omitempty"`
 	Resolution *OrganizationResolution `json:"resolution,omitempty"`
 	AssetResolution *AssetResolution `json:"asset_resolution,omitempty"`
@@ -57,10 +61,12 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 	if max < 1 || max > a.Runner.Limits.MaxToolCalls {
 		return result, errors.New("max tool calls exceeds policy")
 	}
+	// Semantic goal planning and adaptive graph search are the default whenever
+	// an authoritative OAM schema catalog is available.
 	// Well-defined, read-only graph questions are answered deterministically.
 	// This avoids unnecessary model calls and prevents tool-selection failures.
 	if a.Runner.Catalog != nil {
-		return a.AskPlanned(ctx, question)
+		return a.AskAdaptive(ctx, question, AdaptiveOptions{})
 	}
 	transcript := []Message{{Role: "system", Text: InvestigatorInstructions}, {Role: "user", Text: question}}
 	retriedWithoutTools := false
