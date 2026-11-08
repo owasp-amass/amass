@@ -37,7 +37,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, aliasesPath string
 	var scanLimit int
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
-	var graphDepth, graphMatches int
+	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
 	var modelTimeout, investigationTimeout time.Duration
 	var classifierReview bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
@@ -55,6 +55,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&graphDirection, "direction", "both", "Stored graph edge direction: in, out, or both")
 	fs.IntVar(&graphDepth, "depth", 0, "Maximum path length for graph search (default 16 with target types, otherwise 1)")
 	fs.IntVar(&graphMatches, "max-matches", 20, "Maximum graph path matches to return")
+	fs.IntVar(&graphAlternates, "max-paths-per-asset", 3, "Maximum witnessed simple paths retained per asset (1..8)")
+	fs.IntVar(&graphExpansions, "max-expansions", 0, "Maximum guided path expansions (bounded by global policy)")
+	fs.IntVar(&guidanceRounds, "guidance-rounds", 2, "Maximum model guidance rounds (0..3); set 0 for default of 2")
 	fs.StringVar(&graphSince, "since", "", "Only graph edges last seen since this RFC3339 timestamp")
 	fs.StringVar(&outputFormat, "format", "json", "Search format: json, text, or mermaid")
 	fs.StringVar(&collectionApproval, "approve-collection", "", "Explicit approval: exact plan ID returned by collect-plan")
@@ -168,7 +171,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if question == "" {
 			return errors.New("-question required")
 		}
-		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth:graphDepth,MaxMatches:graphMatches})
+		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth:graphDepth,MaxMatches:graphMatches,MaxPathsPerAsset:graphAlternates,MaxExpansions:graphExpansions,GuidanceRounds:guidanceRounds})
 		if err != nil {
 			return err
 		}
