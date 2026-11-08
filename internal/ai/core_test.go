@@ -191,3 +191,21 @@ func TestAgentRequiresToolEvidence(t *testing.T) {
 		t.Fatal("ungrounded answer accepted")
 	}
 }
+
+type failedToolModel struct{ step int }
+
+func (m *failedToolModel) Generate(_ context.Context, _ []Message, _ []ToolSpec) (Response, error) {
+	m.step++
+	if m.step == 1 {
+		return Response{Calls: []Call{{ID: "bad", Name: "get_asset", Arguments: json.RawMessage(`{"id":"not-in-db"}`)}}}, nil
+	}
+	return Response{Text: "The domain belongs to Acme."}, nil
+}
+
+func TestAgentRejectsAnswerAfterFailedTools(t *testing.T) {
+	m := &failedToolModel{}
+	_, err := (Agent{Model: m, Runner: ToolRunner{Graph: graph(), Limits: DefaultLimits()}}).Ask(context.Background(), "Who owns the domain?")
+	if err == nil {
+		t.Fatal("model supplied ungrounded answer following failed tool")
+	}
+}
