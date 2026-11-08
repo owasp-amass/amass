@@ -59,6 +59,12 @@ type OrganizationResolver interface {
 
 // BoundedGraph is the database-backed capability required by agent walks.
 // Unsupported repositories fail closed rather than materializing all edges.
+// EdgeEvidenceReader disambiguates relation tags from asset tags, even when
+// asset IDs and edge IDs happen to share the same string representation.
+type EdgeEvidenceReader interface {
+ EdgeEvidence(context.Context,string,int)([]Evidence,error)
+}
+
 type BoundedGraph interface {
 	EdgesLimited(context.Context, string, string, string, time.Time, int) ([]Relation, bool, error)
 }
