@@ -32,9 +32,30 @@ func TestAdaptiveQuestionUsesGenericRelationshipGoalAndSourceDossier(t *testing.
  for _,stage:=range []string{"goal_planning","resolve_asset","guided_search","evidence_inspection","path_selection"}{
   if _,ok:=stages[stage];!ok{t.Fatalf("missing execution trace stage %q: %+v",stage,result.Trace)}
  }
- if stages["evidence_inspection"].EdgeEvidenceLookups!=3 || stages["evidence_inspection"].EvidenceRecords!=0 {
-  t.Fatalf("source-level tracing should count three distinct untagged edge reads: %+v",stages["evidence_inspection"])
+ // The planner selects the parent, but evidence is inspected before
+ // selection. The ordered relationship goal yields TWO eligible candidate
+ // paths: the parent path (e5,e3,e1) and the longer sibling path
+ // (e5,e3,e1,e2). These share three edges, so there are four distinct
+ // edge lookups, not three. Selected-path edge counts must not be used as
+ // the expected pre-selection evidence workload.
+ wantEdgeIDs:=map[string]bool{"e5":true,"e3":true,"e1":true,"e2":true}
+ observedEdgeIDs:=map[string]bool{}
+ for _,p:=range result.EvidenceDossier.Paths{
+  for _,edge:=range p.Edges{observedEdgeIDs[edge.EdgeID]=true}
  }
+ if len(result.EvidenceDossier.Paths)!=2 || len(observedEdgeIDs)!=len(wantEdgeIDs) {
+  t.Fatalf("expected evidence for parent and sibling candidate paths, got paths=%d unique_edges=%v",len(result.EvidenceDossier.Paths),observedEdgeIDs)
+ }
+ for id:=range wantEdgeIDs{
+  if !observedEdgeIDs[id]{t.Fatalf("candidate evidence missing expected edge %s",id)}
+ }
+ if got:=stages["evidence_inspection"].EdgeEvidenceLookups;got!=len(wantEdgeIDs) {
+  t.Fatalf("expected %d distinct edge lookups before selection, got %d: %+v",len(wantEdgeIDs),got,stages["evidence_inspection"])
+ }
+ if got:=stages["evidence_inspection"].EvidenceRecords;got!=0 {
+  t.Fatalf("synthetic fixture has no edge tags; expected zero provenance records, got %d",got)
+ }
+ t.Logf("PRE-SELECTION EVIDENCE: %d candidate paths, %d distinct edges; final selection: %d parent path",len(result.EvidenceDossier.Paths),stages["evidence_inspection"].EdgeEvidenceLookups,len(result.Matches))
  if stages["guided_search"].GraphNodes==0||stages["guided_search"].PathExpansions==0{
   t.Fatalf("guided search trace lacks real traversal metrics: %+v",stages["guided_search"])
  }
