@@ -57,7 +57,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.IntVar(&graphMatches, "max-matches", 20, "Maximum graph path matches to return")
 	fs.IntVar(&graphAlternates, "max-paths-per-asset", 3, "Maximum witnessed simple paths retained per asset (1..8)")
 	fs.IntVar(&graphExpansions, "max-expansions", 0, "Maximum guided path expansions (bounded by global policy)")
-	fs.IntVar(&guidanceRounds, "guidance-rounds", 2, "Maximum model guidance rounds (0..3); set 0 for default of 2")
+	fs.IntVar(&guidanceRounds, "guidance-rounds", 2, "Maximum intermediate model navigation rounds (0 disables; default 2; max 3)")
 	fs.StringVar(&graphSince, "since", "", "Only graph edges last seen since this RFC3339 timestamp")
 	fs.StringVar(&outputFormat, "format", "json", "Search format: json, text, or mermaid")
 	fs.StringVar(&collectionApproval, "approve-collection", "", "Explicit approval: exact plan ID returned by collect-plan")
