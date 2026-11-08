@@ -374,9 +374,12 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  out.recordTrace(evidenceStarted,InvestigationTraceEvent{Stage:"evidence_inspection",InputPaths:len(candidates),OutputPaths:len(dossier.Paths),EdgeEvidenceLookups:dossier.InspectedEdges,EvidenceRecords:recordCount,Incomplete:dossier.Truncated,Detail:dossier.Reason})
  out.EvidenceDossier=&dossier
  selectionStarted:=time.Now()
- selected,err:=a.chooseAdaptivePathsWithEvidence(ctx,question,goal,candidates,&dossier)
+ selected,groups,deterministic,err:=a.selectAnswerPaths(ctx,question,goal,candidates,&dossier)
+ out.AnswerGroups=groups
  if err!=nil{out.Incomplete=true;out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),Incomplete:true,Detail:err.Error()});return out,err}
- out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),OutputPaths:len(selected),Incomplete:len(selected)==0})
+ selectionDetail:="model_evaluation"
+ if deterministic{selectionDetail="deterministic_destination_grouping"}
+ out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),OutputPaths:len(selected),Incomplete:len(selected)==0,Detail:selectionDetail})
  out.Matches=selected
  out.EvidenceIncomplete=dossier.Truncated
  assessed:=map[string]PathEvidence{}
