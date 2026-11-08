@@ -36,6 +36,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, aliasesPath string
 	var scanLimit int
+	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
+	var graphDepth, graphMatches int
 	var modelTimeout, investigationTimeout time.Duration
 	var classifierReview bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
@@ -45,6 +47,17 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
+	fs.StringVar(&subjectType, "subject-type", "", "Starting OAM asset type (FQDN, IPAddress, Organization, etc.)")
+	fs.StringVar(&subjectField, "subject-field", "", "Indexed OAM field used to resolve the subject")
+	fs.StringVar(&subjectValue, "subject-value", "", "Exact subject identifier")
+	fs.StringVar(&subjectID, "subject-id", "", "Database entity ID, alternative to indexed subject lookup")
+	fs.StringVar(&targetTypes, "target-types", "", "Comma-separated destination OAM asset types; empty discovers any type")
+	fs.StringVar(&graphDirection, "direction", "both", "Stored graph edge direction: in, out, or both")
+	fs.IntVar(&graphDepth, "depth", 0, "Maximum path length for graph search (default 16 with target types, otherwise 1)")
+	fs.IntVar(&graphMatches, "max-matches", 20, "Maximum graph path matches to return")
+	fs.StringVar(&graphSince, "since", "", "Only graph edges last seen since this RFC3339 timestamp")
+	fs.StringVar(&outputFormat, "format", "json", "Search format: json, text, or mermaid")
+	fs.StringVar(&collectionApproval, "approve-collection", "", "Explicit approval: exact plan ID returned by collect-plan")
 	fs.StringVar(&journalPath, "journal", "", "Inference proposal journal path")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
 	fs.StringVar(&aliasesPath, "organization-aliases", "", "Optional JSON file with explicitly sourced organization alias mappings (read-only)")
@@ -63,10 +76,10 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return errors.New("-investigation-timeout must be at least -model-timeout and no more than 30m")
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: amass ai [flags] ask|mcp|infer|scan")
+		return errors.New("usage: amass ai [flags] ask|mcp|infer|scan|search|collect-plan|collect")
 	}
 	operation := fs.Arg(0)
-	if operation != "ask" && operation != "mcp" && operation != "infer" && operation != "scan" {
+	if operation != "ask" && operation != "mcp" && operation != "infer" && operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
 		return fmt.Errorf("unknown operation %q", operation)
 	}
 	cfg := config.NewConfig()
@@ -94,6 +107,20 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
 		cancel()
 		return (mcp.Server{Runner: runner}).Serve(context.Background(), in, out)
+	}
+	if operation=="search" {
+		return graphSearch(ctx,runner,graphSearchOptions{
+			SubjectType:subjectType,SubjectField:subjectField,SubjectValue:subjectValue,
+			SubjectID:subjectID,TargetTypes:targetTypes,Direction:graphDirection,
+			MaxDepth:graphDepth,MaxMatches:graphMatches,Since:graphSince,Format:outputFormat,
+		},out)
+	}
+	if operation=="collect-plan" || operation=="collect" {
+		if subjectID!="" || subjectType=="" || subjectField=="" || subjectValue=="" {
+			return errors.New("collection requires exact -subject-type, -subject-field and -subject-value (not -subject-id)")
+		}
+		plan:=ai.PlanCollection(ai.AssetSelector{Type:subjectType,Field:subjectField,Value:subjectValue})
+		return collectTarget(ctx,cfg,plan,collectionApproval,operation=="collect",out)
 	}
 	if classifierReview && classifierPath == "" {
 		return errors.New("-classifier-review requires -classifier-model")
