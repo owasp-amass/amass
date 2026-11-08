@@ -37,7 +37,10 @@ func TestCompatibleModelToolCalls(t *testing.T) {
 
 func TestCompatibleModelHonorsConfiguredClientTimeout(t *testing.T) {
 	server:=httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter,r *http.Request){
-		<-r.Context().Done()
+		// A bounded delay simulates a slow model response. Request-context
+		// cancellation is not guaranteed to be visible to the handler until
+		// body reads or writes, so never wait indefinitely for it here.
+		time.Sleep(200*time.Millisecond)
 	}))
 	defer server.Close()
 	client:=&http.Client{Timeout:50*time.Millisecond}
