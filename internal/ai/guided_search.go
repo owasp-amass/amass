@@ -157,31 +157,41 @@ func NewGuidedExplorer(ctx context.Context,graph Graph,catalog SchemaCatalog,lim
 
 // Focus updates priorities only. It never narrows the taxonomy, omits a
 // branch, or grants permission to collect data from the Internet.
-func(s *GuidedExplorer)Focus(labels []string,frontierAssetIDs []string)error{
-	for _,label:=range labels{
-		if !s.labels[label]{return fmt.Errorf("unknown OAM relationship label %q",label)}
-	}
-	pending:=map[string]bool{}
-	for _,entry:=range s.frontier{pending[entry.match.Nodes[len(entry.match.Nodes)-1].ID]=true}
-	for _,id:=range frontierAssetIDs{
-		if !pending[id]{return fmt.Errorf("priority asset %q not in current frontier",id)}
-	}
-	s.preferred=append([]string(nil),labels...)
-	s.preferAssets=map[string]bool{}
-	for _,id:=range frontierAssetIDs{s.preferAssets[id]=true}
-	return nil
+func(s *GuidedExplorer)Focus(labels []string,assetIDs []string)error{
+ return s.FocusAll(labels,assetIDs,nil)
 }
 
-// FocusPaths prioritizes exact, previously witnessed frontier paths; the
-// model cannot invent or directly expand a path absent from this frontier.
+// FocusPaths retains existing label/asset priorities while switching to a
+// specified set of exact, already-witnessed frontier paths.
 func(s *GuidedExplorer)FocusPaths(ids []string)error{
- pending:=map[string]bool{}
- for _,entry:=range s.frontier{pending[entry.match.PathID]=true}
- for _,id:=range ids{
-  if !pending[id]{return fmt.Errorf("priority path %q not in current frontier",id)}
+ assets:=make([]string,0,len(s.preferAssets))
+ for id:=range s.preferAssets{assets=append(assets,id)}
+ return s.FocusAll(s.preferred,assets,ids)
+}
+
+// FocusAll validates the entire recommendation before applying any change.
+// Invalid model advice therefore cannot partially alter frontier ranking.
+func(s *GuidedExplorer)FocusAll(labels,assetIDs,pathIDs []string)error{
+ for _,label:=range labels{
+  if !s.labels[label]{return fmt.Errorf("unknown OAM relationship label %q",label)}
  }
+ pendingAssets:=map[string]bool{}
+ pendingPaths:=map[string]bool{}
+ for _,entry:=range s.frontier{
+  pendingAssets[entry.match.Nodes[len(entry.match.Nodes)-1].ID]=true
+  pendingPaths[entry.match.PathID]=true
+ }
+ for _,id:=range assetIDs{
+  if !pendingAssets[id]{return fmt.Errorf("priority asset %q not in current frontier",id)}
+ }
+ for _,id:=range pathIDs{
+  if !pendingPaths[id]{return fmt.Errorf("priority path %q not in current frontier",id)}
+ }
+ s.preferred=append([]string(nil),labels...)
+ s.preferAssets=map[string]bool{}
+ for _,id:=range assetIDs{s.preferAssets[id]=true}
  s.preferPaths=map[string]bool{}
- for _,id:=range ids{s.preferPaths[id]=true}
+ for _,id:=range pathIDs{s.preferPaths[id]=true}
  return nil
 }
 
