@@ -207,3 +207,33 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 }
 
 var _ ai.BoundedGraph = Adapter{}
+
+
+// LookupOrganizations uses an exact, typed content filter to avoid retrieving
+// an arbitrary page of the graph when a question names an organization.
+func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int) ([]ai.Asset, error) {
+	if a.Repo == nil {
+		return nil, errors.New("missing OAM repository")
+	}
+	if name == "" || limit < 1 || limit > 10 {
+		return nil, errors.New("invalid organization lookup parameters")
+	}
+	entities, err := a.Repo.FindEntitiesByContent(ctx, oam.Organization, time.Time{}, limit, dbt.ContentFilters{"name": name})
+	if err != nil {
+		return nil, err
+	}
+	if len(entities) > limit {
+		return nil, errors.New("repository exceeded organization lookup limit")
+	}
+	out := make([]ai.Asset, 0, len(entities))
+	for _, entity := range entities {
+		a, err := convert(entity)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+var _ ai.OrganizationLookup = Adapter{}

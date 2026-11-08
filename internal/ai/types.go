@@ -45,6 +45,13 @@ type Graph interface {
 	Evidence(context.Context, string, int) ([]Evidence, error)
 }
 
+// OrganizationLookup resolves an exact organization name using repository
+// content queries rather than enumerating an arbitrary first page of assets.
+// Callers must handle zero and multiple matching organizations explicitly.
+type OrganizationLookup interface {
+	LookupOrganizations(context.Context, string, int) ([]Asset, error)
+}
+
 // BoundedGraph is the database-backed capability required by agent walks.
 // Unsupported repositories fail closed rather than materializing all edges.
 type BoundedGraph interface {
