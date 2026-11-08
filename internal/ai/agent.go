@@ -51,6 +51,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 		return result, errors.New("max tool calls exceeds policy")
 	}
 	transcript := []Message{{Role: "system", Text: InvestigatorInstructions}, {Role: "user", Text: question}}
+	grounded := false
 	// One final text-only request after exhausting the tool budget.
 	for step := 0; step <= max; step++ {
 		if err := ctx.Err(); err != nil {
@@ -67,7 +68,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 		if len(reply.Calls) == 0 {
 			// Database-specific answers must use at least one graph tool;
 			// an ungrounded initial response cannot be treated as a finding.
-			if result.ToolCalls == 0 {
+			if !grounded {
 				result.Incomplete = true
 				return result, errors.New("model did not inspect the asset database")
 			}
@@ -93,6 +94,8 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 			if err != nil {
 				obs.Error = err.Error()
 				obs.Result = fmt.Sprintf(`{"error":%q}`, err.Error())
+			} else {
+				grounded = true
 			}
 			result.Observations = append(result.Observations, obs)
 			transcript = append(transcript, Message{Role: "tool", ToolCallID: call.ID, Text: obs.Result})
