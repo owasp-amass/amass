@@ -1,30 +1,44 @@
-# Exact organization lookup and deterministic subsidiary questions
+# Typed OAM query planning (experimental)
 
-The experimental AI agent now exposes the read-only `lookup_organization`
-tool. It uses an exact name filter through the Asset Database repository,
-not an unbounded scan. The query returns up to ten matches and asks for
-disambiguation if a name maps to multiple organizations.
+The `amass ai ask` command now uses an OAM-aware, provider-neutral
+planning layer. There are no hardcoded natural-language question patterns
+in the active CLI path.
 
-For this narrow question form:
+1. The model receives a machine-readable taxonomy generated from
+   `oam.AssetList`, `oam.GetAssetOutgoingRelations`, and
+   `oam.GetTransformAssetTypes`.
+2. The model returns a strictly validated typed plan containing an
+   Organization name and 1–3 directed OAM relationship transitions.
+3. Invalid labels, relation types, destinations, directions, or hop counts
+   are rejected. The planner has one opportunity to correct an invalid plan.
+4. Amass resolves the organization name, executes bounded graph queries,
+   and generates answers deterministically from returned asset/edge IDs.
+5. Empty, ambiguous, or truncated queries are explicitly qualified.
 
-```text
-What subsidiaries does Acme Holdings Inc. have?
+Example intermediate plan for a multi-hop investigation:
+
+```json
+{
+  "subject": {"type":"Organization","name":"Acme Holdings Inc."},
+  "hops": [
+    {"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"},
+    {"direction":"out","label":"website","relation_type":"SimpleRelation","destination_type":"URL"}
+  ]
+}
 ```
 
-the agent resolves the organization name, executes an outgoing, depth-one,
-bounded `subsidiary` traversal, and returns the stored OAM relationships
-with asset and edge IDs. **No LLM call is required** for this deterministic
-question. It therefore also works with Ollama models that do not reliably
-choose tools, and incurs no generative-model token cost.
+This architecture reduces hallucinated relationship labels without claiming
+that any given model will always produce a valid plan. The current planner
+starts from Organization names only; other asset types can appear as
+destination types. Source matching is exact. A later increment can add
+generalized typed entity resolution and explicit ambiguity handling.
 
-This is not a general-purpose natural-language-to-graph parser. Questions
-outside the direct-subsidiary pattern still use a model to select tools.
-If that model initially returns no tool calls, the agent retries once with
-a stronger instruction; it fails closed on a second ungrounded answer.
-Ollama's OpenAI-compatible endpoint currently does not support
-`tool_choice: required`, so simply setting that parameter is insufficient.
+For MCP clients, the read-only `describe_oam_schema` tool exposes
+the same OAM taxonomy and can be scoped by `source_type`.
 
-Negative results mean that the specified database contains no matching
-stored relationships. They do **not** establish that a legal entity has
-no subsidiaries in the real world. An unknown or ambiguous company name
-is reported as incomplete, and truncated traversals are disclosed.
+The previous regex-based direct-subsidiary path has been removed.
+OAM relationships are never auto-written by the planner.
+
+**Safety:** OAM records remain untrusted evidence. Schema validation
+guarantees type/label consistency, not truth of ownership claims.
+No database modifications are made by this capability.

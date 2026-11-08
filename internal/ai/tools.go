@@ -16,9 +16,23 @@ type ToolSpec struct {
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
 }
+// RelationshipSchema represents one permitted directed OAM relationship.
+type RelationshipSchema struct {
+	SourceType string `json:"source_type"`
+	Label string `json:"label"`
+	RelationType string `json:"relation_type"`
+	DestinationType string `json:"destination_type"`
+}
+
+// SchemaCatalog exposes authoritative OAM relationship metadata.
+type SchemaCatalog interface {
+	Relations() []RelationshipSchema
+}
+
 type ToolRunner struct {
-	Graph  Graph
-	Limits Limits
+	Graph   Graph
+	Limits  Limits
+	Catalog SchemaCatalog
 }
 
 func objectSchema(required []string, properties map[string]any) map[string]any {
@@ -33,6 +47,7 @@ func integerProp(desc string) map[string]any {
 func Specs() []ToolSpec {
 	return []ToolSpec{
 		{"get_asset", "Retrieve one asset by its database ID", objectSchema([]string{"id"}, map[string]any{"id": stringProp("OAM database asset ID")})},
+		{"describe_oam_schema", "List supported OAM relations, labels, relation types, and valid source/destination types. Use before choosing graph relationship labels.", objectSchema([]string{}, map[string]any{"source_type": stringProp("Optional source asset type, e.g. Organization")})},
 		{"lookup_organization", "Look up an Organization asset by its exact display name (case handling depends on the repository); returns multiple matches for disambiguation", objectSchema([]string{"name"}, map[string]any{"name": stringProp("Exact organization name, e.g. Acme Holdings Inc."), "limit": integerProp("Maximum matches (1-10)")})},
 		{"find_assets", "List assets by an exact OAM asset type and optional RFC3339 last-seen lower bound", objectSchema([]string{"type"}, map[string]any{"type": stringProp("e.g. Organization, FQDN, Service"), "since": stringProp("RFC3339 lower bound, not first-seen"), "limit": integerProp("Maximum results")})},
 		{"walk_relations", "Bounded graph traversal from a known asset ID", objectSchema([]string{"start_id"}, map[string]any{"start_id": stringProp("Root asset ID"), "direction": stringProp("in, out, or both"), "label": stringProp("Exact relation label, optional"), "depth": integerProp("Graph hops"), "since": stringProp("RFC3339 last-seen lower bound")})},
@@ -76,6 +91,21 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 		}
 		result = v
 
+	case "describe_oam_schema":
+		var a struct { SourceType string `json:"source_type"` }
+		if err := decodeStrict(args, &a); err != nil {
+			return nil, err
+		}
+		if r.Catalog == nil {
+			return nil, errors.New("OAM schema catalog not configured")
+		}
+		var relations []RelationshipSchema
+		for _, rel := range r.Catalog.Relations() {
+			if a.SourceType == "" || rel.SourceType == a.SourceType {
+				relations = append(relations, rel)
+			}
+		}
+		result = relations
 	case "lookup_organization":
 		var a struct {
 			Name string `json:"name"`

@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
@@ -220,6 +222,12 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	}
 	entities, err := a.Repo.FindEntitiesByContent(ctx, oam.Organization, time.Time{}, limit, dbt.ContentFilters{"name": name})
 	if err != nil {
+		// PostgreSQL currently reports an empty content query as this
+		// repository error. Treat it as an ordinary no-match result, not
+		// a database failure. Other errors are never suppressed.
+		if strings.TrimSpace(err.Error()) == "zero entities found" {
+			return []ai.Asset{}, nil
+		}
 		return nil, err
 	}
 	if len(entities) > limit {
@@ -237,3 +245,35 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 }
 
 var _ ai.OrganizationLookup = Adapter{}
+
+
+// Catalog derives permitted graph transitions from the OAM package.
+type Catalog struct{}
+
+// Relations enumerates actual OAM labels and relation types. Sorted so
+// different providers and runs receive the same schema context.
+func (Catalog) Relations() []ai.RelationshipSchema {
+	var results []ai.RelationshipSchema
+	for _, src := range oam.AssetList {
+		for _, label := range oam.GetAssetOutgoingRelations(src) {
+			for _, relType := range oam.RelationList {
+				for _, dst := range oam.GetTransformAssetTypes(src, label, relType) {
+					results = append(results, ai.RelationshipSchema{
+						SourceType: string(src), Label: label,
+						RelationType: string(relType), DestinationType: string(dst),
+					})
+				}
+			}
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		a, b := results[i], results[j]
+		if a.SourceType != b.SourceType { return a.SourceType < b.SourceType }
+		if a.Label != b.Label { return a.Label < b.Label }
+		if a.RelationType != b.RelationType { return a.RelationType < b.RelationType }
+		return a.DestinationType < b.DestinationType
+	})
+	return results
+}
+
+var _ ai.SchemaCatalog = Catalog{}

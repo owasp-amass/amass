@@ -68,7 +68,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	}
 	defer repo.Close()
 	graph := oamrepo.Adapter{Repo: repo}
-	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits()}
+	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if operation == "mcp" {
