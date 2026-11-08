@@ -118,8 +118,8 @@ func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T){
  r:=e.Result()
  found:=false
  for _,p:=range r.Matches{if len(p.Edges)==15&&p.Nodes[len(p.Nodes)-1].ID=="a15"{found=true}}
- if !found||r.Truncated||!r.Exhausted{t.Fatalf("15-hop graph path not found: %+v",r) t.Logf("LONG PATH verified maximum depth=15, edges=%d, expanded=%d",r.VisitedEdges,r.ExpandedPaths)
-}
+ if !found||r.Truncated||!r.Exhausted{t.Fatalf("15-hop graph path not found: %+v",r)}
+ t.Logf("LONG PATH verified maximum depth=15, edges=%d, expanded=%d",r.VisitedEdges,r.ExpandedPaths)
 }
 
 func TestGuidedSelectionRequiresPathIDForAmbiguousAsset(t *testing.T){
