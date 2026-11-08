@@ -62,6 +62,7 @@ type GuidedExplorer struct {
 	typeDistances map[string]int
 	preferred []string
 	preferAssets map[string]bool
+	preferPaths map[string]bool
 	expanded int
 	matches int
 	alternates int
@@ -112,7 +113,7 @@ func NewGuidedExplorer(ctx context.Context,graph Graph,catalog SchemaCatalog,lim
 		knownTypes:map[string]bool{},typeDistances:map[string]int{},
 		assets:map[string]Asset{root.ID:root},edgeCache:map[string]guidedEdgeBatch{},
 		seenEdge:map[string]bool{},seenPath:map[string]bool{},
-		perAsset:map[string]int{root.ID:1},preferAssets:map[string]bool{},
+		perAsset:map[string]int{root.ID:1},preferAssets:map[string]bool{},preferPaths:map[string]bool{},
 		out:GraphSearchResult{Root:root,Matches:[]PlanMatch{},Mode:"guided"},
 	}
 	for _,t:=range catalog.Relations(){
@@ -171,6 +172,19 @@ func(s *GuidedExplorer)Focus(labels []string,frontierAssetIDs []string)error{
 	return nil
 }
 
+// FocusPaths prioritizes exact, previously witnessed frontier paths; the
+// model cannot invent or directly expand a path absent from this frontier.
+func(s *GuidedExplorer)FocusPaths(ids []string)error{
+ pending:=map[string]bool{}
+ for _,entry:=range s.frontier{pending[entry.match.PathID]=true}
+ for _,id:=range ids{
+  if !pending[id]{return fmt.Errorf("priority path %q not in current frontier",id)}
+ }
+ s.preferPaths=map[string]bool{}
+ for _,id:=range ids{s.preferPaths[id]=true}
+ return nil
+}
+
 func(s *GuidedExplorer)priority(path guidedPath)int{
 	score:=0
 	last:=path.match.Nodes[len(path.match.Nodes)-1]
@@ -181,6 +195,7 @@ func(s *GuidedExplorer)priority(path guidedPath)int{
 		}
 	}
 	if s.preferAssets[last.ID]{score+=80}
+	if s.preferPaths[path.match.PathID]{score+=120}
 	score-=len(path.match.Edges)*3
 	return score
 }
