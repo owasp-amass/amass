@@ -58,8 +58,7 @@ Use only relationship labels in allowed_labels, asset IDs and path IDs in pendin
  if len(zero.PreferredLabels)>5||len(zero.PriorityAssetIDs)>5||len(zero.PriorityPathIDs)>5 {
   return guidedAdvice{},fmt.Errorf("navigation advice exceeded five priorities")
  }
- if err:=e.Focus(zero.PreferredLabels,zero.PriorityAssetIDs);err!=nil{return guidedAdvice{},err}
- if err:=e.FocusPaths(zero.PriorityPathIDs);err!=nil{return guidedAdvice{},err}
+ if err:=e.FocusAll(zero.PreferredLabels,zero.PriorityAssetIDs,zero.PriorityPathIDs);err!=nil{return guidedAdvice{},err}
  return zero,nil
 }
 
