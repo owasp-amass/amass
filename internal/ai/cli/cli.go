@@ -74,12 +74,6 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if modelTimeout < 5*time.Second || modelTimeout > 15*time.Minute {
-		return errors.New("-model-timeout must be between 5s and 15m")
-	}
-	if investigationTimeout < modelTimeout || investigationTimeout > 30*time.Minute {
-		return errors.New("-investigation-timeout must be at least -model-timeout and no more than 30m")
-	}
 	if fs.NArg() != 1 {
 		return errors.New("usage: amass ai [flags] ask|mcp|infer|scan|search|collect-plan|collect")
 	}
@@ -110,7 +104,10 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if !explicitFlags["max-matches"] && effective.MaxMatches!=0{graphMatches=effective.MaxMatches}
 	if !explicitFlags["max-paths-per-asset"] && effective.MaxPathsPerAsset!=0{graphAlternates=effective.MaxPathsPerAsset}
 	if !explicitFlags["max-expansions"] && effective.MaxExpansions!=0{graphExpansions=effective.MaxExpansions}
-	if !explicitFlags["guidance-rounds"]{guidanceRounds=effective.GuidanceRounds}
+	if !explicitFlags["guidance-rounds"]{
+		_,fromEnv:=os.LookupEnv("AMASS_AI_GUIDANCE_ROUNDS")
+		if cfg.AI!=nil || fromEnv{guidanceRounds=effective.GuidanceRounds}
+	}
 	if !explicitFlags["model-timeout"] && effective.ModelTimeout!=""{
 		value,err:=time.ParseDuration(effective.ModelTimeout)
 		if err!=nil{return err}
