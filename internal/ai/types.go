@@ -52,6 +52,11 @@ type OrganizationLookup interface {
 	LookupOrganizations(context.Context, string, int) ([]Asset, error)
 }
 
+// OrganizationResolver exposes bounded, provenance-labeled entity candidates.
+type OrganizationResolver interface {
+	ResolveOrganizations(context.Context, OrganizationQuery, int) (OrganizationResolution, error)
+}
+
 // BoundedGraph is the database-backed capability required by agent walks.
 // Unsupported repositories fail closed rather than materializing all edges.
 type BoundedGraph interface {

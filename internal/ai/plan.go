@@ -20,7 +20,14 @@ type TypedPlan struct {
 }
 type PlanSubject struct {
 	Type string `json:"type"`
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
+	LegalName string `json:"legal_name,omitempty"`
+	UniqueID string `json:"unique_id,omitempty"`
+	RegistrationID string `json:"registration_id,omitempty"`
+	Jurisdiction string `json:"jurisdiction,omitempty"`
+}
+func (s PlanSubject) OrganizationQuery() OrganizationQuery {
+	return OrganizationQuery{Name:s.Name,LegalName:s.LegalName,UniqueID:s.UniqueID,RegistrationID:s.RegistrationID,Jurisdiction:s.Jurisdiction}
 }
 type PlanHop struct {
 	Direction string `json:"direction"`
@@ -43,9 +50,7 @@ func validatePlan(plan TypedPlan, catalog []RelationshipSchema, limits Limits) e
 	if plan.Subject.Type != "Organization" {
 		return errors.New("current planner supports Organization starting entities only")
 	}
-	if strings.TrimSpace(plan.Subject.Name) == "" || len(plan.Subject.Name) > 256 {
-		return errors.New("subject.name must be 1..256 bytes")
-	}
+	if err:=plan.Subject.OrganizationQuery().Validate();err!=nil {return fmt.Errorf("invalid subject: %w",err)}
 	if len(plan.Hops) < 1 || len(plan.Hops) > maxPlanHops || len(plan.Hops) > limits.MaxDepth {
 		return errors.New("plan must contain 1..3 bounded graph hops")
 	}
@@ -97,11 +102,13 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 	rawCatalog, err := json.Marshal(catalog)
 	if err != nil { return zero, err }
 	system := "You are an OWASP Open Asset Model query planner. Return ONLY a JSON object, without markdown, matching " +
-		"{\"subject\":{\"type\":\"Organization\",\"name\":\"EXACT company name\"},\"hops\":[{\"direction\":\"out\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}. " +
+		"{\"subject\":{\"type\":\"Organization\",\"name\":\"EXACT company name\"},\"hops\":[{\"direction\":\"out\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}.  +
 		"Treat the request as an investigation over STORED graph relationships, not general knowledge. " +
 		"Only choose transitions appearing in the catalog. Each hop begins at the previous hop's destination type. " +
 		"For incoming hops reverse the permitted source/destination types. Prefer the shortest meaningful path (maximum 3 hops). " +
-		"Subject starting type currently must be Organization, and subject.name must preserve the user's exact organization name. " +
+		"Subject type must be Organization. Specify exactly one of name, legal_name, unique_id, registration_id. " +
+		"Use legal_name only for explicitly stated legal names, unique_id only for explicitly stated OAM IDs, and registration_id only when both registration number and jurisdiction are given. " +
+		"Preserve the user-supplied organization string without inventing suffixes, aliases or jurisdictions. " +
 		"Do not invent labels or add confidence claims. If you cannot construct a valid plan, return empty hops. " +
 		"OAM RELATIONSHIP CATALOG: " + string(rawCatalog)
 	conversation := []Message{{Role:"system",Text:system},{Role:"user",Text:question}}
@@ -130,26 +137,37 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 	plan,err:=a.planQuestion(ctx,question)
 	if err!=nil {out.Incomplete=true;return out,err}
 	out.Plan=&plan
-	lookupJSON,_:=json.Marshal(map[string]any{"name":plan.Subject.Name,"limit":10})
-	raw,err:=a.Runner.Run(ctx,"lookup_organization",lookupJSON)
+	lookupJSON,_:=json.Marshal(struct{
+		OrganizationQuery
+		Limit int `json:"limit"`
+	}{OrganizationQuery:plan.Subject.OrganizationQuery(),Limit:10})
+	raw,err:=a.Runner.Run(ctx,"resolve_organization",lookupJSON)
 	if err!=nil {out.Incomplete=true;return out,fmt.Errorf("organization lookup failed: %w",err)}
 	out.ToolCalls++
-	out.Observations=append(out.Observations,Observation{Tool:"lookup_organization",CallID:"planned-root",Result:string(raw)})
-	var roots []Asset
-	if err:=json.Unmarshal(raw,&roots);err!=nil{return out,fmt.Errorf("decode organization lookup: %w",err)}
-	if len(roots)==0 {
+	out.Observations=append(out.Observations,Observation{Tool:"resolve_organization",CallID:"planned-root",Result:string(raw)})
+	var resolution OrganizationResolution
+	if err:=json.Unmarshal(raw,&resolution);err!=nil{return out,fmt.Errorf("decode organization resolution: %w",err)}
+	out.Resolution=&resolution
+	if resolution.Status!="matched" || len(resolution.Candidates)!=1 {
 		out.Incomplete=true
-		out.Answer=fmt.Sprintf("No exact Organization name match for %q exists in this Asset Database; no relationship conclusion can be drawn.",plan.Subject.Name)
+		switch resolution.Status {
+		case "not_found": out.Answer="No Organization matched the asserted name or identifier in the current Asset Database; no relationship conclusion can be drawn."
+		case "ambiguous":
+			var names []string
+			for _,c:=range resolution.Candidates {
+				var sources []string
+				for _,m:=range c.Matches {sources=append(sources,m.Field+"="+m.Value)}
+				names=append(names,humanAsset(c.Asset)+" ["+strings.Join(sources,", ")+"]")
+			}
+			out.Answer="Multiple Organization candidates matched; specify an explicit unique_id or jurisdiction-qualified registration_id. Candidates: "+strings.Join(names,"; ")
+		case "truncated":out.Answer="Organization candidates exceeded the bounded resolution limit; cannot safely select an identity."
+		default:return out,fmt.Errorf("unrecognized organization resolution status %q",resolution.Status)
+		}
 		return out,nil
 	}
-	if len(roots)!=1 {
-		out.Incomplete=true
-		out.Answer=fmt.Sprintf("Organization name %q returned %d matches. Specify a unique identity before traversal.",plan.Subject.Name,len(roots))
-		return out,nil
-	}
-	paths:=[]partialPath{{nodes:[]Asset{roots[0]}}}
+	paths:=[]partialPath{{nodes:[]Asset{resolution.Candidates[0].Asset}}}
 	edgesSeen:=map[string]bool{}
-	nodesSeen:=map[string]bool{roots[0].ID:true}
+	nodesSeen:=map[string]bool{resolution.Candidates[0].Asset.ID:true}
 	for hopIndex,step:=range plan.Hops {
 		next:=make([]partialPath,0)
 		for _,path:=range paths {
