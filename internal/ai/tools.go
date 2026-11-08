@@ -48,6 +48,8 @@ func Specs() []ToolSpec {
 	return []ToolSpec{
 		{"get_asset", "Retrieve one asset by its database ID", objectSchema([]string{"id"}, map[string]any{"id": stringProp("OAM database asset ID")})},
 		{"describe_oam_schema", "List supported OAM relations, labels, relation types, and valid source/destination types. Use before choosing graph relationship labels.", objectSchema([]string{}, map[string]any{"source_type": stringProp("Optional source asset type, e.g. Organization")})},
+		{"describe_asset_selectors", "List all OAM asset types and their supported indexed exact-match fields (entity_id works for every type).", objectSchema([]string{}, map[string]any{})},
+		{"resolve_asset", "Resolve any OAM asset type by field/value or explicit entity_id; returns candidates and ambiguity.", objectSchema([]string{"type"},map[string]any{"type":stringProp("Exact OAM asset type"),"field":stringProp("Indexed field for type"),"value":stringProp("Exact field value"),"entity_id":stringProp("Exact database entity id"),"limit":integerProp("Maximum candidates 1-10")})},
 		{"resolve_organization", "Resolve a company by one asserted name, legal_name, unique_id, or jurisdiction-scoped registration_id. Returns match sources and ambiguity.", objectSchema([]string{}, map[string]any{"name": stringProp("Display or trade name"), "legal_name": stringProp("Registered legal name"), "unique_id": stringProp("OAM unique_id"), "registration_id": stringProp("Registration identifier"), "jurisdiction": stringProp("Jurisdiction qualifier, required for registration_id"), "limit": integerProp("Maximum candidates (1-10)")})},
 		{"lookup_organization", "Look up an Organization asset by its exact display name (case handling depends on the repository); returns multiple matches for disambiguation", objectSchema([]string{"name"}, map[string]any{"name": stringProp("Exact organization name, e.g. Acme Holdings Inc."), "limit": integerProp("Maximum matches (1-10)")})},
 		{"find_assets", "List assets by an exact OAM asset type and optional RFC3339 last-seen lower bound", objectSchema([]string{"type"}, map[string]any{"type": stringProp("e.g. Organization, FQDN, Service"), "since": stringProp("RFC3339 lower bound, not first-seen"), "limit": integerProp("Maximum results")})},
@@ -108,6 +110,30 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 		}
 		result = relations
 
+
+	case "describe_asset_selectors":
+		var a struct{}
+		if err:=decodeStrict(args,&a);err!=nil{return nil,err}
+		catalog,ok:=r.Catalog.(AssetSearchCatalog)
+		if !ok{return nil,errors.New("asset selector catalog unavailable")}
+		result=catalog.SearchFields()
+	case "resolve_asset":
+		var request struct {
+			AssetSelector
+			Limit int `json:"limit"`
+		}
+		if err:=decodeStrict(args,&request);err!=nil{return nil,err}
+		catalog,ok:=r.Catalog.(AssetSearchCatalog)
+		if !ok{return nil,errors.New("asset selector catalog unavailable")}
+		if err:=request.AssetSelector.Validate(catalog.SearchFields());err!=nil{return nil,err}
+		if request.Limit==0{request.Limit=10}
+		if request.Limit<1||request.Limit>10||request.Limit>r.Limits.MaxFind{return nil,errors.New("asset lookup limit exceeds policy")}
+		resolver,ok:=r.Graph.(AssetResolver)
+		if !ok{return nil,errors.New("asset resolver unavailable")}
+		v,err:=resolver.ResolveAsset(ctx,request.AssetSelector,request.Limit)
+		if err!=nil{return nil,err}
+		if len(v.Candidates)>request.Limit{return nil,errors.New("asset resolver exceeded candidate limit")}
+		result=v
 	case "resolve_organization":
 		var a struct {
 			OrganizationQuery

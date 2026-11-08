@@ -26,6 +26,7 @@ type Investigation struct {
 	Plan         *TypedPlan   `json:"plan,omitempty"`
 	Matches      []PlanMatch `json:"matches,omitempty"`
 	Resolution *OrganizationResolution `json:"resolution,omitempty"`
+	AssetResolution *AssetResolution `json:"asset_resolution,omitempty"`
 	Answer       string        `json:"answer"`
 	Observations []Observation `json:"observations"`
 	Incomplete   bool          `json:"incomplete"`

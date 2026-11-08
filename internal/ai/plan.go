@@ -25,6 +25,15 @@ type PlanSubject struct {
 	UniqueID string `json:"unique_id,omitempty"`
 	RegistrationID string `json:"registration_id,omitempty"`
 	Jurisdiction string `json:"jurisdiction,omitempty"`
+	Field string `json:"field,omitempty"`
+	Value string `json:"value,omitempty"`
+	EntityID string `json:"entity_id,omitempty"`
+}
+func (s PlanSubject) AssetSelector() AssetSelector {
+	return AssetSelector{Type:s.Type,Field:s.Field,Value:s.Value,EntityID:s.EntityID}
+}
+func (s PlanSubject) UsesOrganizationResolution() bool {
+	return s.Type=="Organization" && s.Field=="" && s.Value=="" && s.EntityID==""
 }
 func (s PlanSubject) OrganizationQuery() OrganizationQuery {
 	return OrganizationQuery{Name:s.Name,LegalName:s.LegalName,UniqueID:s.UniqueID,RegistrationID:s.RegistrationID,Jurisdiction:s.Jurisdiction}
@@ -47,10 +56,18 @@ type partialPath struct {
 // validatePlan accepts only transitions explicitly present in the catalog.
 // An unknown semantic label is never treated as a negative query result.
 func validatePlan(plan TypedPlan, catalog []RelationshipSchema, limits Limits) error {
-	if plan.Subject.Type != "Organization" {
-		return errors.New("current planner supports Organization starting entities only")
+	return validatePlanWithSelectors(plan,catalog,nil,limits)
+}
+
+func validatePlanWithSelectors(plan TypedPlan, catalog []RelationshipSchema, selectors []AssetSearchSchema, limits Limits) error {
+	if plan.Subject.UsesOrganizationResolution() {
+		if err:=plan.Subject.OrganizationQuery().Validate();err!=nil {return fmt.Errorf("invalid organization subject: %w",err)}
+	} else {
+		if err:=plan.Subject.AssetSelector().Validate(selectors);err!=nil{return fmt.Errorf("invalid asset subject: %w",err)}
+		if plan.Subject.Name!="" || plan.Subject.LegalName!="" || plan.Subject.UniqueID!="" || plan.Subject.RegistrationID!="" || plan.Subject.Jurisdiction!="" {
+			return errors.New("typed asset selector cannot mix organization-specific fields")
+		}
 	}
-	if err:=plan.Subject.OrganizationQuery().Validate();err!=nil {return fmt.Errorf("invalid subject: %w",err)}
 	if len(plan.Hops) < 1 || len(plan.Hops) > maxPlanHops || len(plan.Hops) > limits.MaxDepth {
 		return errors.New("plan must contain 1..3 bounded graph hops")
 	}
@@ -99,25 +116,32 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		return zero, errors.New("OAM schema catalog is unavailable")
 	}
 	catalog := a.Runner.Catalog.Relations()
+	var selectors []AssetSearchSchema
+	if c,ok:=a.Runner.Catalog.(AssetSearchCatalog);ok {selectors=c.SearchFields()}
 	rawCatalog, err := json.Marshal(catalog)
 	if err != nil { return zero, err }
+	rawSelectors,err:=json.Marshal(selectors)
+	if err!=nil{return zero,err}
 	system := "You are an OWASP Open Asset Model query planner. Return ONLY a JSON object, without markdown, matching " +
 		"{\"subject\":{\"type\":\"Organization\",\"name\":\"EXACT company name\"},\"hops\":[{\"direction\":\"out\",\"label\":\"exact OAM label\",\"relation_type\":\"exact OAM relation type\",\"destination_type\":\"exact OAM asset type\"}]}. " +
 		"Treat the request as an investigation over STORED graph relationships, not general knowledge. " +
 		"Only choose transitions appearing in the catalog. Each hop begins at the previous hop's destination type. " +
 		"For incoming hops reverse the permitted source/destination types. Prefer the shortest meaningful path (maximum 3 hops). " +
-		"Subject type must be Organization. Specify exactly one of name, legal_name, unique_id, registration_id. " +
+		"The subject may be ANY registered OAM asset type. For non-Organization subjects use type plus field/value from the SELECTOR CATALOG or type plus entity_id. " +
+		"For Organization subjects either use the existing name/legal_name/unique_id/registration_id format, or type plus indexed field/value or entity_id. " +
+		"Never invent an entity_id or a database identifier. The value must be quoted exactly from the user's question. " +
 		"Use legal_name only for explicitly stated legal names, unique_id only for explicitly stated OAM IDs, and registration_id only when both registration number and jurisdiction are given. " +
 		"Preserve the user-supplied organization string without inventing suffixes, aliases or jurisdictions. " +
 		"Do not invent labels or add confidence claims. If you cannot construct a valid plan, return empty hops. " +
-		"OAM RELATIONSHIP CATALOG: " + string(rawCatalog)
+		"OAM RELATIONSHIP CATALOG: " + string(rawCatalog) +
+		" OAM SELECTOR CATALOG: "+string(rawSelectors)
 	conversation := []Message{{Role:"system",Text:system},{Role:"user",Text:question}}
 	for attempt:=0; attempt<2; attempt++ {
 		response, err := a.Model.Generate(ctx, conversation, nil)
 		if err != nil {return zero, err}
 		if len(response.Calls)>0 {return zero, errors.New("planner attempted a tool call instead of returning typed JSON")}
 		plan, err := parseTypedPlan(response.Text)
-		if err==nil {err=validatePlan(plan,catalog,a.Runner.Limits)}
+		if err==nil {err=validatePlanWithSelectors(plan,catalog,selectors,a.Runner.Limits)}
 		if err==nil {return plan,nil}
 		if attempt==1 {return zero, fmt.Errorf("unable to produce valid OAM query plan: %w",err)}
 		conversation=append(conversation,Message{Role:"assistant",Text:response.Text},
@@ -137,37 +161,47 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 	plan,err:=a.planQuestion(ctx,question)
 	if err!=nil {out.Incomplete=true;return out,err}
 	out.Plan=&plan
-	lookupJSON,_:=json.Marshal(struct{
-		OrganizationQuery
-		Limit int `json:"limit"`
-	}{OrganizationQuery:plan.Subject.OrganizationQuery(),Limit:10})
-	raw,err:=a.Runner.Run(ctx,"resolve_organization",lookupJSON)
-	if err!=nil {out.Incomplete=true;return out,fmt.Errorf("organization lookup failed: %w",err)}
-	out.ToolCalls++
-	out.Observations=append(out.Observations,Observation{Tool:"resolve_organization",CallID:"planned-root",Result:string(raw)})
-	var resolution OrganizationResolution
-	if err:=json.Unmarshal(raw,&resolution);err!=nil{return out,fmt.Errorf("decode organization resolution: %w",err)}
-	out.Resolution=&resolution
-	if resolution.Status!="matched" || len(resolution.Candidates)!=1 {
-		out.Incomplete=true
-		switch resolution.Status {
-		case "not_found": out.Answer="No Organization matched the asserted name or identifier in the current Asset Database; no relationship conclusion can be drawn."
-		case "ambiguous":
-			var names []string
-			for _,c:=range resolution.Candidates {
-				var sources []string
-				for _,m:=range c.Matches {if m.Source!="" {sources=append(sources,m.Field+"="+m.Value+" [source: "+m.Source+"]")} else {sources=append(sources,m.Field+"="+m.Value)}}
-				names=append(names,humanAsset(c.Asset)+" ["+strings.Join(sources,", ")+"]")
-			}
-			out.Answer="Multiple Organization candidates matched; specify an explicit unique_id or jurisdiction-qualified registration_id. Candidates: "+strings.Join(names,"; ")
-		case "truncated":out.Answer="Organization candidates exceeded the bounded resolution limit; cannot safely select an identity."
-		default:return out,fmt.Errorf("unrecognized organization resolution status %q",resolution.Status)
+	var root Asset
+	if plan.Subject.UsesOrganizationResolution() {
+		lookupJSON,_:=json.Marshal(struct{
+			OrganizationQuery
+			Limit int `json:"limit"`
+		}{OrganizationQuery:plan.Subject.OrganizationQuery(),Limit:10})
+		raw,err:=a.Runner.Run(ctx,"resolve_organization",lookupJSON)
+		if err!=nil {out.Incomplete=true;return out,fmt.Errorf("organization lookup failed: %w",err)}
+		out.ToolCalls++
+		out.Observations=append(out.Observations,Observation{Tool:"resolve_organization",CallID:"planned-root",Result:string(raw)})
+		var resolution OrganizationResolution
+		if err:=json.Unmarshal(raw,&resolution);err!=nil{return out,fmt.Errorf("decode organization resolution: %w",err)}
+		out.Resolution=&resolution
+		if resolution.Status!="matched" || len(resolution.Candidates)!=1 {
+			out.Incomplete=true
+			out.Answer=resolutionAnswer(resolution.Status,resolution.Candidates)
+			return out,nil
 		}
-		return out,nil
+		root=resolution.Candidates[0].Asset
+	} else {
+		lookupJSON,_:=json.Marshal(struct{
+			AssetSelector
+			Limit int `json:"limit"`
+		}{AssetSelector:plan.Subject.AssetSelector(),Limit:10})
+		raw,err:=a.Runner.Run(ctx,"resolve_asset",lookupJSON)
+		if err!=nil {out.Incomplete=true;return out,fmt.Errorf("asset lookup failed: %w",err)}
+		out.ToolCalls++
+		out.Observations=append(out.Observations,Observation{Tool:"resolve_asset",CallID:"planned-root",Result:string(raw)})
+		var resolution AssetResolution
+		if err:=json.Unmarshal(raw,&resolution);err!=nil{return out,fmt.Errorf("decode asset resolution: %w",err)}
+		out.AssetResolution=&resolution
+		if resolution.Status!="matched" || len(resolution.Candidates)!=1 {
+			out.Incomplete=true
+			out.Answer=resolutionAnswer(resolution.Status,resolution.Candidates)
+			return out,nil
+		}
+		root=resolution.Candidates[0].Asset
 	}
-	paths:=[]partialPath{{nodes:[]Asset{resolution.Candidates[0].Asset}}}
+	paths:=[]partialPath{{nodes:[]Asset{root}}}
 	edgesSeen:=map[string]bool{}
-	nodesSeen:=map[string]bool{resolution.Candidates[0].Asset.ID:true}
+	nodesSeen:=map[string]bool{root.ID:true}
 	for hopIndex,step:=range plan.Hops {
 		next:=make([]partialPath,0)
 		for _,path:=range paths {
@@ -254,4 +288,22 @@ func humanAsset(a Asset)string {
 		}
 	}
 	return fmt.Sprintf("%s (asset %s)",display,a.ID)
+}
+
+func resolutionAnswer(status string, candidates []OrganizationCandidate) string {
+	switch status {
+	case "not_found": return "No asset matched the asserted typed identifier in the current Asset Database; no relationship conclusion can be drawn."
+	case "truncated": return "The bounded asset lookup was truncated; identity cannot be selected safely."
+	case "ambiguous":
+		var choices []string
+		for _,c:=range candidates {
+			var src []string
+			for _,m:=range c.Matches {
+				if m.Source!="" {src=append(src,m.Field+"="+m.Value+" [source: "+m.Source+"]")}else{src=append(src,m.Field+"="+m.Value)}
+			}
+			choices=append(choices,humanAsset(c.Asset)+" ["+strings.Join(src,", ")+"]")
+		}
+		return "Ambiguous asset identity; specify an explicit entity_id or a more selective typed field. Candidates: "+strings.Join(choices,"; ")
+	default:return "Unable to resolve the starting asset safely."
+	}
 }
