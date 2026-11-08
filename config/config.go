@@ -61,6 +61,9 @@ type Config struct {
 	// Defines options like datasources config path and stuff like that
 	Options map[string]interface{} `yaml:"options,omitempty" json:"-"`
 
+	// Optional inference and classifier configuration; never enables AI by itself.
+	AI *AISettings `yaml:"ai,omitempty" json:"ai,omitempty"`
+
 	// The global transformation settings
 	DefaultTransformations *Transformation `yaml:"-" json:"-"`
 
