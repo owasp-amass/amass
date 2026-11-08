@@ -80,6 +80,16 @@ func(a Agent) planGoal(ctx context.Context,question string)(InvestigationGoal,er
  sc,ok:=a.Runner.Catalog.(AssetSearchCatalog)
  if !ok{return zero,errors.New("OAM indexed selector catalog is required")}
  selectors:=sc.SearchFields()
+ types:=map[string]bool{}
+ for _,selector:=range selectors {types[selector.Type]=true}
+ for _,relation:=range a.Runner.Catalog.Relations() {
+  types[relation.SourceType]=true
+  types[relation.DestinationType]=true
+ }
+ allTypes:=make([]string,0,len(types))
+ for typ:=range types {allTypes=append(allTypes,typ)}
+ sort.Strings(allTypes)
+
  relations:=a.Runner.Catalog.Relations()
  prompt:=`You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
 Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected"}.
@@ -89,7 +99,7 @@ For a non-Organization, use {"type":"FQDN","field":"name","value":"example.org"}
 Choose target_types from the catalog based on the answer requested. Set [] if the question is broad and exploratory.
 All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
 SELECTOR CATALOG:
-`+compactSelectorCatalog(selectors)
+`+compactSelectorCatalog(selectors)+"\nALL AVAILABLE OAM TARGET TYPES: "+strings.Join(allTypes,",")
  history:=[]Message{{Role:"system",Text:prompt},{Role:"user",Text:question}}
  for attempt:=0;attempt<3;attempt++{
   response,err:=a.Model.Generate(ctx,history,nil)
