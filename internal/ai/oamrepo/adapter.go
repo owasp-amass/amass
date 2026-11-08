@@ -433,3 +433,94 @@ func (Catalog) Relations() []ai.RelationshipSchema {
 }
 
 var _ ai.SchemaCatalog = Catalog{}
+
+// SearchFields enumerates indexed typed selectors for each OAM asset kind.
+// These keys follow the Asset Database content-filter registries.
+// ContactRecord currently has only discovered_at, a non-identity timestamp:
+// use an explicit entity_id for reliable lookup.
+func (Catalog) SearchFields() []ai.AssetSearchSchema {
+    filters:=map[string][]string{
+        "Account":{"unique_id","account_type","username","account_number"},
+        "AutnumRecord":{"number","handle","name","whois_server"},
+        "AutonomousSystem":{"number"},
+        "ContactRecord":{},
+        "DomainRecord":{"domain","name","extension","punycode","id","whois_server"},
+        "File":{"url","name","type"},
+        "FQDN":{"name"},
+        "FundsTransfer":{"unique_id","amount","reference_number"},
+        "Identifier":{"unique_id","id","id_type"},
+        "IPAddress":{"address"},
+        "IPNetRecord":{"cidr","handle","name","start_address","end_address","whois_server","parent_handle"},
+        "Location":{"address","building","building_number","province","street_name","unit","locality","city","country","postal_code"},
+        "Netblock":{"cidr"},
+        "Organization":{"unique_id","name","legal_name","registration_id","jurisdiction"},
+        "Person":{"unique_id","full_name","first_name","family_name"},
+        "Phone":{"e164","country_code"},
+        "Product":{"unique_id","product_name","product_type"},
+        "ProductRelease":{"name"},
+        "Service":{"unique_id","service_type"},
+        "TLSCertificate":{"serial_number","subject_common_name"},
+        "URL":{"url","scheme"},
+    }
+    out:=make([]ai.AssetSearchSchema,0,len(oam.AssetList))
+    for _,t:=range oam.AssetList {
+        fields,ok:=filters[string(t)]
+        if !ok {continue}
+        out=append(out,ai.AssetSearchSchema{Type:string(t),Fields:fields})
+    }
+    return out
+}
+var _ ai.AssetSearchCatalog = Catalog{}
+
+// ResolveAsset requires a registered typed selector, uses only bounded read
+// APIs, and never silently resolves an ambiguous query to its first result.
+func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, limit int)(ai.AssetResolution,error){
+    result:=ai.AssetResolution{Query:selector,Status:"not_found",Candidates:[]ai.OrganizationCandidate{}}
+    if a.Repo==nil{return result,errors.New("missing OAM repository")}
+    if err:=selector.Validate((Catalog{}).SearchFields());err!=nil{return result,err}
+    if limit<1 || limit>10{return result,errors.New("asset resolution limit must be 1..10")}
+    if selector.EntityID!="" {
+        asset,err:=a.GetAsset(ctx,selector.EntityID)
+        if err!=nil {
+            // Invalid or inaccessible IDs are errors, not negative evidence.
+            return result,fmt.Errorf("resolve entity_id: %w",err)
+        }
+        if asset.Type!=selector.Type {return result,errors.New("entity_id does not match asserted OAM type")}
+        result.Candidates=append(result.Candidates,ai.OrganizationCandidate{
+            Asset:asset,Matches:[]ai.ResolutionMatch{{Field:"entity_id",Value:selector.EntityID}},
+        })
+        result.Status="matched"
+        return result,nil
+    }
+    value:=selector.Value
+    if selector.Type=="FQDN" && selector.Field=="name" {
+        value=strings.ToLower(strings.TrimSuffix(value,"."))
+    }
+    // The repository uses a bounded indexed query. Ask for one extra record
+    // so a capped result can never masquerade as a unique result.
+    filter:=dbt.ContentFilters{selector.Field:value}
+    rows,err:=a.Repo.FindEntitiesByContent(ctx,oam.AssetType(selector.Type),time.Time{},limit+1,filter)
+    if err!=nil {
+        if strings.TrimSpace(err.Error())=="zero entities found" {return result,nil}
+        return result,err
+    }
+    if len(rows)>limit {result.Truncated=true}
+    for _,ent:=range rows {
+        if len(result.Candidates)>=limit {break}
+        asset,err:=convert(ent)
+        if err!=nil{return result,err}
+        if asset.Type!=selector.Type{return result,errors.New("repository returned wrong OAM type")}
+        result.Candidates=append(result.Candidates,ai.OrganizationCandidate{
+            Asset:asset,Matches:[]ai.ResolutionMatch{{Field:selector.Field,Value:value}},
+        })
+    }
+    sort.Slice(result.Candidates,func(i,j int)bool{return result.Candidates[i].Asset.ID<result.Candidates[j].Asset.ID})
+    switch {
+    case result.Truncated:result.Status="truncated"
+    case len(result.Candidates)==0:result.Status="not_found"
+    case len(result.Candidates)==1:result.Status="matched"
+    default:result.Status="ambiguous"
+    }
+    return result,nil
+}
+var _ ai.AssetResolver = Adapter{}
