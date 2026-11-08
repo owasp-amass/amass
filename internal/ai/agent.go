@@ -23,6 +23,8 @@ type Observation struct {
 	Error  string `json:"error,omitempty"`
 }
 type Investigation struct {
+	Plan         *TypedPlan   `json:"plan,omitempty"`
+	Matches      []PlanMatch `json:"matches,omitempty"`
 	Answer       string        `json:"answer"`
 	Observations []Observation `json:"observations"`
 	Incomplete   bool          `json:"incomplete"`
