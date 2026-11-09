@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Command amass-ai-classifier serves the independent, local classifier.
-// If no trained model is mounted, it safely abstains and escalates.
+// If no trained model is mounted, it routes observed OAM evidence to review or escalation without claiming ownership.
 package main
 
 import (
@@ -30,7 +30,7 @@ func run() error {
   if err!=nil {
    if !errors.Is(err,os.ErrNotExist) {return fmt.Errorf("read classifier model: %w",err)}
    // A missing model path is NOT considered a healthy trained model.
-   fmt.Fprintln(os.Stderr,"classifier: configured model missing; using untrained escalation fallback")
+   fmt.Fprintln(os.Stderr,"classifier: trained model missing; enabling default OAM evidence triage")
   } else {
    m,err:=classify.Load(bytes.NewReader(data))
    if err!=nil{return fmt.Errorf("invalid classifier artifact: %w",err)}
@@ -41,7 +41,7 @@ func run() error {
    fmt.Fprintln(os.Stderr,"classifier: validated model artifact",m.ModelID)
   }
  }
- if model==nil{fmt.Fprintln(os.Stderr,"classifier: untrained fallback active; no positive or negative conclusions")}
+ if model==nil{fmt.Fprintln(os.Stderr,"classifier: default OAM provenance classifier active; review/escalation only, no ownership conclusions")}
  addr:=os.Getenv("AMASS_AI_CLASSIFIER_LISTEN")
  if addr==""{addr="0.0.0.0:8092"}
  srv:=&http.Server{Addr:addr,Handler:classify.HTTPService{Model:model}.Handler(),ReadHeaderTimeout:5*time.Second,MaxHeaderBytes:8192}
