@@ -124,3 +124,60 @@ URL and Organization relationship assets. It does not collect new data.
 
 The graph result intentionally avoids filling in missing URL or
 Organization relationships from an LLM response.
+
+## Natural-language OAM asset names
+
+Users should not have to know an internal Open Asset Model asset type to
+ask an investigation question. `intent_vocabulary.go` provides a curated,
+schema-filtered alias registry. It is used by both the deterministic typed
+relation compiler and the semantic goal-planning prompt.
+
+| User terms | Registered OAM type | Interpretation |
+| --- | --- | --- |
+| FQDNs, hostnames, DNS names | `FQDN` | Hostname assets |
+| Subdomains, subdomain names | `FQDN` | **Hierarchy constraint:** stored `node` relationships; apex is excluded from subdomain-only inventory |
+| IPs, IP addresses, IPv4 addresses, IPv6 addresses | `IPAddress` | Network address asset |
+| Companies, businesses, corporations, firms, legal entities | `Organization` | Organization asset; not proof of corporate registration |
+| Physical, postal, street addresses | `Location` | Geographic/address asset |
+| TLS, SSL or X.509 certificates | `TLSCertificate` | Certificate asset |
+| Networks, subnets, IP ranges | `Netblock` | Address range/block |
+| ASNs, autonomous systems | `AutonomousSystem` | Autonomous system asset |
+
+The bare word **"addresses"** is intentionally ambiguous: it can mean
+`IPAddress` or `Location`. The typed compiler evaluates candidates
+against the **requested OAM relationship labels and traversal topology**.
+It uses a deterministic mapping only if exactly one registered candidate
+type has exactly one valid route. If multiple meanings remain viable, the
+query falls back to semantic planning rather than silently choosing one.
+
+The word **"domain"** is similarly not forced to `FQDN`: a question can
+refer to the FQDN hierarchy, DNS records, or `DomainRecord` registration
+assets. The explicit relation and context determine how it should be
+interpreted. Ambiguous questions retain model-planning and schema
+validation.
+
+The alias registry cannot register new asset types, selectors, or OAM
+relationships. Synonyms do not grant permissions and cannot transform
+an association into a verified ownership claim.
+
+### Examples
+
+```bash
+# "subdomains" intentionally excludes the apex from the returned list
+docker compose run --rm ai \
+  -question "Which subdomains are under owasp.org?" -format text ask
+
+# Companies → Organization, with exact registered edge semantics
+docker compose run --rm ai \
+  -question "Which companies are connected to owasp.org via domain and website relationships?" \
+  -format json ask
+
+# Addresses can mean IPAddress when a unique dns_record path exists
+docker compose run --rm ai \
+  -question "Which IP addresses are connected to owasp.org via dns_record relationships?" \
+  -format json ask
+```
+
+These queries still return only assets and relationships already collected
+in the database. Vocabulary recognition does not manufacture missing
+edges or authorize new discovery.
