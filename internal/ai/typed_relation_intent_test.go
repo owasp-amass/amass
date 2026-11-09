@@ -111,8 +111,8 @@ func TestTypedRelationIntentUsesOtherRegisteredAssetTypes(t *testing.T){
 
 func TestTypedRelationIntentPartialAnswersRemainHonest(t *testing.T){
  g:=typedIntentGraph()
- // A direct FQDN node query must be deliberately explicit about node edges.
- q:="Which FQDN assets are connected to tech.acme.example via node relationships?"
+ // An explicit subdomain query constrains node to its hierarchy direction.
+ q:="Which subdomains are connected to tech.acme.example via node relationships?"
  intent,ok:=deterministicTypedRelationIntent(q,typedIntentTestCatalog)
  if !ok{t.Fatal("typed FQDN node query not recognized")}
  result,err:=searchTypedRelationIntent(context.Background(),g,DefaultLimits(),g.assets["host"],intent,AdaptiveOptions{MaxMatches:4})
