@@ -69,9 +69,12 @@ func run()error{
    if err!=nil{fmt.Fprintln(os.Stderr,"inference probe unsuccessful:",err)}else{fmt.Fprintln(os.Stderr,"inference model responded:",provider,modelName)}
   }
   probe()
-  ticker:=time.NewTicker(5*time.Minute)
-  defer ticker.Stop()
-  for{select{case <-ctx.Done():return;case <-ticker.C:probe()}}
+  for{
+   status.RLock();ready:=status.ready;status.RUnlock()
+   interval:=20*time.Second
+   if ready{interval=5*time.Minute}
+   select{case <-ctx.Done():return;case <-time.After(interval):probe()}
+  }
  }()
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /healthz",func(w http.ResponseWriter,r *http.Request){
