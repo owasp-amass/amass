@@ -100,7 +100,13 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if !explicitFlags["allow-http"]{allowHTTP=effective.AllowHTTP}
 	if !explicitFlags["classifier-model"] && effective.ClassifierModel!=""{classifierPath=effective.ClassifierModel}
 	if !explicitFlags["classifier-endpoint"] && effective.ClassifierEndpoint!=""{classifierEndpoint=effective.ClassifierEndpoint}
-	if !explicitFlags["classifier-review"]{classifierReview=effective.ClassifierReview}
+	if !explicitFlags["classifier-review"]{
+    // Keep default-on triage when a YAML ai: section omits this boolean.
+    // An explicit environment override or positive YAML value changes it;
+    // -classifier-review=false always disables review routing.
+    _,fromEnv:=os.LookupEnv("AMASS_AI_CLASSIFIER_REVIEW")
+    if fromEnv || effective.ClassifierReview{classifierReview=effective.ClassifierReview}
+   }
 	if !explicitFlags["depth"] && effective.MaxDepth!=0{graphDepth=effective.MaxDepth}
 	if !explicitFlags["max-matches"] && effective.MaxMatches!=0{graphMatches=effective.MaxMatches}
 	if !explicitFlags["max-paths-per-asset"] && effective.MaxPathsPerAsset!=0{graphAlternates=effective.MaxPathsPerAsset}
