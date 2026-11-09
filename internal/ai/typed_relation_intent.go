@@ -290,3 +290,28 @@ func typedRelationAnswer(root Asset,intent TypedRelationIntent,paths []PlanMatch
  if truncated{answer+=" Results are partial (search truncated: "+reason+"); additional matches may exist."}
  return answer
 }
+
+ 
+// typedRelationEmptyExplanation identifies the FIRST missing typed hop rather
+// than treating an unexecuted downstream relationship as disproved. This
+// only describes edges returned by the bounded OAM reader, never global
+// absence or independent ownership evidence.
+func typedRelationEmptyExplanation(search GraphSearchResult,intent TypedRelationIntent)string{
+ if len(search.Matches)!=0||len(search.HopDiagnostics)==0{return ""}
+ for _,hop:=range search.HopDiagnostics{
+  if hop.OutputPaths>0{continue}
+  description:=fmt.Sprintf(" The first empty relationship hop was %d (%s --%s:%s/%s--> %s).",
+   hop.Hop,hop.SourceType,hop.Direction,hop.Label,hop.RelationType,hop.TargetType)
+  if hop.ReturnedEdges==0{
+   description+=fmt.Sprintf(" The bounded graph reader returned no matching edges for %d queried path(s).",hop.QueriedPaths)
+  }else{
+   description+=fmt.Sprintf(" The graph reader returned %d edge(s), but none produced an eligible destination; %d were accepted before path constraints.",hop.ReturnedEdges,hop.AcceptedEdges)
+  }
+  if len(search.HopDiagnostics)<len(intent.Hops){
+   description+=fmt.Sprintf(" The %d subsequent hop(s) were not evaluated because there were no candidates to continue from.",len(intent.Hops)-len(search.HopDiagnostics))
+  }
+  description+=" This does not prove the target assets or other OAM relationship paths are absent."
+  return description
+ }
+ return ""
+}
