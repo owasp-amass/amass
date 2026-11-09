@@ -8,6 +8,10 @@ import (
 )
 
 func TestOAMIntentVocabularyCanonicalSynonyms(t *testing.T) {
+ selectors:=append([]AssetSearchSchema(nil),typedIntentTestCatalog.selectors...)
+ for _,kind:=range []string{"Location","TLSCertificate","Netblock"}{
+  selectors=append(selectors,AssetSearchSchema{Type:kind})
+ }
  cases:=[]struct{words,expected string}{
   {"subdomains","FQDN"},
   {"hostnames","FQDN"},
@@ -23,17 +27,16 @@ func TestOAMIntentVocabularyCanonicalSynonyms(t *testing.T) {
   {"network blocks","Netblock"},
  }
  for _,tc:=range cases{
-  got,ok:=intentTargetType(tc.words,typedIntentTestCatalog.selectors,typedIntentTestCatalog.rels)
+  got,ok:=intentTargetType(tc.words,selectors,typedIntentTestCatalog.rels)
   if !ok||got!=tc.expected{t.Errorf("%q -> %q (%v); want %q",tc.words,got,ok,tc.expected)}
  }
 }
 
 func TestOAMIntentVocabularyDoesNotGuessAmbiguousAddresses(t *testing.T){
- candidates:=intentTypeCandidates("addresses",typedIntentTestCatalog.selectors,typedIntentTestCatalog.rels)
  // Register Location explicitly as part of the production schema.
  selectors:=append(append([]AssetSearchSchema(nil),typedIntentTestCatalog.selectors...),
   AssetSearchSchema{Type:"Location",Fields:[]string{"address"}})
- candidates=intentTypeCandidates("addresses",selectors,typedIntentTestCatalog.rels)
+ candidates:=intentTypeCandidates("addresses",selectors,typedIntentTestCatalog.rels)
  if !reflect.DeepEqual(candidates,[]string{"IPAddress","Location"}){
   t.Fatalf("address aliases must remain ambiguous: %+v",candidates)
  }
