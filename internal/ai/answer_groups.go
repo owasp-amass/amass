@@ -38,6 +38,14 @@ func pathSemanticSignature(path PlanMatch)string{
   b.WriteByte('/')
   b.WriteString(e.Type)
   b.WriteByte('/')
+  // Asset types and stored orientation are part of the meaning; equal
+  // labels across different OAM types are not interchangeable claims.
+  if i+1<len(path.Nodes){
+   b.WriteString(path.Nodes[i].Type)
+   b.WriteByte('>')
+   b.WriteString(path.Nodes[i+1].Type)
+  }
+  b.WriteByte('/')
   if i<len(path.Nodes) && e.FromID==path.Nodes[i].ID {b.WriteString("out")}else{b.WriteString("in")}
  }
  return b.String()
