@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - 'internal/ai/**'
+      - 'internal/subs/**'
       - 'cmd/amass-ai-mcp/**'
       - 'cmd/amass-ai-mcp-http/**'
       - 'cmd/amass-ai-classifier/**'
@@ -34,6 +35,8 @@ jobs:
         run: go test -race ./config ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
       - name: Default evidence-first classifier regression
         run: go test ./internal/ai ./internal/ai/classify ./internal/ai/cli -run "TestDefaultEvidenceClassifier|TestHTTPClassifier|TestClassifierServiceEndpointGuard|TestTrainer" -count=1
+      - name: FQDN inventory and subdomain summary regressions
+        run: go test ./internal/subs ./internal/ai -run "TestAddInfrastructureInfoPreservesDiscoveredNamesWithoutASNs|TestFQDNInventory" -count=1
       - name: Build all Amass executables
         # Amass uses libpostal behind CGO; production Docker builds disable CGO.
         # Race-enabled AI tests above intentionally continue to use CGO.
