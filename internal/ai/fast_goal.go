@@ -33,7 +33,13 @@ func deterministicExplicitOrganizationGoal(question string,catalog SchemaCatalog
  if !ok{return zero,false}
  fields:=selectors.SearchFields()
  foundSelector:=false
- for _,field:=range fields{if field.Type=="FQDN"&&field.Field=="name"{foundSelector=true;break}}
+ for _,schema:=range fields{
+  if schema.Type!="FQDN"{continue}
+  for _,field:=range schema.Fields{
+   if field=="name"{foundSelector=true;break}
+  }
+  if foundSelector{break}
+ }
  if !foundSelector{return zero,false}
  goal:=InvestigationGoal{
   Subject:PlanSubject{Type:"FQDN",Field:"name",Value:hostname},
