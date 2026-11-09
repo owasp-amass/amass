@@ -290,6 +290,8 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		"Do not invent labels or add confidence claims. If you cannot construct a valid plan, return empty hops. " +
 		"Map companies and businesses to Organization, hostnames and subdomains to FQDN, IP addresses to IPAddress, and physical addresses to Location. Bare addresses can mean IPAddress or Location; do not guess. Subdomains imply the FQDN node hierarchy, not arbitrary edges. " +
 		"OAM ASSET LANGUAGE ALIASES (interpretation only):\n"+compactIntentVocabulary(selectors,catalog) +
+		"\nOAM RELATIONSHIP ALIASES (only registered labels are valid):\n"+compactRelationshipVocabulary(catalog) +
+		"\nINDEXED FIELD ALIASES (only registered selectors are valid):\n"+compactSearchVocabulary(selectors) +
 		"\nOAM RELATIONSHIP CATALOG (compact):\n"+compactRelations +
 		" OAM SELECTOR CATALOG (compact):\n"+compactSelectors
 	conversation := []Message{{Role:"system",Text:system},{Role:"user",Text:question}}
