@@ -97,6 +97,17 @@ var searchableFieldVocabulary=map[string][]string{
  "scheme":{"scheme","url scheme","protocol"},
  "punycode":{"punycode","idn","internationalized domain name"},
  "extension":{"extension","tld","top level domain"},
+ "amount":{"amount","sum","transfer amount","payment amount"},
+ "type":{"type","kind","category","file type","object type"},
+ "id_type":{"identifier type","id type","identifier category"},
+ "country_code":{"country code","international dialing code","phone country code"},
+ "province":{"province","state","region","administrative division"},
+ "street_name":{"street name","road name","street","road"},
+ "building":{"building","building name","property name"},
+ "building_number":{"building number","street number","house number"},
+ "unit":{"unit","suite","apartment","office unit"},
+ "account_id":{"account id","account identifier","cloud account id"},
+
 }
 
 // relationLabelAliases derives spelling and inflection variants for EVERY
@@ -134,6 +145,22 @@ func relationLabelAliases(label string)[]string{
   if term==""||seen[term]{continue}
   seen[term]=true
   result=append(result,term)
+ }
+ return result
+}
+
+// searchableFieldAliases provides a discoverable form for every OAM
+// indexed field, even if there is no hand-curated semantic expansion.
+func searchableFieldAliases(field string)[]string{
+ aliases:=[]string{field,strings.ReplaceAll(field,"_"," "),strings.ReplaceAll(field,"-"," ")}
+ aliases=append(aliases,searchableFieldVocabulary[field]...)
+ seen:=map[string]bool{}
+ var result []string
+ for _,a:=range aliases{
+  normalized:=normalizeSchemaAlias(a)
+  if normalized==""||seen[normalized]{continue}
+  seen[normalized]=true
+  result=append(result,normalized)
  }
  return result
 }
@@ -182,9 +209,9 @@ func compactSearchVocabulary(selectors []AssetSearchSchema)string{
  sort.Strings(sorted)
  var lines []string
  for _,field:=range sorted{
-  aliases:=searchableFieldVocabulary[field]
-  if len(aliases)>6{aliases=aliases[:6]}
-  if len(aliases)>0{lines=append(lines,field+": "+strings.Join(aliases,", "))}
+  aliases:=searchableFieldAliases(field)
+  if len(aliases)>7{aliases=aliases[:7]}
+  lines=append(lines,field+": "+strings.Join(aliases,", "))
  }
  return strings.Join(lines,"\n")
 }
