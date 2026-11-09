@@ -28,34 +28,27 @@ var camelBoundary2=regexp.MustCompile("([A-Z])([A-Z][a-z])")
 
 func intentAssetAliases(kind string)[]string {
  words:=strings.ToLower(camelBoundary1.ReplaceAllString(camelBoundary2.ReplaceAllString(kind,"$1 $2"),"$1 $2"))
- variants:=[]string{strings.ToLower(kind),words}
- if kind=="IPAddress"{variants=append(variants,"ip","ips","ip address","ip addresses")}
- if kind=="FQDN"{variants=append(variants,"fqdn","fqdns","fully qualified domain name","fully qualified domain names")}
- if kind=="URL"{variants=append(variants,"url","urls")}
- if kind=="TLSCertificate"{variants=append(variants,"tls certificate","tls certificates")}
- if kind=="AutonomousSystem"{variants=append(variants,"asn","asns","autonomous system","autonomous systems")}
+ candidates:=[]string{strings.ToLower(kind),words}
  for _,base:=range []string{strings.ToLower(kind),words}{
-  if strings.HasSuffix(base,"y"){variants=append(variants,strings.TrimSuffix(base,"y")+"ies")}else{variants=append(variants,base+"s")}
+  if strings.HasSuffix(base,"y"){candidates=append(candidates,strings.TrimSuffix(base,"y")+"ies")}else{candidates=append(candidates,base+"s")}
  }
- return variants
+ candidates=append(candidates,intentVocabulary[kind]...)
+ if kind=="FQDN"{candidates=append(candidates,"fqdn","fqdns","fully qualified domain name","fully qualified domain names")}
+ unique:=map[string]bool{}
+ out:=make([]string,0,len(candidates))
+ for _,candidate:=range candidates{
+  normalized:=normalizeIntentTerm(candidate)
+  if normalized==""||unique[normalized]{continue}
+  unique[normalized]=true
+  out=append(out,normalized)
+ }
+ return out
 }
 
 func intentTargetType(raw string,selector []AssetSearchSchema,relations []RelationshipSchema)(string,bool){
- raw=strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(raw))," "))
- raw=strings.TrimSuffix(raw," assets")
- raw=strings.TrimSuffix(raw," asset")
- known:=map[string]bool{}
- for _,s:=range selector{known[s.Type]=true}
- for _,r:=range relations{known[r.SourceType]=true;known[r.DestinationType]=true}
- found:=""
- for typ:=range known{
-  for _,alias:=range intentAssetAliases(typ){
-   if raw!=alias{continue}
-   if found!=""&&found!=typ{return "",false}
-   found=typ
-  }
- }
- return found,found!=""
+ candidates:=intentTypeCandidates(raw,selector,relations)
+ if len(candidates)!=1{return "",false}
+ return candidates[0],true
 }
 
 func intentSubject(raw string,selectors []AssetSearchSchema)(PlanSubject,bool){
@@ -133,14 +126,31 @@ func deterministicTypedRelationIntent(question string,catalog SchemaCatalog)(Typ
  matches:=typedRelationQuestion.FindStringSubmatch(question)
  if len(matches)!=4{return zero,false}
  relations,fields:=catalog.Relations(),selectors.SearchFields()
- target,ok:=intentTargetType(matches[1],fields,relations)
- if !ok{return zero,false}
+ candidates:=intentTypeCandidates(matches[1],fields,relations)
+ if len(candidates)==0{return zero,false}
  subject,ok:=intentSubject(matches[2],fields)
  if !ok{return zero,false}
  hint,ok:=explicitRelationLabels(question,relations)
  if !ok||len(hint.Labels)>maxPlanHops{return zero,false}
- hops,ok:=compileCatalogHops(subject.Type,target,hint,relations)
- if !ok{return zero,false}
+ var target string
+ var hops []PlanHop
+ for _,candidate:=range candidates{
+  candidateHops,valid:=compileCatalogHops(subject.Type,candidate,hint,relations)
+  if !valid{continue}
+  if subdomainTerm(matches[1]){
+   // "Subdomain" is not a generic FQDN alias: it additionally asserts
+   // a hostname hierarchy. Do not substitute a DNS or URL association.
+   if subject.Type!="FQDN"||len(candidateHops)!=1||
+     candidateHops[0].Direction!="out"||candidateHops[0].Label!="node"{
+    continue
+   }
+  }
+  // A generic word such as "addresses" can mean a Location or an
+  // IPAddress. Only a UNIQUE catalog path may disambiguate it.
+  if target!=""{return zero,false}
+  target,hops=candidate,candidateHops
+ }
+ if target==""{return zero,false}
  plan:=TypedPlan{Subject:subject,Hops:hops}
  if err:=validatePlanWithSelectors(plan,relations,fields,DefaultLimits());err!=nil{return zero,false}
  required:=make([]GoalRelation,0,len(hops))
