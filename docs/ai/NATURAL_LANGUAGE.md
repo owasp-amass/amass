@@ -145,6 +145,46 @@ accept 5s–15m and model-timeout–30m, respectively. Repeated model calls shar
 the overall investigation deadline; an expired inference request does not
 establish that an OAM asset or relationship is absent.
 
+### Native Ollama provider (recommended for local models)
+
+`-provider ollama` calls Ollama's native `/api/chat` instead of its
+OpenAI-compatible `/v1` endpoint. With the native API Amass can:
+
+- turn off a reasoning model's thinking phase (`think: false`). Qwen3 thinks
+  by default, which on a CPU-only host such as Docker Desktop on macOS can
+  take minutes per request. Pass `-think` (or `ai.think: true`,
+  `AMASS_AI_THINK=true`) to turn it back on;
+- set the context window (`-context-tokens`, default 8192). The planner
+  prompt for the full OAM catalog is about 3,500 tokens, and a smaller
+  window silently truncates it;
+- constrain the goal planner's reply to a JSON schema whose asset types,
+  labels and relation types are enumerated from the OAM catalog;
+- keep the model loaded for 30 minutes between CLI runs.
+
+The endpoint is the Ollama base URL:
+
+```sh
+amass ai -provider ollama -endpoint http://127.0.0.1:11434 -model qwen3:8b \
+  -trace -question "Which organizations are connected to tech.acme.example?" ask
+```
+
+Models that do not support thinking reject the `think` field; Amass retries
+once without it and stops sending it. The Anthropic provider gets the same
+schema-constrained planning through a forced tool call. The `compatible`
+provider is unchanged and still relies on the prompt for JSON.
+
+`-trace` prints one line per stage and the model usage to stderr, including
+when an investigation fails (illustrative output):
+
+```text
+trace: goal_planning            21.4s  model_interpretation
+trace: resolve_asset             0.0s  FQDN
+...
+trace: model calls=2 input_tokens=7410 output_tokens=388 model_time=34.9s
+```
+
+The JSON output carries the same totals in `model_usage`.
+
 ## Relationship direction in answers
 
 Answer paths render arrows using the stored edge endpoints, not the query

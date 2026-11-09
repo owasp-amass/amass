@@ -34,6 +34,10 @@ type AISettings struct {
 	MaxTokens int `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
 	// Temperature is a decimal 0..2; empty keeps the provider default.
 	Temperature string `yaml:"temperature,omitempty" json:"temperature,omitempty"`
+	// ContextTokens sets the Ollama context window; 0 keeps the default.
+	ContextTokens int `yaml:"context_tokens,omitempty" json:"context_tokens,omitempty"`
+	// Think enables an Ollama reasoning model's thinking phase (off by default).
+	Think bool `yaml:"think,omitempty" json:"think,omitempty"`
 }
 
 // ResolveAISettings applies AMASS_AI_* environment overrides without
@@ -65,6 +69,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 	}{
 		{"AMASS_AI_ALLOW_HTTP", &c.AllowHTTP},
 		{"AMASS_AI_CLASSIFIER_REVIEW", &c.ClassifierReview},
+		{"AMASS_AI_THINK", &c.Think},
 	}
 	for _, pair := range bools {
 		if raw, ok := lookup(pair.key); ok {
@@ -85,6 +90,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		{"AMASS_AI_MAX_EXPANSIONS", &c.MaxExpansions},
 		{"AMASS_AI_GUIDANCE_ROUNDS", &c.GuidanceRounds},
 		{"AMASS_AI_MAX_TOKENS", &c.MaxTokens},
+		{"AMASS_AI_CONTEXT_TOKENS", &c.ContextTokens},
 	}
 	for _, pair := range ints {
 		if raw, ok := lookup(pair.key); ok {
@@ -112,6 +118,9 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 	}
 	if c.GuidanceRounds > 3 {
 		return c, fmt.Errorf("AI guidance_rounds must be 0..3")
+	}
+	if c.ContextTokens != 0 && (c.ContextTokens < 2048 || c.ContextTokens > 262144) {
+		return c, fmt.Errorf("AI context_tokens must be 0 or 2048..262144")
 	}
 	if c.MaxTokens > 128000 {
 		return c, fmt.Errorf("AI max_tokens must be 0..128000")

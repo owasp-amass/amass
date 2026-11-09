@@ -31,6 +31,9 @@ type AnthropicModel struct {
 	// Investigations resend a large, fixed OAM catalog prompt, so caching
 	// is on by default; prompts below the provider minimum are not cached.
 	DisablePromptCache bool
+	// forceTool, when set, requires the model to call that tool (used by
+	// GenerateStructured).
+	forceTool string
 }
 
 // DefaultAnthropicMaxTokens is the reply budget when MaxTokens is unset.
@@ -96,6 +99,9 @@ func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs [
 			tools = append(tools, map[string]any{"name": s.Name, "description": s.Description, "input_schema": s.Parameters})
 		}
 		payload["tools"] = tools
+		if m.forceTool != "" {
+			payload["tool_choice"] = map[string]any{"type": "tool", "name": m.forceTool}
+		}
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
