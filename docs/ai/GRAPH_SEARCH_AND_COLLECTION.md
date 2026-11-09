@@ -140,6 +140,12 @@ printf 'Exact passive collection approval: %s\n' "$PLAN_ID"
 ```
 
 Expected success: JSON with `status: "started"` and `session_token`.
+
+The plan ID is a deterministic confirmation ID: a SHA-256 digest of the scope
+type, scope value and method. It proves the caller passed the scope they
+reviewed, not that they are authorized; anyone who knows the scope can compute
+it. Control who may run `amass ai collect` (and reach the engine API) to
+control who may start collection. No MCP or model tool can start collection.
 Monitor the engine and database through your existing Amass tooling.
 Session completion, automatic investigation resumption, and full provenance
 reports are **not implemented yet**.

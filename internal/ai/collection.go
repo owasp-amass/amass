@@ -11,9 +11,12 @@ import (
 	"strings"
 )
 
-// CollectionPlan is a proposal, never permission. Only a matching explicit
-// approval token may authorize a later engine session. A model must not be
-// able to launch discovery by calling a read-only graph tool.
+// CollectionPlan is a proposal, never permission. Its ID is a deterministic
+// confirmation ID derived from the scope: anyone who knows the scope can
+// compute it, so it confirms that the operator reviewed this exact scope but
+// is not a secret or an authorization credential. Authorization comes from
+// who may run the collect command. A model must not be able to launch
+// discovery by calling a read-only graph tool; no tool exposes collection.
 type CollectionPlan struct {
 	ID               string        `json:"id,omitempty"`
 	Target           AssetSelector `json:"target"`
