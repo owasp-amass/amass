@@ -37,6 +37,13 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "Run gofmt -w on:"; echo "$unformatted"; exit 1
           fi
+      - name: Check the Amass copyright header on AI Go files
+        run: |
+          missing=$(for f in $(git ls-files 'internal/ai/*.go' 'config/ai*.go' 'cmd/amass-ai-*/*.go'); do
+            head -1 "$f" | grep -q '^// Copyright © by Jeff Foley' || echo "$f"; done)
+          if [ -n "$missing" ]; then
+            echo "Add the standard Amass header to:"; echo "$missing"; exit 1
+          fi
       - name: AI, configuration and CLI tests
         run: go test -race ./config ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
       - name: Default evidence-first classifier regression
