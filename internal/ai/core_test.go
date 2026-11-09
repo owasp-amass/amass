@@ -59,8 +59,8 @@ func (g fakeGraph) EdgesLimited(ctx context.Context, id, dir, label string, sinc
 	}
 	return edges, false, nil
 }
-func (g fakeGraph) EdgeEvidence(ctx context.Context,id string,limit int)([]Evidence,error){
- return g.Evidence(ctx,id,limit)
+func (g fakeGraph) EdgeEvidence(ctx context.Context, id string, limit int) ([]Evidence, error) {
+	return g.Evidence(ctx, id, limit)
 }
 func (g fakeGraph) Evidence(_ context.Context, id string, limit int) ([]Evidence, error) {
 	v := g.evidence[id]
@@ -222,20 +222,22 @@ func TestAgentRejectsAnswerAfterFailedTools(t *testing.T) {
 	}
 }
 
+type collidingEvidenceGraph struct{ fakeGraph }
 
-type collidingEvidenceGraph struct{fakeGraph}
-func (g collidingEvidenceGraph) Evidence(ctx context.Context,id string,limit int)([]Evidence,error){
- return []Evidence{{ID:"asset-tag",SubjectID:id,SourceID:"asset-only",Kind:"SourceProperty"}},nil
+func (g collidingEvidenceGraph) Evidence(ctx context.Context, id string, limit int) ([]Evidence, error) {
+	return []Evidence{{ID: "asset-tag", SubjectID: id, SourceID: "asset-only", Kind: "SourceProperty"}}, nil
 }
-func (g collidingEvidenceGraph) EdgeEvidence(ctx context.Context,id string,limit int)([]Evidence,error){
- return []Evidence{{ID:"edge-tag",SubjectID:id,SourceID:"edge-only",Kind:"SourceProperty"}},nil
+func (g collidingEvidenceGraph) EdgeEvidence(ctx context.Context, id string, limit int) ([]Evidence, error) {
+	return []Evidence{{ID: "edge-tag", SubjectID: id, SourceID: "edge-only", Kind: "SourceProperty"}}, nil
 }
-func TestGetEdgeEvidenceUsesExactRelationNamespace(t *testing.T){
- runner:=ToolRunner{Graph:collidingEvidenceGraph{fakeGraph:graph()},Limits:DefaultLimits()}
- raw,err:=runner.Run(context.Background(),"get_edge_evidence",json.RawMessage(`{"id":"1","limit":8}`))
- if err!=nil{t.Fatal(err)}
- if !strings.Contains(string(raw),"edge-tag")||strings.Contains(string(raw),"asset-tag"){
-  t.Fatalf("typed edge evidence returned asset tags for colliding identifier: %s",raw)
- }
- t.Logf("exact edge evidence with colliding ID: %s",raw)
+func TestGetEdgeEvidenceUsesExactRelationNamespace(t *testing.T) {
+	runner := ToolRunner{Graph: collidingEvidenceGraph{fakeGraph: graph()}, Limits: DefaultLimits()}
+	raw, err := runner.Run(context.Background(), "get_edge_evidence", json.RawMessage(`{"id":"1","limit":8}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "edge-tag") || strings.Contains(string(raw), "asset-tag") {
+		t.Fatalf("typed edge evidence returned asset tags for colliding identifier: %s", raw)
+	}
+	t.Logf("exact edge evidence with colliding ID: %s", raw)
 }

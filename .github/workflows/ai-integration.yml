@@ -31,6 +31,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Check gofmt on AI packages
+        run: |
+          unformatted=$(gofmt -l internal/ai config cmd/amass-ai-*)
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt -w on:"; echo "$unformatted"; exit 1
+          fi
       - name: AI, configuration and CLI tests
         run: go test -race ./config ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
       - name: Default evidence-first classifier regression

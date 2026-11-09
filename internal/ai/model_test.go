@@ -4,11 +4,11 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-	"errors"
 )
 
 func TestCompatibleModelToolCalls(t *testing.T) {
@@ -36,17 +36,17 @@ func TestCompatibleModelToolCalls(t *testing.T) {
 }
 
 func TestCompatibleModelHonorsConfiguredClientTimeout(t *testing.T) {
-	server:=httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter,r *http.Request){
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		// A bounded delay simulates a slow model response. Request-context
 		// cancellation is not guaranteed to be visible to the handler until
 		// body reads or writes, so never wait indefinitely for it here.
-		time.Sleep(200*time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}))
 	defer server.Close()
-	client:=&http.Client{Timeout:50*time.Millisecond}
-	_,err:=(CompatibleModel{Endpoint:server.URL,ModelName:"slow-test-model",Client:client}).
-		Generate(context.Background(),[]Message{{Role:"user",Text:"hello"}},nil)
-	if !errors.Is(err,context.DeadlineExceeded) {
-		t.Fatalf("expected configured HTTP timeout, got %v",err)
+	client := &http.Client{Timeout: 50 * time.Millisecond}
+	_, err := (CompatibleModel{Endpoint: server.URL, ModelName: "slow-test-model", Client: client}).
+		Generate(context.Background(), []Message{{Role: "user", Text: "hello"}}, nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected configured HTTP timeout, got %v", err)
 	}
 }
