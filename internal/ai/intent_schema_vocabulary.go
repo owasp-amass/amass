@@ -156,3 +156,43 @@ func compactSearchVocabulary(selectors []AssetSearchSchema)string{
  }
  return strings.Join(lines,"\n")
 }
+
+// Intent-operation paraphrases are semantic signals for goal planning, NOT
+// stand-ins for OAM edge labels. In particular "owns" and "associated with"
+// must not be treated as synonyms for an observed ownership relationship.
+var investigationOperationVocabulary=map[string][]string{
+ "inventory":{"list","show","enumerate","find all","what are the","which ones",
+  "catalog","inventory","discover in database","count","how many","give me every"},
+ "association":{"associated with","related to","connected to","linked to",
+  "correlated with","affiliated with","tied to","associated assets",
+  "connected assets","relationships of","relationships with"},
+ "hierarchy":{"under","beneath","children of","descendants of","parent of",
+  "ancestors of","within the hierarchy","in the tree","direct children",
+  "all descendants","subdomains under"},
+ "attribution":{"attributed to","registered to","registrant","who controls",
+  "who operates","who manages","who owns","ultimate parent","parent company",
+  "subsidiary of","corporate family","legal entity"},
+ "evidence":{"evidence for","prove","supporting sources","source tags",
+  "confidence","how was this discovered","why is this associated",
+  "how do we know","show provenance","witnessed path"},
+ "comparison":{"compare","versus","vs","better supported","strongest evidence",
+  "which route","shortest path","most sources","rank","difference between",
+  "which has more"},
+ "temporal":{"first discovered","last seen","recently observed","historical",
+  "when was","newest","oldest","seen since","observed before"},
+ "filter":{"only","excluding","except","without","within","where",
+  "matching","limited to","with attribute","with property"},
+}
+
+func compactOperationVocabulary()string{
+ intents:=make([]string,0,len(investigationOperationVocabulary))
+ for k:=range investigationOperationVocabulary{intents=append(intents,k)}
+ sort.Strings(intents)
+ var lines []string
+ for _,kind:=range intents{
+  values:=investigationOperationVocabulary[kind]
+  if len(values)>7{values=values[:7]}
+  lines=append(lines,kind+": "+strings.Join(values,", "))
+ }
+ return strings.Join(lines,"\n")
+}
