@@ -99,6 +99,40 @@ var searchableFieldVocabulary=map[string][]string{
  "extension":{"extension","tld","top level domain"},
 }
 
+// relationLabelAliases derives spelling and inflection variants for EVERY
+// registered relation label, then adds carefully curated semantic synonyms.
+// This avoids needing to maintain a handcrafted entry for each new label.
+func relationLabelAliases(label string)[]string{
+ aliases:=[]string{label,strings.ReplaceAll(label,"_"," "),strings.ReplaceAll(label,"-"," ")}
+ aliases=append(aliases,relationVocabulary[strings.ToLower(label)]...)
+ all:=append([]string(nil),aliases...)
+ for _,raw:=range aliases{
+  words:=strings.Fields(normalizeSchemaAlias(raw))
+  if len(words)==0{continue}
+  last:=words[len(words)-1]
+  // Only a transparent English plural inflection is generated. Do not
+  // stem or fuzzy-match unfamiliar words into unrelated OAM labels.
+  switch {
+  case strings.HasSuffix(last,"s"):continue
+  case strings.HasSuffix(last,"y")&&len(last)>1:
+   words[len(words)-1]=strings.TrimSuffix(last,"y")+"ies"
+  case strings.HasSuffix(last,"ch")||strings.HasSuffix(last,"sh"):
+   words[len(words)-1]=last+"es"
+  default: words[len(words)-1]=last+"s"
+  }
+  all=append(all,strings.Join(words," "))
+ }
+ seen:=map[string]bool{}
+ result:=make([]string,0,len(all))
+ for _,raw:=range all{
+  term:=normalizeSchemaAlias(raw)
+  if term==""||seen[term]{continue}
+  seen[term]=true
+  result=append(result,term)
+ }
+ return result
+}
+
 // schemaRelationAliasCandidates returns every *registered* OAM label that can
 // match an explicit user phrase. An ambiguous alias produces multiple labels
 // and MUST NOT be silently reduced to one.
@@ -109,14 +143,7 @@ func schemaRelationAliasCandidates(phrase string,catalog []RelationshipSchema)[]
  for _,r:=range catalog{if r.Label!=""{available[r.Label]=true}}
  var matched []string
  for label:=range available{
-  aliases:=[]string{label,strings.ReplaceAll(label,"_"," "),strings.ReplaceAll(label,"-"," ")}
-  aliases=append(aliases,relationVocabulary[strings.ToLower(label)]...)
-  // Treat singular/plural variants as linguistic forms only, never by
-  // doing substring matching on asset values.
-  for _,base:=range append([]string(nil),aliases...){
-   normalized:=normalizeSchemaAlias(base)
-   if normalized!=""&&!strings.HasSuffix(normalized,"s"){aliases=append(aliases,normalized+"s")}
-  }
+  aliases:=relationLabelAliases(label)
   for _,alias:=range aliases{
    if normalizeSchemaAlias(alias)==needle{matched=append(matched,label);break}
   }
