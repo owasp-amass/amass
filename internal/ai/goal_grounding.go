@@ -39,9 +39,7 @@ func explicitRelationLabels(question string,catalog []RelationshipSchema)(explic
  registered:=map[string]bool{}
  for _,r:=range catalog{if r.Label!=""{registered[r.Label]=true}}
  for label:=range registered{
-  aliases:=[]string{label,strings.ReplaceAll(label,"_"," "),strings.ReplaceAll(label,"-"," ")}
-  aliases=append(aliases,relationVocabulary[strings.ToLower(label)]...)
-  for _,raw:=range aliases{
+  for _,raw:=range relationLabelAliases(label){
    alias:=normalizeSchemaAlias(raw)
    if alias==""{continue}
    start:=0
