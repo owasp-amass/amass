@@ -12,9 +12,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 	"github.com/owasp-amass/asset-db/repository"
 	neo4jrepo "github.com/owasp-amass/asset-db/repository/neo4j"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -571,6 +573,26 @@ func (Catalog) Relations() []ai.RelationshipSchema {
 }
 
 var _ ai.SchemaCatalog = Catalog{}
+
+var (
+	semanticsOnce  sync.Once
+	semanticsTable *semantics.Table
+)
+
+// Attribution returns what an OAM relationship says about who controls its
+// source asset, from internal/ai/semantics. The embedded table is validated
+// in CI against the OAM taxonomy; an unknown relationship never attributes
+// ownership.
+func (Catalog) Attribution(source, label, relationType, destination string) (string, bool) {
+	semanticsOnce.Do(func() { semanticsTable, _ = semantics.Load() })
+	if semanticsTable == nil {
+		return "", false
+	}
+	r, ok := semanticsTable.Lookup(source, label, relationType, destination)
+	return r.Attribution, ok
+}
+
+var _ ai.AttributionCatalog = Catalog{}
 
 // SearchFields enumerates indexed typed selectors for each OAM asset kind.
 // These keys follow the Asset Database content-filter registries.

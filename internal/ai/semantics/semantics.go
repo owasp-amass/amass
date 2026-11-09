@@ -46,8 +46,11 @@ type Relation struct {
 	Destination  string `yaml:"destination"`
 	Attribution  string `yaml:"attribution"`
 	Purpose      string `yaml:"purpose"`
-	Review       bool   `yaml:"review"`
-	Note         string `yaml:"note"`
+	// Review marks an undecided edge; Reviewed records a maintainer decision
+	// on an edge whose role varies in practice.
+	Review   bool   `yaml:"review"`
+	Reviewed bool   `yaml:"reviewed"`
+	Note     string `yaml:"note"`
 }
 
 // Table holds every relationship's meaning.
