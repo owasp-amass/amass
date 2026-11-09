@@ -182,7 +182,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 			return fmt.Errorf("load organization aliases: %w", err)
 		}
 	}
-	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases}
+	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()

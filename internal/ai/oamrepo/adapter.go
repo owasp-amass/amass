@@ -13,6 +13,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/asset-db/repository"
+	neo4jrepo "github.com/owasp-amass/asset-db/repository/neo4j"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
@@ -21,6 +22,9 @@ import (
 type Adapter struct {
 	Repo    repository.Repository
 	Aliases []ai.OrganizationAlias
+	// Neo4jDatabase names the Neo4j database when Repo is asset-db's Neo4j
+	// repository; empty selects the server default. See Neo4jDatabaseName.
+	Neo4jDatabase string
 }
 
 func (a Adapter) GetAsset(ctx context.Context, id string) (ai.Asset, error) {
@@ -232,9 +236,10 @@ func AllowedRelation(subject, label, object string) bool {
 	return oam.ValidRelationship(oam.AssetType(subject), label, oam.SimpleRelation, oam.AssetType(object))
 }
 
-// EdgesLimited requires a repository that implements server-side SQL bounds.
-// The current released asset-db dependency may not implement it yet; graph
-// walks must fail closed until the bounded API is released or pinned.
+// EdgesLimited requires a repository that bounds edge reads on the server.
+// SQLite and PostgreSQL need asset-db's ReadEdgesLimited (not yet in the
+// released asset-db); Neo4j is bounded here with a LIMIT Cypher query over
+// released asset-db APIs. Any other repository fails closed.
 func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, since time.Time, limit int) ([]ai.Relation, bool, error) {
 	if a.Repo == nil {
 		return nil, false, errors.New("missing repository")
@@ -242,7 +247,8 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	bounded, ok := a.Repo.(interface {
 		ReadEdgesLimited(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, bool, error)
 	})
-	if !ok {
+	neo, isNeo := a.Repo.(*neo4jrepo.NeoRepository)
+	if !ok && !isNeo {
 		return nil, false, errors.New("asset-db version lacks bounded edge reader; upgrade the repository dependency")
 	}
 	ent, err := a.Repo.FindEntityById(ctx, id)
@@ -253,7 +259,13 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	if label != "" {
 		labels = []string{label}
 	}
-	edges, more, err := bounded.ReadEdgesLimited(ctx, ent, direction, since, limit, labels...)
+	var edges []*dbt.Edge
+	var more bool
+	if ok {
+		edges, more, err = bounded.ReadEdgesLimited(ctx, ent, direction, since, limit, labels...)
+	} else {
+		edges, more, err = neo4jEdgesLimited(ctx, neo, a.Neo4jDatabase, ent, direction, since, limit, labels...)
+	}
 	if err != nil {
 		return nil, false, err
 	}
