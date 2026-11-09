@@ -2,6 +2,7 @@
 package classify
 
 import (
+ "context"
  "errors"
  "fmt"
  "math"
@@ -44,4 +45,15 @@ func EvidenceTriage(in Input) (Prediction,error) {
   output.Decision="review"
  }
  return output,nil
+}
+
+// EvidenceRuleClassifier is the zero-config default classifier. It scores
+// no probabilities, uses only the verified OAM feature vector supplied
+// by the caller and can be replaced by a trained linear model or HTTP
+// classification service without changing inference providers.
+type EvidenceRuleClassifier struct{}
+var _ Classifier = EvidenceRuleClassifier{}
+func (EvidenceRuleClassifier) Classify(ctx context.Context,in Input)(Prediction,error){
+ if err:=ctx.Err();err!=nil{return Prediction{},err}
+ return EvidenceTriage(in)
 }
