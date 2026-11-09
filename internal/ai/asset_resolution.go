@@ -19,19 +19,23 @@ type AssetSelector struct {
 	Value    string `json:"value,omitempty"`
 	EntityID string `json:"entity_id,omitempty"`
 }
+
 type AssetSearchSchema struct {
 	Type   string   `json:"type"`
 	Fields []string `json:"fields"`
 }
+
 type AssetSearchCatalog interface {
 	SearchFields() []AssetSearchSchema
 }
+
 type AssetResolution struct {
 	Query      AssetSelector           `json:"query"`
 	Status     string                  `json:"status"`
 	Candidates []OrganizationCandidate `json:"candidates"`
 	Truncated  bool                    `json:"truncated"`
 }
+
 type AssetResolver interface {
 	ResolveAsset(context.Context, AssetSelector, int) (AssetResolution, error)
 }
@@ -62,7 +66,9 @@ func (s AssetSelector) Validate(catalog []AssetSearchSchema) error {
 				return nil
 			}
 		}
+
 		return fmt.Errorf("field %q is not indexed for OAM asset type %s", s.Field, s.Type)
 	}
+
 	return fmt.Errorf("unregistered OAM asset type %q", s.Type)
 }

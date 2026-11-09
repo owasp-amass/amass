@@ -16,16 +16,27 @@ func TestRelationAliasGrounding(t *testing.T) {
 		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 		{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 		{SourceType: "Organization", Label: "website", RelationType: "SimpleRelation", DestinationType: "URL"},
-		{SourceType: "Organization", Label: "registration", RelationType: "SimpleRelation", DestinationType: "DomainRecord"},
+		{
+			SourceType:      "Organization",
+			Label:           "registration",
+			RelationType:    "SimpleRelation",
+			DestinationType: "DomainRecord",
+		},
 	}
 	cases := []struct {
 		question string
 		labels   []string
 	}{
 		{"Which IP addresses are connected to test.example via DNS resolution relationships?", []string{"dns_record"}},
-		{"Which companies are connected to test.example via domain and official website relationships?", []string{"domain", "website"}},
+		{
+			"Which companies are connected to test.example via domain and official website relationships?",
+			[]string{"domain", "website"},
+		},
 		{"Which hostnames are connected to test.example using subdomain hierarchy edges?", []string{"node"}},
-		{"Which registration records are connected to test.example via domain registration relations?", []string{"registration"}},
+		{
+			"Which registration records are connected to test.example via domain registration relations?",
+			[]string{"registration"},
+		},
 		{"Which IP addresses are connected to test.example via dns_record relationships?", []string{"dns_record"}},
 	}
 	for _, tc := range cases {
@@ -68,6 +79,7 @@ func TestRelationshipAndFieldVocabularyScopesToCatalog(t *testing.T) {
 	if !strings.Contains(relPrompt, "dns_record:") || strings.Contains(relPrompt, "subsidiary:") {
 		t.Fatalf("wrong relationship prompt scope: %q", relPrompt)
 	}
+
 	fieldPrompt := compactSearchVocabulary(selectors)
 	if !strings.Contains(fieldPrompt, "unique_id:") || strings.Contains(fieldPrompt, "registration_id:") {
 		t.Fatalf("wrong indexed-field prompt scope: %q", fieldPrompt)
@@ -76,7 +88,12 @@ func TestRelationshipAndFieldVocabularyScopesToCatalog(t *testing.T) {
 
 func TestRelationAliasCatalogWideDynamicNaming(t *testing.T) {
 	cat := []RelationshipSchema{
-		{SourceType: "Account", Label: "account_linked_to", RelationType: "SimpleRelation", DestinationType: "Organization"},
+		{
+			SourceType:      "Account",
+			Label:           "account_linked_to",
+			RelationType:    "SimpleRelation",
+			DestinationType: "Organization",
+		},
 	}
 	for _, name := range []string{"account_linked_to", "account linked to", "account-linked-to"} {
 		got := schemaRelationAliasCandidates(name, cat)

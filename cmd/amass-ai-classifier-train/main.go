@@ -21,6 +21,7 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	input := flag.String("input", "", "Labeled training examples in JSONL format")
 	output := flag.String("output", "", "Output trained JSON model file")
@@ -29,31 +30,38 @@ func run() error {
 	if *input == "" || *output == "" {
 		return errors.New("-input and -output required")
 	}
+
 	f, err := os.Open(*input)
 	if err != nil {
 		return err
 	}
+
 	examples, err := classify.ReadLabeledJSONL(f)
 	_ = f.Close()
 	if err != nil {
 		return err
 	}
+
 	model, metrics, err := classify.TrainLinearModel(examples, *id)
 	if err != nil {
 		return err
 	}
+
 	data, err := json.MarshalIndent(model, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	dir := filepath.Dir(*output)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
+
 	tmp, err := os.CreateTemp(dir, ".classifier-*.json")
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	if err := tmp.Chmod(0600); err != nil {
 		_ = tmp.Close()
@@ -69,6 +77,7 @@ func run() error {
 	if err := os.Rename(tmp.Name(), *output); err != nil {
 		return err
 	}
+
 	fmt.Fprintln(os.Stderr, "Classifier trained and saved:", *output)
 	return json.NewEncoder(os.Stdout).Encode(metrics)
 }

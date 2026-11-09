@@ -35,6 +35,7 @@ var reviewedAttribution = testAttribution{
 }
 
 func asset(id, typ, key string) Asset { return Asset{ID: id, Type: typ, Key: key} }
+
 func edge(id, from, to, label string) Relation {
 	return Relation{ID: id, FromID: from, ToID: to, Label: label, Type: "SimpleRelation"}
 }
@@ -68,14 +69,19 @@ func TestOwnerAttributionStepRules(t *testing.T) {
 		"issuer is not an owner":  {issuerPath(), false},
 		"registrant is the owner": {registrantPath(), true},
 		"certificate subject is the owner": {PlanMatch{
-			Nodes: []Asset{asset("f", "FQDN", "a.example"), asset("c", "TLSCertificate", "1"), asset("s", "ContactRecord", "Subject"), asset("o", "Organization", "Acme")},
-			Edges: []Relation{edge("1", "c", "f", "common_name"), edge("2", "c", "s", "subject_contact"), edge("3", "s", "o", "organization")}}, true},
+			Nodes: []Asset{asset("f", "FQDN", "a.example"), asset("c", "TLSCertificate", "1"), asset("s",
+				"ContactRecord", "Subject"), asset("o", "Organization", "Acme")},
+			Edges: []Relation{edge("1", "c", "f", "common_name"), edge("2", "c", "s",
+				"subject_contact"), edge("3", "s", "o", "organization")}}, true},
 		"organization website, traversed backward": {PlanMatch{
-			Nodes: []Asset{asset("f", "FQDN", "a.example"), asset("u", "URL", "https://a.example/"), asset("o", "Organization", "Acme")},
+			Nodes: []Asset{asset("f", "FQDN", "a.example"), asset("u", "URL",
+				"https://a.example/"), asset("o", "Organization", "Acme")},
 			Edges: []Relation{edge("1", "u", "f", "domain"), edge("2", "o", "u", "website")}}, true},
 		"controller followed backward does not attribute": {PlanMatch{
-			Nodes: []Asset{asset("o", "Organization", "Acme"), asset("s", "ContactRecord", "Subject"), asset("c", "TLSCertificate", "1"), asset("x", "Organization", "Other")},
-			Edges: []Relation{edge("1", "s", "o", "organization"), edge("2", "c", "s", "subject_contact"), edge("3", "c", "x", "issuer_contact")}}, false},
+			Nodes: []Asset{asset("o", "Organization", "Acme"), asset("s", "ContactRecord",
+				"Subject"), asset("c", "TLSCertificate", "1"), asset("x", "Organization", "Other")},
+			Edges: []Relation{edge("1", "s", "o", "organization"), edge("2", "c", "s",
+				"subject_contact"), edge("3", "c", "x", "issuer_contact")}}, false},
 		"unknown relationship never attributes": {PlanMatch{
 			Nodes: []Asset{asset("f", "FQDN", "a.example"), asset("o", "Organization", "Acme")},
 			Edges: []Relation{edge("1", "f", "o", "verified_for")}}, false},
@@ -99,11 +105,13 @@ func TestUltimateParentExcludesThirdPartiesAndReportsThem(t *testing.T) {
 	if got := eligibleAdaptivePathsWith(goal, paths, reviewedAttribution); len(got) != 0 {
 		t.Fatalf("a certificate issuer must not be a parent candidate: %+v", got)
 	}
+
 	conns := thirdPartyConnections(reviewedAttribution, paths)
 	if len(conns) != 1 || conns[0].AssetID != "le" || conns[0].Via != "TLSCertificate issuer_contact" {
 		t.Fatalf("third party not reported: %+v", conns)
 	}
-	if s := thirdPartySummary(conns); !strings.Contains(s, "let's encrypt (asset le) via TLSCertificate issuer_contact") {
+	if s := thirdPartySummary(conns); !strings.Contains(s,
+		"let's encrypt (asset le) via TLSCertificate issuer_contact") {
 		t.Fatalf("summary: %s", s)
 	}
 

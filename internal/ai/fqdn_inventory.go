@@ -26,14 +26,18 @@ func deterministicFQDNInventoryGoal(question string, catalog SchemaCatalog) (Inv
 	if len(m) != 2 {
 		return zero, false
 	}
+
 	host := strings.ToLower(m[1])
-	if strings.Contains(host, "..") || strings.Contains(host, ".-") || strings.Contains(host, "-.") || strings.HasSuffix(host, ".") {
+	if strings.Contains(host, "..") || strings.Contains(host, ".-") || strings.Contains(host,
+		"-.") || strings.HasSuffix(host, ".") {
 		return zero, false
 	}
+
 	selector, ok := catalog.(AssetSearchCatalog)
 	if !ok {
 		return zero, false
 	}
+
 	foundField, foundNode := false, false
 	for _, s := range selector.SearchFields() {
 		if s.Type != "FQDN" {
@@ -46,22 +50,27 @@ func deterministicFQDNInventoryGoal(question string, catalog SchemaCatalog) (Inv
 		}
 	}
 	for _, r := range catalog.Relations() {
-		if r.SourceType == "FQDN" && r.DestinationType == "FQDN" && r.Label == "node" && r.RelationType == "SimpleRelation" {
+		if r.SourceType == "FQDN" && r.DestinationType == "FQDN" && r.Label == "node" &&
+			r.RelationType == "SimpleRelation" {
 			foundNode = true
 		}
 	}
 	if !foundField || !foundNode {
 		return zero, false
 	}
+
 	goal := InvestigationGoal{
 		Subject:     PlanSubject{Type: "FQDN", Field: "name", Value: host},
 		TargetTypes: []string{"FQDN"}, Direction: "out", Purpose: "connected",
-		Relationships: []GoalRelation{{SourceType: "FQDN", DestinationType: "FQDN", Label: "node", RelationType: "SimpleRelation"}},
-		PathRule:      "all",
+		Relationships: []GoalRelation{
+			{SourceType: "FQDN", DestinationType: "FQDN", Label: "node", RelationType: "SimpleRelation"},
+		},
+		PathRule: "all",
 	}
 	if err := validateGoal(goal, catalog.Relations(), selector.SearchFields()); err != nil {
 		return zero, false
 	}
+
 	return goal, true
 }
 
@@ -78,10 +87,12 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 	if root.Type != "FQDN" {
 		return out, errors.New("FQDN inventory requires FQDN root")
 	}
+
 	bounded, ok := graph.(BoundedGraph)
 	if !ok {
 		return out, errors.New("bounded graph reader required")
 	}
+
 	depth, maxMatches, maxExpansions := opts.MaxDepth, opts.MaxMatches, opts.MaxExpansions
 	if depth == 0 {
 		depth = limits.MaxDepth
@@ -101,6 +112,7 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 	if maxExpansions < 1 || maxExpansions > min(400, limits.MaxNodes*8) {
 		return out, errors.New("max expansions exceeds policy")
 	}
+
 	type queued struct {
 		asset Asset
 		path  PlanMatch
@@ -120,11 +132,13 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 			out.Reason = "path expansion limit"
 			break
 		}
+
 		current := pending[0]
 		pending = pending[1:]
 		if len(current.path.Edges) >= depth {
 			continue
 		}
+
 		out.ExpandedPaths++
 		edges, more, err := bounded.EdgesLimited(ctx, current.asset.ID, "out", "node", time.Time{}, limits.MaxPerNode)
 		if err != nil {
@@ -139,12 +153,14 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 				out.Reason = "per-node edge limit"
 			}
 		}
+
 		sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 		for _, edge := range edges {
 			if err := ctx.Err(); err != nil {
 				return out, err
 			}
-			if edge.FromID != current.asset.ID || edge.ToID == "" || edge.Type != "SimpleRelation" || edge.Label != "node" {
+			if edge.FromID != current.asset.ID || edge.ToID == "" || edge.Type != "SimpleRelation" ||
+				edge.Label != "node" {
 				out.SchemaRejected++
 				continue
 			}
@@ -154,6 +170,7 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 					out.Reason = "edge limit"
 					break
 				}
+
 				seenEdges[edge.ID] = true
 			}
 			if seen[edge.ToID] {
@@ -164,15 +181,18 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 				out.Reason = "node limit"
 				break
 			}
+
 			next, err := graph.GetAsset(ctx, edge.ToID)
 			if err != nil {
 				return out, err
 			}
+
 			nextName := strings.ToLower(strings.TrimSuffix(next.Key, "."))
 			if next.Type != "FQDN" || !strings.HasSuffix(nextName, "."+rootName) {
 				out.SchemaRejected++
 				continue
 			}
+
 			seen[next.ID] = true
 			path := PlanMatch{
 				Nodes: append(append([]Asset(nil), current.path.Nodes...), next),
@@ -191,12 +211,14 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 			break
 		}
 	}
+
 	out.VisitedNodes = len(seen)
 	out.VisitedEdges = len(seenEdges)
 	if out.SchemaRejected > 0 && !out.Truncated {
 		out.Truncated = true
 		out.Reason = "stored edge absent from FQDN node taxonomy/scope"
 	}
+
 	out.Exhausted = !out.Truncated
 	// Make names deterministic independent of database edge identifier order.
 	sort.Slice(out.Matches, func(i, j int) bool {
@@ -205,6 +227,7 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 		if a == b {
 			return out.Matches[i].PathID < out.Matches[j].PathID
 		}
+
 		return a < b
 	})
 	return out, nil
@@ -215,28 +238,35 @@ func fqdnInventoryAnswerScoped(root Asset, paths []PlanMatch, truncated bool, re
 	if !subdomainsOnly {
 		names = append(names, root.Key)
 	}
+
 	seen := map[string]bool{root.ID: true}
 	for _, path := range paths {
 		if len(path.Nodes) == 0 {
 			continue
 		}
+
 		last := path.Nodes[len(path.Nodes)-1]
 		if seen[last.ID] {
 			continue
 		}
+
 		seen[last.ID] = true
 		names = append(names, last.Key)
 	}
+
 	sort.Strings(names)
 	description := "FQDN asset(s)"
 	if subdomainsOnly {
 		description = "subdomain FQDN asset(s)"
 	}
-	answer := fmt.Sprintf("Found %d %s in the stored OAM node hierarchy for %s:\n%s", len(names), description, root.Key, strings.Join(names, "\n"))
+
+	answer := fmt.Sprintf("Found %d %s in the stored OAM node hierarchy for %s:\n%s", len(names),
+		description, root.Key, strings.Join(names, "\n"))
 	answer += "\nThese are stored FQDN asset associations, not proof of current DNS resolution or ownership."
 	if truncated {
 		answer += " Results are partial (search truncated: " + reason + "); additional names may exist."
 	}
+
 	return answer
 }
 

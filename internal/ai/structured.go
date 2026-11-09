@@ -43,6 +43,7 @@ func generateJSON(ctx context.Context, model Model, history []Message, schema JS
 	if len(resp.Calls) != 0 {
 		return resp, errors.New("model requested a tool call instead of returning JSON")
 	}
+
 	return resp, nil
 }
 
@@ -53,10 +54,12 @@ func (m AnthropicModel) GenerateStructured(ctx context.Context, history []Messag
 	if schema.Name == "" || len(schema.Schema) == 0 {
 		return Response{}, errors.New("structured generation requires a named JSON schema")
 	}
+
 	spec := ToolSpec{Name: schema.Name, Description: schema.Description, Parameters: schema.Schema}
 	if spec.Description == "" {
 		spec.Description = "Return the result as the input of this tool."
 	}
+
 	forced := m
 	forced.forceTool = schema.Name
 	resp, err := forced.Generate(ctx, history, []ToolSpec{spec})
@@ -65,9 +68,14 @@ func (m AnthropicModel) GenerateStructured(ctx context.Context, history []Messag
 	}
 	for _, c := range resp.Calls {
 		if c.Name == schema.Name {
-			return Response{Text: string(c.Arguments), InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens}, nil
+			return Response{
+				Text:         string(c.Arguments),
+				InputTokens:  resp.InputTokens,
+				OutputTokens: resp.OutputTokens,
+			}, nil
 		}
 	}
+
 	return Response{}, errors.New("anthropic: model did not return the structured result")
 }
 

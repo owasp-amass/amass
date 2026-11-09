@@ -18,6 +18,7 @@ func TestTableCoversExactlyTheOAMTaxonomy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defined := map[string]bool{}
 	for _, src := range oam.AssetList {
 		for _, label := range oam.GetAssetOutgoingRelations(src) {
@@ -34,7 +35,8 @@ func TestTableCoversExactlyTheOAMTaxonomy(t *testing.T) {
 	}
 	for _, r := range table.Relations {
 		if !defined[key(r.Source, r.Label, r.RelationType, r.Destination)] {
-			t.Errorf("semantics for %s --%s/%s--> %s, which OAM does not define", r.Source, r.Label, r.RelationType, r.Destination)
+			t.Errorf("semantics for %s --%s/%s--> %s, which OAM does not define", r.Source, r.Label,
+				r.RelationType, r.Destination)
 		}
 	}
 }
@@ -52,14 +54,17 @@ func TestParseRejectsBadEntries(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
+
 	table, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r, ok := table.Lookup("TLSCertificate", "issuer_contact", "SimpleRelation", "ContactRecord"); !ok || r.Attribution != ThirdParty {
+	if r, ok := table.Lookup("TLSCertificate", "issuer_contact", "SimpleRelation",
+		"ContactRecord"); !ok || r.Attribution != ThirdParty {
 		t.Fatalf("issuer_contact must be third_party: %+v", r)
 	}
-	if r, ok := table.Lookup("TLSCertificate", "san_dns_name", "SimpleRelation", "FQDN"); !ok || r.Attribution != Shared {
+	if r, ok := table.Lookup("TLSCertificate", "san_dns_name", "SimpleRelation",
+		"FQDN"); !ok || r.Attribution != Shared {
 		t.Fatalf("san_dns_name must not carry attribution: %+v", r)
 	}
 }

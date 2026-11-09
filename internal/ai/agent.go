@@ -25,6 +25,7 @@ type Observation struct {
 	Result string `json:"result"`
 	Error  string `json:"error,omitempty"`
 }
+
 type Investigation struct {
 	Plan               *TypedPlan                `json:"plan,omitempty"`
 	Query              *Query                    `json:"query,omitempty"`
@@ -47,6 +48,7 @@ type Investigation struct {
 	PlanStoppedAtHop   int                       `json:"plan_stopped_at_hop,omitempty"`
 	ToolCalls          int                       `json:"tool_calls"`
 }
+
 type Agent struct {
 	Model    Model
 	Runner   ToolRunner
@@ -64,6 +66,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 	if err := a.Runner.Limits.Validate(); err != nil {
 		return result, err
 	}
+
 	max := a.MaxCalls
 	if max == 0 {
 		max = a.Runner.Limits.MaxToolCalls
@@ -78,6 +81,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 	if a.Runner.Catalog != nil {
 		return a.AskAdaptive(ctx, question, AdaptiveOptions{})
 	}
+
 	transcript := []Message{{Role: "system", Text: InvestigatorInstructions}, {Role: "user", Text: question}}
 	retriedWithoutTools := false
 	grounded := false
@@ -86,10 +90,12 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
+
 		specs := Specs()
 		if result.ToolCalls >= max {
 			specs = nil
 		}
+
 		reply, err := a.Model.Generate(ctx, transcript, specs)
 		if err != nil {
 			return result, err
@@ -106,12 +112,14 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 						Text: "Your previous answer did not inspect the database and cannot be accepted. You MUST call an available graph tool now before answering. For an organization named in the question, use lookup_organization to resolve its ID, then walk_relations to inspect its relationships. Do not answer from memory."})
 					continue
 				}
+
 				result.Incomplete = true
 				return result, errors.New("model did not inspect the asset database, including after one tool-use retry")
 			}
 			if reply.Text == "" {
 				return result, errors.New("model returned an empty answer")
 			}
+
 			result.Answer = reply.Text
 			return result, nil
 		}
@@ -119,12 +127,14 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 			result.Incomplete = true
 			return result, errors.New("model continued tool calls past limit")
 		}
+
 		transcript = append(transcript, Message{Role: "assistant", Text: reply.Text, Calls: reply.Calls})
 		for _, call := range reply.Calls {
 			if result.ToolCalls >= max {
 				result.Incomplete = true
 				return result, errors.New("model attempted too many tool calls")
 			}
+
 			result.ToolCalls++
 			payload, err := a.Runner.Run(ctx, call.Name, call.Arguments)
 			obs := Observation{Tool: call.Name, CallID: call.ID, Result: string(payload)}
@@ -134,10 +144,12 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 			} else {
 				grounded = true
 			}
+
 			result.Observations = append(result.Observations, obs)
 			transcript = append(transcript, Message{Role: "tool", ToolCallID: call.ID, Text: obs.Result})
 		}
 	}
+
 	result.Incomplete = true
 	return result, errors.New("investigation round budget exhausted")
 }

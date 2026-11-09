@@ -32,8 +32,15 @@ func TestValidateQuery(t *testing.T) {
 	if err := ValidateQuery(websiteRouteQuery(), catalog, selectors, limits); err != nil {
 		t.Fatalf("valid route rejected: %v", err)
 	}
-	explore := Query{Version: QueryVersion, Subject: PlanSubject{Type: "FQDN", Field: "name", Value: "tech.acme.example"},
-		Traversal: TraversalExplore, TargetTypes: []string{"Organization"}, Direction: "both", Purpose: "connected", Source: SourceCaller}
+
+	explore := Query{Version: QueryVersion, Subject: PlanSubject{
+		Type:  "FQDN",
+		Field: "name",
+		Value: "tech.acme.example",
+	},
+		Traversal: TraversalExplore, TargetTypes: []string{
+			"Organization",
+		}, Direction: "both", Purpose: "connected", Source: SourceCaller}
 	if err := ValidateQuery(explore, catalog, selectors, limits); err != nil {
 		t.Fatalf("valid explore rejected: %v", err)
 	}
@@ -63,6 +70,7 @@ func TestValidateQuery(t *testing.T) {
 			t.Errorf("%s: invalid query accepted", name)
 		}
 	}
+
 	explore.Hops = websiteRouteQuery().Hops
 	if err := ValidateQuery(explore, catalog, selectors, limits); err == nil {
 		t.Error("explore with hops accepted")
@@ -73,11 +81,14 @@ func TestValidateHierarchyQuery(t *testing.T) {
 	cat := fqdnInventoryCatalog
 	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "FQDN", Field: "name", Value: "owasp.org"},
 		Traversal: TraversalHierarchy, TargetTypes: []string{"FQDN"}, Direction: "out", Purpose: "connected",
-		Relationships: []GoalRelation{{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"}},
-		PathRule:      "all", ExcludeRoot: true, Source: SourceCaller}
+		Relationships: []GoalRelation{
+			{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
+		},
+		PathRule: "all", ExcludeRoot: true, Source: SourceCaller}
 	if err := ValidateQuery(q, cat.Relations(), cat.SearchFields(), DefaultLimits()); err != nil {
 		t.Fatalf("valid hierarchy rejected: %v", err)
 	}
+
 	q.Direction = "both"
 	if err := ValidateQuery(q, cat.Relations(), cat.SearchFields(), DefaultLimits()); err == nil {
 		t.Fatal("hierarchy with direction both accepted")
@@ -90,26 +101,31 @@ func TestCompileQuestionDeterministicRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Traversal != TraversalHierarchy || !q.ExcludeRoot || q.Source != SourceFQDNHierarchy || q.Subject.Value != "owasp.org" {
+	if q.Traversal != TraversalHierarchy || !q.ExcludeRoot || q.Source != SourceFQDNHierarchy ||
+		q.Subject.Value != "owasp.org" {
 		t.Fatalf("subdomain question compiled to %+v", q)
 	}
+
 	q, err = agent.CompileQuestion(context.Background(), "Which FQDN assets are associated with owasp.org?")
 	if err != nil || q.Traversal != TraversalHierarchy || q.ExcludeRoot {
 		t.Fatalf("FQDN inventory compiled to %+v err=%v", q, err)
 	}
 	// Without a model, a question no compiler recognises must fail closed.
-	if _, err := agent.CompileQuestion(context.Background(), "Tell me something interesting about owasp.org"); err == nil {
+	if _, err := agent.CompileQuestion(context.Background(),
+		"Tell me something interesting about owasp.org"); err == nil {
 		t.Fatal("unrecognised question compiled without a model")
 	}
 }
 
 func TestCompileQuestionTypedRoute(t *testing.T) {
 	agent := Agent{Runner: ToolRunner{Limits: DefaultLimits(), Catalog: typedIntentTestCatalog}}
-	q, err := agent.CompileQuestion(context.Background(), "Which URLs are connected to tech.acme.example via domain relationships?")
+	q, err := agent.CompileQuestion(context.Background(),
+		"Which URLs are connected to tech.acme.example via domain relationships?")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Traversal != TraversalRoute || q.Source != SourceTypedRelation || len(q.Hops) != 1 || q.Hops[0].Label != "domain" {
+	if q.Traversal != TraversalRoute || q.Source != SourceTypedRelation || len(q.Hops) != 1 ||
+		q.Hops[0].Label != "domain" {
 		t.Fatalf("typed question compiled to %+v", q)
 	}
 }
@@ -137,6 +153,7 @@ func TestAskQueryExploreRequiresModelAndValidQuery(t *testing.T) {
 	if _, err := (Agent{Runner: runner}).AskQuery(context.Background(), explore, AdaptiveOptions{}); err == nil {
 		t.Fatal("explore query ran without a model")
 	}
+
 	bad := websiteRouteQuery()
 	bad.Hops[0].Label = "invented"
 	out, err := (Agent{Runner: runner}).AskQuery(context.Background(), bad, AdaptiveOptions{})
@@ -151,6 +168,7 @@ func TestQueryJSONRoundTripAndDescribe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var back Query
 	if err := decodeStrict(raw, &back); err != nil {
 		t.Fatalf("query JSON must decode strictly: %v", err)
@@ -158,6 +176,7 @@ func TestQueryJSONRoundTripAndDescribe(t *testing.T) {
 	if back.Traversal != q.Traversal || len(back.Hops) != 2 || back.Subject.Name != q.Subject.Name {
 		t.Fatalf("round trip lost fields: %+v", back)
 	}
+
 	desc := q.Describe()
 	if !strings.Contains(desc, "out subsidiary to Organization, then out website to URL") {
 		t.Fatalf("unexpected description: %s", desc)

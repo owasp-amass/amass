@@ -21,6 +21,7 @@ type Asset struct {
 	CreatedAt time.Time `json:"created_at"`
 	LastSeen  time.Time `json:"last_seen"`
 }
+
 type Relation struct {
 	ID        string    `json:"id"`
 	FromID    string    `json:"from_id"`
@@ -31,6 +32,7 @@ type Relation struct {
 	CreatedAt time.Time `json:"created_at"`
 	LastSeen  time.Time `json:"last_seen"`
 }
+
 type Evidence struct {
 	ID        string    `json:"id"`
 	SubjectID string    `json:"subject_id"`
@@ -87,6 +89,7 @@ func DefaultLimits() Limits {
 	return Limits{MaxDepth: 16, MaxNodes: 100, MaxEdges: 200, MaxPerNode: 40, MaxFind: 50,
 		MaxEvidence: 50, MaxToolCalls: 10, MaxToolBytes: 64000}
 }
+
 func (l Limits) Validate() error {
 	if l.MaxDepth < 1 || l.MaxDepth > 32 || l.MaxNodes < 1 || l.MaxNodes > 2000 ||
 		l.MaxEdges < 1 || l.MaxEdges > 4000 || l.MaxPerNode < 1 || l.MaxPerNode > 500 ||
@@ -94,6 +97,7 @@ func (l Limits) Validate() error {
 		l.MaxToolCalls < 1 || l.MaxToolCalls > 40 || l.MaxToolBytes < 1024 || l.MaxToolBytes > 1048576 {
 		return errors.New("limits outside approved bounds")
 	}
+
 	return nil
 }
 
@@ -104,6 +108,7 @@ type WalkRequest struct {
 	Depth     int    `json:"depth,omitempty"`
 	Since     string `json:"since,omitempty"`
 }
+
 type WalkResult struct {
 	Nodes     []Asset    `json:"nodes"`
 	Edges     []Relation `json:"edges"`
@@ -115,10 +120,12 @@ func DateSince(s string) (time.Time, error) {
 	if strings.TrimSpace(s) == "" {
 		return time.Time{}, nil
 	}
+
 	t, e := time.Parse(time.RFC3339, s)
 	if e != nil {
 		return time.Time{}, fmt.Errorf("since must be RFC3339: %w", e)
 	}
+
 	return t, nil
 }
 
@@ -143,18 +150,22 @@ func Walk(ctx context.Context, graph Graph, l Limits, r WalkRequest) (WalkResult
 	if r.Direction != "both" && r.Direction != "in" && r.Direction != "out" {
 		return out, errors.New("direction must be in, out or both")
 	}
+
 	since, err := DateSince(r.Since)
 	if err != nil {
 		return out, err
 	}
+
 	limited, ok := graph.(BoundedGraph)
 	if !ok {
 		return out, errors.New("graph repository lacks bounded edge queries")
 	}
+
 	a, err := graph.GetAsset(ctx, r.StartID)
 	if err != nil {
 		return out, err
 	}
+
 	out.Nodes = append(out.Nodes, a)
 	type item struct {
 		id    string
@@ -167,11 +178,13 @@ func Walk(ctx context.Context, graph Graph, l Limits, r WalkRequest) (WalkResult
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
+
 		current := queue[0]
 		queue = queue[1:]
 		if current.depth >= r.Depth {
 			continue
 		}
+
 		edges, more, err := limited.EdgesLimited(ctx, current.id, r.Direction, r.Label, since, l.MaxPerNode)
 		if err != nil {
 			return out, err
@@ -190,9 +203,11 @@ func Walk(ctx context.Context, graph Graph, l Limits, r WalkRequest) (WalkResult
 					out.Reason = "edge limit"
 					return out, nil
 				}
+
 				edgeIDs[edge.ID] = true
 				out.Edges = append(out.Edges, edge)
 			}
+
 			nextID := edge.ToID
 			if current.id == edge.ToID {
 				nextID = edge.FromID
@@ -205,14 +220,17 @@ func Walk(ctx context.Context, graph Graph, l Limits, r WalkRequest) (WalkResult
 				out.Reason = "node limit"
 				return out, nil
 			}
+
 			next, err := graph.GetAsset(ctx, nextID)
 			if err != nil {
 				return out, err
 			}
+
 			seen[nextID] = true
 			out.Nodes = append(out.Nodes, next)
 			queue = append(queue, item{nextID, current.depth + 1})
 		}
 	}
+
 	return out, nil
 }

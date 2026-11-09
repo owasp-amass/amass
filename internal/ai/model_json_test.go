@@ -30,7 +30,8 @@ func TestModelJSON(t *testing.T) {
 }
 
 func TestInferrerAcceptsFencedProposal(t *testing.T) {
-	answer := codeFence + "json\n" + `{"subject_id":"a","predicate":"none","object_id":"b","confidence":0.1,"reason":"insufficient","evidence_ids":[],"contradictions":[]}` + "\n" + codeFence
+	answer := codeFence + "json\n" +
+		`{"subject_id":"a","predicate":"none","object_id":"b","confidence":0.1,"reason":"insufficient","evidence_ids":[],"contradictions":[]}` + "\n" + codeFence
 	i := Inferrer{Model: inferenceModel{answer: answer}, MinSources: 2}
 	p, err := i.Analyze(t.Context(), Candidate{SubjectID: "a", ObjectID: "b", AllowedLabels: []string{"subsidiary"}})
 	if err != nil || p != nil {

@@ -58,6 +58,7 @@ func (s *HTTPServer) clock() time.Time {
 	if s.now != nil {
 		return s.now()
 	}
+
 	return time.Now()
 }
 
@@ -65,6 +66,7 @@ func (s *HTTPServer) ttl() time.Duration {
 	if s.SessionTTL > 0 {
 		return s.SessionTTL
 	}
+
 	return DefaultSessionTTL
 }
 
@@ -77,6 +79,7 @@ func (s *HTTPServer) addSession(id string) {
 			delete(s.sessions, key)
 		}
 	}
+
 	limit := s.MaxSessions
 	if limit < 1 {
 		limit = DefaultMaxSessions
@@ -88,8 +91,10 @@ func (s *HTTPServer) addSession(id string) {
 				oldest = key
 			}
 		}
+
 		delete(s.sessions, oldest)
 	}
+
 	s.sessions[id] = &mcpSession{lastSeen: now}
 }
 
@@ -100,14 +105,17 @@ func (s *HTTPServer) touchSession(id string) *mcpSession {
 	if !ok {
 		return nil
 	}
+
 	now := s.clock()
 	if now.Sub(sess.lastSeen) > s.ttl() {
 		delete(s.sessions, id)
 		return nil
 	}
+
 	sess.lastSeen = now
 	return sess
 }
+
 func (s *HTTPServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -118,20 +126,24 @@ func (s *HTTPServer) Handler() http.Handler {
 			mcpJSON(w, 503, map[string]any{"status": "unconfigured"})
 			return
 		}
+
 		mcpJSON(w, 200, map[string]any{"status": "ready", "transport": "streamable-http", "access": "read_only"})
 	})
 	mux.HandleFunc("/mcp", s.handleMCP)
 	return mux
 }
+
 func validOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
 	}
+
 	o, err := url.Parse(origin)
 	if err != nil || o.User != nil {
 		return false
 	}
+
 	host := o.Hostname()
 	// Browser-driven requests to a locally published port are allowed only
 	// with matching origin and host; this prevents DNS-rebinding origins.
@@ -139,9 +151,11 @@ func validOrigin(r *http.Request) bool {
 	if h, _, e := net.SplitHostPort(target); e == nil {
 		target = h
 	}
+
 	return (host == "localhost" || host == "127.0.0.1" || host == "::1") &&
 		(target == "localhost" || target == "127.0.0.1" || target == "::1")
 }
+
 func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -153,6 +167,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server token not configured", http.StatusServiceUnavailable)
 		return
 	}
+
 	expected := "Bearer " + s.Token
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(expected)) != 1 {
 		w.Header().Set("WWW-Authenticate", "Bearer")
@@ -171,11 +186,13 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		if exists {
 			delete(s.sessions, session)
 		}
+
 		s.mu.Unlock()
 		if !exists {
 			http.Error(w, "unknown MCP session", http.StatusNotFound)
 			return
 		}
+
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -188,6 +205,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "application/json required", http.StatusUnsupportedMediaType)
 		return
 	}
+
 	// Streamable HTTP clients must advertise JSON and SSE; this server
 	// deliberately selects JSON responses for single-message POSTs.
 	accept := r.Header.Get("Accept")
@@ -195,6 +213,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Accept must include application/json and text/event-stream", http.StatusNotAcceptable)
 		return
 	}
+
 	defer func() { _ = r.Body.Close() }()
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	var req incoming
@@ -202,6 +221,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		mcpJSON(w, 400, rpcError(nil, -32700, "parse error"))
 		return
 	}
+
 	var extra any
 	if err := d.Decode(&extra); err != io.EOF {
 		mcpJSON(w, 400, rpcError(nil, -32600, "invalid request body"))
@@ -216,11 +236,13 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 			mcpJSON(w, 400, rpcError(nil, -32600, "initialize requires ID"))
 			return
 		}
+
 		sessionBytes := make([]byte, 24)
 		if _, err := rand.Read(sessionBytes); err != nil {
 			http.Error(w, "session initialization failed", http.StatusInternalServerError)
 			return
 		}
+
 		id := hex.EncodeToString(sessionBytes)
 		s.mu.Lock()
 		s.addSession(id)
@@ -233,6 +255,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}))
 		return
 	}
+
 	session := r.Header.Get("Mcp-Session-Id")
 	s.mu.Lock()
 	sess := s.touchSession(session)
@@ -248,8 +271,10 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 			if live := s.touchSession(session); live != nil {
 				live.initialized = true
 			}
+
 			s.mu.Unlock()
 		}
+
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
@@ -263,8 +288,10 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	case "tools/list":
 		tools := make([]any, 0)
 		for _, t := range ai.Specs() {
-			tools = append(tools, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
+			tools = append(tools,
+				map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
 		}
+
 		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{"tools": tools}))
 	case "tools/call":
 		var p struct {
@@ -275,18 +302,23 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 			mcpJSON(w, 200, rpcError(req.ID, -32602, "invalid tool request"))
 			return
 		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 		result, err := s.Runner.Run(ctx, p.Name, p.Arguments)
 		cancel()
 		if err != nil {
-			mcpJSON(w, 200, rpcResult(req.ID, map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}))
+			mcpJSON(w, 200, rpcResult(req.ID,
+				map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}))
 			return
 		}
-		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{"content": []any{map[string]any{"type": "text", "text": string(result)}}}))
+
+		mcpJSON(w, 200, rpcResult(req.ID,
+			map[string]any{"content": []any{map[string]any{"type": "text", "text": string(result)}}}))
 	default:
 		mcpJSON(w, 200, rpcError(req.ID, -32601, fmt.Sprintf("unsupported method: %s", req.Method)))
 	}
 }
+
 func mcpJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

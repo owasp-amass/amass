@@ -21,17 +21,21 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 	if a.Runner.Catalog == nil {
 		return zero, errors.New("OAM schema catalog is required")
 	}
+
 	q, ok := compileDeterministicQuestion(question, a.Runner.Catalog)
 	if !ok {
 		if a.Model == nil {
 			return zero, errors.New("question needs the model planner, but no model is configured")
 		}
+
 		goal, err := a.planGoal(ctx, question)
 		if err != nil {
 			return zero, err
 		}
+
 		q = QueryFromGoal(goal, question, SourceModelGoal)
 	}
+
 	var selectors []AssetSearchSchema
 	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
 		selectors = c.SearchFields()
@@ -39,6 +43,7 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 	if err := ValidateQuery(q, a.Runner.Catalog.Relations(), selectors, a.Runner.Limits); err != nil {
 		return zero, fmt.Errorf("compiled query is invalid: %w", err)
 	}
+
 	return q, nil
 }
 
@@ -60,5 +65,6 @@ func compileDeterministicQuestion(question string, catalog SchemaCatalog) (Query
 	if goal, ok := deterministicExplicitOrganizationGoal(question, catalog); ok {
 		return QueryFromGoal(goal, question, SourceOrganizationRelation), true
 	}
+
 	return Query{}, false
 }

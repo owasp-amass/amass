@@ -22,17 +22,20 @@ type Message struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	Calls      []Call `json:"calls,omitempty"`
 }
+
 type Call struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }
+
 type Response struct {
 	Text         string
 	Calls        []Call
 	InputTokens  int
 	OutputTokens int
 }
+
 type Model interface {
 	Generate(context.Context, []Message, []ToolSpec) (Response, error)
 }
@@ -55,6 +58,7 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 	if m.Endpoint == "" || m.ModelName == "" {
 		return out, errors.New("model endpoint and name required")
 	}
+
 	var msgs []map[string]any
 	for _, msg := range history {
 		item := map[string]any{"role": msg.Role, "content": msg.Text}
@@ -64,15 +68,23 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 		if msg.Role == "assistant" && len(msg.Calls) > 0 {
 			var calls []any
 			for _, c := range msg.Calls {
-				calls = append(calls, map[string]any{"id": c.ID, "type": "function", "function": map[string]any{"name": c.Name, "arguments": string(c.Arguments)}})
+				calls = append(calls,
+					map[string]any{
+						"id":       c.ID,
+						"type":     "function",
+						"function": map[string]any{"name": c.Name, "arguments": string(c.Arguments)},
+					})
 			}
+
 			item["tool_calls"] = calls
 			if msg.Text == "" {
 				item["content"] = nil
 			}
 		}
+
 		msgs = append(msgs, item)
 	}
+
 	request := map[string]any{"model": m.ModelName, "messages": msgs}
 	if m.MaxTokens > 0 {
 		request["max_tokens"] = m.MaxTokens
@@ -83,32 +95,47 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 	if len(specs) > 0 {
 		ts := make([]any, 0, len(specs))
 		for _, s := range specs {
-			ts = append(ts, map[string]any{"type": "function", "function": map[string]any{"name": s.Name, "description": s.Description, "parameters": s.Parameters}})
+			ts = append(ts,
+				map[string]any{
+					"type": "function",
+					"function": map[string]any{
+						"name":        s.Name,
+						"description": s.Description,
+						"parameters":  s.Parameters,
+					},
+				})
 		}
+
 		request["tools"] = ts
 	}
+
 	data, err := json.Marshal(request)
 	if err != nil {
 		return out, err
 	}
+
 	endpoint := strings.TrimSuffix(m.Endpoint, "/")
 	// Endpoint must be the complete /v1/chat/completions URL.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return out, err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	if m.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+m.APIKey)
 	}
+
 	client := m.Client
 	if client == nil {
 		client = &http.Client{Timeout: 90 * time.Second}
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return out, err
 	}
+
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
@@ -117,6 +144,7 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return out, fmt.Errorf("model HTTP status %d", resp.StatusCode)
 	}
+
 	var payload struct {
 		Choices []struct {
 			Message struct {
@@ -141,6 +169,7 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 	if len(payload.Choices) == 0 {
 		return out, errors.New("model returned no choices")
 	}
+
 	c := payload.Choices[0].Message
 	if c.Content != nil {
 		out.Text = *c.Content
@@ -149,8 +178,11 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 		if tc.ID == "" || tc.Function.Name == "" || !json.Valid([]byte(tc.Function.Arguments)) {
 			return Response{}, errors.New("invalid model tool call")
 		}
-		out.Calls = append(out.Calls, Call{ID: tc.ID, Name: tc.Function.Name, Arguments: json.RawMessage(tc.Function.Arguments)})
+
+		out.Calls = append(out.Calls,
+			Call{ID: tc.ID, Name: tc.Function.Name, Arguments: json.RawMessage(tc.Function.Arguments)})
 	}
+
 	out.InputTokens = payload.Usage.Prompt
 	out.OutputTokens = payload.Usage.Completion
 	return out, nil

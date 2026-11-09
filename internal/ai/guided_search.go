@@ -88,6 +88,7 @@ func WitnessPathID(match PlanMatch) string {
 			s.WriteByte(0)
 		}
 	}
+
 	sum := sha256.Sum256([]byte(s.String()))
 	return hex.EncodeToString(sum[:12])
 }
@@ -99,6 +100,7 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 	if graph == nil || catalog == nil {
 		return nil, errors.New("graph and OAM schema catalog required")
 	}
+
 	bounded, ok := graph.(BoundedGraph)
 	if !ok {
 		return nil, errors.New("graph repository lacks bounded edge queries")
@@ -136,14 +138,17 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 	if req.MaxExpansions < 1 || req.MaxExpansions > min(400, limits.MaxNodes*8) {
 		return nil, errors.New("max_expansions exceeds policy")
 	}
+
 	since, err := DateSince(req.Since)
 	if err != nil {
 		return nil, err
 	}
+
 	root, err := graph.GetAsset(ctx, req.StartID)
 	if err != nil {
 		return nil, err
 	}
+
 	s := &GuidedExplorer{
 		graph: graph, bounded: bounded, limits: limits, req: req, since: since,
 		catalog: map[string]bool{}, targets: map[string]bool{}, labels: map[string]bool{},
@@ -174,6 +179,7 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 		if !s.knownTypes[t] {
 			return nil, fmt.Errorf("unregistered target OAM type %q", t)
 		}
+
 		s.targets[t] = true
 	}
 	if err := validGoalRelations(req.Relationships, req.PathRule, catalog.Relations()); err != nil {
@@ -190,7 +196,10 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 	for changed := true; changed; {
 		changed = false
 		for _, rel := range catalog.Relations() {
-			for _, pair := range [][2]string{{rel.SourceType, rel.DestinationType}, {rel.DestinationType, rel.SourceType}} {
+			for _, pair := range [][2]string{
+				{rel.SourceType, rel.DestinationType},
+				{rel.DestinationType, rel.SourceType},
+			} {
 				if distance, ok := s.typeDistances[pair[1]]; ok {
 					if prior, ok := s.typeDistances[pair[0]]; !ok || distance+1 < prior {
 						s.typeDistances[pair[0]] = distance + 1
@@ -200,6 +209,7 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 			}
 		}
 	}
+
 	initial := PlanMatch{Nodes: []Asset{root}, Edges: []Relation{}}
 	initial.PathID = WitnessPathID(initial)
 	s.frontier = []guidedPath{{match: initial}}
@@ -220,6 +230,7 @@ func (s *GuidedExplorer) FocusPaths(ids []string) error {
 	for id := range s.preferAssets {
 		assets = append(assets, id)
 	}
+
 	return s.FocusAll(s.preferred, assets, ids)
 }
 
@@ -231,6 +242,7 @@ func (s *GuidedExplorer) FocusAll(labels, assetIDs, pathIDs []string) error {
 			return fmt.Errorf("unknown OAM relationship label %q", label)
 		}
 	}
+
 	pendingAssets := map[string]bool{}
 	pendingPaths := map[string]bool{}
 	for _, entry := range s.frontier {
@@ -247,15 +259,18 @@ func (s *GuidedExplorer) FocusAll(labels, assetIDs, pathIDs []string) error {
 			return fmt.Errorf("priority path %q not in current frontier", id)
 		}
 	}
+
 	s.preferred = append([]string(nil), labels...)
 	s.preferAssets = map[string]bool{}
 	for _, id := range assetIDs {
 		s.preferAssets[id] = true
 	}
+
 	s.preferPaths = map[string]bool{}
 	for _, id := range pathIDs {
 		s.preferPaths[id] = true
 	}
+
 	return nil
 }
 
@@ -279,6 +294,7 @@ func (s *GuidedExplorer) priority(path guidedPath) int {
 	if s.preferPaths[path.match.PathID] {
 		score += 120
 	}
+
 	score -= len(path.match.Edges) * 3
 	return score
 }
@@ -287,12 +303,14 @@ func (s *GuidedExplorer) Pending(limit int) []GuidedFrontier {
 	if limit <= 0 {
 		return nil
 	}
+
 	ordered := append([]guidedPath(nil), s.frontier...)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		a, b := s.priority(ordered[i]), s.priority(ordered[j])
 		if a != b {
 			return a > b
 		}
+
 		return ordered[i].match.PathID < ordered[j].match.PathID
 	})
 	out := make([]GuidedFrontier, 0, min(limit, len(ordered)))
@@ -300,6 +318,7 @@ func (s *GuidedExplorer) Pending(limit int) []GuidedFrontier {
 		if len(out) >= limit {
 			break
 		}
+
 		node := entry.match.Nodes[len(entry.match.Nodes)-1]
 		var labels []string
 		if edges, ok := s.edgeCache[node.ID]; ok {
@@ -310,10 +329,20 @@ func (s *GuidedExplorer) Pending(limit int) []GuidedFrontier {
 			for label := range seen {
 				labels = append(labels, label)
 			}
+
 			sort.Strings(labels)
 		}
-		out = append(out, GuidedFrontier{AssetID: node.ID, AssetType: node.Type, Depth: len(entry.match.Edges), PathID: entry.match.PathID, AvailableLabels: labels})
+
+		out = append(out,
+			GuidedFrontier{
+				AssetID:         node.ID,
+				AssetType:       node.Type,
+				Depth:           len(entry.match.Edges),
+				PathID:          entry.match.PathID,
+				AvailableLabels: labels,
+			})
 	}
+
 	return out
 }
 
@@ -322,6 +351,7 @@ func (s *GuidedExplorer) end(reason string) {
 	if s.out.Reason == "" {
 		s.out.Reason = reason
 	}
+
 	s.finished = true
 }
 
@@ -331,6 +361,7 @@ func containsPathAsset(p PlanMatch, id string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -340,6 +371,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 	if s.finished {
 		return true, nil
 	}
+
 	count := 0
 	for len(s.frontier) > 0 && (batch <= 0 || count < batch) {
 		if err := ctx.Err(); err != nil {
@@ -349,11 +381,13 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 			s.end("path expansion limit")
 			break
 		}
+
 		sort.SliceStable(s.frontier, func(i, j int) bool {
 			a, b := s.priority(s.frontier[i]), s.priority(s.frontier[j])
 			if a != b {
 				return a > b
 			}
+
 			return s.frontier[i].match.PathID < s.frontier[j].match.PathID
 		})
 		current := s.frontier[0]
@@ -363,6 +397,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 		if len(current.match.Edges) >= s.req.MaxDepth {
 			continue
 		}
+
 		node := current.match.Nodes[len(current.match.Nodes)-1]
 		batchEdges, ok := s.edgeCache[node.ID]
 		if !ok {
@@ -373,6 +408,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 			if len(edges) > s.limits.MaxPerNode {
 				return false, errors.New("bounded repository exceeded per-node edge policy")
 			}
+
 			sort.SliceStable(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 			batchEdges = guidedEdgeBatch{edges: edges, more: more}
 			s.edgeCache[node.ID] = batchEdges
@@ -387,6 +423,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 			if err := ctx.Err(); err != nil {
 				return false, err
 			}
+
 			nextID := ""
 			switch {
 			case e.FromID == node.ID && s.req.Direction != "in":
@@ -401,24 +438,29 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 					s.end("edge limit")
 					return true, nil
 				}
+
 				s.seenEdge[e.ID] = true
 			}
 			if containsPathAsset(current.match, nextID) {
 				continue
 			}
+
 			next, ok := s.assets[nextID]
 			if !ok {
 				if len(s.assets) >= s.limits.MaxNodes {
 					s.end("node limit")
 					return true, nil
 				}
+
 				var err error
 				next, err = s.graph.GetAsset(ctx, nextID)
 				if err != nil {
 					return false, err
 				}
+
 				s.assets[nextID] = next
 			}
+
 			source, dest := node.Type, next.Type
 			if e.FromID == nextID {
 				source, dest = dest, source
@@ -431,6 +473,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 				s.out.AlternativePathsSkipped++
 				continue
 			}
+
 			path := PlanMatch{
 				Nodes: append(append([]Asset(nil), current.match.Nodes...), next),
 				Edges: append(append([]Relation(nil), current.match.Edges...), e),
@@ -439,10 +482,12 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 			if s.seenPath[path.PathID] {
 				continue
 			}
+
 			s.seenPath[path.PathID] = true
 			s.perAsset[nextID]++
 			s.frontier = append(s.frontier, guidedPath{match: path})
-			if (len(s.targets) == 0 || s.targets[next.Type]) && pathSatisfiesGoal(path, s.req.Relationships, s.req.PathRule) {
+			if (len(s.targets) == 0 || s.targets[next.Type]) && pathSatisfiesGoal(path, s.req.Relationships,
+				s.req.PathRule) {
 				s.out.Matches = append(s.out.Matches, path)
 				s.matches++
 				if s.perAsset[nextID] > 1 {
@@ -458,6 +503,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 	if len(s.frontier) == 0 {
 		s.finished = true
 	}
+
 	return s.finished, nil
 }
 
@@ -478,5 +524,6 @@ func (s *GuidedExplorer) Result() GraphSearchResult {
 	if s.finished && len(s.frontier) == 0 && !out.Truncated {
 		out.Exhausted = true
 	}
+
 	return out
 }

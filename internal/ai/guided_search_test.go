@@ -44,27 +44,34 @@ func TestGuidedSearchRetainsAlternativePathsToSameAsset(t *testing.T) {
 			break
 		}
 	}
+
 	result := e.Result()
 	if len(result.Matches) != 2 || !result.Exhausted || result.Truncated || result.AlternativeMatches != 1 {
 		t.Fatalf("expected two complete alternative paths: %+v", result)
 	}
+
 	a, b := result.Matches[0], result.Matches[1]
-	if len(a.Edges) != 2 || len(b.Edges) != 2 || a.PathID == b.PathID || a.Nodes[2].ID != "org" || b.Nodes[2].ID != "org" {
+	if len(a.Edges) != 2 || len(b.Edges) != 2 || a.PathID == b.PathID || a.Nodes[2].ID != "org" ||
+		b.Nodes[2].ID != "org" {
 		t.Fatalf("distinct, witnessed paths to same organization not retained: %+v", result.Matches)
 	}
 	for _, path := range result.Matches {
-		t.Logf("WITNESSED ROUTE path_id=%s depth=%d via=%s target=%s", path.PathID, len(path.Edges), path.Nodes[1].ID, path.Nodes[len(path.Nodes)-1].ID)
+		t.Logf("WITNESSED ROUTE path_id=%s depth=%d via=%s target=%s", path.PathID, len(path.Edges),
+			path.Nodes[1].ID, path.Nodes[len(path.Nodes)-1].ID)
 	}
-	t.Logf("GRAPH COVERAGE nodes=%d edges=%d alternatives=%d exhausted=%t", result.VisitedNodes, result.VisitedEdges, result.AlternativeMatches, result.Exhausted)
+
+	t.Logf("GRAPH COVERAGE nodes=%d edges=%d alternatives=%d exhausted=%t", result.VisitedNodes,
+		result.VisitedEdges, result.AlternativeMatches, result.Exhausted)
 	if result.VisitedNodes != 4 || result.VisitedEdges != 4 {
 		t.Fatalf("unexpected coverage: %+v", result)
 	}
 }
 
 func TestGuidedSearchCannotUseInventedRelationPriorities(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(), GuidedSearchRequest{
-		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}},
-	})
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(),
+		GuidedSearchRequest{
+			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}},
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +84,7 @@ func TestGuidedSearchCannotUseInventedRelationPriorities(t *testing.T) {
 	if err := e.Focus([]string{"website"}, []string{"f"}); err != nil {
 		t.Fatal(err)
 	}
+
 	pending := e.Pending(1)
 	if len(pending) != 1 {
 		t.Fatal("expected initial frontier")
@@ -96,17 +104,20 @@ func TestGuidedSearchCannotUseInventedRelationPriorities(t *testing.T) {
 }
 
 func TestGuidedSearchMarksAlternativeRouteLimitAsPartial(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(), GuidedSearchRequest{
-		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
-		MaxPathsPerAsset:   1,
-	})
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(),
+		GuidedSearchRequest{
+			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
+			MaxPathsPerAsset:   1,
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = e.Advance(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	r := e.Result()
 	if len(r.Matches) != 1 || !r.Truncated || r.Exhausted || r.AlternativePathsSkipped < 1 {
 		t.Fatalf("alternative path budget must report partial coverage: %+v", r)
@@ -114,13 +125,15 @@ func TestGuidedSearchMarksAlternativeRouteLimitAsPartial(t *testing.T) {
 }
 
 func TestGuidedSearchHonorsStageAndExpansionLimits(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(), GuidedSearchRequest{
-		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
-		MaxExpansions:      1,
-	})
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(),
+		GuidedSearchRequest{
+			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
+			MaxExpansions:      1,
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	done, err := e.Advance(context.Background(), 1)
 	if err != nil || done {
 		t.Fatalf("expected pending frontier: done=%t error=%v", done, err)
@@ -128,10 +141,12 @@ func TestGuidedSearchHonorsStageAndExpansionLimits(t *testing.T) {
 	if len(e.Pending(10)) == 0 {
 		t.Fatal("no pending frontier")
 	}
+
 	done, err = e.Advance(context.Background(), 1)
 	if err != nil || !done {
 		t.Fatalf("budget should stop next stage: done=%t error=%v", done, err)
 	}
+
 	r := e.Result()
 	if !r.Truncated || !strings.Contains(r.Reason, "expansion") || r.ExpandedPaths != 1 {
 		t.Fatalf("expansion limit not enforced: %+v", r)
@@ -140,7 +155,12 @@ func TestGuidedSearchHonorsStageAndExpansionLimits(t *testing.T) {
 
 func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T) {
 	graph := fakeGraph{assets: map[string]Asset{}, links: []Relation{}}
-	catalog := planCatalog{{SourceType: "FQDN", Label: "related", RelationType: "SimpleRelation", DestinationType: "Service"},
+	catalog := planCatalog{{
+		SourceType:      "FQDN",
+		Label:           "related",
+		RelationType:    "SimpleRelation",
+		DestinationType: "Service",
+	},
 		{SourceType: "Service", Label: "related", RelationType: "SimpleRelation", DestinationType: "FQDN"}}
 	for i := 0; i <= 15; i++ {
 		id := fmt.Sprintf("a%02d", i)
@@ -148,22 +168,32 @@ func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T) {
 		if i%2 == 1 {
 			typ = "Service"
 		}
+
 		graph.assets[id] = Asset{ID: id, Type: typ, Key: id}
 		if i > 0 {
-			graph.links = append(graph.links, Relation{ID: fmt.Sprintf("e%02d", i), FromID: fmt.Sprintf("a%02d", i-1), ToID: id, Label: "related", Type: "SimpleRelation"})
+			graph.links = append(graph.links, Relation{ID: fmt.Sprintf("e%02d",
+				i), FromID: fmt.Sprintf("a%02d", i-1), ToID: id, Label: "related", Type: "SimpleRelation"})
 		}
 	}
+
 	e, err := NewGuidedExplorer(context.Background(), graph, catalog, DefaultLimits(), GuidedSearchRequest{
-		GraphSearchRequest: GraphSearchRequest{StartID: "a00", TargetTypes: []string{"Service"}, MaxDepth: 15, MaxMatches: 20},
-		MaxPathsPerAsset:   2, MaxExpansions: 100,
+		GraphSearchRequest: GraphSearchRequest{
+			StartID:     "a00",
+			TargetTypes: []string{"Service"},
+			MaxDepth:    15,
+			MaxMatches:  20,
+		},
+		MaxPathsPerAsset: 2, MaxExpansions: 100,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	done, err := e.Advance(context.Background(), 0)
 	if err != nil || !done {
 		t.Fatalf("long guided path error: done=%t err=%v", done, err)
 	}
+
 	r := e.Result()
 	found := false
 	for _, p := range r.Matches {
@@ -174,26 +204,31 @@ func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T) {
 	if !found || r.Truncated || !r.Exhausted {
 		t.Fatalf("15-hop graph path not found: %+v", r)
 	}
+
 	t.Logf("LONG PATH verified maximum depth=15, edges=%d, expanded=%d", r.VisitedEdges, r.ExpandedPaths)
 }
 
 func TestGuidedSelectionRequiresPathIDForAmbiguousAsset(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(), GuidedSearchRequest{
-		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
-	})
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), testOAMCatalog, DefaultLimits(),
+		GuidedSearchRequest{
+			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = e.Advance(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	paths := e.Result().Matches
 	model := &plannerModel{replies: []string{
 		`{"selected_asset_ids":["org"]}`,
 		`{"selected_path_ids":["not-a-witnessed-path"]}`,
 	}}
-	_, err = (Agent{Model: model}).chooseAdaptivePaths(context.Background(), "Which organization?", InvestigationGoal{Purpose: "connected"}, paths)
+	_, err = (Agent{Model: model}).chooseAdaptivePaths(context.Background(), "Which organization?",
+		InvestigationGoal{Purpose: "connected"}, paths)
 	if err == nil || !strings.Contains(err.Error(), "not witnessed") {
 		t.Fatalf("ambiguous or invented selection accepted: %v", err)
 	}
@@ -207,6 +242,7 @@ func TestGuidedExplorationStopsOnContextCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cancel()
 	_, err = e.Advance(ctx, 0)
 	if !errors.Is(err, context.Canceled) {

@@ -18,7 +18,8 @@ type intentCatalog struct {
 	selectors []AssetSearchSchema
 }
 
-func (c intentCatalog) Relations() []RelationshipSchema   { return c.rels }
+func (c intentCatalog) Relations() []RelationshipSchema { return c.rels }
+
 func (c intentCatalog) SearchFields() []AssetSearchSchema { return c.selectors }
 
 var typedIntentTestCatalog = intentCatalog{
@@ -38,10 +39,25 @@ var typedIntentTestCatalog = intentCatalog{
 
 func typedIntentGraph() plannedGraph {
 	g := fakeGraph{assets: map[string]Asset{
-		"host":    {ID: "host", Type: "FQDN", Key: "tech.acme.example", Content: map[string]any{"name": "tech.acme.example"}},
-		"site":    {ID: "site", Type: "URL", Key: "https://tech.acme.example/", Content: map[string]any{"url": "https://tech.acme.example/"}},
-		"company": {ID: "company", Type: "Organization", Key: "Acme Technologies Ltd.", Content: map[string]any{"name": "Acme Technologies Ltd."}},
-		"ip":      {ID: "ip", Type: "IPAddress", Key: "192.0.2.10", Content: map[string]any{"address": "192.0.2.10"}},
+		"host": {
+			ID:      "host",
+			Type:    "FQDN",
+			Key:     "tech.acme.example",
+			Content: map[string]any{"name": "tech.acme.example"},
+		},
+		"site": {
+			ID:      "site",
+			Type:    "URL",
+			Key:     "https://tech.acme.example/",
+			Content: map[string]any{"url": "https://tech.acme.example/"},
+		},
+		"company": {
+			ID:      "company",
+			Type:    "Organization",
+			Key:     "Acme Technologies Ltd.",
+			Content: map[string]any{"name": "Acme Technologies Ltd."},
+		},
+		"ip": {ID: "ip", Type: "IPAddress", Key: "192.0.2.10", Content: map[string]any{"address": "192.0.2.10"}},
 	}}
 	g.links = []Relation{
 		{ID: "edge-domain", FromID: "site", ToID: "host", Label: "domain", Type: "SimpleRelation"},
@@ -53,8 +69,10 @@ func typedIntentGraph() plannedGraph {
 	for i := 0; i < 35; i++ {
 		id := fmt.Sprintf("noise-%02d", i)
 		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: fmt.Sprintf("noise-%02d.acme.example", i)}
-		g.links = append(g.links, Relation{ID: "noise-edge-" + id, FromID: "host", ToID: id, Label: "node", Type: "SimpleRelation"})
+		g.links = append(g.links,
+			Relation{ID: "noise-edge-" + id, FromID: "host", ToID: id, Label: "node", Type: "SimpleRelation"})
 	}
+
 	return plannedGraph{fakeGraph: g}
 }
 
@@ -65,6 +83,7 @@ func TestTypedRelationIntentUsesIncomingOAMEdgesAndNoLLM(t *testing.T) {
 		compiled.Hops[0].DestinationType != "URL" || compiled.Hops[0].RelationType != "SimpleRelation" {
 		t.Fatalf("failed to compile exact incoming OAM domain relation: %+v ok=%t", compiled, ok)
 	}
+
 	model := &plannerModel{}
 	result, err := (Agent{Model: model, Runner: ToolRunner{
 		Graph: typedIntentGraph(), Catalog: typedIntentTestCatalog, Limits: DefaultLimits(),
@@ -96,8 +115,10 @@ func TestTypedRelationIntentTwoHopsAcrossThreeAssetTypes(t *testing.T) {
 		intent.Hops[1].DestinationType != "Organization" {
 		t.Fatalf("expected FQDN <-domain- URL <-website- Organization, got %+v (ok=%v)", intent, ok)
 	}
+
 	g := typedIntentGraph()
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"], intent, AdaptiveOptions{})
+	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+		intent, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,8 +137,10 @@ func TestTypedRelationIntentUsesOtherRegisteredAssetTypes(t *testing.T) {
 		intent.Hops[0].RelationType != "BasicDNSRelation" {
 		t.Fatalf("did not preserve typed DNS relationship: %+v ok=%t", intent, ok)
 	}
+
 	g := typedIntentGraph()
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"], intent, AdaptiveOptions{})
+	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+		intent, AdaptiveOptions{})
 	if err != nil || result.Truncated || len(result.Matches) != 1 || result.Matches[0].Nodes[1].ID != "ip" {
 		t.Fatalf("wrong IP match: result=%+v err=%v", result, err)
 	}
@@ -131,13 +154,16 @@ func TestTypedRelationIntentPartialAnswersRemainHonest(t *testing.T) {
 	if !ok {
 		t.Fatal("typed FQDN node query not recognized")
 	}
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"], intent, AdaptiveOptions{MaxMatches: 4})
+
+	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+		intent, AdaptiveOptions{MaxMatches: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !result.Truncated || result.Reason != "match limit" || len(result.Matches) != 4 || result.Exhausted {
 		t.Fatalf("result must indicate limited inventory: %+v", result)
 	}
+
 	answer := typedRelationAnswer(g.assets["host"], intent, result.Matches, result.Truncated, result.Reason)
 	if !strings.Contains(answer, "Found 4 FQDN asset(s)") || !strings.Contains(answer, "Results are partial") {
 		t.Fatalf("partial results were hidden: %s", answer)
@@ -157,6 +183,7 @@ func TestTypedRelationIntentRejectsAmbiguityAndInventedTaxonomy(t *testing.T) {
 			t.Errorf("ambiguous or fabricated relation incorrectly grounded: %q", q)
 		}
 	}
+
 	twoWays := typedIntentTestCatalog
 	twoWays.rels = append(append([]RelationshipSchema(nil), twoWays.rels...),
 		RelationshipSchema{SourceType: "FQDN", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"})
@@ -174,10 +201,14 @@ func TestTypedRelationIntentFirstHopEmptyDoesNotInventOrganizationAbsence(t *tes
 			edges = append(edges, edge)
 		}
 	}
+
 	g.links = edges
 	model := &plannerModel{}
 	q := "Which organizations are connected to tech.acme.example via domain and website relationships?"
-	got, err := (Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: typedIntentTestCatalog, Limits: DefaultLimits()}}).
+	got, err := (Agent{
+		Model:  model,
+		Runner: ToolRunner{Graph: g, Catalog: typedIntentTestCatalog, Limits: DefaultLimits()},
+	}).
 		AskAdaptive(context.Background(), q, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -188,9 +219,11 @@ func TestTypedRelationIntentFirstHopEmptyDoesNotInventOrganizationAbsence(t *tes
 	if got.Search == nil || got.Search.Truncated || !got.Search.Exhausted || got.Incomplete || len(got.Matches) != 0 {
 		t.Fatalf("zero accepted first hop must be a completed, empty typed search: %+v", got)
 	}
+
 	hops := got.Search.HopDiagnostics
 	if len(hops) != 1 || hops[0].Hop != 1 || hops[0].Direction != "in" ||
-		hops[0].Label != "domain" || hops[0].QueriedPaths != 1 || hops[0].ReturnedEdges != 0 || hops[0].OutputPaths != 0 {
+		hops[0].Label != "domain" || hops[0].QueriedPaths != 1 || hops[0].ReturnedEdges != 0 ||
+		hops[0].OutputPaths != 0 {
 		t.Fatalf("incorrect missing first hop trace: %+v", hops)
 	}
 	if !strings.Contains(got.Answer, "first empty relationship hop was 1") ||
@@ -213,24 +246,29 @@ func TestTypedRelationIntentReportsSecondHopWhenWebsiteRelationMissing(t *testin
 			edges = append(edges, edge)
 		}
 	}
+
 	g.links = edges
 	q := "Which organizations are connected to tech.acme.example via domain and website relationships?"
 	intent, ok := deterministicTypedRelationIntent(q, typedIntentTestCatalog)
 	if !ok {
 		t.Fatal("expected a two-hop typed intent")
 	}
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"], intent, AdaptiveOptions{})
+
+	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+		intent, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.HopDiagnostics) != 2 {
 		t.Fatalf("expected attempted website hop, got %+v", result.HopDiagnostics)
 	}
+
 	first, second := result.HopDiagnostics[0], result.HopDiagnostics[1]
 	if first.ReturnedEdges != 1 || first.OutputPaths != 1 || second.QueriedPaths != 1 ||
 		second.ReturnedEdges != 0 || second.Label != "website" || result.Truncated {
 		t.Fatalf("did not distinguish first-hop success from second-hop failure: %+v", result.HopDiagnostics)
 	}
+
 	explanation := typedRelationEmptyExplanation(result, intent)
 	if !strings.Contains(explanation, "first empty relationship hop was 2") ||
 		strings.Contains(explanation, "subsequent hop(s)") {

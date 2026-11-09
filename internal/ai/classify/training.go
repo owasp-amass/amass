@@ -23,6 +23,7 @@ type LabeledExample struct {
 	Label    string             `json:"label"`
 	Features map[string]float64 `json:"features"`
 }
+
 type TrainingMetrics struct {
 	TrainingExamples          int     `json:"training_examples"`
 	HoldoutExamples           int     `json:"holdout_examples"`
@@ -33,7 +34,12 @@ type TrainingMetrics struct {
 	ScoreKind                 string  `json:"score_kind"`
 }
 
-var TrainingFeatureNames = []string{"distinct_sources", "evidence_count", "source_property_fraction", "unattributed_fraction"}
+var TrainingFeatureNames = []string{
+	"distinct_sources",
+	"evidence_count",
+	"source_property_fraction",
+	"unattributed_fraction",
+}
 
 // ReadLabeledJSONL bounds input and validates exact OAM provenance features.
 // Observations must be independently labeled before use; these values do not
@@ -50,12 +56,14 @@ func ReadLabeledJSONL(r io.Reader) ([]LabeledExample, error) {
 		if len(out) >= 100000 {
 			return nil, errors.New("training dataset too large")
 		}
+
 		dec := json.NewDecoder(strings.NewReader(line))
 		dec.DisallowUnknownFields()
 		var example LabeledExample
 		if err := dec.Decode(&example); err != nil {
 			return nil, fmt.Errorf("training row %d: %w", len(out)+1, err)
 		}
+
 		var extra any
 		if err := dec.Decode(&extra); err != io.EOF {
 			return nil, fmt.Errorf("training row %d contains trailing data", len(out)+1)
@@ -75,17 +83,19 @@ func ReadLabeledJSONL(r io.Reader) ([]LabeledExample, error) {
 				return nil, fmt.Errorf("invalid or missing feature %s", name)
 			}
 		}
+
 		out = append(out, example)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
 // TrainLinearModel implements a small, reproducible L2-regularized logistic
 // classifier. A group-held-out split prevents case leakage. The output is
-// explicitly UNCALIBRATED and cannot authorize negative skips or OAM writes.
+// explicitly uncalibrated and cannot authorize negative skips or OAM writes.
 func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, TrainingMetrics, error) {
 	var metrics TrainingMetrics
 	if modelID == "" || len(modelID) > 80 {
@@ -94,6 +104,7 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 	if len(rows) < 40 {
 		return nil, metrics, errors.New("need at least 40 independently labeled examples")
 	}
+
 	training := make([]LabeledExample, 0)
 	holdout := make([]LabeledExample, 0)
 	counts := map[string]int{}
@@ -103,6 +114,7 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 		if prior, ok := groups[r.GroupID]; ok && prior != r.Label {
 			return nil, metrics, fmt.Errorf("conflicting labels for group %s", r.GroupID)
 		}
+
 		groups[r.GroupID] = r.Label
 		sum := sha256.Sum256([]byte(r.GroupID))
 		if int(sum[0])%5 == 0 {
@@ -117,10 +129,12 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 		holdoutCounts["unrelated"] < 2 || holdoutCounts["potential_relation"] < 2 {
 		return nil, metrics, errors.New("need 20 independent groups, 8 holdout examples, 10 training examples and 2 holdout examples of each class")
 	}
+
 	sort.Slice(training, func(i, j int) bool {
 		if training[i].GroupID == training[j].GroupID {
 			return training[i].Label < training[j].Label
 		}
+
 		return training[i].GroupID < training[j].GroupID
 	})
 	const learningRate = .28
@@ -136,29 +150,34 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 			for i, name := range TrainingFeatureNames {
 				score += weights[i] * sample.Features[name]
 			}
+
 			probability := 1 / (1 + math.Exp(-math.Max(-40, math.Min(40, score))))
 			label := 0.0
 			if sample.Label == "potential_relation" {
 				label = 1
 			}
+
 			difference := probability - label
 			gradBias += difference
 			for i, name := range TrainingFeatureNames {
 				grad[i] += difference * sample.Features[name]
 			}
 		}
+
 		scale := float64(len(training))
 		bias -= learningRate * gradBias / scale
 		for i := range weights {
 			weights[i] -= learningRate * (grad[i]/scale + regularization*weights[i])
 		}
 	}
+
 	positiveWeights := map[string]float64{}
 	negativeWeights := map[string]float64{}
 	for i, name := range TrainingFeatureNames {
 		positiveWeights[name] = weights[i] / 2
 		negativeWeights[name] = -weights[i] / 2
 	}
+
 	model := &LinearModel{
 		ModelID:        modelID,
 		Task:           "organization_relation",
@@ -172,12 +191,14 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 	if err := model.Validate(); err != nil {
 		return nil, metrics, err
 	}
+
 	correct, tp, fp, fn := 0, 0, 0, 0
 	for _, sample := range holdout {
 		probability, err := model.ClassifyUnrestricted(sample.Features)
 		if err != nil {
 			return nil, metrics, err
 		}
+
 		predicted := "unrelated"
 		if probability >= .5 {
 			predicted = "potential_relation"
@@ -195,6 +216,7 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 			fn++
 		}
 	}
+
 	metrics = TrainingMetrics{TrainingExamples: len(training), HoldoutExamples: len(holdout),
 		HoldoutAccuracy:           float64(correct) / float64(len(holdout)),
 		HoldoutPotentialPrecision: ratio(tp, tp+fp), HoldoutPotentialRecall: ratio(tp, tp+fn),
@@ -202,16 +224,20 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 	}
 	return model, metrics, nil
 }
+
 func ratio(a, b int) float64 {
 	if b == 0 {
 		return 0
 	}
+
 	return float64(a) / float64(b)
 }
+
 func (m *LinearModel) ClassifyUnrestricted(features map[string]float64) (float64, error) {
 	if err := m.Validate(); err != nil {
 		return 0, err
 	}
+
 	scores := make([]float64, 2)
 	for i, c := range m.Classes {
 		scores[i] = c.Bias
@@ -219,6 +245,7 @@ func (m *LinearModel) ClassifyUnrestricted(features map[string]float64) (float64
 			scores[i] += c.Weights[k] * v
 		}
 	}
+
 	diff := scores[1] - scores[0]
 	return 1 / (1 + math.Exp(-math.Max(-40, math.Min(40, diff)))), nil
 }

@@ -25,12 +25,14 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 	for _, r := range relations {
 		types[r.SourceType], types[r.DestinationType] = true, true
 	}
+
 	str := func() map[string]any { return map[string]any{"type": "string"} }
 	enum := func(set map[string]bool) map[string]any {
 		vals := make([]string, 0, len(set))
 		for v := range set {
 			vals = append(vals, v)
 		}
+
 		sort.Strings(vals)
 		return map[string]any{"type": "string", "enum": vals}
 	}
@@ -56,12 +58,14 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 		if seen[key] {
 			continue
 		}
+
 		seen[key] = true
 		transitions = append(transitions, map[string]any{
 			"source_type": r.SourceType, "label": r.Label,
 			"relation_type": r.RelationType, "destination_type": r.DestinationType,
 		})
 	}
+
 	relation := map[string]any{"enum": transitions}
 	return JSONSchema{
 		Name:        "investigation_goal",
@@ -76,7 +80,14 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 				"relationships": relationshipsSchema(relation, len(transitions) > 0),
 				"path_rule":     map[string]any{"type": "string", "enum": []string{"", "any", "all", "ordered"}},
 			},
-			"required":             []string{"subject", "target_types", "direction", "purpose", "relationships", "path_rule"},
+			"required": []string{
+				"subject",
+				"target_types",
+				"direction",
+				"purpose",
+				"relationships",
+				"path_rule",
+			},
 			"additionalProperties": false,
 		},
 	}
@@ -86,5 +97,6 @@ func relationshipsSchema(item map[string]any, allowed bool) map[string]any {
 	if !allowed {
 		return map[string]any{"type": "array", "maxItems": 0}
 	}
+
 	return map[string]any{"type": "array", "items": item}
 }

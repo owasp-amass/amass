@@ -18,6 +18,7 @@ import (
 )
 
 type Server struct{ Runner ai.ToolRunner }
+
 type incoming struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -28,9 +29,11 @@ type incoming struct {
 func rpcResult(id json.RawMessage, result any) any {
 	return map[string]any{"jsonrpc": "2.0", "id": id, "result": result}
 }
+
 func rpcError(id json.RawMessage, code int, reason string) any {
 	return map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": reason}}
 }
+
 func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	reader := bufio.NewScanner(in)
 	reader.Buffer(make([]byte, 4096), 2<<20)
@@ -40,17 +43,20 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+
 		var request incoming
 		if err := json.Unmarshal(reader.Bytes(), &request); err != nil {
 			if err := write(writer, rpcError(nil, -32700, "parse error")); err != nil {
 				return err
 			}
+
 			continue
 		}
 		if request.JSONRPC != "2.0" || request.Method == "" {
 			if err := write(writer, rpcError(request.ID, -32600, "invalid JSON-RPC request")); err != nil {
 				return err
 			}
+
 			continue
 		}
 		// Notifications intentionally have no response.
@@ -58,14 +64,17 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			if request.Method == "notifications/initialized" {
 				initialized = true
 			}
+
 			continue
 		}
 		if !initialized && request.Method != "initialize" && request.Method != "ping" {
 			if err := write(writer, rpcError(request.ID, -32000, "MCP not initialized")); err != nil {
 				return err
 			}
+
 			continue
 		}
+
 		var reply any
 		switch request.Method {
 		case "initialize":
@@ -78,6 +87,7 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			if version != "2025-11-25" {
 				version = "2025-11-25"
 			}
+
 			reply = rpcResult(request.ID, map[string]any{"protocolVersion": version,
 				"serverInfo":   map[string]any{"name": "amass-ai", "version": "0.1.0"},
 				"capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}})
@@ -86,8 +96,10 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		case "tools/list":
 			tools := []any{}
 			for _, t := range ai.Specs() {
-				tools = append(tools, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
+				tools = append(tools,
+					map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
 			}
+
 			reply = rpcResult(request.ID, map[string]any{"tools": tools})
 		case "tools/call":
 			var p struct {
@@ -98,13 +110,19 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 				reply = rpcError(request.ID, -32602, "invalid tool request")
 				break
 			}
+
 			toolCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 			result, err := s.Runner.Run(toolCtx, p.Name, p.Arguments)
 			cancel()
 			if err != nil {
-				reply = rpcResult(request.ID, map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}})
+				reply = rpcResult(request.ID,
+					map[string]any{
+						"isError": true,
+						"content": []any{map[string]any{"type": "text", "text": err.Error()}},
+					})
 			} else {
-				reply = rpcResult(request.ID, map[string]any{"content": []any{map[string]any{"type": "text", "text": string(result)}}})
+				reply = rpcResult(request.ID,
+					map[string]any{"content": []any{map[string]any{"type": "text", "text": string(result)}}})
 			}
 		default:
 			reply = rpcError(request.ID, -32601, fmt.Sprintf("unsupported method: %s", request.Method))
@@ -113,8 +131,10 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			return err
 		}
 	}
+
 	return reader.Err()
 }
+
 func write(w *bufio.Writer, response any) error {
 	data, err := json.Marshal(response)
 	if err != nil {
@@ -123,5 +143,6 @@ func write(w *bufio.Writer, response any) error {
 	if _, err = w.Write(append(data, '\n')); err != nil {
 		return err
 	}
+
 	return w.Flush()
 }

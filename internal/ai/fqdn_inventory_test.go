@@ -26,15 +26,18 @@ func fqdnInventoryFixture() plannedGraph {
 	for i, name := range realWorldFQDNInventoryNames[1:] {
 		id := fmt.Sprintf("fqdn-%02d", i)
 		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
-		g.links = append(g.links, Relation{ID: fmt.Sprintf("node-%02d", i), FromID: "root", ToID: id, Label: "node", Type: "SimpleRelation"})
+		g.links = append(g.links, Relation{ID: fmt.Sprintf("node-%02d",
+			i), FromID: "root", ToID: id, Label: "node", Type: "SimpleRelation"})
 	}
 	// Real-world graphs also contain incoming URL/domain records and other
 	// unrelated edges. They must not consume the 20-match inventory budget.
 	for i := 0; i < 30; i++ {
 		id := fmt.Sprintf("url-%02d", i)
 		g.assets[id] = Asset{ID: id, Type: "URL", Key: "https://owasp.org/" + id}
-		g.links = append(g.links, Relation{ID: "domain-" + id, FromID: id, ToID: "root", Label: "domain", Type: "SimpleRelation"})
+		g.links = append(g.links,
+			Relation{ID: "domain-" + id, FromID: id, ToID: "root", Label: "domain", Type: "SimpleRelation"})
 	}
+
 	return plannedGraph{fakeGraph: g}
 }
 
@@ -91,7 +94,10 @@ func TestFQDNInventoryQuestionRetainsAllSeventeenNames(t *testing.T) {
 
 func TestFQDNInventoryReportsPartialNamesAtConfiguredLimit(t *testing.T) {
 	model := &plannerModel{}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: fqdnInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits()}}
+	agent := Agent{
+		Model:  model,
+		Runner: ToolRunner{Graph: fqdnInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits()},
+	}
 	result, err := agent.AskAdaptive(context.Background(),
 		"Which FQDN assets are associated with owasp.org?",
 		AdaptiveOptions{MaxMatches: 5, GuidanceRounds: 0})
@@ -101,10 +107,12 @@ func TestFQDNInventoryReportsPartialNamesAtConfiguredLimit(t *testing.T) {
 	if model.calls != 0 {
 		t.Fatal("bounded inventory called LLM")
 	}
-	if result.Search == nil || !result.Search.Truncated || result.Search.Reason != "match limit" || len(result.Matches) != 5 || !result.Incomplete {
+	if result.Search == nil || !result.Search.Truncated || result.Search.Reason != "match limit" ||
+		len(result.Matches) != 5 || !result.Incomplete {
 		t.Fatalf("partial inventory was not transparently reported: %+v", result)
 	}
-	if !strings.Contains(result.Answer, "Found 6 FQDN asset(s)") || !strings.Contains(result.Answer, "Results are partial") {
+	if !strings.Contains(result.Answer, "Found 6 FQDN asset(s)") || !strings.Contains(result.Answer,
+		"Results are partial") {
 		t.Fatalf("bounded inventory must return witnessed matches, not an empty answer: %s", result.Answer)
 	}
 }

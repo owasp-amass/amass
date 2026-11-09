@@ -28,8 +28,10 @@ func traceElapsed(start time.Time) int64 {
 	if v < 0 {
 		return 0
 	}
+
 	return v
 }
+
 func (i *Investigation) recordTrace(start time.Time, event InvestigationTraceEvent) {
 	event.DurationMS = traceElapsed(start)
 	i.Trace = append(i.Trace, event)

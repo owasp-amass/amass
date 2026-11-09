@@ -24,7 +24,7 @@ type GraphSearchRequest struct {
 	Since       string   `json:"since,omitempty"`
 }
 
-// Exhausted means the bounded search completed within MaxDepth, NOT that all
+// Exhausted means the bounded search completed within MaxDepth, not that all
 // relationships in the full Asset Database have been enumerated.
 // GraphHopDiagnostic describes one executed schema-grounded relationship hop.
 // Counts reflect edges returned by the bounded graph reader, not the existence
@@ -59,6 +59,7 @@ type GraphSearchResult struct {
 	AlternativePathsSkipped int                  `json:"alternative_paths_skipped,omitempty"`
 	HopDiagnostics          []GraphHopDiagnostic `json:"hop_diagnostics,omitempty"`
 }
+
 type graphSearchStep struct {
 	asset Asset
 	path  PlanMatch
@@ -77,6 +78,7 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 	if graph == nil || catalog == nil {
 		return out, errors.New("graph and OAM schema catalog are required")
 	}
+
 	bounded, ok := graph.(BoundedGraph)
 	if !ok {
 		return out, errors.New("graph repository lacks bounded edge queries")
@@ -106,14 +108,17 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 	if req.MaxMatches < 1 || req.MaxMatches > limits.MaxFind || req.MaxMatches > limits.MaxNodes {
 		return out, errors.New("max_matches exceeds policy")
 	}
+
 	since, err := DateSince(req.Since)
 	if err != nil {
 		return out, err
 	}
+
 	root, err := graph.GetAsset(ctx, req.StartID)
 	if err != nil {
 		return out, err
 	}
+
 	out.Root = root
 	out.VisitedNodes = 1
 
@@ -135,11 +140,13 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 	if len(req.TargetTypes) > 100 {
 		return out, errors.New("too many target types")
 	}
+
 	targets := map[string]bool{}
 	for _, typ := range req.TargetTypes {
 		if !knownTypes[typ] {
 			return out, fmt.Errorf("unregistered OAM target asset type %q", typ)
 		}
+
 		targets[typ] = true
 	}
 
@@ -151,11 +158,13 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
+
 		current := queue[0]
 		queue = queue[1:]
 		if current.depth >= req.MaxDepth {
 			continue
 		}
+
 		edges, more, err := bounded.EdgesLimited(ctx, current.asset.ID, req.Direction, "", since, limits.MaxPerNode)
 		if err != nil {
 			return out, err
@@ -167,11 +176,13 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 			out.Truncated = true
 			out.Reason = "per-node edge limit"
 		}
+
 		sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 		for _, edge := range edges {
 			if err := ctx.Err(); err != nil {
 				return out, err
 			}
+
 			nextID := ""
 			switch {
 			case current.asset.ID == edge.FromID && req.Direction != "in":
@@ -188,9 +199,11 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 					out.Reason = "edge limit"
 					return out, nil
 				}
+
 				edgeIDs[edge.ID] = true
 				out.VisitedEdges++
 			}
+
 			next, ok := assets[nextID]
 			if !ok {
 				if len(assets) >= limits.MaxNodes {
@@ -198,12 +211,15 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 					out.Reason = "node limit"
 					return out, nil
 				}
+
 				next, err = graph.GetAsset(ctx, nextID)
 				if err != nil {
 					return out, err
 				}
+
 				assets[nextID] = next
 			}
+
 			fromType, toType := current.asset.Type, next.Type
 			if edge.FromID == next.ID && edge.ToID == current.asset.ID {
 				fromType, toType = toType, fromType
@@ -220,6 +236,7 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 				out.Reason = "node limit"
 				return out, nil
 			}
+
 			visited[nextID] = true
 			out.VisitedNodes++
 			path := PlanMatch{Nodes: append(append([]Asset{}, current.path.Nodes...), next),
@@ -232,6 +249,7 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 					return out, nil
 				}
 			}
+
 			queue = append(queue, graphSearchStep{asset: next, path: path, depth: current.depth + 1})
 		}
 	}
@@ -239,6 +257,7 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 		out.Truncated = true
 		out.Reason = "stored relationships absent from OAM taxonomy"
 	}
+
 	out.Exhausted = !out.Truncated
 	return out, nil
 }

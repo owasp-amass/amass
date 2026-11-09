@@ -39,6 +39,7 @@ func pathSemanticSignature(path PlanMatch) string {
 		if i > 0 {
 			b.WriteByte('|')
 		}
+
 		b.WriteString(e.Label)
 		b.WriteByte('/')
 		b.WriteString(e.Type)
@@ -50,6 +51,7 @@ func pathSemanticSignature(path PlanMatch) string {
 			b.WriteByte('>')
 			b.WriteString(path.Nodes[i+1].Type)
 		}
+
 		b.WriteByte('/')
 		if i < len(path.Nodes) && e.FromID == path.Nodes[i].ID {
 			b.WriteString("out")
@@ -57,6 +59,7 @@ func pathSemanticSignature(path PlanMatch) string {
 			b.WriteString("in")
 		}
 	}
+
 	return b.String()
 }
 
@@ -69,6 +72,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 		if len(path.Nodes) == 0 {
 			continue
 		}
+
 		last := path.Nodes[len(path.Nodes)-1]
 		signature := pathSemanticSignature(path)
 		key := last.ID + "\x00" + signature
@@ -77,16 +81,19 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 		groupAsset[key] = last.ID
 		groupSignature[key] = signature
 	}
+
 	byEvidence := map[string]PathEvidence{}
 	if dossier != nil {
 		for _, p := range dossier.Paths {
 			byEvidence[p.PathID] = p
 		}
 	}
+
 	ids := make([]string, 0, len(groups))
 	for id := range groups {
 		ids = append(ids, id)
 	}
+
 	sort.Strings(ids)
 	var summaries []AnswerGroup
 	var representatives []PlanMatch
@@ -102,6 +109,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 				pid = WitnessPathID(p)
 				p.PathID = pid
 			}
+
 			byPath[pid] = p
 			cand := adaptiveCandidate{AssetID: id, PathID: pid, Depth: len(p.Edges)}
 			if evidence, ok := byEvidence[pid]; ok {
@@ -109,8 +117,10 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 			} else {
 				cand.Coverage = PathSourceCoverage{TotalEdges: len(p.Edges), UnassessedEdges: len(p.Edges)}
 			}
+
 			candidates = append(candidates, cand)
 		}
+
 		rankComparableAlternates(candidates)
 		best := byPath[candidates[0].PathID]
 		isDirect := true
@@ -121,6 +131,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 					if prior.Type != typeInfo[id].Type {
 						continue
 					}
+
 					prefix := PlanMatch{Nodes: p.Nodes[:i+1], Edges: p.Edges[:i]}
 					if pathSatisfiesGoal(prefix, goal.Relationships, goal.PathRule) {
 						// All witness routes to this destination that reach a
@@ -128,11 +139,13 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 						if p.PathID == best.PathID {
 							isDirect = false
 						}
+
 						break
 					}
 				}
 			}
 		}
+
 		summary := AnswerGroup{
 			AssetID: id, SemanticSignature: groupSignature[groupKey], AssetType: typeInfo[id].Type, Display: humanAsset(typeInfo[id]),
 			PreferredPathID: best.PathID, AlternativePathIDs: []string{}, DirectToGoal: isDirect,
@@ -140,10 +153,12 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 		for _, c := range candidates[1:] {
 			summary.AlternativePathIDs = append(summary.AlternativePathIDs, c.PathID)
 		}
+
 		summaries = append(summaries, summary)
 		direct[best.PathID] = isDirect
 		representatives = append(representatives, best)
 	}
+
 	// Context is retained in summaries and full evidence; prefer minimum
 	// semantically completed routes when at least one exists.
 	var primary []PlanMatch
@@ -151,6 +166,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 		if goal.Purpose == "connected" && len(goal.Relationships) > 0 && !direct[p.PathID] {
 			continue
 		}
+
 		primary = append(primary, p)
 	}
 	if len(primary) == 0 {
@@ -159,6 +175,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 	if len(primary) <= 1 {
 		return primary, summaries, true, nil
 	}
+
 	selected, err := a.chooseAdaptivePathsWithEvidence(ctx, question, goal, primary, dossier)
 	return selected, summaries, false, err
 }

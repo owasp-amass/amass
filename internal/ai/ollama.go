@@ -70,6 +70,7 @@ func OllamaChatURL(endpoint string) (string, error) {
 	if strings.HasSuffix(e, "/api/chat") {
 		return e, nil
 	}
+
 	return e + "/api/chat", nil
 }
 
@@ -97,16 +98,19 @@ func (m OllamaModel) GenerateStructured(ctx context.Context, history []Message, 
 	if len(schema.Schema) == 0 {
 		return Response{}, errors.New("structured generation requires a JSON schema")
 	}
+
 	resp, err := m.chat(ctx, history, nil, schema.Schema)
 	if err != nil && strings.Contains(err.Error(), "ollama HTTP status 400") {
 		// An Ollama build that cannot compile this schema into a grammar
 		// should not block planning: ask again without the constraint and let
 		// Go validation decide, as for providers without structured output.
 		lower := strings.ToLower(err.Error())
-		if strings.Contains(lower, "format") || strings.Contains(lower, "schema") || strings.Contains(lower, "grammar") {
+		if strings.Contains(lower, "format") || strings.Contains(lower, "schema") || strings.Contains(lower,
+			"grammar") {
 			return m.chat(ctx, history, nil, nil)
 		}
 	}
+
 	return resp, err
 }
 
@@ -115,10 +119,12 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 	if m.ModelName == "" {
 		return out, errors.New("ollama model name required")
 	}
+
 	url, err := OllamaChatURL(m.Endpoint)
 	if err != nil {
 		return out, err
 	}
+
 	// Ollama tool calls carry no IDs; map each tool result back to the name
 	// of the call it answers so the model can tell results apart.
 	callNames := map[string]string{}
@@ -136,6 +142,7 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 				om.ToolCalls = append(om.ToolCalls, tc)
 				callNames[c.ID] = c.Name
 			}
+
 			msgs = append(msgs, om)
 		case "tool":
 			msgs = append(msgs, ollamaMessage{Role: "tool", Content: msg.Text, ToolName: callNames[msg.ToolCallID]})
@@ -143,6 +150,7 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 			return out, fmt.Errorf("unknown message role %q", msg.Role)
 		}
 	}
+
 	options := map[string]any{"num_ctx": m.ContextTokens}
 	if m.ContextTokens == 0 {
 		options["num_ctx"] = DefaultOllamaContextTokens
@@ -153,10 +161,12 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 	if m.Temperature != nil {
 		options["temperature"] = *m.Temperature
 	}
+
 	keepAlive := m.KeepAlive
 	if keepAlive == "" {
 		keepAlive = DefaultOllamaKeepAlive
 	}
+
 	request := map[string]any{"model": m.ModelName, "messages": msgs, "stream": false,
 		"options": options, "keep_alive": keepAlive}
 	sendThink := m.noThink == nil || !m.noThink.Load()
@@ -169,21 +179,25 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 			tools = append(tools, map[string]any{"type": "function", "function": map[string]any{
 				"name": s.Name, "description": s.Description, "parameters": s.Parameters}})
 		}
+
 		request["tools"] = tools
 	}
 	if format != nil {
 		request["format"] = format
 	}
+
 	body, status, err := m.post(ctx, url, request)
 	if err != nil {
 		return out, err
 	}
 	// Some models reject the think field outright. Retry once without it and
 	// remember, rather than failing every request for non-reasoning models.
-	if status == http.StatusBadRequest && sendThink && !m.Think && strings.Contains(strings.ToLower(string(body)), "think") {
+	if status == http.StatusBadRequest && sendThink && !m.Think &&
+		strings.Contains(strings.ToLower(string(body)), "think") {
 		if m.noThink != nil {
 			m.noThink.Store(true)
 		}
+
 		delete(request, "think")
 		body, status, err = m.post(ctx, url, request)
 		if err != nil {
@@ -193,6 +207,7 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 	if status < 200 || status > 299 {
 		return out, fmt.Errorf("ollama HTTP status %d: %s", status, ollamaError(body))
 	}
+
 	var payload struct {
 		Message struct {
 			Content   string           `json:"content"`
@@ -206,6 +221,7 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return out, fmt.Errorf("decode ollama reply: %w", err)
 	}
+
 	out.Text = payload.Message.Content
 	for i, tc := range payload.Message.ToolCalls {
 		args := tc.Function.Arguments
@@ -215,13 +231,17 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 		if tc.Function.Name == "" || !json.Valid(args) {
 			return Response{}, errors.New("invalid ollama tool call")
 		}
-		out.Calls = append(out.Calls, Call{ID: fmt.Sprintf("ollama-call-%d", i+1), Name: tc.Function.Name, Arguments: args})
+
+		out.Calls = append(out.Calls, Call{ID: fmt.Sprintf("ollama-call-%d",
+			i+1), Name: tc.Function.Name, Arguments: args})
 	}
+
 	out.InputTokens = payload.PromptEvalCount
 	out.OutputTokens = payload.EvalCount
 	if payload.DoneReason == "length" {
 		return out, fmt.Errorf("ollama reply hit the %v-token limit (num_ctx/num_predict); raise -context-tokens or -max-tokens", options["num_ctx"])
 	}
+
 	return out, nil
 }
 
@@ -230,24 +250,29 @@ func (m OllamaModel) post(ctx context.Context, url string, request map[string]an
 	if err != nil {
 		return nil, 0, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	client := m.Client
 	if client == nil {
 		client = &http.Client{Timeout: 4 * time.Minute}
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, 0, err
 	}
+
 	return body, resp.StatusCode, nil
 }
 
@@ -263,5 +288,6 @@ func ollamaError(body []byte) string {
 	if len(msg) > 300 {
 		msg = msg[:300] + "..."
 	}
+
 	return msg
 }

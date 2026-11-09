@@ -36,6 +36,7 @@ type adaptiveSelection struct {
 	SelectedPathIDs  []string `json:"selected_path_ids,omitempty"`
 	SelectedAssetIDs []string `json:"selected_asset_ids,omitempty"` // backward-compatible
 }
+
 type adaptiveCandidate struct {
 	PathID        string              `json:"path_id"`
 	AssetID       string              `json:"asset_id"`
@@ -60,6 +61,7 @@ func parseGoal(raw string, selectors []AssetSearchSchema) (InvestigationGoal, er
 	if err := decodeStrict(data, &goal); err != nil {
 		return goal, fmt.Errorf("invalid investigation goal: %w", err)
 	}
+
 	goal.Subject = normalizePlannedSubject(goal.Subject, selectors)
 	return goal, nil
 }
@@ -73,7 +75,8 @@ func validateGoal(goal InvestigationGoal, catalog []RelationshipSchema, selector
 		if err := goal.Subject.AssetSelector().Validate(selectors); err != nil {
 			return err
 		}
-		if goal.Subject.Name != "" || goal.Subject.LegalName != "" || goal.Subject.UniqueID != "" || goal.Subject.RegistrationID != "" || goal.Subject.Jurisdiction != "" {
+		if goal.Subject.Name != "" || goal.Subject.LegalName != "" || goal.Subject.UniqueID != "" ||
+			goal.Subject.RegistrationID != "" || goal.Subject.Jurisdiction != "" {
 			return errors.New("typed subject selector cannot mix organization-specific identifiers")
 		}
 	}
@@ -83,6 +86,7 @@ func validateGoal(goal InvestigationGoal, catalog []RelationshipSchema, selector
 	if goal.Purpose != "connected" && goal.Purpose != "ultimate_parent" {
 		return errors.New("purpose must be connected or ultimate_parent")
 	}
+
 	allowed := map[string]bool{}
 	for _, s := range selectors {
 		allowed[s.Type] = true
@@ -113,6 +117,7 @@ func validateGoal(goal InvestigationGoal, catalog []RelationshipSchema, selector
 			return errors.New("ultimate_parent requires bidirectional graph exploration")
 		}
 	}
+
 	return nil
 }
 
@@ -124,6 +129,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 	if !ok {
 		return zero, errors.New("OAM indexed selector catalog is required")
 	}
+
 	selectors := sc.SearchFields()
 	relations := a.Runner.Catalog.Relations()
 	// The first attempts show only the catalog slice the question mentions;
@@ -137,6 +143,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		if err != nil {
 			return zero, err
 		}
+
 		goal, err := parseGoal(response.Text, selectors)
 		if err == nil && !explicit && (!prompt.NamesRelationship || goal.Purpose == "ultimate_parent") {
 			// The user asked for no particular relationships, so any the model
@@ -146,7 +153,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		}
 		if err == nil && explicit {
 			// Validate selectors, target types, traversal direction and purpose
-			// BEFORE replacing any hallucinated relationship list. An invalid
+			// before replacing any hallucinated relationship list. An invalid
 			// subject or invented target cannot be repaired using schema grounding.
 			base := goal
 			base.Relationships = nil
@@ -158,7 +165,8 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 			} else {
 				// No unique OAM schema path satisfies all explicitly named labels.
 				// Do not silently drop user constraints or accept an unrelated path.
-				err = fmt.Errorf("explicit relationship labels %q have no unique schema path from %s to %v", strings.Join(explicitHint.Labels, ", "), base.Subject.Type, base.TargetTypes)
+				err = fmt.Errorf("explicit relationship labels %q have no unique schema path from %s to %v",
+					strings.Join(explicitHint.Labels, ", "), base.Subject.Type, base.TargetTypes)
 			}
 		}
 		if err == nil {
@@ -170,12 +178,19 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		if attempt == 2 {
 			return zero, fmt.Errorf("invalid investigation goal after 3 attempts: %w", err)
 		}
-		history = append(history, Message{Role: "assistant", Text: response.Text}, Message{Role: "user", Text: "Goal rejected: " + err.Error() + ". Re-read the user's actual question; honor explicitly named relationship labels rather than unrelated registration/WHOIS edges. Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule)."})
+
+		history = append(history, Message{Role: "assistant", Text: response.Text},
+			Message{
+				Role: "user",
+				Text: "Goal rejected: " + err.Error() +
+					". Re-read the user's actual question; honor explicitly named relationship labels rather than unrelated registration/WHOIS edges. Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule).",
+			})
 		if attempt == 1 && prompt.Sliced {
 			full := goalPlannerPrompt(question, relations, selectors, false)
 			history[0].Text, schema = full.Text, full.Schema
 		}
 	}
+
 	return zero, errors.New("goal planner exhausted attempts")
 }
 
@@ -201,6 +216,7 @@ func eligibleAdaptivePathsWith(goal InvestigationGoal, paths []PlanMatch, attr A
 	if goal.Purpose != "ultimate_parent" {
 		return qualified
 	}
+
 	candidates := make([]PlanMatch, 0, len(paths))
 	for _, p := range qualified {
 		if len(p.Nodes) == 0 || p.Nodes[len(p.Nodes)-1].Type != "Organization" {
@@ -211,6 +227,7 @@ func eligibleAdaptivePathsWith(goal InvestigationGoal, paths []PlanMatch, attr A
 				continue
 			}
 		}
+
 		first := -1
 		for i, n := range p.Nodes {
 			if n.Type == "Organization" {
@@ -221,10 +238,12 @@ func eligibleAdaptivePathsWith(goal InvestigationGoal, paths []PlanMatch, attr A
 		if first < 0 {
 			continue
 		}
+
 		valid := true
 		for i := first + 1; i < len(p.Nodes); i++ {
 			e := p.Edges[i-1]
-			if p.Nodes[i].Type != "Organization" || e.Label != "subsidiary" || e.FromID != p.Nodes[i].ID || e.ToID != p.Nodes[i-1].ID {
+			if p.Nodes[i].Type != "Organization" || e.Label != "subsidiary" || e.FromID != p.Nodes[i].ID ||
+				e.ToID != p.Nodes[i-1].ID {
 				valid = false
 				break
 			}
@@ -233,6 +252,7 @@ func eligibleAdaptivePathsWith(goal InvestigationGoal, paths []PlanMatch, attr A
 			candidates = append(candidates, p)
 		}
 	}
+
 	// Keep only terminal documented ancestors. More than one terminal ancestor
 	// can exist in an ambiguous ownership graph and must remain distinguishable.
 	nonTerminal := map[string]bool{}
@@ -243,12 +263,14 @@ func eligibleAdaptivePathsWith(goal InvestigationGoal, paths []PlanMatch, attr A
 			}
 		}
 	}
+
 	out := make([]PlanMatch, 0, len(candidates))
 	for _, p := range candidates {
 		if !nonTerminal[p.Nodes[len(p.Nodes)-1].ID] {
 			out = append(out, p)
 		}
 	}
+
 	return out
 }
 
@@ -265,6 +287,7 @@ func (a Agent) chooseAdaptivePathsWithEvidence(ctx context.Context, question str
 	if len(paths) == 1 {
 		return paths, nil
 	}
+
 	candidates := make([]adaptiveCandidate, 0, len(paths))
 	byEvidence := map[string]PathEvidence{}
 	if dossier != nil {
@@ -272,28 +295,40 @@ func (a Agent) chooseAdaptivePathsWithEvidence(ctx context.Context, question str
 			byEvidence[p.PathID] = p
 		}
 	}
+
 	byPath := map[string]PlanMatch{}
 	byAsset := map[string][]string{}
 	for _, p := range paths {
 		if len(p.Nodes) == 0 {
 			continue
 		}
+
 		n := p.Nodes[len(p.Nodes)-1]
 		id := p.PathID
 		if id == "" {
 			id = WitnessPathID(p)
 		}
+
 		p.PathID = id
 		byPath[id] = p
 		byAsset[n.ID] = append(byAsset[n.ID], id)
-		cand := adaptiveCandidate{PathID: id, AssetID: n.ID, AssetType: n.Type, Display: humanAsset(n), Depth: len(p.Edges), Path: formatMatch(p)}
+		cand := adaptiveCandidate{
+			PathID:    id,
+			AssetID:   n.ID,
+			AssetType: n.Type,
+			Display:   humanAsset(n),
+			Depth:     len(p.Edges),
+			Path:      formatMatch(p),
+		}
 		if evidence, ok := byEvidence[id]; ok {
 			cand.SourceStatus = evidence.Status
 			cand.WeakestEdgeID = evidence.WeakestLink
 			cand.Coverage, cand.EdgeSources = pathSourceCoverage(evidence)
 		}
+
 		candidates = append(candidates, cand)
 	}
+
 	// Ordering only favors documented alternatives to the same witnessed
 	// destination; it does not reduce the candidate set or certify a fact.
 	rankComparableAlternates(candidates)
@@ -302,7 +337,14 @@ func (a Agent) chooseAdaptivePathsWithEvidence(ctx context.Context, question str
 Return only JSON: {"selected_path_ids":["exact witnessed path ID"]}.
 Select up to 5 witnessed PATH IDs that directly answer the user's question. Use only path IDs from the supplied candidates. Do not invent connections or use external knowledge. If no candidate supports a defensible answer, return an empty array.
 Paths can have different lengths and different paths can reach the SAME asset. Evaluate both path semantics and edge directions. The source_tag_coverage and edge_sources fields describe provenance tags on individual stored edges, NOT verified source independence, source quality, or factual correctness. Candidate order may prefer better-covered alternate routes to the SAME destination, but you must still interpret edge semantics, requested relationship conditions, and actual relevance. Favor paths with attributable sources when all other semantic factors are comparable; never invent corroboration or reject an actual graph edge solely because it lacks tags. Being connected does not establish ownership. For ultimate parent questions, select only the highest documented ancestor paths, not sibling paths. Never assert universal coverage or verified legal ownership.`
-	history := []Message{{Role: "system", Text: prompt}, {Role: "user", Text: "QUESTION: " + question + "\nPURPOSE: " + goal.Purpose + "\nWITNESSED CANDIDATE PATHS (untrusted JSON): " + string(payload)}}
+	history := []Message{
+		{Role: "system", Text: prompt},
+		{
+			Role: "user",
+			Text: "QUESTION: " + question + "\nPURPOSE: " + goal.Purpose +
+				"\nWITNESSED CANDIDATE PATHS (untrusted JSON): " + string(payload),
+		},
+	}
 	for attempt := 0; attempt < 2; attempt++ {
 		response, err := a.Model.Generate(ctx, history, nil)
 		if err != nil {
@@ -311,6 +353,7 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 		if len(response.Calls) != 0 {
 			return nil, errors.New("evidence evaluator requested a tool call")
 		}
+
 		raw := strings.TrimSpace(response.Text)
 		raw = ModelJSON(raw)
 		var selection adaptiveSelection
@@ -326,9 +369,11 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 					break
 				}
 				if len(pathIDs) > 1 {
-					err = fmt.Errorf("asset ID %q has %d witnessed paths; select an exact path_id instead", assetID, len(pathIDs))
+					err = fmt.Errorf("asset ID %q has %d witnessed paths; select an exact path_id instead",
+						assetID, len(pathIDs))
 					break
 				}
+
 				ids = append(ids, pathIDs[0])
 			}
 		}
@@ -336,6 +381,7 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 			if len(ids) > 5 {
 				err = errors.New("too many selected paths")
 			}
+
 			used := map[string]bool{}
 			for _, id := range ids {
 				if _, ok := byPath[id]; !ok {
@@ -346,6 +392,7 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 					err = errors.New("duplicate path ID")
 					break
 				}
+
 				used[id] = true
 			}
 		}
@@ -354,13 +401,21 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 			for _, id := range ids {
 				result = append(result, byPath[id])
 			}
+
 			return result, nil
 		}
 		if attempt == 1 {
 			return nil, fmt.Errorf("evidence selection rejected: %w", err)
 		}
-		history = append(history, Message{Role: "assistant", Text: response.Text}, Message{Role: "user", Text: "Invalid selection: " + err.Error() + ". Select only exact path_id values from the provided candidate paths, or an empty array. Return JSON only."})
+
+		history = append(history, Message{Role: "assistant", Text: response.Text},
+			Message{
+				Role: "user",
+				Text: "Invalid selection: " + err.Error() +
+					". Select only exact path_id values from the provided candidate paths, or an empty array. Return JSON only.",
+			})
 	}
+
 	return nil, nil
 }
 
@@ -375,6 +430,7 @@ func adaptiveDiagram(paths []PlanMatch) string {
 			edges[e.ID] = e
 		}
 	}
+
 	nodeIDs := make([]string, 0, len(nodes))
 	edgeIDs := make([]string, 0, len(edges))
 	for id := range nodes {
@@ -383,6 +439,7 @@ func adaptiveDiagram(paths []PlanMatch) string {
 	for id := range edges {
 		edgeIDs = append(edgeIDs, id)
 	}
+
 	sort.Strings(nodeIDs)
 	sort.Strings(edgeIDs)
 	walk := WalkResult{}
@@ -392,6 +449,7 @@ func adaptiveDiagram(paths []PlanMatch) string {
 	for _, id := range edgeIDs {
 		walk.Edges = append(walk.Edges, edges[id])
 	}
+
 	return Mermaid(walk)
 }
 
@@ -414,18 +472,22 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 	if err := a.Runner.Limits.Validate(); err != nil {
 		return out, err
 	}
+
 	planStarted := time.Now()
 	var q Query
 	q, err = a.CompileQuestion(ctx, question)
 	if err != nil {
 		out.Incomplete = true
-		out.recordTrace(planStarted, InvestigationTraceEvent{Stage: "goal_planning", Incomplete: true, Detail: err.Error()})
+		out.recordTrace(planStarted,
+			InvestigationTraceEvent{Stage: "goal_planning", Incomplete: true, Detail: err.Error()})
 		return out, err
 	}
+
 	planningMode := "model_interpretation"
 	if q.Source != SourceModelGoal {
 		planningMode = "deterministic_schema_grounding"
 	}
+
 	out.recordTrace(planStarted, InvestigationTraceEvent{Stage: "goal_planning", Detail: planningMode})
 	return a.executeQuery(ctx, q, opts, out)
 }
@@ -449,6 +511,7 @@ func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (out
 	if err := a.Runner.Limits.Validate(); err != nil {
 		return out, err
 	}
+
 	var selectors []AssetSearchSchema
 	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
 		selectors = c.SearchFields()
@@ -457,6 +520,7 @@ func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (out
 		out.Incomplete = true
 		return out, fmt.Errorf("invalid query: %w", err)
 	}
+
 	return a.executeQuery(ctx, q, opts, out)
 }
 
@@ -469,6 +533,7 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	if strings.TrimSpace(question) == "" {
 		question = q.Describe()
 	}
+
 	fqdnInventory := q.Traversal == TraversalHierarchy
 	typedRelation := q.Traversal == TraversalRoute
 	typedIntent := TypedRelationIntent{Goal: goal, Hops: q.Hops}
@@ -485,19 +550,23 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 			out.Incomplete = true
 			return out, err
 		}
+
 		out.ToolCalls++
-		out.Observations = append(out.Observations, Observation{Tool: "resolve_organization", CallID: "adaptive-root", Result: string(raw)})
+		out.Observations = append(out.Observations,
+			Observation{Tool: "resolve_organization", CallID: "adaptive-root", Result: string(raw)})
 		var resolution OrganizationResolution
 		if err := json.Unmarshal(raw, &resolution); err != nil {
 			out.Incomplete = true
 			return out, err
 		}
+
 		out.Resolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
 			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates)
 			return out, nil
 		}
+
 		root = resolution.Candidates[0].Asset
 	} else {
 		args, _ := json.Marshal(struct {
@@ -509,13 +578,16 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 			out.Incomplete = true
 			return out, err
 		}
+
 		out.ToolCalls++
-		out.Observations = append(out.Observations, Observation{Tool: "resolve_asset", CallID: "adaptive-root", Result: string(raw)})
+		out.Observations = append(out.Observations,
+			Observation{Tool: "resolve_asset", CallID: "adaptive-root", Result: string(raw)})
 		var resolution AssetResolution
 		if err := json.Unmarshal(raw, &resolution); err != nil {
 			out.Incomplete = true
 			return out, err
 		}
+
 		out.AssetResolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
@@ -524,15 +596,19 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 				proposal := PlanCollection(goal.Subject.AssetSelector())
 				out.Collection = &proposal
 			}
+
 			return out, nil
 		}
+
 		root = resolution.Candidates[0].Asset
 	}
+
 	out.recordTrace(resolveStarted, InvestigationTraceEvent{Stage: "resolve_asset", Detail: root.Type})
 	if a.Runner.Limits.MaxToolCalls < 2 {
 		out.Incomplete = true
 		return out, errors.New("two graph tool operations must be permitted")
 	}
+
 	searchStarted := time.Now()
 	var search GraphSearchResult
 	var err error
@@ -545,10 +621,21 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	}
 	if err != nil {
 		out.Incomplete = true
-		out.recordTrace(searchStarted, InvestigationTraceEvent{Stage: "guided_search", Incomplete: true, Detail: err.Error()})
+		out.recordTrace(searchStarted,
+			InvestigationTraceEvent{Stage: "guided_search", Incomplete: true, Detail: err.Error()})
 		return out, err
 	}
-	out.recordTrace(searchStarted, InvestigationTraceEvent{Stage: "guided_search", OutputPaths: len(search.Matches), GraphNodes: search.VisitedNodes, GraphEdges: search.VisitedEdges, PathExpansions: search.ExpandedPaths, Incomplete: search.Truncated, Detail: search.Reason})
+
+	out.recordTrace(searchStarted,
+		InvestigationTraceEvent{
+			Stage:          "guided_search",
+			OutputPaths:    len(search.Matches),
+			GraphNodes:     search.VisitedNodes,
+			GraphEdges:     search.VisitedEdges,
+			PathExpansions: search.ExpandedPaths,
+			Incomplete:     search.Truncated,
+			Detail:         search.Reason,
+		})
 	out.ToolCalls++
 	out.Search = &search
 	obs, _ := json.Marshal(struct {
@@ -558,19 +645,28 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		Truncated    bool   `json:"truncated"`
 		Reason       string `json:"reason,omitempty"`
 	}{len(search.Matches), search.VisitedNodes, search.VisitedEdges, search.Truncated, search.Reason})
-	out.Observations = append(out.Observations, Observation{Tool: "search_graph", CallID: "adaptive-search", Result: string(obs)})
+	out.Observations = append(out.Observations,
+		Observation{Tool: "search_graph", CallID: "adaptive-search", Result: string(obs)})
 	attrCatalog, _ := a.Runner.Catalog.(AttributionCatalog)
 	candidates := eligibleAdaptivePathsWith(goal, search.Matches, attrCatalog)
 	if goal.Purpose == "ultimate_parent" && attrCatalog != nil {
 		out.ThirdParties = thirdPartyConnections(attrCatalog, search.Matches)
 	}
+
 	evidenceStarted := time.Now()
 	dossier, err := EvaluatePathEvidence(ctx, a.Runner.Graph, a.Runner.Limits, candidates)
 	if err != nil {
 		out.Incomplete = true
-		out.recordTrace(evidenceStarted, InvestigationTraceEvent{Stage: "evidence_inspection", InputPaths: len(candidates), Incomplete: true, Detail: err.Error()})
+		out.recordTrace(evidenceStarted,
+			InvestigationTraceEvent{
+				Stage:      "evidence_inspection",
+				InputPaths: len(candidates),
+				Incomplete: true,
+				Detail:     err.Error(),
+			})
 		return out, fmt.Errorf("evaluate OAM source provenance: %w", err)
 	}
+
 	recordCount := 0
 	seenEvidenceEdges := map[string]bool{}
 	for _, p := range dossier.Paths {
@@ -578,11 +674,22 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 			if seenEvidenceEdges[edge.EdgeID] {
 				continue
 			}
+
 			seenEvidenceEdges[edge.EdgeID] = true
 			recordCount += len(edge.Records)
 		}
 	}
-	out.recordTrace(evidenceStarted, InvestigationTraceEvent{Stage: "evidence_inspection", InputPaths: len(candidates), OutputPaths: len(dossier.Paths), EdgeEvidenceLookups: dossier.InspectedEdges, EvidenceRecords: recordCount, Incomplete: dossier.Truncated, Detail: dossier.Reason})
+
+	out.recordTrace(evidenceStarted,
+		InvestigationTraceEvent{
+			Stage:               "evidence_inspection",
+			InputPaths:          len(candidates),
+			OutputPaths:         len(dossier.Paths),
+			EdgeEvidenceLookups: dossier.InspectedEdges,
+			EvidenceRecords:     recordCount,
+			Incomplete:          dossier.Truncated,
+			Detail:              dossier.Reason,
+		})
 	out.EvidenceDossier = &dossier
 	selectionStarted := time.Now()
 	var selected []PlanMatch
@@ -603,23 +710,40 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	} else {
 		selected, groups, deterministic, err = a.selectAnswerPaths(ctx, question, goal, candidates, &dossier)
 	}
+
 	out.AnswerGroups = groups
 	if err != nil {
 		out.Incomplete = true
-		out.recordTrace(selectionStarted, InvestigationTraceEvent{Stage: "path_selection", InputPaths: len(candidates), Incomplete: true, Detail: err.Error()})
+		out.recordTrace(selectionStarted,
+			InvestigationTraceEvent{
+				Stage:      "path_selection",
+				InputPaths: len(candidates),
+				Incomplete: true,
+				Detail:     err.Error(),
+			})
 		return out, err
 	}
+
 	selectionDetail := "model_evaluation"
 	if deterministic {
 		selectionDetail = "deterministic_destination_grouping"
 	}
+
 	selectionIncomplete := len(selected) == 0
 	// No matches is a complete *typed inventory* result when all applicable
 	// hops were evaluated within bounds. It is not a failed path selection.
 	if fqdnInventory || typedRelation {
 		selectionIncomplete = search.Truncated
 	}
-	out.recordTrace(selectionStarted, InvestigationTraceEvent{Stage: "path_selection", InputPaths: len(candidates), OutputPaths: len(selected), Incomplete: selectionIncomplete, Detail: selectionDetail})
+
+	out.recordTrace(selectionStarted,
+		InvestigationTraceEvent{
+			Stage:       "path_selection",
+			InputPaths:  len(candidates),
+			OutputPaths: len(selected),
+			Incomplete:  selectionIncomplete,
+			Detail:      selectionDetail,
+		})
 	out.Matches = selected
 	out.EvidenceIncomplete = dossier.Truncated
 	assessed := map[string]PathEvidence{}
@@ -631,11 +755,13 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		if id == "" {
 			id = WitnessPathID(path)
 		}
+
 		ev, ok := assessed[id]
 		if !ok || ev.Status != "multiple_source_tags_on_each_edge" {
 			out.EvidenceIncomplete = true
 		}
 	}
+
 	out.Incomplete = search.Truncated || (!fqdnInventory && !typedRelation && len(selected) == 0)
 	if fqdnInventory || typedRelation {
 		if fqdnInventory {
@@ -646,6 +772,7 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 				out.Answer += typedRelationEmptyExplanation(search, typedIntent)
 			}
 		}
+
 		out.Diagram = adaptiveDiagram(selected)
 		return out, nil
 	}
@@ -669,8 +796,10 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		if goal.Purpose == "ultimate_parent" {
 			out.Answer = "Highest documented parent organization candidate(s) from stored OAM paths (not independently verified ultimate legal ownership): " + strings.Join(paths, "; ")
 		} else {
-			out.Answer = fmt.Sprintf("Found %d relevant stored OAM path(s): %s", len(selected), strings.Join(paths, "; "))
+			out.Answer = fmt.Sprintf("Found %d relevant stored OAM path(s): %s", len(selected),
+				strings.Join(paths, "; "))
 		}
+
 		out.Diagram = adaptiveDiagram(selected)
 		if out.EvidenceIncomplete {
 			out.Answer += " Source-level support is incomplete or unattributed on one or more witnessed edges; their relationships are not independently verified."
@@ -684,5 +813,6 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	if search.Truncated {
 		out.Answer += " Search truncated (" + search.Reason + "); additional relevant paths may exist."
 	}
+
 	return out, nil
 }

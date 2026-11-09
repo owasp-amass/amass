@@ -103,25 +103,30 @@ func (q Query) Describe() string {
 		if q.ExcludeRoot {
 			what = "subdomains"
 		}
+
 		return fmt.Sprintf("List %s below %s through the stored FQDN node hierarchy.", what, subject)
 	case TraversalRoute:
 		steps := make([]string, 0, len(q.Hops))
 		for _, h := range q.Hops {
 			steps = append(steps, fmt.Sprintf("%s %s to %s", h.Direction, h.Label, h.DestinationType))
 		}
+
 		return fmt.Sprintf("List %s reached from %s by following %s.", targets, subject, strings.Join(steps, ", then "))
 	default:
 		if q.Purpose == "ultimate_parent" {
 			return fmt.Sprintf("Find the highest documented parent Organization of %s.", subject)
 		}
+
 		desc := fmt.Sprintf("Find %s connected to %s", targets, subject)
 		if len(q.Relationships) > 0 {
 			labels := make([]string, 0, len(q.Relationships))
 			for _, r := range q.Relationships {
 				labels = append(labels, r.Label)
 			}
+
 			desc += fmt.Sprintf(" via %s relationships (%s)", strings.Join(labels, ", "), q.PathRule)
 		}
+
 		return desc + "."
 	}
 }
@@ -167,13 +172,16 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 		if q.ExcludeRoot {
 			return errors.New("exclude_root applies only to the hierarchy traversal")
 		}
-		if err := validatePlanWithSelectors(TypedPlan{Subject: q.Subject, Hops: q.Hops}, catalog, selectors, limits); err != nil {
+		if err := validatePlanWithSelectors(TypedPlan{Subject: q.Subject, Hops: q.Hops}, catalog, selectors,
+			limits); err != nil {
 			return err
 		}
+
 		last := q.Hops[len(q.Hops)-1].DestinationType
 		if len(q.TargetTypes) != 1 || q.TargetTypes[0] != last {
 			return fmt.Errorf("route target_types must be exactly the final hop type %s", last)
 		}
+
 		want, err := routeRelationships(q.Subject.Type, q.Hops, catalog)
 		if err != nil {
 			return err
@@ -189,6 +197,7 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 			len(q.TargetTypes) != 1 || q.TargetTypes[0] != "FQDN" {
 			return errors.New("hierarchy queries descend out to FQDN targets with purpose connected and no hops")
 		}
+
 		node := GoalRelation{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"}
 		if len(q.Relationships) != 1 || q.Relationships[0] != node {
 			return errors.New("hierarchy queries use exactly the FQDN node relationship")
@@ -201,6 +210,7 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	default:
 		return fmt.Errorf("unknown query source %q", q.Source)
 	}
+
 	return nil
 }
 
@@ -224,8 +234,10 @@ func routeRelationships(subjectType string, hops []PlanHop, catalog []Relationsh
 		if !found {
 			return nil, fmt.Errorf("hop %d has no OAM catalog transition", i+1)
 		}
+
 		current = h.DestinationType
 	}
+
 	return out, nil
 }
 
@@ -238,5 +250,6 @@ func sameRelations(a, b []GoalRelation) bool {
 			return false
 		}
 	}
+
 	return true
 }

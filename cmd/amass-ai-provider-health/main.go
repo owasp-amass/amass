@@ -37,16 +37,19 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	provider := os.Getenv("AMASS_AI_PROVIDER")
 	if provider == "" {
 		provider = "compatible"
 	}
+
 	modelName := os.Getenv("AMASS_AI_MODEL")
 	endpoint := os.Getenv("AMASS_AI_ENDPOINT")
 	if modelName == "" || endpoint == "" {
 		return errors.New("AMASS_AI_MODEL and AMASS_AI_ENDPOINT must be configured")
 	}
+
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Hostname() == "" || u.User != nil {
 		return errors.New("invalid model endpoint")
@@ -54,6 +57,7 @@ func run() error {
 	if u.Scheme != "https" && (u.Scheme != "http" || os.Getenv("AMASS_AI_ALLOW_HTTP") != "true") {
 		return errors.New("model HTTP requires explicit AMASS_AI_ALLOW_HTTP=true; otherwise use HTTPS")
 	}
+
 	timeout := 4 * time.Minute
 	if raw := os.Getenv("AMASS_AI_MODEL_TIMEOUT"); raw != "" {
 		timeout, err = time.ParseDuration(raw)
@@ -61,6 +65,7 @@ func run() error {
 			return errors.New("invalid model timeout")
 		}
 	}
+
 	apiKey := os.Getenv("AMASS_AI_API_KEY")
 	client := &http.Client{Timeout: timeout}
 	var model ai.Model
@@ -69,6 +74,7 @@ func run() error {
 		if _, err := ai.OllamaChatURL(endpoint); err != nil {
 			return err
 		}
+
 		m := ai.NewOllamaModel(endpoint, modelName, client)
 		m.Think = os.Getenv("AMASS_AI_THINK") == "true"
 		if raw := os.Getenv("AMASS_AI_CONTEXT_TOKENS"); raw != "" {
@@ -76,8 +82,10 @@ func run() error {
 			if err != nil || n < 2048 || n > 262144 {
 				return errors.New("AMASS_AI_CONTEXT_TOKENS must be 2048..262144")
 			}
+
 			m.ContextTokens = n
 		}
+
 		model = m
 	case "compatible":
 		model = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
@@ -85,10 +93,12 @@ func run() error {
 		if apiKey == "" {
 			return errors.New("the Anthropic provider requires AMASS_AI_API_KEY")
 		}
+
 		model = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
 	default:
 		return fmt.Errorf("unsupported inference provider %q", provider)
 	}
+
 	var status state
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -103,6 +113,7 @@ func run() error {
 			if err == nil && strings.TrimSpace(response.Text) == "" && len(response.Calls) == 0 {
 				err = errors.New("model responded without usable content")
 			}
+
 			status.Lock()
 			status.ready = err == nil
 			if err == nil {
@@ -111,6 +122,7 @@ func run() error {
 			} else {
 				status.lastError = err.Error()
 			}
+
 			status.Unlock()
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "inference probe unsuccessful:", err)
@@ -150,6 +162,7 @@ func run() error {
 			state = "ready"
 			code = 200
 		}
+
 		// The error remains in container logs and must not expose upstream tokens.
 		_ = lastErr
 		send(w, code, map[string]any{"status": state, "provider": provider, "model": modelName, "last_success": lastOK})
@@ -165,8 +178,10 @@ func run() error {
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
+
 	return err
 }
+
 func send(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

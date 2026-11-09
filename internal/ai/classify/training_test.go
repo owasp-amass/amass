@@ -16,6 +16,7 @@ func TestTrainerRejectsMissingLabelsAndUnknownFeatures(t *testing.T) {
 		t.Fatal("unregistered feature accepted")
 	}
 }
+
 func TestTrainerUsesGroupHoldoutAndUncalibratedScores(t *testing.T) {
 	var lines strings.Builder
 	for i := 0; i < 180; i++ {
@@ -27,13 +28,17 @@ func TestTrainerUsesGroupHoldoutAndUncalibratedScores(t *testing.T) {
 			distinct = 1
 			attribution = 1
 		}
-		fmt.Fprintf(&lines, `{"group_id":"sample-%d","label":"%s","features":{"distinct_sources":%g,"evidence_count":0.5,"source_property_fraction":%g,"unattributed_fraction":0}}%s`,
+
+		fmt.Fprintf(&lines,
+			`{"group_id":"sample-%d","label":"%s","features":{"distinct_sources":%g,"evidence_count":0.5,"source_property_fraction":%g,"unattributed_fraction":0}}%s`,
 			i, label, distinct, attribution, "\n")
 	}
+
 	rows, err := ReadLabeledJSONL(strings.NewReader(lines.String()))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	model, metrics, err := TrainLinearModel(rows, "synthetic-classifier-regression")
 	if err != nil {
 		t.Fatal(err)

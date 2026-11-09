@@ -55,6 +55,7 @@ func (m *meteredModel) GenerateStructured(ctx context.Context, h []Message, sche
 	} else {
 		r, err = m.inner.Generate(ctx, h, nil)
 	}
+
 	m.record(start, r)
 	return r, err
 }
@@ -75,6 +76,7 @@ func (a Agent) metered() (Agent, *meteredModel) {
 	if m, ok := a.Model.(*meteredModel); ok {
 		return a, m
 	}
+
 	m := &meteredModel{inner: a.Model}
 	a.Model = m
 	return a, m

@@ -31,6 +31,7 @@ func TestAISettingsYAMLAndEnvironmentPrecedence(t *testing.T) {
 	if c.AI == nil || c.AI.Model != "qwen3:8b" || c.AI.MaxDepth != 8 || !c.AI.AllowHTTP {
 		t.Fatalf("YAML section failed to decode: %+v", c.AI)
 	}
+
 	env := map[string]string{
 		"AMASS_AI_MODEL":             "qwen3:14b",
 		"AMASS_AI_DEPTH":             "12",
@@ -46,6 +47,7 @@ func TestAISettingsYAMLAndEnvironmentPrecedence(t *testing.T) {
 		t.Fatalf("environment precedence incorrectly applied: %+v", out)
 	}
 }
+
 func TestAISettingsInvalidEnvironmentValuesFailClosed(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
 		{"AMASS_AI_ALLOW_HTTP", "maybe"},
@@ -60,17 +62,20 @@ func TestAISettingsInvalidEnvironmentValuesFailClosed(t *testing.T) {
 				if k == tc.key {
 					return tc.value, true
 				}
+
 				return "", false
 			})
 			if err == nil {
 				t.Fatalf("invalid AI setting %s=%s was accepted", tc.key, tc.value)
 			}
-			if !strings.Contains(err.Error(), "AI") && !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), tc.key) {
+			if !strings.Contains(err.Error(), "AI") && !strings.Contains(err.Error(),
+				"timeout") && !strings.Contains(err.Error(), tc.key) {
 				t.Fatalf("missing setting context: %v", err)
 			}
 		})
 	}
 }
+
 func TestAISettingsDisabledByDefault(t *testing.T) {
 	c := NewConfig()
 	if c.AI != nil {

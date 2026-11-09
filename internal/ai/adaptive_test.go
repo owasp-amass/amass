@@ -16,13 +16,15 @@ func TestAdaptiveAskFindsParentWithoutSibling(t *testing.T) {
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"ultimate_parent"}`,
 	}}
 	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
-	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(), "What is the highest parent organization associated with tech.acme.example?")
+	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(),
+		"What is the highest parent organization associated with tech.acme.example?")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if out.Goal == nil || out.Search == nil || out.Incomplete || len(out.Matches) != 1 {
 		t.Fatalf("unexpected adaptive result: %+v", out)
 	}
+
 	last := out.Matches[0].Nodes[len(out.Matches[0].Nodes)-1]
 	if last.ID != "parent" || len(out.Matches[0].Edges) != 3 {
 		t.Fatalf("parent should be depth 3 without sibling: %+v", out.Matches)
@@ -41,7 +43,8 @@ func TestAdaptiveAskSelectsOnlyWitnessedPaths(t *testing.T) {
 		`{"selected_asset_ids":["parent","tech"]}`,
 	}}
 	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
-	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(), "Which organizations are connected to tech.acme.example?")
+	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(),
+		"Which organizations are connected to tech.acme.example?")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +65,8 @@ func TestAdaptiveSelectionRejectsInventedAssetIDs(t *testing.T) {
 		{Nodes: []Asset{{ID: "a", Type: "FQDN"}, {ID: "one", Type: "Organization"}}, Edges: []Relation{{ID: "edge1"}}},
 		{Nodes: []Asset{{ID: "a", Type: "FQDN"}, {ID: "two", Type: "Organization"}}, Edges: []Relation{{ID: "edge2"}}},
 	}
-	_, err := (Agent{Model: model}).chooseAdaptivePaths(context.Background(), "Which organizations?", InvestigationGoal{Purpose: "connected"}, paths)
+	_, err := (Agent{Model: model}).chooseAdaptivePaths(context.Background(), "Which organizations?",
+		InvestigationGoal{Purpose: "connected"}, paths)
 	if err == nil || !strings.Contains(err.Error(), "not witnessed") {
 		t.Fatalf("invented asset IDs accepted: %v", err)
 	}
@@ -73,6 +77,7 @@ func TestAdaptivePlanRejectsUnknownTargetAndHops(t *testing.T) {
 	if err == nil {
 		t.Fatal("adaptive planner accepted unsupported fixed hop key")
 	}
+
 	goal, err := parseGoal(`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["NotAnOAMType"],"direction":"both","purpose":"connected"}`, testOAMCatalog.SearchFields())
 	if err != nil {
 		t.Fatal(err)
@@ -87,14 +92,17 @@ func TestAdaptiveSearchReturnedJSONRemainsMachineReadable(t *testing.T) {
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"ultimate_parent"}`,
 	}}
 	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
-	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(), "Highest parent organization of tech.acme.example?")
+	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(),
+		"Highest parent organization of tech.acme.example?")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw, err := json.Marshal(out)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var data map[string]any
 	if err := json.Unmarshal(raw, &data); err != nil {
 		t.Fatal(err)

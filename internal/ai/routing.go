@@ -14,7 +14,7 @@ import (
 )
 
 // EvidenceSummary records the provenance that was available to the router.
-// Distinct source IDs are an approximation, NOT proof of source independence.
+// Distinct source IDs are an approximation, not proof of source independence.
 type EvidenceSummary struct {
 	EvidenceIDs      []string `json:"evidence_ids"`
 	SourceIDs        []string `json:"source_ids"`
@@ -28,7 +28,7 @@ const OrganizationClassificationTask = "organization_relation"
 // ExtractProvenanceFeatures produces bounded, non-semantic features exclusively
 // from supplied, repository-verified OAM evidence. No model is asked to parse
 // arbitrary web, DNS, or certificate text as an instruction.
-// The caller MUST verify evidence IDs against the Asset Database first.
+// The caller must verify evidence IDs against the Asset Database first.
 func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, error) {
 	var out EvidenceSummary
 	if c.SubjectID == "" || c.ObjectID == "" || c.SubjectID == c.ObjectID {
@@ -37,6 +37,7 @@ func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, er
 	if len(c.AllowedLabels) == 0 || len(c.Evidence) > 100 {
 		return classify.Input{}, out, errors.New("invalid candidate taxonomy or evidence count")
 	}
+
 	evidenceIDs := make(map[string]string)
 	sources := make(map[string]bool)
 	for _, ev := range c.Evidence {
@@ -47,8 +48,10 @@ func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, er
 			if prior != ev.SourceID {
 				return classify.Input{}, out, fmt.Errorf("conflicting provenance for evidence %q", ev.ID)
 			}
+
 			continue
 		}
+
 		evidenceIDs[ev.ID] = ev.SourceID
 		if ev.SourceID == "" {
 			out.Unattributed++
@@ -65,6 +68,7 @@ func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, er
 	for id := range sources {
 		out.SourceIDs = append(out.SourceIDs, id)
 	}
+
 	sort.Strings(out.EvidenceIDs)
 	sort.Strings(out.SourceIDs)
 	n := len(evidenceIDs)
@@ -73,6 +77,7 @@ func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, er
 	if n > 0 {
 		fraction = float64(out.SourceProperties) / denom
 	}
+
 	input := classify.Input{Task: OrganizationClassificationTask, Features: map[string]float64{
 		"distinct_sources":         minFloat(float64(len(sources))/3, 1),
 		"evidence_count":           minFloat(float64(n)/8, 1),
@@ -86,12 +91,15 @@ func minFloat(a, b float64) float64 {
 	if a < b {
 		return a
 	}
+
 	return b
 }
+
 func frac(part, whole int) float64 {
 	if whole == 0 {
 		return 0
 	}
+
 	return float64(part) / float64(whole)
 }
 
@@ -122,10 +130,12 @@ func (i Inferrer) AnalyzeRouted(ctx context.Context, c Candidate, classifier cla
 	if i.MinSources < 2 {
 		return out, errors.New("minimum independent sources must be >= 2")
 	}
+
 	input, summary, err := ExtractProvenanceFeatures(c)
 	if err != nil {
 		return out, err
 	}
+
 	out.Provenance = summary
 	if len(summary.SourceIDs) < i.MinSources {
 		out.Decision = "needs_evidence"
@@ -139,26 +149,30 @@ func (i Inferrer) AnalyzeRouted(ctx context.Context, c Candidate, classifier cla
 		}
 		// Enforce feature schema agreement, even for custom classifier adapters.
 		if prediction.FeatureVersion != OrganizationFeatureVersion {
-			return out, fmt.Errorf("classifier feature version %q does not match %q", prediction.FeatureVersion, OrganizationFeatureVersion)
+			return out, fmt.Errorf("classifier feature version %q does not match %q",
+				prediction.FeatureVersion, OrganizationFeatureVersion)
 		}
+
 		out.Prediction = &prediction
 		if prediction.Decision == "review" && policy.AllowLocalReview {
 			out.Decision = "review"
 			out.Reason = "classifier triage: analyst review required; no relationship has been proposed or accepted"
 			return out, nil
 		}
-		if prediction.Decision == "skip" && prediction.ScoreKind == "calibrated_probability" && policy.AllowCalibratedSkip {
+		if prediction.Decision == "skip" && prediction.ScoreKind == "calibrated_probability" &&
+			policy.AllowCalibratedSkip {
 			out.Decision = "skip"
 			out.Reason = "calibrated classifier triage under explicit skip policy; not a statement of non-ownership"
 			return out, nil
 		}
-		// Uncalibrated negatives ALWAYS escalate; classifier output is not evidence.
+		// Uncalibrated negatives always escalate; classifier output is not evidence.
 	}
 	if i.Model == nil {
 		out.Decision = "escalate"
 		out.Reason = "generative model required to investigate this candidate"
 		return out, nil
 	}
+
 	out.UsedGenerativeModel = true
 	proposal, err := i.Analyze(ctx, c)
 	if err != nil {
@@ -169,6 +183,7 @@ func (i Inferrer) AnalyzeRouted(ctx context.Context, c Candidate, classifier cla
 		out.Reason = "generative model found no supported relationship"
 		return out, nil
 	}
+
 	out.Decision = "proposed"
 	out.Reason = "proposal requires policy validation or human review"
 	out.Proposal = proposal

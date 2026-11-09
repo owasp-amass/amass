@@ -97,6 +97,7 @@ func intentTypeCandidates(raw string, selectors []AssetSearchSchema, relations [
 	if term == "" {
 		return nil
 	}
+
 	registered := map[string]bool{}
 	for _, s := range selectors {
 		registered[s.Type] = true
@@ -105,6 +106,7 @@ func intentTypeCandidates(raw string, selectors []AssetSearchSchema, relations [
 		registered[r.SourceType] = true
 		registered[r.DestinationType] = true
 	}
+
 	var matches []string
 	for typ := range registered {
 		for _, alias := range intentAssetAliases(typ) {
@@ -114,6 +116,7 @@ func intentTypeCandidates(raw string, selectors []AssetSearchSchema, relations [
 			}
 		}
 	}
+
 	sort.Strings(matches)
 	return matches
 }
@@ -129,10 +132,12 @@ func compactIntentVocabulary(selectors []AssetSearchSchema, relations []Relation
 		registered[r.SourceType] = true
 		registered[r.DestinationType] = true
 	}
+
 	types := make([]string, 0, len(registered))
 	for typ := range registered {
 		types = append(types, typ)
 	}
+
 	sort.Strings(types)
 	var rows []string
 	for _, typ := range types {
@@ -140,8 +145,10 @@ func compactIntentVocabulary(selectors []AssetSearchSchema, relations []Relation
 		if len(aliases) == 0 {
 			continue
 		}
+
 		rows = append(rows, typ+": "+strings.Join(aliases, ", "))
 	}
+
 	return strings.Join(rows, "\n")
 }
 
