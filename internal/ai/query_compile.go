@@ -34,6 +34,7 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 		}
 
 		q = QueryFromGoal(goal, question, SourceModelGoal)
+		promoteHierarchyGoal(&q)
 	}
 
 	var selectors []AssetSearchSchema

@@ -42,7 +42,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var scanLimit int
 	var queryPath string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
-	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
+	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
 	var modelTimeout, investigationTimeout time.Duration
 	var maxTokens, contextTokens int
 	var temperatureFlag string
@@ -70,6 +70,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.IntVar(&graphDepth, "depth", 0,
 		"Maximum path length for graph search (default 16 with target types, otherwise 1)")
 	fs.IntVar(&graphMatches, "max-matches", 20, "Maximum graph path matches to return")
+	fs.IntVar(&inventoryNames, "max-names", ai.DefaultInventoryNames,
+		"Maximum names listed by an FQDN or subdomain inventory (not sent to the model)")
 	fs.IntVar(&graphAlternates, "max-paths-per-asset", 3, "Maximum witnessed simple paths retained per asset (1..8)")
 	fs.IntVar(&graphExpansions, "max-expansions", 0, "Maximum guided path expansions (bounded by global policy)")
 	fs.IntVar(&guidanceRounds, "guidance-rounds", 2,
@@ -354,6 +356,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 				MaxPathsPerAsset: graphAlternates,
 				MaxExpansions:    graphExpansions,
 				GuidanceRounds:   guidanceRounds,
+				MaxInventory:     inventoryNames,
 			})
 		if showTrace {
 			writeTrace(errout, result)
@@ -382,6 +385,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 				MaxPathsPerAsset: graphAlternates,
 				MaxExpansions:    graphExpansions,
 				GuidanceRounds:   guidanceRounds,
+				MaxInventory:     inventoryNames,
 			})
 		if showTrace {
 			writeTrace(errout, result)
