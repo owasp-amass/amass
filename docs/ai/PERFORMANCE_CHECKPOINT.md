@@ -64,7 +64,7 @@ git merge --ff-only origin/feature/ai-investigation-inference
 go mod edit -replace=github.com/owasp-amass/asset-db=../asset-db
 
 go test ./internal/ai \
-  -run 'TestExplicitOrganizationQuestionUsesZeroModelCalls|TestDeterministicGoal|TestAnswerGrouping|TestAdaptiveAskFindsParentWithoutSibling|TestAdaptiveQuestionUsesGenericRelationshipGoalAndSourceDossier' \
+  -run 'TestExplicitOrganizationQuestionUsesZeroModelCalls|TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel|TestDeterministicGoal|TestAnswerGrouping|TestAdaptiveAskFindsParentWithoutSibling|TestAdaptiveQuestionUsesGenericRelationshipGoalAndSourceDossier' \
   -v -count=1
 
 go test ./config ./internal/ai/... -count=1
@@ -83,6 +83,12 @@ it uses the complete synthetic graph investigation and evidence
 dossier but a model with no responses. It must return exactly one
 direct Acme Technologies answer, keep parent and sibling context,
 and make **zero** model calls.
+
+The regression `TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel`
+recreates six alternative-path candidates and verifies that Acme
+Technologies is the only primary answer, using the better-sourced
+URL, while the parent, sibling, and weaker path remain in evidence.
+The test deliberately requires zero model calls.
 
 `TestAnswerGroupingCollapsesEquivalentRoutesWithoutModelCall`
 checks preferred source-tag coverage and retained alternatives.
