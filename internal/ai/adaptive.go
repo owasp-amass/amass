@@ -445,7 +445,7 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  out.Incomplete=search.Truncated || (!(fqdnInventory||typedRelation)&&len(selected)==0)
  if fqdnInventory||typedRelation {
   if fqdnInventory{
-   out.Answer=fqdnInventoryAnswer(root,selected,search.Truncated,search.Reason)
+   out.Answer=fqdnInventoryAnswerScoped(root,selected,search.Truncated,search.Reason,isSubdomainInventoryQuestion(question))
   }else{
    out.Answer=typedRelationAnswer(root,typedIntent,selected,search.Truncated,search.Reason)
    if len(selected)==0{
