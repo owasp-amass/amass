@@ -156,3 +156,108 @@ func TestSubdomainIntentUsesHierarchyAndExcludesApex(t *testing.T) {
 		}
 	}
 }
+
+// largeFQDNInventoryFixture models a campus namespace: 150 direct
+// subdomains plus 50 under cslab, more than the model-context node,
+// per-node and find limits allow.
+func largeFQDNInventoryFixture() plannedGraph {
+	root := Asset{ID: "root", Type: "FQDN", Key: "colgate.edu", Content: map[string]any{"name": "colgate.edu"}}
+	g := fakeGraph{assets: map[string]Asset{"root": root}}
+	add := func(id, name, parent string) {
+		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+		g.links = append(g.links, Relation{ID: "node-" + id, FromID: parent, ToID: id, Label: "node",
+			Type: "SimpleRelation"})
+	}
+
+	add("cslab", "cslab.colgate.edu", "root")
+	for i := 0; i < 149; i++ {
+		add(fmt.Sprintf("host-%03d", i), fmt.Sprintf("host%03d.colgate.edu", i), "root")
+	}
+	for i := 0; i < 50; i++ {
+		add(fmt.Sprintf("lab-%02d", i), fmt.Sprintf("lab%02d.cslab.colgate.edu", i), "cslab")
+	}
+
+	return plannedGraph{fakeGraph: g}
+}
+
+func TestSubdomainInventoryWordingsCompileWithoutModel(t *testing.T) {
+	for _, q := range []string{
+		"What are all the subdomains within colgate.edu?",
+		"What are the subdomains in colgate.edu",
+		"Which subdomains are in colgate.edu?",
+		"List all of the subdomains under colgate.edu",
+		"Show the hostnames within colgate.edu's DNS namespace",
+		"Give me all subdomains of colgate.edu?",
+	} {
+		goal, ok := deterministicFQDNInventoryGoal(q, fqdnInventoryCatalog)
+		if !ok || goal.Subject.Value != "colgate.edu" {
+			t.Errorf("%q was not compiled as an inventory of colgate.edu: %+v", q, goal)
+		}
+	}
+}
+
+func TestLargeSubdomainInventoryIsCompleteAndSkipsModel(t *testing.T) {
+	model := &plannerModel{}
+	agent := Agent{Model: model, Runner: ToolRunner{
+		Graph: largeFQDNInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
+	}}
+
+	result, err := agent.AskAdaptive(context.Background(), "What are all the subdomains within colgate.edu?",
+		AdaptiveOptions{MaxMatches: 20, MaxInventory: DefaultInventoryNames, GuidanceRounds: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.calls != 0 {
+		t.Fatalf("inventory called the model %d time(s)", model.calls)
+	}
+	if result.Search == nil || result.Search.Truncated || result.Incomplete {
+		t.Fatalf("inventory was truncated: %+v", result.Search)
+	}
+	if !strings.Contains(result.Answer, "Found 200 subdomain FQDN asset(s)") ||
+		!strings.Contains(result.Answer, "\nlab49.cslab.colgate.edu\n") {
+		t.Fatalf("inventory answer is missing names: %.300s", result.Answer)
+	}
+	if result.Diagram != "" {
+		t.Fatal("inventories above the diagram limit should not render a diagram")
+	}
+}
+
+func TestModelSubdomainGoalIsPromotedToHierarchy(t *testing.T) {
+	model := &plannerModel{replies: []string{
+		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":["FQDN"],` +
+			`"direction":"both","purpose":"connected"}`,
+	}}
+	agent := Agent{Model: model, Runner: ToolRunner{
+		Graph: largeFQDNInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
+	}}
+
+	question := "What are all the subdomains within Colgate University's DNS namespace?"
+	q, err := agent.CompileQuestion(context.Background(), question)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Traversal != TraversalHierarchy || !q.ExcludeRoot || q.Source != SourceModelGoal {
+		t.Fatalf("model subdomain goal was not promoted to a hierarchy inventory: %+v", q)
+	}
+
+	result, err := agent.AskQuery(context.Background(), q, AdaptiveOptions{GuidanceRounds: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.calls != 1 || result.Incomplete || !strings.Contains(result.Answer, "Found 200 subdomain") {
+		t.Fatalf("calls=%d incomplete=%v answer=%.200s", model.calls, result.Incomplete, result.Answer)
+	}
+}
+
+func TestModelGoalWithOtherRelationshipsIsNotPromoted(t *testing.T) {
+	q := Query{
+		Question: "Which FQDNs share an IP address with colgate.edu?",
+		Subject:  PlanSubject{Type: "FQDN", Field: "name", Value: "colgate.edu"}, TargetTypes: []string{"FQDN"},
+		Relationships: []GoalRelation{
+			{SourceType: "FQDN", Label: "dns_record", RelationType: "BasicDNSRelation", DestinationType: "IPAddress"},
+		},
+	}
+	if promoteHierarchyGoal(&q) {
+		t.Fatal("a DNS record goal must not become a subdomain inventory")
+	}
+}

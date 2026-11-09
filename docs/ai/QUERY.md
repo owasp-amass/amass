@@ -37,6 +37,14 @@ question ──► CompileQuestion ──► Query ──► ValidateQuery ─�
 | `route` | Exactly the listed hops, in order (up to 3) | No | Every witnessed destination |
 | `explore` | Any schema-valid path within limits, filtered by `relationships`/`path_rule`/`purpose` | Yes | Paths the model selects from those witnessed |
 
+A hierarchy inventory is listed by Go and never sent to the model, so it is
+bounded by `-max-names` (default 1000, at most 10000) rather than the smaller
+model-context limits. Subdomain wordings such as "What are all the subdomains
+within example.com?" compile directly. When the model planner produces a goal
+that starts at an FQDN, asks for FQDNs and either uses only `node` edges or
+comes from a subdomain or DNS namespace question, it is promoted to the
+hierarchy traversal, so the listing is the same as `amass subs -names`.
+
 `ValidateQuery` rejects any subject selector, type, label, relation type or
 hop that is not in the OAM catalog, and any field that does not belong to the
 chosen traversal (for example `hops` on an explore query). Validation never

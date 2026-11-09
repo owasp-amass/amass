@@ -30,6 +30,7 @@ type AdaptiveOptions struct {
 	MaxPathsPerAsset int
 	MaxExpansions    int
 	GuidanceRounds   int // 0 disables optional intermediate guidance; positive values 1..3
+	MaxInventory     int // names listed by a hierarchy inventory; 0 uses MaxMatches, then the default
 }
 
 type adaptiveSelection struct {
@@ -432,6 +433,10 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 	return nil, nil
 }
 
+// maxInventoryDiagramPaths keeps inventory diagrams readable; larger
+// inventories are returned as a list without a diagram.
+const maxInventoryDiagramPaths = 100
+
 func adaptiveDiagram(paths []PlanMatch) string {
 	nodes := map[string]Asset{}
 	edges := map[string]Relation{}
@@ -666,8 +671,16 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		out.ThirdParties = thirdPartyConnections(attrCatalog, search.Matches)
 	}
 
+	// An inventory can list more names than evidence inspection allows, so
+	// provenance is sampled from the first paths; the rest are reported as
+	// unassessed rather than dropped.
+	inspect := candidates
+	if fqdnInventory && len(inspect) > a.Runner.Limits.MaxFind {
+		inspect = inspect[:a.Runner.Limits.MaxFind]
+	}
+
 	evidenceStarted := time.Now()
-	dossier, err := EvaluatePathEvidence(ctx, a.Runner.Graph, a.Runner.Limits, candidates)
+	dossier, err := EvaluatePathEvidence(ctx, a.Runner.Graph, a.Runner.Limits, inspect)
 	if err != nil {
 		out.Incomplete = true
 		out.recordTrace(evidenceStarted,
@@ -779,6 +792,9 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	if fqdnInventory || typedRelation {
 		if fqdnInventory {
 			out.Answer = fqdnInventoryAnswerScoped(root, selected, search.Truncated, search.Reason, q.ExcludeRoot)
+			if len(selected) > maxInventoryDiagramPaths {
+				return out, nil
+			}
 		} else {
 			out.Answer = typedRelationAnswer(root, typedIntent, selected, search.Truncated, search.Reason)
 			if len(selected) == 0 {
