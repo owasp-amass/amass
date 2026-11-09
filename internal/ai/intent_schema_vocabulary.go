@@ -27,26 +27,19 @@ var relationVocabulary = map[string][]string{
 	"certificate":        {"certificate", "certificates", "tls cert", "ssl cert", "server certificate", "tls certificate"},
 	"san_dns_name":       {"subject alternative name", "subject alternative names", "san", "sans", "certificate san", "certificate dns name", "certificate dns names"},
 	"contains":           {"containment", "contains", "contained within", "encompasses", "includes"},
-	"service":            {"service", "services", "exposed service", "network service"},
 	"ip_address":         {"ip address", "ip addresses", "network address", "network addresses"},
-	"netblock":           {"netblock", "netblocks", "ip block", "ip blocks", "network range"},
 	"location":           {"location", "locations", "physical location", "geolocation"},
-	"product":            {"product", "products", "software product", "application"},
 	"account":            {"account", "accounts", "user account", "cloud account"},
 	"contact":            {"contact", "contacts", "point of contact"},
-	"email":              {"email", "email address", "email addresses", "mailbox"},
 	"domain":             {"domain", "domain name", "domain names", "url domain", "url hostname"},
-	"redirect":           {"redirect", "redirects", "redirection", "http redirect", "url redirect"},
-	"cname_record":       {"cname", "cname record", "canonical name", "alias record", "dns alias"},
-	"a_record":           {"a record", "ipv4 record", "dns a record"},
-	"aaaa_record":        {"aaaa record", "ipv6 record", "dns aaaa record"},
-	"mx_record":          {"mx record", "mail exchange", "mail exchanger", "mail server record"},
-	"ns_record":          {"ns record", "nameserver", "name server", "name servers"},
-	"txt_record":         {"txt record", "dns txt", "text record"},
-	"autonomous_system":  {"autonomous system", "autonomous systems", "asn association", "bgp origin"},
-	"belongs_to":         {"belongs to", "membership", "member of"},
-	"ownership":          {"ownership", "owned by", "owns", "owner"},
-	"associated_with":    {"association", "associated with", "related to", "connected with"},
+	// Labels whose meaning depends on relation content (A, AAAA, MX, TXT,
+	// CNAME records are all "dns_record" edges distinguished by RR type) are
+	// deliberately absent until the planner can filter on that content.
+	"port":         {"open port", "open ports", "exposed service", "exposed services", "network service", "listening service"},
+	"name_server":  {"name server", "name servers", "nameserver", "nameservers", "registered name servers"},
+	"product_used": {"product used", "products used", "software in use", "technology used", "technologies used"},
+	"announces":    {"announces", "announced by", "bgp announcement", "bgp announcements", "bgp origin"},
+	"member":       {"member", "members", "membership", "member of"},
 }
 
 var aliasPunctuation = regexp.MustCompile(`[^a-z0-9]+`)
@@ -290,4 +283,15 @@ func compactOperationVocabulary() string {
 		lines = append(lines, kind+": "+strings.Join(values, ", "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// CuratedRelationLabels returns the OAM labels that have curated aliases,
+// sorted. Tests use it to reject aliases for labels OAM does not register.
+func CuratedRelationLabels() []string {
+	labels := make([]string, 0, len(relationVocabulary))
+	for label := range relationVocabulary {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	return labels
 }
