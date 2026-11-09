@@ -317,7 +317,9 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  planStarted:=time.Now()
  // Narrow, taxonomy-validated explicit questions do not need to pay for
  // an LLM schema transcription. Ambiguous questions still use planGoal.
- goal,grounded:=deterministicExplicitOrganizationGoal(question,a.Runner.Catalog)
+ goal,fqdnInventory:=deterministicFQDNInventoryGoal(question,a.Runner.Catalog)
+ grounded:=fqdnInventory
+ if !grounded {goal,grounded=deterministicExplicitOrganizationGoal(question,a.Runner.Catalog)}
  var err error
  if !grounded{goal,err=a.planGoal(ctx,question)}
  if err!=nil{out.Incomplete=true;out.recordTrace(planStarted,InvestigationTraceEvent{Stage:"goal_planning",Incomplete:true,Detail:err.Error()});return out,err}
@@ -362,7 +364,12 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  out.recordTrace(resolveStarted,InvestigationTraceEvent{Stage:"resolve_asset",Detail:root.Type})
  if a.Runner.Limits.MaxToolCalls<2{out.Incomplete=true;return out,errors.New("two graph tool operations must be permitted")}
  searchStarted:=time.Now()
- search,err:=a.guidedInvestigation(ctx,question,goal,root,opts,&out)
+ var search GraphSearchResult
+ if fqdnInventory {
+  search,err=searchFQDNInventory(ctx,a.Runner.Graph,a.Runner.Limits,root,opts)
+ }else{
+  search,err=a.guidedInvestigation(ctx,question,goal,root,opts,&out)
+ }
  if err!=nil{out.Incomplete=true;out.recordTrace(searchStarted,InvestigationTraceEvent{Stage:"guided_search",Incomplete:true,Detail:err.Error()});return out,err}
  out.recordTrace(searchStarted,InvestigationTraceEvent{Stage:"guided_search",OutputPaths:len(search.Matches),GraphNodes:search.VisitedNodes,GraphEdges:search.VisitedEdges,PathExpansions:search.ExpandedPaths,Incomplete:search.Truncated,Detail:search.Reason})
  out.ToolCalls++
@@ -391,7 +398,24 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  out.recordTrace(evidenceStarted,InvestigationTraceEvent{Stage:"evidence_inspection",InputPaths:len(candidates),OutputPaths:len(dossier.Paths),EdgeEvidenceLookups:dossier.InspectedEdges,EvidenceRecords:recordCount,Incomplete:dossier.Truncated,Detail:dossier.Reason})
  out.EvidenceDossier=&dossier
  selectionStarted:=time.Now()
- selected,groups,deterministic,err:=a.selectAnswerPaths(ctx,question,goal,candidates,&dossier)
+ var selected []PlanMatch
+ var groups []AnswerGroup
+ var deterministic bool
+ if fqdnInventory {
+  // Every validated node descendant directly answers this inventory
+  // question. Do not ask an LLM to arbitrarily pick five FQDNs.
+  deterministic=true
+  selected=append([]PlanMatch(nil),candidates...)
+  groups=make([]AnswerGroup,0,len(selected))
+  for _,p:=range selected{
+   last:=p.Nodes[len(p.Nodes)-1]
+   groups=append(groups,AnswerGroup{AssetID:last.ID,AssetType:last.Type,
+    Display:humanAsset(last),SemanticSignature:pathSemanticSignature(p),
+    PreferredPathID:p.PathID,AlternativePathIDs:[]string{},DirectToGoal:true})
+  }
+ }else{
+  selected,groups,deterministic,err=a.selectAnswerPaths(ctx,question,goal,candidates,&dossier)
+ }
  out.AnswerGroups=groups
  if err!=nil{out.Incomplete=true;out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),Incomplete:true,Detail:err.Error()});return out,err}
  selectionDetail:="model_evaluation"
@@ -407,7 +431,12 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
   ev,ok:=assessed[id]
   if !ok||ev.Status!="multiple_source_tags_on_each_edge"{out.EvidenceIncomplete=true}
  }
- out.Incomplete=search.Truncated || len(selected)==0
+ out.Incomplete=search.Truncated || (!fqdnInventory&&len(selected)==0)
+ if fqdnInventory {
+  out.Answer=fqdnInventoryAnswer(root,selected,search.Truncated,search.Reason)
+  out.Diagram=adaptiveDiagram(selected)
+  return out,nil
+ }
  if len(selected)==0{
   out.Answer="No sufficiently supported answer was identified in the witnessed OAM paths. This does not prove that the requested relationship is absent."
   if !search.Truncated && !goal.Subject.UsesOrganizationResolution(){
