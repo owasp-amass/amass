@@ -67,7 +67,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&aliasesPath, "organization-aliases", "", "Optional JSON file with explicitly sourced organization alias mappings (read-only)")
 	fs.StringVar(&classifierPath, "classifier-model", "", "Optional local linear model JSON (untrained weights should not be used for production decisions)")
 	fs.StringVar(&classifierEndpoint, "classifier-endpoint", "", "Provider-neutral classifier service URL, e.g., http://classifier:8092")
-	fs.BoolVar(&classifierReview, "classifier-review", false, "Permit review-only triage without invoking a generative model; never inserts OAM edges")
+	fs.BoolVar(&classifierReview, "classifier-review", true, "Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute, "Maximum time per model request (e.g., 4m for local Ollama)")
 	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute, "Maximum total time for a single investigation")
@@ -157,10 +157,10 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		plan:=ai.PlanCollection(ai.AssetSelector{Type:subjectType,Field:subjectField,Value:subjectValue})
 		return collectTarget(ctx,cfg,plan,collectionApproval,operation=="collect",out)
 	}
-	if classifierReview && classifierPath == "" && classifierEndpoint == "" {
-		return errors.New("-classifier-review requires -classifier-model")
-	}
-	var localClassifier classify.Classifier
+	
+	// Default to deterministic classification of observed OAM evidence; a trained
+	// local artifact or independent service can replace it without selecting an LLM.
+	var localClassifier classify.Classifier = classify.EvidenceRuleClassifier{}
 	if classifierEndpoint!="" && classifierPath!="" {return errors.New("choose either classifier service endpoint or local model file")}
 	if classifierEndpoint!="" {
 		if err:=validateClassifierEndpoint(classifierEndpoint);err!=nil{return err}
