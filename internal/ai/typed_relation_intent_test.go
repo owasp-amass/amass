@@ -146,3 +146,58 @@ func TestTypedRelationIntentRejectsAmbiguityAndInventedTaxonomy(t *testing.T){
   t.Fatal("ambiguous opposite edge directions must fall back to semantic planning")
  }
 }
+
+func TestTypedRelationIntentFirstHopEmptyDoesNotInventOrganizationAbsence(t *testing.T){
+ g:=typedIntentGraph()
+ // Simulate FQDNs collected by subs, but without the URL -> domain edge.
+ edges:=make([]Relation,0,len(g.links))
+ for _,edge:=range g.links{if edge.Label!="domain"{edges=append(edges,edge)}}
+ g.links=edges
+ model:=&plannerModel{}
+ q:="Which organizations are connected to tech.acme.example via domain and website relationships?"
+ got,err:=(Agent{Model:model,Runner:ToolRunner{Graph:g,Catalog:typedIntentTestCatalog,Limits:DefaultLimits()}}).
+  AskAdaptive(context.Background(),q,AdaptiveOptions{})
+ if err!=nil{t.Fatal(err)}
+ if model.calls!=0{t.Fatalf("explicit typed relation unexpectedly called model: %d",model.calls)}
+ if got.Search==nil||got.Search.Truncated||!got.Search.Exhausted||got.Incomplete||len(got.Matches)!=0{
+  t.Fatalf("zero accepted first hop must be a completed, empty typed search: %+v",got)
+ }
+ hops:=got.Search.HopDiagnostics
+ if len(hops)!=1||hops[0].Hop!=1||hops[0].Direction!="in"||
+  hops[0].Label!="domain"||hops[0].QueriedPaths!=1||hops[0].ReturnedEdges!=0||hops[0].OutputPaths!=0{
+  t.Fatalf("incorrect missing first hop trace: %+v",hops)
+ }
+ if !strings.Contains(got.Answer,"first empty relationship hop was 1")||
+  !strings.Contains(got.Answer,"subsequent hop(s) were not evaluated")||
+  !strings.Contains(got.Answer,"other OAM relationship paths"){
+  t.Fatalf("zero organization answer must explain missing URL/domain bridge: %s",got.Answer)
+ }
+ for _,event:=range got.Trace{
+  if event.Stage=="path_selection"&&event.Incomplete{
+   t.Fatalf("completed empty deterministic search incorrectly marked incomplete: %+v",event)
+  }
+ }
+}
+
+func TestTypedRelationIntentReportsSecondHopWhenWebsiteRelationMissing(t *testing.T){
+ g:=typedIntentGraph()
+ edges:=make([]Relation,0,len(g.links))
+ for _,edge:=range g.links{if edge.Label!="website"{edges=append(edges,edge)}}
+ g.links=edges
+ q:="Which organizations are connected to tech.acme.example via domain and website relationships?"
+ intent,ok:=deterministicTypedRelationIntent(q,typedIntentTestCatalog)
+ if !ok{t.Fatal("expected a two-hop typed intent")}
+ result,err:=searchTypedRelationIntent(context.Background(),g,DefaultLimits(),g.assets["host"],intent,AdaptiveOptions{})
+ if err!=nil{t.Fatal(err)}
+ if len(result.HopDiagnostics)!=2{t.Fatalf("expected attempted website hop, got %+v",result.HopDiagnostics)}
+ first,second:=result.HopDiagnostics[0],result.HopDiagnostics[1]
+ if first.ReturnedEdges!=1||first.OutputPaths!=1||second.QueriedPaths!=1||
+  second.ReturnedEdges!=0||second.Label!="website"||result.Truncated{
+  t.Fatalf("did not distinguish first-hop success from second-hop failure: %+v",result.HopDiagnostics)
+ }
+ explanation:=typedRelationEmptyExplanation(result,intent)
+ if !strings.Contains(explanation,"first empty relationship hop was 2")||
+  strings.Contains(explanation,"subsequent hop(s)"){
+  t.Fatalf("incorrect missing second hop explanation: %s",explanation)
+ }
+}
