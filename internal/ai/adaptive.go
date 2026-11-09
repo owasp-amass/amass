@@ -420,9 +420,9 @@ func adaptiveDiagram(paths []PlanMatch) string {
 	return Mermaid(walk)
 }
 
-// AskAdaptive is read-only. It plans the goal, resolves the root exactly,
-// searches all schema-valid OAM transitions up to the resource limits, then
-// validates model-selected results against witnessed paths.
+// AskAdaptive is read-only. It compiles the question into a Query (using a
+// deterministic compiler when the wording is narrow and explicit, otherwise
+// the model goal planner) and executes it with AskQuery.
 func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOptions) (Investigation, error) {
 	var out Investigation
 	if a.Model == nil || a.Runner.Graph == nil || a.Runner.Catalog == nil {
@@ -435,35 +435,57 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 		return out, err
 	}
 	planStarted := time.Now()
-	// Narrow, taxonomy-validated explicit questions do not need to pay for
-	// an LLM schema transcription. Ambiguous questions still use planGoal.
-	goal, fqdnInventory := deterministicFQDNInventoryGoal(question, a.Runner.Catalog)
-	typedIntent, typedRelation := TypedRelationIntent{}, false
-	grounded := fqdnInventory
-	if !grounded {
-		typedIntent, typedRelation = deterministicTypedRelationIntent(question, a.Runner.Catalog)
-		if typedRelation {
-			goal = typedIntent.Goal
-			grounded = true
-		}
-	}
-	if !grounded {
-		goal, grounded = deterministicExplicitOrganizationGoal(question, a.Runner.Catalog)
-	}
-	var err error
-	if !grounded {
-		goal, err = a.planGoal(ctx, question)
-	}
+	q, err := a.CompileQuestion(ctx, question)
 	if err != nil {
 		out.Incomplete = true
 		out.recordTrace(planStarted, InvestigationTraceEvent{Stage: "goal_planning", Incomplete: true, Detail: err.Error()})
 		return out, err
 	}
 	planningMode := "model_interpretation"
-	if grounded {
+	if q.Source != SourceModelGoal {
 		planningMode = "deterministic_schema_grounding"
 	}
 	out.recordTrace(planStarted, InvestigationTraceEvent{Stage: "goal_planning", Detail: planningMode})
+	return a.executeQuery(ctx, q, opts, out)
+}
+
+// AskQuery validates and executes a structured Query, such as one supplied
+// by a CLI or MCP caller. Route and hierarchy queries need no model; explore
+// queries use the model to guide search and choose among witnessed paths.
+func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (Investigation, error) {
+	var out Investigation
+	if a.Runner.Graph == nil || a.Runner.Catalog == nil {
+		return out, errors.New("graph and OAM catalog required")
+	}
+	if a.Model == nil && !q.Deterministic() {
+		return out, errors.New("a model is required for explore queries")
+	}
+	if err := a.Runner.Limits.Validate(); err != nil {
+		return out, err
+	}
+	var selectors []AssetSearchSchema
+	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
+		selectors = c.SearchFields()
+	}
+	if err := ValidateQuery(q, a.Runner.Catalog.Relations(), selectors, a.Runner.Limits); err != nil {
+		out.Incomplete = true
+		return out, fmt.Errorf("invalid query: %w", err)
+	}
+	return a.executeQuery(ctx, q, opts, out)
+}
+
+// executeQuery runs a validated Query: resolve the root exactly, search,
+// inspect source evidence, select paths and render the answer.
+func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, out Investigation) (Investigation, error) {
+	out.Query = &q
+	goal := q.Goal()
+	question := q.Question
+	if strings.TrimSpace(question) == "" {
+		question = q.Describe()
+	}
+	fqdnInventory := q.Traversal == TraversalHierarchy
+	typedRelation := q.Traversal == TraversalRoute
+	typedIntent := TypedRelationIntent{Goal: goal, Hops: q.Hops}
 	out.Goal = &goal
 	resolveStarted := time.Now()
 	var root Asset
@@ -527,6 +549,7 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 	}
 	searchStarted := time.Now()
 	var search GraphSearchResult
+	var err error
 	if fqdnInventory {
 		search, err = searchFQDNInventory(ctx, a.Runner.Graph, a.Runner.Limits, root, opts)
 	} else if typedRelation {
@@ -626,7 +649,7 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 	out.Incomplete = search.Truncated || (!fqdnInventory && !typedRelation && len(selected) == 0)
 	if fqdnInventory || typedRelation {
 		if fqdnInventory {
-			out.Answer = fqdnInventoryAnswerScoped(root, selected, search.Truncated, search.Reason, isSubdomainInventoryQuestion(question))
+			out.Answer = fqdnInventoryAnswerScoped(root, selected, search.Truncated, search.Reason, q.ExcludeRoot)
 		} else {
 			out.Answer = typedRelationAnswer(root, typedIntent, selected, search.Truncated, search.Reason)
 			if len(selected) == 0 {

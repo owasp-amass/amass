@@ -36,6 +36,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
+	var queryPath string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
 	var modelTimeout, investigationTimeout time.Duration
@@ -50,6 +51,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
+	fs.StringVar(&queryPath, "query", "", "JSON Query file to execute with ask (\"-\" reads stdin); route and hierarchy queries need no model")
 	fs.StringVar(&subjectType, "subject-type", "", "Starting OAM asset type (FQDN, IPAddress, Organization, etc.)")
 	fs.StringVar(&subjectField, "subject-field", "", "Indexed OAM field used to resolve the subject")
 	fs.StringVar(&subjectValue, "subject-value", "", "Exact subject identifier")
@@ -79,10 +81,10 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: amass ai [flags] ask|mcp|infer|scan|search|collect-plan|collect")
+		return errors.New("usage: amass ai [flags] ask|plan|mcp|infer|scan|search|collect-plan|collect")
 	}
 	operation := fs.Arg(0)
-	if operation != "ask" && operation != "mcp" && operation != "infer" && operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
+	if operation != "ask" && operation != "plan" && operation != "mcp" && operation != "infer" && operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
 		return fmt.Errorf("unknown operation %q", operation)
 	}
 	cfg := config.NewConfig()
@@ -182,6 +184,33 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if investigationTimeout < modelTimeout || investigationTimeout > 30*time.Minute {
 		return errors.New("investigation timeout must be at least model timeout and at most 30m")
 	}
+	// Only plan, ask, infer and scan can use a model, and plan and ask can
+	// run deterministic queries without one. MCP, search and collection never
+	// build a model client, so a model setting cannot break them.
+	usesModel := operation == "plan" || operation == "ask" || operation == "infer" || operation == "scan"
+	var provider ai.Model
+	if usesModel && modelName != "" {
+		var err error
+		provider, err = newProvider(providerName, endpoint, modelName, os.Getenv(keyEnv), allowHTTP, modelTimeout, maxTokens, temperature)
+		if err != nil {
+			return err
+		}
+	}
+	if operation == "plan" {
+		// Compiling a question reads only the static OAM catalog, never the
+		// Asset Database, so no database is opened.
+		if question == "" {
+			return errors.New("-question required")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
+		defer cancel()
+		agent := ai.Agent{Model: provider, Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}}
+		q, err := agent.CompileQuestion(ctx, question)
+		if err != nil {
+			return err
+		}
+		return writeJSON(out, q)
+	}
 	repo := tools.OpenGraphDatabase(cfg)
 	if repo == nil {
 		return errors.New("unable to open OAM database")
@@ -249,26 +278,22 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		}
 		localClassifier = model
 	}
-	if modelName == "" {
+	if operation == "ask" && queryPath != "" {
+		if question != "" {
+			return errors.New("use either -question or -query, not both")
+		}
+		q, err := readQuery(queryPath, in)
+		if err != nil {
+			return err
+		}
+		result, err := (ai.Agent{Model: provider, Runner: runner}).AskQuery(ctx, q, ai.AdaptiveOptions{MaxDepth: graphDepth, MaxMatches: graphMatches, MaxPathsPerAsset: graphAlternates, MaxExpansions: graphExpansions, GuidanceRounds: guidanceRounds})
+		if err != nil {
+			return err
+		}
+		return writeInvestigation(out, outputFormat, result)
+	}
+	if provider == nil {
 		return errors.New("-model required")
-	}
-	var provider ai.Model
-	switch providerName {
-	case "compatible":
-		if endpoint == "" {
-			endpoint = "http://127.0.0.1:11434/v1/chat/completions"
-		}
-		provider = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}, MaxTokens: maxTokens, Temperature: temperature}
-	case "anthropic":
-		if endpoint == "" {
-			endpoint = "https://api.anthropic.com/v1/messages"
-		}
-		provider = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}, MaxTokens: maxTokens, Temperature: temperature}
-	default:
-		return fmt.Errorf("unknown model provider %q", providerName)
-	}
-	if err := validateModelEndpoint(endpoint, allowHTTP); err != nil {
-		return err
 	}
 	switch operation {
 	case "scan":
@@ -281,26 +306,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
-		if outputFormat == "text" {
-			_, err = fmt.Fprintln(out, result.Answer)
-			return err
-		}
-		if outputFormat == "mermaid" {
-			if result.Diagram == "" {
-				return fmt.Errorf("investigation did not produce a diagram: %s", result.Answer)
-			}
-			_, err = fmt.Fprint(out, result.Diagram)
-			return err
-		}
-		if outputFormat != "json" {
-			return errors.New("-format must be json, text, or mermaid")
-		}
-		pretty, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(out, string(pretty))
-		return err
+		return writeInvestigation(out, outputFormat, result)
 	case "infer":
 		if candidatePath == "" || journalPath == "" {
 			return errors.New("-candidate and -journal required")
