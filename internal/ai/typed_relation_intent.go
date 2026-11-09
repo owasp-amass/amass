@@ -87,6 +87,13 @@ func intentSubject(raw string,selectors []AssetSearchSchema)(PlanSubject,bool){
 // explicit labels and source/target types. Unordered labels may be permuted,
 // but no intermediate relation is inferred, and competing paths fail closed.
 func compileCatalogHops(root,target string,hint explicitRelationHint,relations []RelationshipSchema)([]PlanHop,bool){
+ return compileCatalogHopsDirected(root,target,hint,relations,"")
+}
+
+// Only an explicitly requested hierarchy is allowed to constrain edge
+// direction before compiling the route. Other relations stay ambiguous if
+// both orientations are valid from the requested source and destination.
+func compileCatalogHopsDirected(root,target string,hint explicitRelationHint,relations []RelationshipSchema,requiredFirstDirection string)([]PlanHop,bool){
  if len(hint.Labels)==0||len(hint.Labels)>maxPlanHops{return nil,false}
  type state struct{kind string;hops []PlanHop;used uint8}
  unique:=map[string][]PlanHop{}
@@ -107,6 +114,7 @@ func compileCatalogHops(root,target string,hint explicitRelationHint,relations [
     if !strings.EqualFold(r.Label,label){continue}
     for _,choice:=range []struct{from,to,dir string}{{r.SourceType,r.DestinationType,"out"},{r.DestinationType,r.SourceType,"in"}}{
      if choice.from!=s.kind{continue}
+     if len(s.hops)==0&&requiredFirstDirection!=""&&choice.dir!=requiredFirstDirection{continue}
      hop:=PlanHop{Direction:choice.dir,Label:r.Label,RelationType:r.RelationType,DestinationType:choice.to}
      visit(state{kind:choice.to,hops:append(append([]PlanHop(nil),s.hops...),hop),used:s.used|(1<<uint(i))})
     }
@@ -135,7 +143,9 @@ func deterministicTypedRelationIntent(question string,catalog SchemaCatalog)(Typ
  var target string
  var hops []PlanHop
  for _,candidate:=range candidates{
-  candidateHops,valid:=compileCatalogHops(subject.Type,candidate,hint,relations)
+  direction:=""
+  if subdomainTerm(matches[1]){direction="out"}
+  candidateHops,valid:=compileCatalogHopsDirected(subject.Type,candidate,hint,relations,direction)
   if !valid{continue}
   if subdomainTerm(matches[1]){
    // "Subdomain" is not a generic FQDN alias: it additionally asserts
