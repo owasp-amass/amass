@@ -143,22 +143,22 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if !validOrigin(r) {
-		http.Error(w, "origin forbidden", 403)
+		http.Error(w, "origin forbidden", http.StatusForbidden)
 		return
 	}
 	if s.Token == "" {
-		http.Error(w, "server token not configured", 503)
+		http.Error(w, "server token not configured", http.StatusServiceUnavailable)
 		return
 	}
 	expected := "Bearer " + s.Token
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(expected)) != 1 {
 		w.Header().Set("WWW-Authenticate", "Bearer")
-		http.Error(w, "unauthorized", 401)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if r.Method == http.MethodGet {
 		w.Header().Set("Allow", "POST, DELETE")
-		http.Error(w, "SSE not offered; use POST", 405)
+		http.Error(w, "SSE not offered; use POST", http.StatusMethodNotAllowed)
 		return
 	}
 	if r.Method == http.MethodDelete {
@@ -170,7 +170,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Unlock()
 		if !exists {
-			http.Error(w, "unknown MCP session", 404)
+			http.Error(w, "unknown MCP session", http.StatusNotFound)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -178,21 +178,21 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST, DELETE")
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		http.Error(w, "application/json required", 415)
+		http.Error(w, "application/json required", http.StatusUnsupportedMediaType)
 		return
 	}
 	// Streamable HTTP clients must advertise JSON and SSE; this server
 	// deliberately selects JSON responses for single-message POSTs.
 	accept := r.Header.Get("Accept")
 	if !strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/event-stream") {
-		http.Error(w, "Accept must include application/json and text/event-stream", 406)
+		http.Error(w, "Accept must include application/json and text/event-stream", http.StatusNotAcceptable)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	var req incoming
 	if err := d.Decode(&req); err != nil {
@@ -215,7 +215,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}
 		sessionBytes := make([]byte, 24)
 		if _, err := rand.Read(sessionBytes); err != nil {
-			http.Error(w, "session initialization failed", 500)
+			http.Error(w, "session initialization failed", http.StatusInternalServerError)
 			return
 		}
 		id := hex.EncodeToString(sessionBytes)
@@ -236,7 +236,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	initialized := sess != nil && sess.initialized
 	s.mu.Unlock()
 	if sess == nil {
-		http.Error(w, "MCP session missing or expired", 404)
+		http.Error(w, "MCP session missing or expired", http.StatusNotFound)
 		return
 	}
 	if len(req.ID) == 0 {

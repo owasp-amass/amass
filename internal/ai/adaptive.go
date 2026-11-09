@@ -623,7 +623,7 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 			out.EvidenceIncomplete = true
 		}
 	}
-	out.Incomplete = search.Truncated || (!(fqdnInventory || typedRelation) && len(selected) == 0)
+	out.Incomplete = search.Truncated || (!fqdnInventory && !typedRelation && len(selected) == 0)
 	if fqdnInventory || typedRelation {
 		if fqdnInventory {
 			out.Answer = fqdnInventoryAnswerScoped(root, selected, search.Truncated, search.Reason, isSubdomainInventoryQuestion(question))

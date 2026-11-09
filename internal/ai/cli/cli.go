@@ -414,7 +414,7 @@ func validateClassifierEndpoint(endpoint string) error {
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return errors.New("invalid classifier endpoint")
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "classifier" || u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1")) {
+	if u.Scheme != "https" && (u.Scheme != "http" || (u.Hostname() != "classifier" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1")) {
 		return errors.New("classifier HTTP is permitted only on the trusted Compose service hostname or localhost; otherwise use HTTPS")
 	}
 	return nil

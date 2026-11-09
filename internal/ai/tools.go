@@ -136,7 +136,7 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 		if !ok {
 			return nil, errors.New("asset selector catalog unavailable")
 		}
-		if err := request.AssetSelector.Validate(catalog.SearchFields()); err != nil {
+		if err := request.Validate(catalog.SearchFields()); err != nil {
 			return nil, err
 		}
 		if request.Limit == 0 {
@@ -165,7 +165,7 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 		if err := decodeStrict(args, &a); err != nil {
 			return nil, err
 		}
-		if err := a.OrganizationQuery.Validate(); err != nil {
+		if err := a.Validate(); err != nil {
 			return nil, err
 		}
 		if a.Limit == 0 {

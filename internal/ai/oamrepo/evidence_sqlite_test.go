@@ -22,7 +22,7 @@ func TestEdgeProvenanceDoesNotAliasEntityTagsOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	parent, err := db.CreateAsset(ctx, &org.Organization{ID: "synthetic-parent", Name: "Synthetic Parent"})
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestUntaggedEdgeReturnsEmptyEvidenceOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	from, err := db.CreateAsset(ctx, &org.Organization{ID: "synthetic-untagged-parent", Name: "Untagged Parent"})
 	if err != nil {
 		t.Fatal(err)

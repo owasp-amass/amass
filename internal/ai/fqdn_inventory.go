@@ -207,13 +207,6 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 	return out, nil
 }
 
-// The apex is an FQDN asset, but is not itself a subdomain of the apex.
-// Keep the older generic FQDN-inventory contract and specialize only when
-// the question explicitly requests subdomains.
-func fqdnInventoryAnswer(root Asset, paths []PlanMatch, truncated bool, reason string) string {
-	return fqdnInventoryAnswerScoped(root, paths, truncated, reason, false)
-}
-
 func fqdnInventoryAnswerScoped(root Asset, paths []PlanMatch, truncated bool, reason string, subdomainsOnly bool) string {
 	names := make([]string, 0, len(paths)+1)
 	if !subdomainsOnly {

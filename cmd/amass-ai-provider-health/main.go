@@ -47,7 +47,7 @@ func run() error {
 	if err != nil || u.Hostname() == "" || u.User != nil {
 		return errors.New("invalid model endpoint")
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && os.Getenv("AMASS_AI_ALLOW_HTTP") == "true") {
+	if u.Scheme != "https" && (u.Scheme != "http" || os.Getenv("AMASS_AI_ALLOW_HTTP") != "true") {
 		return errors.New("model HTTP requires explicit AMASS_AI_ALLOW_HTTP=true; otherwise use HTTPS")
 	}
 	timeout := 4 * time.Minute
@@ -65,7 +65,7 @@ func run() error {
 		model = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
 	case "anthropic":
 		if apiKey == "" {
-			return errors.New("Anthropic requires AMASS_AI_API_KEY")
+			return errors.New("the Anthropic provider requires AMASS_AI_API_KEY")
 		}
 		model = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
 	default:
