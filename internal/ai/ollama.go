@@ -97,7 +97,17 @@ func (m OllamaModel) GenerateStructured(ctx context.Context, history []Message, 
 	if len(schema.Schema) == 0 {
 		return Response{}, errors.New("structured generation requires a JSON schema")
 	}
-	return m.chat(ctx, history, nil, schema.Schema)
+	resp, err := m.chat(ctx, history, nil, schema.Schema)
+	if err != nil && strings.Contains(err.Error(), "ollama HTTP status 400") {
+		// An Ollama build that cannot compile this schema into a grammar
+		// should not block planning: ask again without the constraint and let
+		// Go validation decide, as for providers without structured output.
+		lower := strings.ToLower(err.Error())
+		if strings.Contains(lower, "format") || strings.Contains(lower, "schema") || strings.Contains(lower, "grammar") {
+			return m.chat(ctx, history, nil, nil)
+		}
+	}
+	return resp, err
 }
 
 func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSpec, format map[string]any) (Response, error) {

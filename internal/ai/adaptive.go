@@ -138,6 +138,12 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 			return zero, err
 		}
 		goal, err := parseGoal(response.Text, selectors)
+		if err == nil && !explicit && (!prompt.NamesRelationship || goal.Purpose == "ultimate_parent") {
+			// The user asked for no particular relationships, so any the model
+			// added are its own guesses: they could only narrow the search, and
+			// an invalid one would reject an otherwise valid plan. Drop them.
+			goal.Relationships, goal.PathRule = nil, ""
+		}
 		if err == nil && explicit {
 			// Validate selectors, target types, traversal direction and purpose
 			// BEFORE replacing any hallucinated relationship list. An invalid

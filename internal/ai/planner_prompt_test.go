@@ -5,6 +5,7 @@
 package ai
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
@@ -104,5 +105,48 @@ func TestSlicedPlannerPromptIsMuchSmaller(t *testing.T) {
 	p = goalPlannerPrompt("Which organizations are connected to owasp.org via website relationships?", rels, sel, true)
 	if !p.Explicit || !strings.Contains(p.Text, "|website|") {
 		t.Fatal("explicit website relationship missing from the sliced catalog")
+	}
+}
+
+// replyModel returns the same planner reply on every call.
+type replyModel struct {
+	reply string
+	calls int
+}
+
+func (m *replyModel) Generate(context.Context, []Message, []ToolSpec) (Response, error) {
+	m.calls++
+	return Response{Text: m.reply}, nil
+}
+
+// Reproduces a Docker Desktop run: for a parent question that names no
+// relationship, qwen3:8b added FQDN --website--> Organization, which OAM
+// does not have, and every attempt was rejected.
+func TestPlannerDropsRelationshipsTheQuestionDidNotRequest(t *testing.T) {
+	bad := `{"subject":{"type":"FQDN","field":"name","value":"owasp.org"},"target_types":["Organization"],"direction":"both","purpose":"ultimate_parent",` +
+		`"relationships":[{"source_type":"FQDN","label":"website","relation_type":"SimpleRelation","destination_type":"Organization"}],"path_rule":"all"}`
+	model := &replyModel{reply: bad}
+	agent := Agent{Model: model, Runner: ToolRunner{Limits: DefaultLimits(), Catalog: oamCatalog{}}}
+	q, err := agent.CompileQuestion(context.Background(), "What is the highest parent organization connected to owasp.org?")
+	if err != nil {
+		t.Fatalf("plan rejected: %v", err)
+	}
+	if len(q.Relationships) != 0 || q.PathRule != "" || q.Purpose != "ultimate_parent" || model.calls != 1 {
+		t.Fatalf("unrequested relationships must be dropped on the first attempt: %+v calls=%d", q, model.calls)
+	}
+
+	// "organization" names an asset type here, not the organization relationship.
+	p := goalPlannerPrompt("What is the highest parent organization connected to owasp.org?", oamCatalog{}.Relations(), oamCatalog{}.SearchFields(), true)
+	if p.NamesRelationship || !strings.Contains(p.Text, "names no OAM relationship") {
+		t.Fatal("a type word must not pull its same-named relationship into the slice")
+	}
+
+	// When the question does ask for a relationship, an invented transition
+	// is still rejected rather than silently dropped.
+	model = &replyModel{reply: `{"subject":{"type":"FQDN","field":"name","value":"owasp.org"},"target_types":["TLSCertificate"],"direction":"both","purpose":"connected",` +
+		`"relationships":[{"source_type":"FQDN","label":"certificate","relation_type":"SimpleRelation","destination_type":"Organization"}],"path_rule":"any"}`}
+	agent.Model = model
+	if _, err := agent.CompileQuestion(context.Background(), "Which certificates cover owasp.org?"); err == nil {
+		t.Fatal("invented transition accepted for a question that names a relationship")
 	}
 }
