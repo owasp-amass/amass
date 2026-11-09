@@ -25,9 +25,9 @@ type collectionResponse struct {
 	SessionToken string            `json:"session_token,omitempty"`
 }
 
-// collectTarget is deliberately separate from model tools. Without an exact
-// matching approval token, neither an engine session nor an Internet request
-// can be created. This phase starts one passive session and returns its token;
+// collectTarget is deliberately separate from model tools. Without the exact
+// confirmation ID of the reviewed plan, neither an engine session nor an
+// Internet request can be created. The ID is not a secret (see CollectionPlan). This phase starts one passive session and returns its token;
 // session monitoring and automatic query resumption are future integrations.
 func collectTarget(ctx context.Context, cfg *config.Config, plan ai.CollectionPlan, approved string, execute bool, out io.Writer) error {
 	response := collectionResponse{Status: plan.Status, Plan: plan}
