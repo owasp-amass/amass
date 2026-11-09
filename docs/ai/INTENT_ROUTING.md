@@ -83,3 +83,44 @@ semantics and ambiguity rules are tested.
 Regressions cover incoming URL association, FQDN/URL/Organization two-hop
 routes, alternate relation types, noisy graph neighborhoods, bounded
 partial results, and rejection of invented or ambiguous relations.
+
+ 
+## Understanding empty multi-hop answers
+
+A completed typed search with zero results means that **no witnessed path
+matching the exact requested edge labels, relation types and directions**
+was returned by the bounded database reader. It does NOT mean there are no
+assets of the destination type or that no other association exists.
+
+In JSON, `search.hop_diagnostics` now exposes the attempted hops,
+including `queried_paths`, `returned_edges`, `accepted_edges`, and
+`output_paths`. If an intermediate hop produces zero destinations,
+subsequent hops are skipped and the text answer identifies the first empty
+transition. For example, a request for Organizations connected to a FQDN
+via `domain` and `website` first traverses the **incoming**
+`URL --domain--> FQDN` relationship; without a witnessed URL candidate,
+the incoming `Organization --website--> URL` hop cannot run.
+
+To inspect the root's stored edge labels independently, first obtain the
+root entity ID from `asset_resolution.candidates[].asset.id`. On an
+isolated PostgreSQL deployment, perform a **read-only** check:
+
+```bash
+docker compose exec -T assetdb sh -c '
+  psql -U postgres -d "$AMASS_DB" -P pager=off -c "
+    SELECT CASE WHEN e.to_entity_id=1 THEN '\''in'\''
+                ELSE '\''out'\'' END AS direction,
+           e.label, count(*) AS edges
+    FROM public.edge e
+    WHERE e.to_entity_id=1 OR e.from_entity_id=1
+    GROUP BY 1, 2 ORDER BY 1, 2;"
+'
+```
+
+Replace ID `1` with the entity ID returned by resolution; it is not
+stable across deployments. This check distinguishes genuinely absent stored
+edges from a mistaken assumption that FQDN collection automatically creates
+URL and Organization relationship assets. It does not collect new data.
+
+The graph result intentionally avoids filling in missing URL or
+Organization relationships from an LLM response.
