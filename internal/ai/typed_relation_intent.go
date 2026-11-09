@@ -229,12 +229,18 @@ func searchTypedRelationIntent(ctx context.Context,graph Graph,limits Limits,roo
      out.Matches=append(out.Matches,witness)
      if len(out.Matches)>=maxMatches{out.Truncated=true;out.Reason="match limit";break}
     }else{
+     // A dense multi-hop graph may admit many paths between the same
+     // bounded set of nodes. Cap the frontier independently from the
+     // unique edge/node budgets to avoid unbounded intermediate memory.
+     if len(nextPaths)>=limits.MaxEdges{
+      out.Truncated=true;out.Reason="intermediate path limit";break
+     }
      nextPaths=append(nextPaths,witness)
     }
    }
-   if out.Reason=="match limit"||out.Reason=="edge limit"||out.Reason=="node limit"{break}
+   if out.Reason=="match limit"||out.Reason=="edge limit"||out.Reason=="node limit"||out.Reason=="intermediate path limit"{break}
   }
-  if out.Reason=="match limit"||out.Reason=="edge limit"||out.Reason=="node limit"||out.Reason=="path expansion limit"{break}
+  if out.Reason=="match limit"||out.Reason=="edge limit"||out.Reason=="node limit"||out.Reason=="intermediate path limit"||out.Reason=="path expansion limit"{break}
   paths=nextPaths
  }
  out.VisitedNodes=len(seenNodes)
