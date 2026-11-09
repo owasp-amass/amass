@@ -1,0 +1,333 @@
+# Copyright © by Jeff Foley 2017-2026. All rights reserved.
+# Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+# SPDX-License-Identifier: Apache-2.0
+
+# Meaning of every Open Asset Model relationship, for AI investigations.
+#
+# STATUS: draft for review. Nothing reads this file for decisions yet.
+#
+# Keyed exactly like OAM's own relationship table (source, label,
+# relation_type, destination) so it can move into open-asset-model
+# unchanged. A test fails when OAM defines a relationship missing here.
+#
+# attribution - what the edge says about who controls the SOURCE asset:
+#   controller     the destination identifies a party that controls the source
+#                  (domain registrant, certificate subject)
+#   controls       the source party controls the destination
+#                  (an organization's website, a parent's subsidiary)
+#   same_subject   the destination is the same subject in another form;
+#                  attribution passes through (FQDN to its domain record)
+#   shared         the destination may be shared with unrelated parties;
+#                  attribution does NOT pass through (certificate SANs)
+#   infrastructure technical dependency such as DNS resolution or routing;
+#                  reaches hosts and networks, not owners
+#   third_party    the destination is a separate provider, issuer, registrar
+#                  or operator
+#   attribute      descriptive data (identifiers, addresses, phones)
+#
+# purpose - the kind of question the edge helps answer:
+#   registration certificate corporate contact network dns web identity
+#   financial product hierarchy
+#
+# review: true marks an edge whose role varies in practice and needs a
+# maintainer's decision.
+
+version: 1
+relations:
+  - {source: Account, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity,
+     note: "Identifier of the account."}
+  - {source: Account, label: user, relation_type: SimpleRelation, destination: Organization,
+     attribution: controller, purpose: identity, review: true,
+     note: "The Person or Organization that uses the account; usually its controller, but a shared or delegated account can have other users."}
+  - {source: Account, label: user, relation_type: SimpleRelation, destination: Person,
+     attribution: controller, purpose: identity, review: true,
+     note: "The Person or Organization that uses the account; usually its controller, but a shared or delegated account can have other users."}
+  - {source: AutnumRecord, label: abuse_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: registration,
+     note: "Abuse handling contact; frequently a provider or registry service desk."}
+  - {source: AutnumRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration, review: true,
+     note: "Administrative contact for the AS number; usually the registrant organization, sometimes an agent."}
+  - {source: AutnumRecord, label: rdap_url, relation_type: SimpleRelation, destination: URL,
+     attribution: third_party, purpose: registration,
+     note: "RDAP service of the registry."}
+  - {source: AutnumRecord, label: registrant, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration,
+     note: "Registrant of the AS number (used by engine scope association). Owner of the address space; when reached from an FQDN through DNS it is the hosting network, not the FQDN owner."}
+  - {source: AutnumRecord, label: technical_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: registration, review: true,
+     note: "Technical contact for the AS number; often a network operator or provider rather than the registrant."}
+  - {source: AutnumRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
+     attribution: third_party, purpose: registration,
+     note: "WHOIS service of the registry."}
+  - {source: AutonomousSystem, label: announces, relation_type: SimpleRelation, destination: Netblock,
+     attribution: infrastructure, purpose: network,
+     note: "Prefixes routed by the AS; routing does not establish ownership of the prefix."}
+  - {source: AutonomousSystem, label: registration, relation_type: SimpleRelation, destination: AutnumRecord,
+     attribution: same_subject, purpose: registration,
+     note: "The AS number registration record (engine scope association)."}
+  - {source: ContactRecord, label: fqdn, relation_type: SimpleRelation, destination: FQDN,
+     attribution: attribute, purpose: contact, review: true,
+     note: "Domain listed in the contact (for example an email domain); may belong to the contact party or a provider."}
+  - {source: ContactRecord, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: contact,
+     note: "Identifier in the contact (for example a registry handle)."}
+  - {source: ContactRecord, label: location, relation_type: SimpleRelation, destination: Location,
+     attribution: attribute, purpose: contact,
+     note: "Postal location of the contact."}
+  - {source: ContactRecord, label: organization, relation_type: SimpleRelation, destination: Organization,
+     attribution: same_subject, purpose: contact,
+     note: "The organization named in this contact; attribution comes from how the contact was reached (registrant vs registrar, subject vs issuer)."}
+  - {source: ContactRecord, label: person, relation_type: SimpleRelation, destination: Person,
+     attribution: same_subject, purpose: contact,
+     note: "The person named in this contact; role depends on how the contact was reached."}
+  - {source: ContactRecord, label: phone, relation_type: SimpleRelation, destination: Phone,
+     attribution: attribute, purpose: contact,
+     note: "Phone number of the contact."}
+  - {source: ContactRecord, label: url, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: contact, review: true,
+     note: "URL listed in the contact; often the contact party's own website."}
+  - {source: DomainRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration, review: true,
+     note: "Administrative contact; usually the registrant, but privacy services and agents are common."}
+  - {source: DomainRecord, label: billing_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration, review: true,
+     note: "Billing contact; usually the registrant, sometimes a reseller."}
+  - {source: DomainRecord, label: name_server, relation_type: SimpleRelation, destination: FQDN,
+     attribution: third_party, purpose: dns,
+     note: "Authoritative name servers; usually a DNS provider."}
+  - {source: DomainRecord, label: registrant_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration,
+     note: "Registrant of the domain (used by engine scope association). The strongest documented owner signal for a domain."}
+  - {source: DomainRecord, label: registrar_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: registration,
+     note: "The registrar, a service provider."}
+  - {source: DomainRecord, label: technical_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: registration, review: true,
+     note: "Technical contact; often the hosting provider or DNS operator."}
+  - {source: DomainRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
+     attribution: third_party, purpose: registration,
+     note: "WHOIS service of the registrar or registry."}
+  - {source: FQDN, label: dns_record, relation_type: BasicDNSRelation, destination: FQDN,
+     attribution: infrastructure, purpose: dns,
+     note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
+  - {source: FQDN, label: dns_record, relation_type: BasicDNSRelation, destination: IPAddress,
+     attribution: infrastructure, purpose: dns, review: true,
+     note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
+  - {source: FQDN, label: dns_record, relation_type: PrefDNSRelation, destination: FQDN,
+     attribution: infrastructure, purpose: dns,
+     note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
+  - {source: FQDN, label: dns_record, relation_type: SRVDNSRelation, destination: FQDN,
+     attribution: infrastructure, purpose: dns,
+     note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
+  - {source: FQDN, label: node, relation_type: SimpleRelation, destination: FQDN,
+     attribution: same_subject, purpose: hierarchy,
+     note: "Parent domain to subdomain in the FQDN hierarchy (engine scope association). A subdomain is normally controlled by the apex domain owner."}
+  - {source: FQDN, label: port, relation_type: PortRelation, destination: Service,
+     attribution: infrastructure, purpose: network,
+     note: "Service listening for this name."}
+  - {source: FQDN, label: registration, relation_type: SimpleRelation, destination: DomainRecord,
+     attribution: same_subject, purpose: registration,
+     note: "The domain registration record (engine scope association)."}
+  - {source: FQDN, label: verified_for, relation_type: SimpleRelation, destination: Organization,
+     attribution: third_party, purpose: dns, review: true,
+     note: "A TXT verification record shows the domain was verified with this organization or service (for example a SaaS vendor); the organization is a provider, not the owner."}
+  - {source: FQDN, label: verified_for, relation_type: SimpleRelation, destination: Service,
+     attribution: third_party, purpose: dns,
+     note: "A TXT verification record shows the domain was verified for this service."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: attribute, purpose: web,
+     note: "Data found inside the file."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Data found inside the file."}
+  - {source: File, label: url, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Where the file was retrieved."}
+  - {source: FundsTransfer, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: financial,
+     note: "Transfer identifier."}
+  - {source: FundsTransfer, label: recipient, relation_type: SimpleRelation, destination: Account,
+     attribution: attribute, purpose: financial,
+     note: "Receiving account."}
+  - {source: FundsTransfer, label: sender, relation_type: SimpleRelation, destination: Account,
+     attribution: attribute, purpose: financial,
+     note: "Sending account."}
+  - {source: FundsTransfer, label: third_party, relation_type: SimpleRelation, destination: Organization,
+     attribution: third_party, purpose: financial,
+     note: "Intermediary such as a bank or payment processor."}
+  - {source: IPAddress, label: port, relation_type: PortRelation, destination: Service,
+     attribution: infrastructure, purpose: network,
+     note: "Service listening on the address."}
+  - {source: IPAddress, label: ptr_record, relation_type: SimpleRelation, destination: FQDN,
+     attribution: infrastructure, purpose: dns,
+     note: "Reverse DNS name; set by whoever controls the address space, often a provider."}
+  - {source: IPNetRecord, label: abuse_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: registration,
+     note: "Abuse handling contact; frequently a provider or registry service desk."}
+  - {source: IPNetRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration, review: true,
+     note: "Administrative contact for the address block; usually the registrant organization, sometimes an agent."}
+  - {source: IPNetRecord, label: rdap_url, relation_type: SimpleRelation, destination: URL,
+     attribution: third_party, purpose: registration,
+     note: "RDAP service of the registry."}
+  - {source: IPNetRecord, label: registrant, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: registration,
+     note: "Registrant of the address block (used by engine scope association). Owner of the address space; when reached from an FQDN through DNS it is the hosting network, not the FQDN owner."}
+  - {source: IPNetRecord, label: technical_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: registration, review: true,
+     note: "Technical contact for the address block; often a network operator or provider rather than the registrant."}
+  - {source: IPNetRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
+     attribution: third_party, purpose: registration,
+     note: "WHOIS service of the registry."}
+  - {source: Identifier, label: issuing_agent, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: identity,
+     note: "The body that issued or registers the identifier."}
+  - {source: Identifier, label: issuing_authority, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: identity,
+     note: "The body that issued or registers the identifier."}
+  - {source: Identifier, label: registration_agency, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: identity,
+     note: "The body that issued or registers the identifier."}
+  - {source: Location, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity,
+     note: "Identifier of the location."}
+  - {source: Netblock, label: contains, relation_type: SimpleRelation, destination: IPAddress,
+     attribution: same_subject, purpose: network,
+     note: "Address within the block; the block registrant controls it (engine scope association)."}
+  - {source: Netblock, label: registration, relation_type: SimpleRelation, destination: IPNetRecord,
+     attribution: same_subject, purpose: registration,
+     note: "The address block registration record (engine scope association)."}
+  - {source: Organization, label: account, relation_type: SimpleRelation, destination: Account,
+     attribution: controls, purpose: identity,
+     note: "An account held by the organization."}
+  - {source: Organization, label: funding_source, relation_type: SimpleRelation, destination: Organization,
+     attribution: attribute, purpose: financial, review: true,
+     note: "An investor or funder; funding does not by itself establish control or ownership."}
+  - {source: Organization, label: funding_source, relation_type: SimpleRelation, destination: Person,
+     attribution: attribute, purpose: financial, review: true,
+     note: "An investor or funder; funding does not by itself establish control or ownership."}
+  - {source: Organization, label: hq_address, relation_type: SimpleRelation, destination: Location,
+     attribution: attribute, purpose: corporate,
+     note: "Address of the organization."}
+  - {source: Organization, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity,
+     note: "Registry or legal identifier (for example LEI or company number)."}
+  - {source: Organization, label: legal_address, relation_type: SimpleRelation, destination: Location,
+     attribution: attribute, purpose: corporate,
+     note: "Address of the organization."}
+  - {source: Organization, label: location, relation_type: SimpleRelation, destination: Location,
+     attribution: attribute, purpose: corporate,
+     note: "Address of the organization."}
+  - {source: Organization, label: member, relation_type: SimpleRelation, destination: Person,
+     attribution: attribute, purpose: corporate,
+     note: "A person who belongs to the organization; members do not control it."}
+  - {source: Organization, label: org_unit, relation_type: SimpleRelation, destination: Organization,
+     attribution: controls, purpose: corporate,
+     note: "The destination is a unit of the source organization."}
+  - {source: Organization, label: social_media_profile, relation_type: SimpleRelation, destination: URL,
+     attribution: controls, purpose: web,
+     note: "The organization's own social media profile."}
+  - {source: Organization, label: subsidiary, relation_type: SimpleRelation, destination: Organization,
+     attribution: controls, purpose: corporate,
+     note: "The source organization is the parent of the destination."}
+  - {source: Organization, label: website, relation_type: SimpleRelation, destination: URL,
+     attribution: controls, purpose: web,
+     note: "The organization's own website."}
+  - {source: Person, label: account, relation_type: SimpleRelation, destination: Account,
+     attribution: controls, purpose: identity,
+     note: "An account held by the person."}
+  - {source: Person, label: address, relation_type: SimpleRelation, destination: Location,
+     attribution: attribute, purpose: identity,
+     note: "Address of the person."}
+  - {source: Person, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity,
+     note: "Identifier of the person."}
+  - {source: Person, label: phone, relation_type: SimpleRelation, destination: Phone,
+     attribution: attribute, purpose: identity,
+     note: "Phone number of the person."}
+  - {source: Phone, label: account, relation_type: SimpleRelation, destination: Account,
+     attribution: attribute, purpose: identity,
+     note: "Account associated with the phone number."}
+  - {source: Phone, label: contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: attribute, purpose: contact,
+     note: "Contact record listing the phone number."}
+  - {source: ProductRelease, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: product,
+     note: "Release identifier."}
+  - {source: ProductRelease, label: website, relation_type: SimpleRelation, destination: URL,
+     attribution: controls, purpose: web,
+     note: "The release's website."}
+  - {source: Product, label: id, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: product,
+     note: "Product identifier."}
+  - {source: Product, label: manufacturer, relation_type: SimpleRelation, destination: Organization,
+     attribution: controller, purpose: product,
+     note: "The organization that makes the product."}
+  - {source: Product, label: release, relation_type: SimpleRelation, destination: ProductRelease,
+     attribution: controls, purpose: product,
+     note: "A release of the product."}
+  - {source: Product, label: website, relation_type: SimpleRelation, destination: URL,
+     attribution: controls, purpose: web,
+     note: "The product's website."}
+  - {source: Service, label: certificate, relation_type: SimpleRelation, destination: TLSCertificate,
+     attribution: same_subject, purpose: certificate,
+     note: "Certificate presented by the service (engine scope association)."}
+  - {source: Service, label: product_used, relation_type: SimpleRelation, destination: Product,
+     attribution: third_party, purpose: product,
+     note: "Software the service runs; points to the vendor's product, not the service owner."}
+  - {source: Service, label: product_used, relation_type: SimpleRelation, destination: ProductRelease,
+     attribution: third_party, purpose: product,
+     note: "Software the service runs; points to the vendor's product, not the service owner."}
+  - {source: Service, label: provider, relation_type: SimpleRelation, destination: Organization,
+     attribution: third_party, purpose: network,
+     note: "The organization providing the service, such as a cloud or SaaS vendor. It operates the service but does not own the customer's assets."}
+  - {source: Service, label: terms_of_service, relation_type: SimpleRelation, destination: File,
+     attribution: attribute, purpose: web,
+     note: "Terms of service document."}
+  - {source: Service, label: terms_of_service, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Terms of service document."}
+  - {source: TLSCertificate, label: common_name, relation_type: SimpleRelation, destination: FQDN,
+     attribution: same_subject, purpose: certificate,
+     note: "Subject common name (engine scope association)."}
+  - {source: TLSCertificate, label: issuer_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: certificate,
+     note: "The certificate authority that issued the certificate."}
+  - {source: TLSCertificate, label: issuing_certificate_url, relation_type: SimpleRelation, destination: URL,
+     attribution: third_party, purpose: certificate,
+     note: "Where the issuing CA certificate is published."}
+  - {source: TLSCertificate, label: issuing_certificate, relation_type: SimpleRelation, destination: TLSCertificate,
+     attribution: third_party, purpose: certificate,
+     note: "The issuing CA certificate."}
+  - {source: TLSCertificate, label: ocsp_server, relation_type: SimpleRelation, destination: URL,
+     attribution: third_party, purpose: certificate,
+     note: "The CA's revocation service."}
+  - {source: TLSCertificate, label: san_dns_name, relation_type: SimpleRelation, destination: FQDN,
+     attribution: shared, purpose: certificate,
+     note: "A subject alternative name. One certificate can cover many unrelated parties (CDN and hosting certificates), so SANs do not carry ownership; engine scope association does not use them."}
+  - {source: TLSCertificate, label: san_email_address, relation_type: SimpleRelation, destination: Identifier,
+     attribution: shared, purpose: certificate,
+     note: "A subject alternative email address. One certificate can cover many unrelated parties (CDN and hosting certificates), so SANs do not carry ownership; engine scope association does not use them."}
+  - {source: TLSCertificate, label: san_ip_address, relation_type: SimpleRelation, destination: IPAddress,
+     attribution: shared, purpose: certificate,
+     note: "A subject alternative address. One certificate can cover many unrelated parties (CDN and hosting certificates), so SANs do not carry ownership; engine scope association does not use them."}
+  - {source: TLSCertificate, label: san_url, relation_type: SimpleRelation, destination: URL,
+     attribution: shared, purpose: certificate,
+     note: "A subject alternative URL. One certificate can cover many unrelated parties (CDN and hosting certificates), so SANs do not carry ownership; engine scope association does not use them."}
+  - {source: TLSCertificate, label: subject_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: certificate,
+     note: "Certificate subject (engine scope association). Names the organization for OV/EV certificates; DV certificates usually have none."}
+  - {source: URL, label: domain, relation_type: SimpleRelation, destination: FQDN,
+     attribution: same_subject, purpose: web,
+     note: "The host of the URL; controlled by the same party for first-party URLs."}
+  - {source: URL, label: file, relation_type: SimpleRelation, destination: File,
+     attribution: attribute, purpose: web,
+     note: "Content retrieved from the URL."}
+  - {source: URL, label: ip_address, relation_type: SimpleRelation, destination: IPAddress,
+     attribution: infrastructure, purpose: network,
+     note: "The address the URL host resolved to."}
+  - {source: URL, label: port, relation_type: PortRelation, destination: Service,
+     attribution: infrastructure, purpose: network,
+     note: "Service serving the URL."}
