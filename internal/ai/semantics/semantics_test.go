@@ -63,3 +63,16 @@ func TestParseRejectsBadEntries(t *testing.T) {
 		t.Fatalf("san_dns_name must not carry attribution: %+v", r)
 	}
 }
+
+// Owner questions rely on every attribution being decided.
+func TestNoUndecidedRelationships(t *testing.T) {
+	table, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range table.Relations {
+		if r.Review {
+			t.Errorf("%s --%s--> %s is still marked review: true", r.Source, r.Label, r.Destination)
+		}
+	}
+}

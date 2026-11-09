@@ -4,7 +4,8 @@
 
 # Meaning of every Open Asset Model relationship, for AI investigations.
 #
-# STATUS: draft for review. Nothing reads this file for decisions yet.
+# STATUS: reviewed by the maintainer (2026-11-09). Owner questions use the
+# attribution field; see internal/ai/ownership.go.
 #
 # Keyed exactly like OAM's own relationship table (source, label,
 # relation_type, destination) so it can move into open-asset-model
@@ -29,8 +30,9 @@
 #   registration certificate corporate contact network dns web identity
 #   financial product hierarchy
 #
-# review: true marks an edge whose role varies in practice and needs a
-# maintainer's decision.
+# reviewed: true marks an edge whose role varies in practice; the
+# maintainer confirmed the value shown. Mark a changed or new uncertain
+# edge review: true until it is decided.
 
 version: 1
 relations:
@@ -38,16 +40,16 @@ relations:
      attribution: attribute, purpose: identity,
      note: "Identifier of the account."}
   - {source: Account, label: user, relation_type: SimpleRelation, destination: Organization,
-     attribution: controller, purpose: identity, review: true,
+     attribution: controller, purpose: identity, reviewed: true,
      note: "The Person or Organization that uses the account; usually its controller, but a shared or delegated account can have other users."}
   - {source: Account, label: user, relation_type: SimpleRelation, destination: Person,
-     attribution: controller, purpose: identity, review: true,
+     attribution: controller, purpose: identity, reviewed: true,
      note: "The Person or Organization that uses the account; usually its controller, but a shared or delegated account can have other users."}
   - {source: AutnumRecord, label: abuse_contact, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: third_party, purpose: registration,
      note: "Abuse handling contact; frequently a provider or registry service desk."}
   - {source: AutnumRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: controller, purpose: registration, review: true,
+     attribution: controller, purpose: registration, reviewed: true,
      note: "Administrative contact for the AS number; usually the registrant organization, sometimes an agent."}
   - {source: AutnumRecord, label: rdap_url, relation_type: SimpleRelation, destination: URL,
      attribution: third_party, purpose: registration,
@@ -56,7 +58,7 @@ relations:
      attribution: controller, purpose: registration,
      note: "Registrant of the AS number (used by engine scope association). Owner of the address space; when reached from an FQDN through DNS it is the hosting network, not the FQDN owner."}
   - {source: AutnumRecord, label: technical_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: third_party, purpose: registration, review: true,
+     attribution: third_party, purpose: registration, reviewed: true,
      note: "Technical contact for the AS number; often a network operator or provider rather than the registrant."}
   - {source: AutnumRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
      attribution: third_party, purpose: registration,
@@ -68,7 +70,7 @@ relations:
      attribution: same_subject, purpose: registration,
      note: "The AS number registration record (engine scope association)."}
   - {source: ContactRecord, label: fqdn, relation_type: SimpleRelation, destination: FQDN,
-     attribution: attribute, purpose: contact, review: true,
+     attribution: attribute, purpose: contact, reviewed: true,
      note: "Domain listed in the contact (for example an email domain); may belong to the contact party or a provider."}
   - {source: ContactRecord, label: id, relation_type: SimpleRelation, destination: Identifier,
      attribution: attribute, purpose: contact,
@@ -86,13 +88,13 @@ relations:
      attribution: attribute, purpose: contact,
      note: "Phone number of the contact."}
   - {source: ContactRecord, label: url, relation_type: SimpleRelation, destination: URL,
-     attribution: attribute, purpose: contact, review: true,
+     attribution: attribute, purpose: contact, reviewed: true,
      note: "URL listed in the contact; often the contact party's own website."}
   - {source: DomainRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: controller, purpose: registration, review: true,
+     attribution: controller, purpose: registration, reviewed: true,
      note: "Administrative contact; usually the registrant, but privacy services and agents are common."}
   - {source: DomainRecord, label: billing_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: controller, purpose: registration, review: true,
+     attribution: controller, purpose: registration, reviewed: true,
      note: "Billing contact; usually the registrant, sometimes a reseller."}
   - {source: DomainRecord, label: name_server, relation_type: SimpleRelation, destination: FQDN,
      attribution: third_party, purpose: dns,
@@ -104,7 +106,7 @@ relations:
      attribution: third_party, purpose: registration,
      note: "The registrar, a service provider."}
   - {source: DomainRecord, label: technical_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: third_party, purpose: registration, review: true,
+     attribution: third_party, purpose: registration, reviewed: true,
      note: "Technical contact; often the hosting provider or DNS operator."}
   - {source: DomainRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
      attribution: third_party, purpose: registration,
@@ -113,7 +115,7 @@ relations:
      attribution: infrastructure, purpose: dns,
      note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
   - {source: FQDN, label: dns_record, relation_type: BasicDNSRelation, destination: IPAddress,
-     attribution: infrastructure, purpose: dns, review: true,
+     attribution: infrastructure, purpose: dns, reviewed: true,
      note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
   - {source: FQDN, label: dns_record, relation_type: PrefDNSRelation, destination: FQDN,
      attribution: infrastructure, purpose: dns,
@@ -131,7 +133,7 @@ relations:
      attribution: same_subject, purpose: registration,
      note: "The domain registration record (engine scope association)."}
   - {source: FQDN, label: verified_for, relation_type: SimpleRelation, destination: Organization,
-     attribution: third_party, purpose: dns, review: true,
+     attribution: third_party, purpose: dns, reviewed: true,
      note: "A TXT verification record shows the domain was verified with this organization or service (for example a SaaS vendor); the organization is a provider, not the owner."}
   - {source: FQDN, label: verified_for, relation_type: SimpleRelation, destination: Service,
      attribution: third_party, purpose: dns,
@@ -167,7 +169,7 @@ relations:
      attribution: third_party, purpose: registration,
      note: "Abuse handling contact; frequently a provider or registry service desk."}
   - {source: IPNetRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: controller, purpose: registration, review: true,
+     attribution: controller, purpose: registration, reviewed: true,
      note: "Administrative contact for the address block; usually the registrant organization, sometimes an agent."}
   - {source: IPNetRecord, label: rdap_url, relation_type: SimpleRelation, destination: URL,
      attribution: third_party, purpose: registration,
@@ -176,7 +178,7 @@ relations:
      attribution: controller, purpose: registration,
      note: "Registrant of the address block (used by engine scope association). Owner of the address space; when reached from an FQDN through DNS it is the hosting network, not the FQDN owner."}
   - {source: IPNetRecord, label: technical_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: third_party, purpose: registration, review: true,
+     attribution: third_party, purpose: registration, reviewed: true,
      note: "Technical contact for the address block; often a network operator or provider rather than the registrant."}
   - {source: IPNetRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
      attribution: third_party, purpose: registration,
@@ -203,10 +205,10 @@ relations:
      attribution: controls, purpose: identity,
      note: "An account held by the organization."}
   - {source: Organization, label: funding_source, relation_type: SimpleRelation, destination: Organization,
-     attribution: attribute, purpose: financial, review: true,
+     attribution: attribute, purpose: financial, reviewed: true,
      note: "An investor or funder; funding does not by itself establish control or ownership."}
   - {source: Organization, label: funding_source, relation_type: SimpleRelation, destination: Person,
-     attribution: attribute, purpose: financial, review: true,
+     attribution: attribute, purpose: financial, reviewed: true,
      note: "An investor or funder; funding does not by itself establish control or ownership."}
   - {source: Organization, label: hq_address, relation_type: SimpleRelation, destination: Location,
      attribution: attribute, purpose: corporate,

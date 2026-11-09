@@ -184,6 +184,14 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 // prevents a sibling organization from becoming a parent merely because it
 // is reachable through the graph.
 func eligibleAdaptivePaths(goal InvestigationGoal, paths []PlanMatch) []PlanMatch {
+	return eligibleAdaptivePathsWith(goal, paths, nil)
+}
+
+// eligibleAdaptivePathsWith also requires, for ultimate_parent goals and
+// when attribution semantics are available, that the path reach its first
+// Organization only through owner-attributing relationships. A certificate
+// issuer or registrar is connected to an asset but is not its parent.
+func eligibleAdaptivePathsWith(goal InvestigationGoal, paths []PlanMatch, attr AttributionCatalog) []PlanMatch {
 	qualified := make([]PlanMatch, 0, len(paths))
 	for _, p := range paths {
 		if pathSatisfiesGoal(p, goal.Relationships, goal.PathRule) {
@@ -197,6 +205,11 @@ func eligibleAdaptivePaths(goal InvestigationGoal, paths []PlanMatch) []PlanMatc
 	for _, p := range qualified {
 		if len(p.Nodes) == 0 || p.Nodes[len(p.Nodes)-1].Type != "Organization" {
 			continue
+		}
+		if attr != nil {
+			if owned, _, _ := ownerAttributed(attr, p); !owned {
+				continue
+			}
 		}
 		first := -1
 		for i, n := range p.Nodes {
@@ -546,7 +559,11 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		Reason       string `json:"reason,omitempty"`
 	}{len(search.Matches), search.VisitedNodes, search.VisitedEdges, search.Truncated, search.Reason})
 	out.Observations = append(out.Observations, Observation{Tool: "search_graph", CallID: "adaptive-search", Result: string(obs)})
-	candidates := eligibleAdaptivePaths(goal, search.Matches)
+	attrCatalog, _ := a.Runner.Catalog.(AttributionCatalog)
+	candidates := eligibleAdaptivePathsWith(goal, search.Matches, attrCatalog)
+	if goal.Purpose == "ultimate_parent" && attrCatalog != nil {
+		out.ThirdParties = thirdPartyConnections(attrCatalog, search.Matches)
+	}
 	evidenceStarted := time.Now()
 	dossier, err := EvaluatePathEvidence(ctx, a.Runner.Graph, a.Runner.Limits, candidates)
 	if err != nil {
@@ -634,6 +651,10 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	}
 	if len(selected) == 0 {
 		out.Answer = "No sufficiently supported answer was identified in the witnessed OAM paths. This does not prove that the requested relationship is absent."
+		if goal.Purpose == "ultimate_parent" && attrCatalog != nil {
+			out.Answer = "No organization is documented as the owner of " + humanAsset(root) +
+				" in the stored OAM paths, so no parent organization can be named. This does not prove that none exists."
+		}
 		if !search.Truncated && !goal.Subject.UsesOrganizationResolution() {
 			proposal := PlanCollection(goal.Subject.AssetSelector())
 			if proposal.Status == "approval_required" {
@@ -656,6 +677,9 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		} else {
 			out.Answer += " Multiple source tags were found on the selected graph evidence, but source independence and relationship truth are not verified."
 		}
+	}
+	if goal.Purpose == "ultimate_parent" {
+		out.Answer += thirdPartySummary(out.ThirdParties)
 	}
 	if search.Truncated {
 		out.Answer += " Search truncated (" + search.Reason + "); additional relevant paths may exist."
