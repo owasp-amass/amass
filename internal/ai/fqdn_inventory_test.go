@@ -106,3 +106,27 @@ func TestFQDNInventoryFastPathRejectsAmbiguousQuestions(t *testing.T){
   }
  }
 }
+
+func TestSubdomainIntentUsesHierarchyAndExcludesApex(t *testing.T){
+ for _,question:=range []string{
+  "Which subdomains are under owasp.org?",
+  "Which subdomains are associated with owasp.org?",
+  "List subdomains of owasp.org",
+ }{
+  model:=&plannerModel{}
+  agent:=Agent{Model:model,Runner:ToolRunner{
+   Graph:fqdnInventoryFixture(),Catalog:fqdnInventoryCatalog,Limits:DefaultLimits(),
+  }}
+  result,err:=agent.AskAdaptive(context.Background(),question,AdaptiveOptions{})
+  if err!=nil{t.Fatalf("%q: %v",question,err)}
+  if model.calls!=0||result.Search==nil||result.Search.Truncated||
+   len(result.Matches)!=16||result.Incomplete{
+   t.Fatalf("%q: subdomain inventory did not use complete deterministic node hierarchy: %+v",question,result)
+  }
+  if !strings.Contains(result.Answer,"Found 16 subdomain FQDN asset(s)")||
+   strings.Contains(result.Answer,"\nowasp.org\n")||
+   !strings.Contains(result.Answer,"\nwiki.owasp.org\n"){
+   t.Fatalf("%q: expected 16 descendants without apex: %s",question,result.Answer)
+  }
+ }
+}
