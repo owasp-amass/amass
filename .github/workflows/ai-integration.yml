@@ -84,3 +84,31 @@ jobs:
           go mod edit -replace=github.com/owasp-amass/asset-db=./asset-db
           go test -v ./internal/ai/oamrepo -run '^TestAdapterBoundedTraversalOnSQLite$' -count=1
           go test ./config ./internal/ai/...
+
+  neo4j-adapter:
+    # The Neo4j bounded reader lives in the Amass adapter and uses only
+    # released asset-db APIs, so this job runs against the pinned asset-db.
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      AMASS_AI_TEST_NEO4J_DSN: bolt://localhost:7687/neo4j
+    services:
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: none
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Bounded Neo4j traversal through the AI adapter
+        run: go test -v ./internal/ai/oamrepo -run 'Neo4j' -count=1
