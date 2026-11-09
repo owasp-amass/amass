@@ -181,3 +181,46 @@ docker compose run --rm ai \
 These queries still return only assets and relationships already collected
 in the database. Vocabulary recognition does not manufacture missing
 edges or authorize new discovery.
+
+ 
+## Extensible semantic vocabulary
+
+The vocabulary layer now has three independent maps:
+
+- **Asset type aliases** in `intent_vocabulary.go` include common
+  cybersecurity names, plurals, abbreviations, business terminology, and
+  every registered OAM type's CamelCase/space-separated spelling.
+- **Relationship aliases** in `intent_schema_vocabulary.go` include
+  human-friendly names and paraphrases for common OAM labels. Every
+  additional registered label automatically gains its literal name and
+  normalized underscore/hyphen/space forms. Explicit user phrases select
+  the longest matching alias before shorter overlapping words, and shared
+  aliases for different labels fail closed.
+- **Indexed search-field aliases** represent common metadata terms such as
+  registration number, certificate serial, CIDR, ASN, legal name, WHOIS
+  handle, postal code, and account ID. They are shown to the LLM only when
+  the corresponding field exists in the authoritative selector catalog.
+
+A separate search-operation vocabulary covers inventory, association,
+hierarchy, attribution, evidence, comparison, time, and filtering.
+**These operations are not themselves OAM relationship labels**: for
+example, "who owns" requests attribution but does not authorize asserting
+an ownership edge from a generic association.
+
+An arbitrary phrasing cannot be promised an exact deterministic match.
+Unknown expressions use the semantic planner, and that plan is validated
+against the actual OAM catalog. The explicit typed path currently still
+requires a recognizable question containing subject, target type, and a
+named relationship clause such as "via DNS resolution relationships".
+Conversational questions without that structure use the model planner.
+
+New manually curated aliases should be added only when their meaning is
+specific enough. Conflicting terms (such as "addresses" or "domains")
+remain ambiguous until a unique schema-grounded interpretation emerges.
+This allows vocabulary growth without manufacturing graph facts or
+conflating asset *types* with relationship semantics.
+
+Vocabulary regression coverage includes ambiguous network/physical
+addresses, subdomain hierarchy, company/organization equivalence,
+DNS-record paraphrases, alternate relationship labels, unknown labels,
+registered dynamic labels, and prompt scoping for indexed selectors.
