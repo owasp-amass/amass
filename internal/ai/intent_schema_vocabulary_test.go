@@ -79,3 +79,21 @@ func TestRelationAliasCatalogWideDynamicNaming(t *testing.T){
   }
  }
 }
+
+func TestRegisteredRelationLabelsGeneratePluralNouns(t *testing.T){
+ cat:=[]RelationshipSchema{
+  {SourceType:"FQDN",Label:"custom_record",RelationType:"SimpleRelation",DestinationType:"URL"},
+  {SourceType:"FQDN",Label:"service_category",RelationType:"SimpleRelation",DestinationType:"Service"},
+ }
+ for phrase,want:=range map[string]string{
+  "custom record":"custom_record",
+  "custom records":"custom_record",
+  "service category":"service_category",
+  "service categories":"service_category",
+ }{
+  got:=schemaRelationAliasCandidates(phrase,cat)
+  if !reflect.DeepEqual(got,[]string{want}){
+   t.Errorf("registered %q should match %s: %+v",phrase,want,got)
+  }
+ }
+}
