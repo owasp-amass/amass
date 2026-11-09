@@ -45,16 +45,22 @@ func questionFocus(question string, relations []RelationshipSchema, selectors []
 		registered[r.SourceType], registered[r.DestinationType] = true, true
 		labels[r.Label] = true
 	}
+	typeAliases := map[string]bool{}
 	for typ := range registered {
 		for _, alias := range intentAssetAliases(typ) {
+			typeAliases[normalizeSchemaAlias(alias)] = true
 			if mentions(alias) {
 				f.Types[typ] = true
-				break
 			}
 		}
 	}
+	// A word that names an asset type ("organization", "location") is not a
+	// request for the relationship of the same name.
 	for label := range labels {
 		for _, alias := range relationLabelAliases(label) {
+			if typeAliases[normalizeSchemaAlias(alias)] {
+				continue
+			}
 			if mentions(alias) {
 				f.Labels[label] = true
 				break
@@ -96,6 +102,9 @@ type plannerPrompt struct {
 	Hint     explicitRelationHint
 	// Sliced reports that the prompt shows only the question's focus.
 	Sliced bool
+	// NamesRelationship reports that the question asks for particular
+	// relationships, explicitly or by a relationship alias.
+	NamesRelationship bool
 }
 
 // goalPlannerPrompt builds the goal planner prompt. With sliced set, only
@@ -120,6 +129,7 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 
 	out.Hint, out.Explicit = explicitRelationLabels(question, relations)
 	focus := questionFocus(question, relations, selectors)
+	out.NamesRelationship = out.Explicit || len(focus.Labels) > 0
 	promptRelations := relations
 	promptSelectors := selectors
 	typeAliasTypes := types

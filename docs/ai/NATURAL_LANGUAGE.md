@@ -157,8 +157,10 @@ OpenAI-compatible `/v1` endpoint. With the native API Amass can:
 - set the context window (`-context-tokens`, default 8192). The planner
   prompt for the full OAM catalog is about 3,500 tokens, and a smaller
   window silently truncates it;
-- constrain the goal planner's reply to a JSON schema whose asset types,
-  labels and relation types are enumerated from the OAM catalog;
+- constrain the goal planner's reply to a JSON schema that enumerates the
+  OAM asset types and each allowed relationship as one whole transition, so
+  valid parts cannot be combined into a transition OAM does not have (if an
+  Ollama build rejects the schema, the request is retried unconstrained);
 - keep the model loaded for 30 minutes between CLI runs.
 
 The endpoint is the Ollama base URL:
@@ -196,6 +198,12 @@ matters on CPU-only hosts where reading the prompt dominates latency. The
 reply schema allows only the relationship labels that were shown. If the
 first two attempts fail validation, the last attempt shows the full
 catalog. Validation always uses the full catalog.
+
+A word that names an asset type ("organization") does not count as asking
+for the relationship of the same name. When a question asks for no
+particular relationship, or asks for the highest parent without naming
+relationships, any relationship constraints the model adds are dropped
+rather than validated: they could only narrow the search.
 
 ## Relationship direction in answers
 

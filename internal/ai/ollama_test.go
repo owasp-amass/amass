@@ -187,10 +187,16 @@ func TestAnthropicStructuredForcesTool(t *testing.T) {
 func TestGoalSchemaEnumeratesCatalogAndMetersUsage(t *testing.T) {
 	schema := goalJSONSchema(testOAMCatalog.Relations(), testOAMCatalog.SearchFields())
 	props := schema.Schema["properties"].(map[string]any)
-	rel := props["relationships"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
-	labels := rel["label"].(map[string]any)["enum"].([]string)
-	if strings.Join(labels, ",") != "domain,subsidiary,website" {
-		t.Fatalf("labels must come from the catalog: %v", labels)
+	allowed := props["relationships"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
+	if len(allowed) != len(testOAMCatalog) {
+		t.Fatalf("each catalog transition must be one allowed value: %v", allowed)
+	}
+	for i, want := range testOAMCatalog {
+		got := allowed[i].(map[string]any)
+		if got["source_type"] != want.SourceType || got["label"] != want.Label ||
+			got["relation_type"] != want.RelationType || got["destination_type"] != want.DestinationType {
+			t.Fatalf("transition %d: got %v want %+v", i, got, want)
+		}
 	}
 
 	// The planner uses structured generation; metering wraps it and counts usage.
@@ -225,4 +231,19 @@ func (m *structuredRecorder) GenerateStructured(_ context.Context, _ []Message, 
 		return Response{}, nil
 	}
 	return Response{Text: m.reply, InputTokens: 100, OutputTokens: 20}, nil
+}
+
+func TestOllamaStructuredFallsBackWhenSchemaIsRejected(t *testing.T) {
+	stub := &ollamaStub{reply: func(req map[string]any) (int, string) {
+		if _, set := req["format"]; set {
+			return 400, `{"error":"invalid JSON schema in format"}`
+		}
+		return 200, `{"message":{"role":"assistant","content":"{}"},"done":true,"done_reason":"stop"}`
+	}}
+	srv := stub.server(t)
+	got, err := NewOllamaModel(srv.URL, "m", nil).GenerateStructured(context.Background(),
+		[]Message{{Role: "user", Text: "q"}}, JSONSchema{Name: "x", Schema: map[string]any{"type": "object"}})
+	if err != nil || got.Text != "{}" || len(stub.requests) != 2 {
+		t.Fatalf("expected an unconstrained retry: %+v err=%v requests=%d", got, err, len(stub.requests))
+	}
 }

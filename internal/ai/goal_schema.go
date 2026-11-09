@@ -7,27 +7,23 @@ package ai
 import "sort"
 
 // goalJSONSchema describes the planner's InvestigationGoal reply. Asset
-// types, relation labels and relation types are enumerated from the OAM
+// types and whole relationship transitions are enumerated from the OAM
 // catalog, so a provider that enforces the schema cannot emit invented
-// names. Pairings (which label joins which types) are still checked by
-// validateGoal; the schema only narrows the vocabulary.
+// names or transitions. validateGoal still decides validity.
 func goalJSONSchema(relations []RelationshipSchema, selectors []AssetSearchSchema) JSONSchema {
 	return goalJSONSchemaFor(relations, selectors, relations)
 }
 
-// goalJSONSchemaFor enumerates every OAM asset type but only the labels and
-// relation types of promptRelations, the relationships the planner was
-// shown. With none, the relationships list must be empty.
+// goalJSONSchemaFor enumerates every OAM asset type but only the transitions
+// in promptRelations, the relationships the planner was shown. With none,
+// the relationships list must be empty.
 func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSchema, promptRelations []RelationshipSchema) JSONSchema {
-	types, labels, relTypes := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	types := map[string]bool{}
 	for _, s := range selectors {
 		types[s.Type] = true
 	}
 	for _, r := range relations {
 		types[r.SourceType], types[r.DestinationType] = true, true
-	}
-	for _, r := range promptRelations {
-		labels[r.Label], relTypes[r.RelationType] = true, true
 	}
 	str := func() map[string]any { return map[string]any{"type": "string"} }
 	enum := func(set map[string]bool) map[string]any {
@@ -49,15 +45,24 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 		"required":             []string{"type"},
 		"additionalProperties": false,
 	}
-	relation := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"source_type": assetType, "label": enum(labels),
-			"relation_type": enum(relTypes), "destination_type": assetType,
-		},
-		"required":             []string{"source_type", "label", "relation_type", "destination_type"},
-		"additionalProperties": false,
+	// Each allowed relationship is one exact catalog transition. Listing
+	// whole transitions (not independent enums per field) stops a
+	// schema-enforcing provider from combining valid parts into a
+	// transition OAM does not have, such as FQDN --website--> Organization.
+	transitions := make([]any, 0, len(promptRelations))
+	seen := map[string]bool{}
+	for _, r := range promptRelations {
+		key := relationKey(r.SourceType, r.Label, r.RelationType, r.DestinationType)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		transitions = append(transitions, map[string]any{
+			"source_type": r.SourceType, "label": r.Label,
+			"relation_type": r.RelationType, "destination_type": r.DestinationType,
+		})
 	}
+	relation := map[string]any{"enum": transitions}
 	return JSONSchema{
 		Name:        "investigation_goal",
 		Description: "The read-only OAM investigation goal for the user's question.",
@@ -68,7 +73,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 				"target_types":  map[string]any{"type": "array", "items": assetType},
 				"direction":     map[string]any{"type": "string", "enum": []string{"both", "in", "out"}},
 				"purpose":       map[string]any{"type": "string", "enum": []string{"connected", "ultimate_parent"}},
-				"relationships": relationshipsSchema(relation, len(labels) > 0),
+				"relationships": relationshipsSchema(relation, len(transitions) > 0),
 				"path_rule":     map[string]any{"type": "string", "enum": []string{"", "any", "all", "ordered"}},
 			},
 			"required":             []string{"subject", "target_types", "direction", "purpose", "relationships", "path_rule"},
