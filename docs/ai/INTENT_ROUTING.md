@@ -21,6 +21,10 @@ asset selectors, relation labels, relation types, and stored directions.
 All routes use read-only stored graph data; neither source-tag counts nor LLM
 claims establish legal ownership.
 
+Each route compiles to the same Query representation, which is validated once
+and executed once; see [QUERY.md](QUERY.md). Use `amass ai ... plan` to see
+which route a question takes.
+
 ## Cross-type explicit relationship questions
 
 The deterministic typed relationship grammar is deliberately narrow:

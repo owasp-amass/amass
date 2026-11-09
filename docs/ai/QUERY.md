@@ -1,0 +1,90 @@
+# Query: the single investigation representation
+
+Every `amass ai ask` investigation is now a **Query**: one JSON document that
+says what to read from the Asset Database. The four question routes in
+[INTENT_ROUTING.md](INTENT_ROUTING.md) each compile to a Query; a single
+validator checks it against the OAM catalog, and a single executor runs it.
+
+```text
+question ──► CompileQuestion ──► Query ──► ValidateQuery ──► AskQuery ──► Investigation
+               (deterministic                (OAM catalog,     (resolve root, search,
+                compilers, then               no database)      evidence, answer)
+                model planner)
+-query file ───────────────────► Query ──┘
+```
+
+## Fields
+
+| Field | Meaning |
+| --- | --- |
+| `version` | Schema version, currently `1` |
+| `question` | The user's wording, if any; explore uses it to guide path selection |
+| `subject` | The root asset selector, as in `TypedPlan` and `InvestigationGoal` |
+| `traversal` | `explore`, `route` or `hierarchy` (below) |
+| `target_types` | OAM asset types the answer is about; empty means any (explore only) |
+| `direction` | Stored edge direction for explore: `both`, `in` or `out` |
+| `purpose` | `connected` or `ultimate_parent` (explore only) |
+| `relationships`, `path_rule` | Explore path constraints; for a route, the transition behind each hop |
+| `hops` | The exact route, for `route` |
+| `exclude_root` | Omit the root from a hierarchy listing (subdomains, not FQDNs) |
+| `source` | Which compiler produced it: `fqdn_hierarchy`, `typed_relation`, `organization_relation`, `model_goal` or `caller` |
+
+## Traversals
+
+| Traversal | What it reads | Needs a model | Answer |
+| --- | --- | --- | --- |
+| `hierarchy` | FQDN `node` edges below the root | No | Every witnessed FQDN, sorted |
+| `route` | Exactly the listed hops, in order (up to 3) | No | Every witnessed destination |
+| `explore` | Any schema-valid path within limits, filtered by `relationships`/`path_rule`/`purpose` | Yes | Paths the model selects from those witnessed |
+
+`ValidateQuery` rejects any subject selector, type, label, relation type or
+hop that is not in the OAM catalog, and any field that does not belong to the
+chosen traversal (for example `hops` on an explore query). Validation never
+touches the database, so an invalid query fails before any graph read.
+
+## CLI
+
+Print the Query a question compiles to, without opening the database:
+
+```bash
+amass ai -question "Which subdomains are associated with owasp.org?" plan
+```
+
+Narrow, explicit questions compile without a model. Other questions need
+`-model` (or `AMASS_AI_MODEL`) so the goal planner can run.
+
+Run a saved or hand-written Query. Route and hierarchy queries need no model:
+
+```bash
+amass ai -question "Which subdomains are associated with owasp.org?" plan > subdomains.json
+amass ai -query subdomains.json -format text ask
+```
+
+```json
+{
+  "version": 1,
+  "subject": {"type": "Organization", "name": "Acme Holdings Inc."},
+  "traversal": "route",
+  "target_types": ["URL"],
+  "direction": "both",
+  "purpose": "connected",
+  "hops": [
+    {"direction": "out", "label": "subsidiary", "relation_type": "SimpleRelation", "destination_type": "Organization"},
+    {"direction": "out", "label": "website", "relation_type": "SimpleRelation", "destination_type": "URL"}
+  ],
+  "source": "caller"
+}
+```
+
+`-query -` reads the Query from standard input. Unknown JSON keys are
+rejected. The JSON output of `ask` now includes the executed `query`.
+
+## Go API
+
+- `Agent.CompileQuestion(ctx, question)` returns a validated Query.
+- `Agent.AskQuery(ctx, q, opts)` validates and executes one.
+- `Agent.AskAdaptive(ctx, question, opts)` is `CompileQuestion` then
+  execution, with the same trace stages as before.
+
+`AskPlanned`, the earlier hop-only planner, is retained for now and will be
+folded into a single schema-constrained model planner that emits a Query.

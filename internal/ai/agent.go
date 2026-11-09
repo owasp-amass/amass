@@ -24,6 +24,7 @@ type Observation struct {
 }
 type Investigation struct {
 	Plan               *TypedPlan                `json:"plan,omitempty"`
+	Query              *Query                    `json:"query,omitempty"`
 	Goal               *InvestigationGoal        `json:"goal,omitempty"`
 	Search             *GraphSearchResult        `json:"search,omitempty"`
 	EvidenceDossier    *EvidenceDossier          `json:"evidence_dossier,omitempty"`
