@@ -8,6 +8,10 @@ on:
     paths:
       - 'internal/ai/**'
       - 'cmd/amass-ai-mcp/**'
+      - 'cmd/amass-ai-mcp-http/**'
+      - 'cmd/amass-ai-classifier/**'
+      - 'cmd/amass-ai-classifier-train/**'
+      - 'cmd/amass-ai-provider-health/**'
       - 'cmd/amass/main.go'
       - 'Dockerfile'
       - '.github/workflows/ai-integration.yml'
@@ -28,6 +32,8 @@ jobs:
           cache: true
       - name: AI, configuration and CLI tests
         run: go test -race ./config ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
+      - name: Default evidence-first classifier regression
+        run: go test ./internal/ai ./internal/ai/classify ./internal/ai/cli -run "TestDefaultEvidenceClassifier|TestHTTPClassifier|TestClassifierServiceEndpointGuard|TestTrainer" -count=1
       - name: Build all Amass executables
         # Amass uses libpostal behind CGO; production Docker builds disable CGO.
         # Race-enabled AI tests above intentionally continue to use CGO.
