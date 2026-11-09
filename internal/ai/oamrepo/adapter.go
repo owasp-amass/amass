@@ -36,31 +36,39 @@ func (a Adapter) GetAsset(ctx context.Context, id string) (ai.Asset, error) {
 	if a.Repo == nil {
 		return ai.Asset{}, errors.New("missing OAM repository")
 	}
+
 	ent, err := a.Repo.FindEntityById(ctx, id)
 	if err != nil {
 		return ai.Asset{}, err
 	}
+
 	return convert(ent)
 }
+
 func convert(e *dbt.Entity) (ai.Asset, error) {
 	if e == nil || e.Asset == nil {
 		return ai.Asset{}, errors.New("empty entity/asset")
 	}
+
 	return ai.Asset{ID: e.ID, Type: string(e.Asset.AssetType()), Key: e.Asset.Key(),
 		Content: e.Asset, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen}, nil
 }
+
 func knownAssetType(t string) bool {
 	for _, item := range oam.AssetList {
 		if string(item) == t {
 			return true
 		}
 	}
+
 	return false
 }
+
 func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limit int) ([]ai.Asset, error) {
 	if !knownAssetType(t) {
 		return nil, fmt.Errorf("unknown OAM asset type %q", t)
 	}
+
 	ents, err := a.Repo.FindEntitiesByType(ctx, oam.AssetType(t), since, limit)
 	if err != nil {
 		return nil, err
@@ -68,25 +76,31 @@ func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limi
 	if len(ents) > limit {
 		ents = ents[:limit]
 	}
+
 	out := make([]ai.Asset, 0, len(ents))
 	for _, ent := range ents {
 		v, err := convert(ent)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, v)
 	}
+
 	return out, nil
 }
+
 func (a Adapter) Edges(ctx context.Context, id, direction, label string, since time.Time) ([]ai.Relation, error) {
 	ent, err := a.Repo.FindEntityById(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+
 	var labels []string
 	if label != "" {
 		labels = []string{label}
 	}
+
 	var found []ai.Relation
 	convertEdges := func(edges []*dbt.Edge, dir string) error {
 		for _, edge := range edges {
@@ -96,10 +110,12 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 			if label != "" && edge.Relation.Label() != label {
 				continue
 			}
+
 			found = append(found, ai.Relation{ID: edge.ID, FromID: edge.FromEntity.ID, ToID: edge.ToEntity.ID,
 				Label: edge.Relation.Label(), Type: string(edge.Relation.RelationType()), Direction: dir,
 				CreatedAt: edge.CreatedAt, LastSeen: edge.LastSeen})
 		}
+
 		return nil
 	}
 	if direction == "in" || direction == "both" {
@@ -120,8 +136,10 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 			return nil, err
 		}
 	}
+
 	return found, nil
 }
+
 func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evidence, error) {
 	if ent, err := a.Repo.FindEntityById(ctx, id); err == nil {
 		tags, err := a.Repo.FindEntityTags(ctx, ent, time.Time{})
@@ -131,6 +149,7 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 		if err != nil {
 			return nil, err
 		}
+
 		out := make([]ai.Evidence, 0)
 		for _, tag := range tags {
 			if tag == nil || tag.Property == nil {
@@ -139,15 +158,19 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 			if len(out) >= limit {
 				break
 			}
+
 			out = append(out, ai.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
 				Kind: string(tag.Property.PropertyType()), Property: tag.Property, LastSeen: tag.LastSeen})
 		}
+
 		return out, nil
 	}
+
 	edge, err := a.Repo.FindEdgeById(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+
 	tags, err := a.Repo.FindEdgeTags(ctx, edge, time.Time{})
 	if emptyTagLookup(err) {
 		return []ai.Evidence{}, nil
@@ -155,6 +178,7 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]ai.Evidence, 0)
 	for _, tag := range tags {
 		if tag == nil || tag.Property == nil {
@@ -163,15 +187,17 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 		if len(out) >= limit {
 			break
 		}
+
 		out = append(out, ai.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
 			Kind: string(tag.Property.PropertyType()), Property: tag.Property, LastSeen: tag.LastSeen})
 	}
+
 	return out, nil
 }
 
 // emptyTagLookup recognizes only exact repository-specific empty-result
 // messages. Asset Database currently returns ordinary errors for missing
-// tags instead of a shared sentinel. Do NOT treat arbitrary lookup errors
+// tags instead of a shared sentinel. Do not treat arbitrary lookup errors
 // as absence: storage, authentication, and decoding failures remain fatal.
 func emptyTagLookup(err error) bool {
 	if err == nil {
@@ -184,6 +210,7 @@ func emptyTagLookup(err error) bool {
 		"zero tags found":          // neo4j
 		return true
 	}
+
 	return false
 }
 
@@ -197,10 +224,12 @@ func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]ai.E
 	if id == "" || limit < 1 || limit > 500 {
 		return nil, errors.New("invalid edge evidence query or limit")
 	}
+
 	edge, err := a.Repo.FindEdgeById(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("resolve exact edge for evidence: %w", err)
 	}
+
 	tags, err := a.Repo.FindEdgeTags(ctx, edge, time.Time{})
 	if emptyTagLookup(err) {
 		return []ai.Evidence{}, nil
@@ -208,6 +237,7 @@ func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]ai.E
 	if err != nil {
 		return nil, fmt.Errorf("read edge %s provenance tags: %w", id, err)
 	}
+
 	out := make([]ai.Evidence, 0, min(len(tags), limit))
 	for _, tag := range tags {
 		if tag == nil || tag.Property == nil {
@@ -216,9 +246,11 @@ func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]ai.E
 		if len(out) >= limit {
 			break
 		}
+
 		out = append(out, ai.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
 			Kind: string(tag.Property.PropertyType()), Property: tag.Property, LastSeen: tag.LastSeen})
 	}
+
 	return out, nil
 }
 
@@ -230,6 +262,7 @@ func source(p oam.Property) string {
 	if p.PropertyType() != oam.SourceProperty {
 		return ""
 	}
+
 	return p.Name()
 }
 
@@ -249,6 +282,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	if a.Repo == nil {
 		return nil, false, errors.New("missing repository")
 	}
+
 	bounded, ok := a.Repo.(interface {
 		ReadEdgesLimited(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, bool, error)
 	})
@@ -256,14 +290,17 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	if !ok && !isNeo {
 		return nil, false, errors.New("asset-db version lacks bounded edge reader; upgrade the repository dependency")
 	}
+
 	ent, err := a.Repo.FindEntityById(ctx, id)
 	if err != nil {
 		return nil, false, err
 	}
+
 	var labels []string
 	if label != "" {
 		labels = []string{label}
 	}
+
 	var edges []*dbt.Edge
 	var more bool
 	if ok {
@@ -277,17 +314,31 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	if len(edges) > limit {
 		return nil, false, errors.New("repository violated bounded edge limit")
 	}
+
 	out := make([]ai.Relation, 0, len(edges))
 	for _, e := range edges {
 		if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
 			return nil, false, errors.New("malformed bounded edge")
 		}
+
 		dir := "out"
 		if e.ToEntity.ID == id {
 			dir = "in"
 		}
-		out = append(out, ai.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID, Label: e.Relation.Label(), Type: string(e.Relation.RelationType()), Direction: dir, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen})
+
+		out = append(out,
+			ai.Relation{
+				ID:        e.ID,
+				FromID:    e.FromEntity.ID,
+				ToID:      e.ToEntity.ID,
+				Label:     e.Relation.Label(),
+				Type:      string(e.Relation.RelationType()),
+				Direction: dir,
+				CreatedAt: e.CreatedAt,
+				LastSeen:  e.LastSeen,
+			})
 	}
+
 	return out, more, nil
 }
 
@@ -300,6 +351,7 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	if a.Repo == nil {
 		return nil, errors.New("missing OAM repository")
 	}
+
 	name = strings.Join(strings.Fields(name), " ")
 	if name == "" || len(name) > 256 || limit < 1 || limit > 10 {
 		return nil, errors.New("invalid organization lookup parameters")
@@ -308,7 +360,7 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	// Models sometimes remove a final period from a company name (e.g.,
 	// "Inc." -> "Inc"). Try both exact forms using indexed content queries.
 	// This is intentionally not fuzzy matching: other punctuation and
-	// arbitrary string similarity are NOT accepted as an entity identity.
+	// arbitrary string similarity are not accepted as an entity identity.
 	variants := []string{name}
 	if strings.HasSuffix(name, ".") {
 		variants = append(variants, strings.TrimSuffix(name, "."))
@@ -322,6 +374,7 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 		if candidate == "" || len(out) >= limit {
 			break
 		}
+
 		remaining := limit - len(out)
 		entities, err := a.Repo.FindEntitiesByContent(ctx, oam.Organization,
 			time.Time{}, remaining, dbt.ContentFilters{"name": candidate})
@@ -331,6 +384,7 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 			if strings.TrimSpace(err.Error()) == "zero entities found" {
 				continue
 			}
+
 			return nil, err
 		}
 		if len(entities) > remaining {
@@ -347,6 +401,7 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 			}
 		}
 	}
+
 	return out, nil
 }
 
@@ -373,6 +428,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 		if strings.HasSuffix(s, ".") {
 			return []string{s, strings.TrimSuffix(s, ".")}
 		}
+
 		return []string{s, s + "."}
 	}
 	matches := map[string]*ai.OrganizationCandidate{}
@@ -382,6 +438,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 		if err != nil {
 			return err
 		}
+
 		// Make jurisdiction a strict identity constraint if supplied.
 		var org oamorg.Organization
 		raw, err := json.Marshal(asset.Content)
@@ -394,12 +451,14 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 		if query.Jurisdiction != "" && org.Jurisdiction != query.Jurisdiction {
 			return nil
 		}
+
 		c, exists := matches[asset.ID]
 		if !exists {
 			if len(matches) >= limit {
 				tooMany = true
 				return nil
 			}
+
 			c = &ai.OrganizationCandidate{Asset: asset, Matches: []ai.ResolutionMatch{}}
 			matches[asset.ID] = c
 		}
@@ -408,6 +467,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 				return nil
 			}
 		}
+
 		c.Matches = append(c.Matches, ai.ResolutionMatch{Field: field, Value: value, Source: source})
 		return nil
 	}
@@ -416,6 +476,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 		if field == "registration_id" {
 			filters["jurisdiction"] = query.Jurisdiction
 		}
+
 		// Each lookup requests one extra candidate for truncation detection.
 		// Any overflow prevents automatic selection.
 		rows, err := a.Repo.FindEntitiesByContent(ctx, oam.Organization, time.Time{}, limit+1, filters)
@@ -423,6 +484,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 			if strings.TrimSpace(err.Error()) == "zero entities found" {
 				return nil
 			}
+
 			return err
 		}
 		if len(rows) > limit {
@@ -433,6 +495,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 				return err
 			}
 		}
+
 		return nil
 	}
 	switch {
@@ -476,7 +539,9 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 	for _, candidate := range matches {
 		result.Candidates = append(result.Candidates, *candidate)
 	}
-	sort.Slice(result.Candidates, func(i, j int) bool { return result.Candidates[i].Asset.ID < result.Candidates[j].Asset.ID })
+
+	sort.Slice(result.Candidates,
+		func(i, j int) bool { return result.Candidates[i].Asset.ID < result.Candidates[j].Asset.ID })
 	for i := range result.Candidates {
 		sort.Slice(result.Candidates[i].Matches, func(j, k int) bool {
 			a, b := result.Candidates[i].Matches[j], result.Candidates[i].Matches[k]
@@ -486,6 +551,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 			if a.Value != b.Value {
 				return a.Value < b.Value
 			}
+
 			return a.Source < b.Source
 		})
 	}
@@ -500,6 +566,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 	default:
 		result.Status = "ambiguous"
 	}
+
 	return result, nil
 }
 
@@ -508,11 +575,13 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 func queryByAlias(alias ai.OrganizationAlias,
 	add func(*dbt.Entity, string, string, string) error, ctx context.Context,
 	repo repository.Repository, limit int) error {
-	rows, err := repo.FindEntitiesByContent(ctx, oam.Organization, time.Time{}, limit+1, dbt.ContentFilters{"unique_id": alias.UniqueID})
+	rows, err := repo.FindEntitiesByContent(ctx, oam.Organization, time.Time{}, limit+1,
+		dbt.ContentFilters{"unique_id": alias.UniqueID})
 	if err != nil {
 		if strings.TrimSpace(err.Error()) == "zero entities found" {
 			return nil
 		}
+
 		return err
 	}
 	for _, ent := range rows {
@@ -530,6 +599,7 @@ func queryByAlias(alias ai.OrganizationAlias,
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -556,6 +626,7 @@ func (Catalog) Relations() []ai.RelationshipSchema {
 			}
 		}
 	}
+
 	sort.Slice(results, func(i, j int) bool {
 		a, b := results[i], results[j]
 		if a.SourceType != b.SourceType {
@@ -567,6 +638,7 @@ func (Catalog) Relations() []ai.RelationshipSchema {
 		if a.RelationType != b.RelationType {
 			return a.RelationType < b.RelationType
 		}
+
 		return a.DestinationType < b.DestinationType
 	})
 	return results
@@ -588,6 +660,7 @@ func (Catalog) Attribution(source, label, relationType, destination string) (str
 	if semanticsTable == nil {
 		return "", false
 	}
+
 	r, ok := semanticsTable.Lookup(source, label, relationType, destination)
 	return r.Attribution, ok
 }
@@ -611,16 +684,27 @@ func (Catalog) SearchFields() []ai.AssetSearchSchema {
 		"Identifier":       {"unique_id", "id", "id_type"},
 		"IPAddress":        {"address"},
 		"IPNetRecord":      {"cidr", "handle", "name", "start_address", "end_address", "whois_server", "parent_handle"},
-		"Location":         {"address", "building", "building_number", "province", "street_name", "unit", "locality", "city", "country", "postal_code"},
-		"Netblock":         {"cidr"},
-		"Organization":     {"unique_id", "name", "legal_name", "registration_id", "jurisdiction"},
-		"Person":           {"unique_id", "full_name", "first_name", "family_name"},
-		"Phone":            {"e164", "country_code"},
-		"Product":          {"unique_id", "product_name", "product_type"},
-		"ProductRelease":   {"name"},
-		"Service":          {"unique_id", "service_type"},
-		"TLSCertificate":   {"serial_number", "subject_common_name"},
-		"URL":              {"url", "scheme"},
+		"Location": {
+			"address",
+			"building",
+			"building_number",
+			"province",
+			"street_name",
+			"unit",
+			"locality",
+			"city",
+			"country",
+			"postal_code",
+		},
+		"Netblock":       {"cidr"},
+		"Organization":   {"unique_id", "name", "legal_name", "registration_id", "jurisdiction"},
+		"Person":         {"unique_id", "full_name", "first_name", "family_name"},
+		"Phone":          {"e164", "country_code"},
+		"Product":        {"unique_id", "product_name", "product_type"},
+		"ProductRelease": {"name"},
+		"Service":        {"unique_id", "service_type"},
+		"TLSCertificate": {"serial_number", "subject_common_name"},
+		"URL":            {"url", "scheme"},
 	}
 	out := make([]ai.AssetSearchSchema, 0, len(oam.AssetList))
 	for _, t := range oam.AssetList {
@@ -628,8 +712,10 @@ func (Catalog) SearchFields() []ai.AssetSearchSchema {
 		if !ok {
 			continue
 		}
+
 		out = append(out, ai.AssetSearchSchema{Type: string(t), Fields: fields})
 	}
+
 	return out
 }
 
@@ -657,16 +743,19 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 		if asset.Type != selector.Type {
 			return result, errors.New("entity_id does not match asserted OAM type")
 		}
+
 		result.Candidates = append(result.Candidates, ai.OrganizationCandidate{
 			Asset: asset, Matches: []ai.ResolutionMatch{{Field: "entity_id", Value: selector.EntityID}},
 		})
 		result.Status = "matched"
 		return result, nil
 	}
+
 	value := selector.Value
 	if selector.Type == "FQDN" && selector.Field == "name" {
 		value = strings.ToLower(strings.TrimSuffix(value, "."))
 	}
+
 	// The repository uses a bounded indexed query. Ask for one extra record
 	// so a capped result can never masquerade as a unique result.
 	filter := dbt.ContentFilters{selector.Field: value}
@@ -675,6 +764,7 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 		if strings.TrimSpace(err.Error()) == "zero entities found" {
 			return result, nil
 		}
+
 		return result, err
 	}
 	if len(rows) > limit {
@@ -684,6 +774,7 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 		if len(result.Candidates) >= limit {
 			break
 		}
+
 		asset, err := convert(ent)
 		if err != nil {
 			return result, err
@@ -691,11 +782,14 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 		if asset.Type != selector.Type {
 			return result, errors.New("repository returned wrong OAM type")
 		}
+
 		result.Candidates = append(result.Candidates, ai.OrganizationCandidate{
 			Asset: asset, Matches: []ai.ResolutionMatch{{Field: selector.Field, Value: value}},
 		})
 	}
-	sort.Slice(result.Candidates, func(i, j int) bool { return result.Candidates[i].Asset.ID < result.Candidates[j].Asset.ID })
+
+	sort.Slice(result.Candidates,
+		func(i, j int) bool { return result.Candidates[i].Asset.ID < result.Candidates[j].Asset.ID })
 	switch {
 	case result.Truncated:
 		result.Status = "truncated"
@@ -706,6 +800,7 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 	default:
 		result.Status = "ambiguous"
 	}
+
 	return result, nil
 }
 

@@ -38,6 +38,7 @@ func TestNeo4jBoundedEdgeQuery(t *testing.T) {
 	if params["eid"] != "42" || params["lim"] != int64(6) {
 		t.Errorf("unexpected params %#v", params)
 	}
+
 	types, _ := params["types"].([]string)
 	if len(types) != 2 || types[0] != "NODE" || types[1] != "DNS_RECORD" {
 		t.Errorf("labels must match upper-cased relationship types, got %#v", params["types"])
@@ -47,6 +48,7 @@ func TestNeo4jBoundedEdgeQuery(t *testing.T) {
 	if err != nil || !strings.Contains(in, "<-[r]-") || strings.Contains(in, "WHERE") {
 		t.Errorf("incoming query without filters: %q err=%v", in, err)
 	}
+
 	both, _, err := neo4jBoundedEdgeQuery("42", "both", time.Time{}, 1, nil)
 	if err != nil || !strings.Contains(both, ")-[r]-(") {
 		t.Errorf("undirected query: %q err=%v", both, err)
@@ -77,10 +79,12 @@ func TestNeo4jDatabaseName(t *testing.T) {
 	if got := Neo4jDatabaseName(cfg); got != "assets" {
 		t.Errorf("got %q, want assets", got)
 	}
+
 	cfg.GraphDBs[1].URL = "bolt://db:7687"
 	if got := Neo4jDatabaseName(cfg); got != "" {
 		t.Errorf("no path should select the server default, got %q", got)
 	}
+
 	cfg.GraphDBs[1].System = "postgres"
 	if got := Neo4jDatabaseName(cfg); got != "" {
 		t.Errorf("non-Neo4j primary must yield empty, got %q", got)
@@ -97,10 +101,12 @@ func TestAdapterBoundedTraversalOnNeo4j(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set AMASS_AI_TEST_NEO4J_DSN to a disposable Neo4j database")
 	}
+
 	repo, err := assetdb.New(neo4jrepo.Neo4j, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -115,7 +121,8 @@ func TestAdapterBoundedTraversalOnNeo4j(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = repo.CreateEdge(ctx, &dbt.Edge{FromEntity: root, ToEntity: dest, Relation: &oamgen.SimpleRelation{Name: "node"}}); err != nil {
+		if _, err = repo.CreateEdge(ctx,
+			&dbt.Edge{FromEntity: root, ToEntity: dest, Relation: &oamgen.SimpleRelation{Name: "node"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -126,6 +133,7 @@ func TestAdapterBoundedTraversalOnNeo4j(t *testing.T) {
 	if err != nil || len(edges) != 1 || !more {
 		t.Fatalf("bounded page: len=%d more=%v err=%v", len(edges), more, err)
 	}
+
 	edges, more, err = adapter.EdgesLimited(ctx, root.ID, "out", "node", time.Time{}, 2)
 	if err != nil || len(edges) != 2 || more {
 		t.Fatalf("complete page: len=%d more=%v err=%v", len(edges), more, err)
@@ -135,10 +143,12 @@ func TestAdapterBoundedTraversalOnNeo4j(t *testing.T) {
 			t.Fatalf("unexpected edge %#v", e)
 		}
 	}
+
 	in, _, err := adapter.EdgesLimited(ctx, edges[0].ToID, "in", "", time.Time{}, 5)
 	if err != nil || len(in) != 1 || in[0].Direction != "in" {
 		t.Fatalf("incoming page: %#v err=%v", in, err)
 	}
+
 	none, more, err := adapter.EdgesLimited(ctx, root.ID, "out", "dns_record", time.Time{}, 5)
 	if err != nil || len(none) != 0 || more {
 		t.Fatalf("label filter: len=%d more=%v err=%v", len(none), more, err)

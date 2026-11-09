@@ -16,7 +16,10 @@ func TestExplicitRelationGroundingRecoversHallucinatedRegistration(t *testing.T)
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"connected","relationships":[{"source_type":"FQDN","label":"registration","relation_type":"SimpleRelation","destination_type":"DomainRecord"}],"path_rule":"any"}`,
 	}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}}
+	agent := Agent{
+		Model:  model,
+		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()},
+	}
 	goal, err := agent.planGoal(context.Background(), alternateFixtureQuestion)
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +27,8 @@ func TestExplicitRelationGroundingRecoversHallucinatedRegistration(t *testing.T)
 	if model.calls != 1 {
 		t.Fatalf("schema grounding should not require model retry; got %d calls", model.calls)
 	}
-	if goal.Subject.Type != "FQDN" || goal.Subject.Value != "tech.acme.example" || len(goal.TargetTypes) != 1 || goal.TargetTypes[0] != "Organization" {
+	if goal.Subject.Type != "FQDN" || goal.Subject.Value != "tech.acme.example" || len(goal.TargetTypes) != 1 ||
+		goal.TargetTypes[0] != "Organization" {
 		t.Fatalf("grounding changed user identifier or target: %+v", goal)
 	}
 	if goal.PathRule != "all" || len(goal.Relationships) != 2 {
@@ -39,7 +43,9 @@ func TestExplicitRelationGroundingRecoversHallucinatedRegistration(t *testing.T)
 	if err := validateGoal(goal, testOAMCatalog.Relations(), testOAMCatalog.SearchFields()); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("REPAIRED GOAL: %s -> %s using %s and %s, rule=%s", goal.Subject.Type, goal.TargetTypes[0], goal.Relationships[0].Label, goal.Relationships[1].Label, goal.PathRule)
+
+	t.Logf("REPAIRED GOAL: %s -> %s using %s and %s, rule=%s", goal.Subject.Type, goal.TargetTypes[0],
+		goal.Relationships[0].Label, goal.Relationships[1].Label, goal.PathRule)
 }
 
 func TestExplicitRelationGroundingPreservesOrderedUserIntent(t *testing.T) {
@@ -48,6 +54,7 @@ func TestExplicitRelationGroundingPreservesOrderedUserIntent(t *testing.T) {
 	if !ok || hint.Rule != "ordered" {
 		t.Fatalf("ordered labels were not detected: %+v", hint)
 	}
+
 	rels, ok := groundedRelationshipGoal(hint, "FQDN", "Organization", testOAMCatalog.Relations())
 	if !ok || len(rels) != 2 || rels[0].Label != "domain" || rels[1].Label != "website" {
 		t.Fatalf("ordered schema route not grounded: %+v", rels)
@@ -74,7 +81,10 @@ func TestExplicitRelationGroundingFailsClosedWhenTargetTypeHallucinated(t *testi
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["ImaginaryOrganization"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`,
 	}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}}
+	agent := Agent{
+		Model:  model,
+		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()},
+	}
 	_, err := agent.planGoal(context.Background(), alternateFixtureQuestion)
 	if err == nil || !strings.Contains(err.Error(), "unknown OAM target type") {
 		t.Fatalf("invented target was accepted: %v", err)
@@ -82,7 +92,8 @@ func TestExplicitRelationGroundingFailsClosedWhenTargetTypeHallucinated(t *testi
 }
 
 func TestNonExplicitQuestionDoesNotTriggerRelationRepair(t *testing.T) {
-	hint, ok := explicitRelationLabels("What organization is associated with tech.acme.example?", testOAMCatalog.Relations())
+	hint, ok := explicitRelationLabels("What organization is associated with tech.acme.example?",
+		testOAMCatalog.Relations())
 	if ok || len(hint.Labels) != 0 {
 		t.Fatalf("association question was incorrectly constrained: %+v", hint)
 	}

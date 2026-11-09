@@ -21,26 +21,34 @@ func (cliTestGraph) GetAsset(_ context.Context, id string) (ai.Asset, error) {
 	if id == "1" {
 		return ai.Asset{ID: "1", Type: "FQDN", Key: "tech.acme.example"}, nil
 	}
+
 	return ai.Asset{ID: "2", Type: "Organization", Key: "Acme Holdings"}, nil
 }
+
 func (cliTestGraph) FindAssets(context.Context, string, time.Time, int) ([]ai.Asset, error) {
 	return nil, nil
 }
+
 func (cliTestGraph) Edges(context.Context, string, string, string, time.Time) ([]ai.Relation, error) {
 	return nil, nil
 }
+
 func (cliTestGraph) Evidence(context.Context, string, int) ([]ai.Evidence, error) { return nil, nil }
+
 func (cliTestGraph) EdgesLimited(_ context.Context, id, dir, label string, _ time.Time, limit int) ([]ai.Relation, bool, error) {
 	if id == "1" {
 		return []ai.Relation{{ID: "e1", FromID: "2", ToID: "1", Label: "domain", Type: "SimpleRelation"}}, false, nil
 	}
+
 	return []ai.Relation{}, false, nil
 }
 
 type cliTestCatalog struct{}
 
 func (cliTestCatalog) Relations() []ai.RelationshipSchema {
-	return []ai.RelationshipSchema{{SourceType: "Organization", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"}}
+	return []ai.RelationshipSchema{
+		{SourceType: "Organization", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
+	}
 }
 
 func TestGraphSearchUserFacingTextAndMermaid(t *testing.T) {
@@ -53,10 +61,12 @@ func TestGraphSearchUserFacingTextAndMermaid(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		output := buf.String()
 		switch format {
 		case "text":
-			if !strings.Contains(output, "depth=1") || !strings.Contains(output, "<--domain") || !strings.Contains(output, "Acme Holdings") {
+			if !strings.Contains(output, "depth=1") || !strings.Contains(output,
+				"<--domain") || !strings.Contains(output, "Acme Holdings") {
 				t.Fatalf("wrong text: %s", output)
 			}
 		case "mermaid":
@@ -74,6 +84,7 @@ func TestGraphSearchUserFacingTextAndMermaid(t *testing.T) {
 		}
 	}
 }
+
 func TestGraphSearchRejectsAmbiguousSelectors(t *testing.T) {
 	runner := ai.ToolRunner{Graph: cliTestGraph{}, Catalog: cliTestCatalog{}, Limits: ai.DefaultLimits()}
 	cases := []graphSearchOptions{
@@ -88,6 +99,7 @@ func TestGraphSearchRejectsAmbiguousSelectors(t *testing.T) {
 		}
 	}
 }
+
 func TestCollectionRequiresExactApprovalBeforeNetwork(t *testing.T) {
 	p := ai.PlanCollection(ai.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"})
 	var out bytes.Buffer

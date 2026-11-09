@@ -51,35 +51,49 @@ func graphSearch(ctx context.Context, runner ai.ToolRunner, opt graphSearchOptio
 	if opt.SubjectID != "" && (opt.SubjectField != "" || opt.SubjectValue != "") {
 		return errors.New("-subject-id cannot be combined with -subject-field or -subject-value")
 	}
+
 	id := opt.SubjectID
 	response := graphSearchResponse{Status: "unresolved"}
 	if id == "" {
 		args, err := json.Marshal(struct {
 			ai.AssetSelector
 			Limit int `json:"limit"`
-		}{AssetSelector: ai.AssetSelector{Type: opt.SubjectType, Field: opt.SubjectField, Value: opt.SubjectValue}, Limit: 10})
+		}{
+			AssetSelector: ai.AssetSelector{Type: opt.SubjectType, Field: opt.SubjectField, Value: opt.SubjectValue},
+			Limit:         10,
+		})
 		if err != nil {
 			return err
 		}
+
 		raw, err := runner.Run(ctx, "resolve_asset", args)
 		if err != nil {
 			return fmt.Errorf("resolve subject: %w", err)
 		}
+
 		var resolution ai.AssetResolution
 		if err := json.Unmarshal(raw, &resolution); err != nil {
 			return err
 		}
+
 		response.Resolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			response.Status = resolution.Status
 			if resolution.Status == "not_found" {
-				plan := ai.PlanCollection(ai.AssetSelector{Type: opt.SubjectType, Field: opt.SubjectField, Value: opt.SubjectValue})
+				plan := ai.PlanCollection(ai.AssetSelector{
+					Type:  opt.SubjectType,
+					Field: opt.SubjectField,
+					Value: opt.SubjectValue,
+				})
 				response.Collection = &plan
 			}
+
 			return writeGraphSearchResponse(out, opt.Format, response)
 		}
+
 		id = resolution.Candidates[0].Asset.ID
 	}
+
 	var targets []string
 	if strings.TrimSpace(opt.TargetTypes) != "" {
 		unique := map[string]bool{}
@@ -94,6 +108,7 @@ func graphSearch(ctx context.Context, runner ai.ToolRunner, opt graphSearchOptio
 			}
 		}
 	}
+
 	result, err := ai.SearchGraph(ctx, runner.Graph, runner.Catalog, runner.Limits, ai.GraphSearchRequest{
 		StartID: id, TargetTypes: targets, Direction: opt.Direction, MaxDepth: opt.MaxDepth, MaxMatches: opt.MaxMatches, Since: opt.Since,
 	})
@@ -103,6 +118,7 @@ func graphSearch(ctx context.Context, runner ai.ToolRunner, opt graphSearchOptio
 	if opt.SubjectType != "" && result.Root.Type != opt.SubjectType {
 		return fmt.Errorf("asset %q is %s, not asserted type %s", id, result.Root.Type, opt.SubjectType)
 	}
+
 	response.Status = "matched"
 	response.Search = &result
 	return writeGraphSearchResponse(out, opt.Format, response)
@@ -121,12 +137,16 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 				return err
 			}
 			if response.Collection != nil {
-				_, err = fmt.Fprintf(out, "Collection: %s (%s); approval required: %t\n", response.Collection.Status, response.Collection.ID, response.Collection.RequiresApproval)
+				_, err = fmt.Fprintf(out, "Collection: %s (%s); approval required: %t\n",
+					response.Collection.Status, response.Collection.ID, response.Collection.RequiresApproval)
 			}
+
 			return err
 		}
+
 		r := response.Search
-		if _, err := fmt.Fprintf(out, "Root: %s [%s] (asset %s)\nPaths: %d, visited nodes: %d, visited edges: %d, bounded complete: %t, truncated: %t\n", r.Root.Key, r.Root.Type, r.Root.ID, len(r.Matches), r.VisitedNodes, r.VisitedEdges, r.Exhausted, r.Truncated); err != nil {
+		if _, err := fmt.Fprintf(out,
+			"Root: %s [%s] (asset %s)\nPaths: %d, visited nodes: %d, visited edges: %d, bounded complete: %t, truncated: %t\n", r.Root.Key, r.Root.Type, r.Root.ID, len(r.Matches), r.VisitedNodes, r.VisitedEdges, r.Exhausted, r.Truncated); err != nil {
 			return err
 		}
 		if r.Reason != "" {
@@ -159,11 +179,13 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 				return err
 			}
 		}
+
 		return nil
 	case "mermaid":
 		if response.Search == nil {
 			return fmt.Errorf("cannot render %s result as Mermaid", response.Status)
 		}
+
 		nodes := map[string]ai.Asset{response.Search.Root.ID: response.Search.Root}
 		edges := map[string]ai.Relation{}
 		for _, p := range response.Search.Matches {
@@ -174,6 +196,7 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 				edges[e.ID] = e
 			}
 		}
+
 		nodeIDs := make([]string, 0, len(nodes))
 		edgeIDs := make([]string, 0, len(edges))
 		for id := range nodes {
@@ -182,6 +205,7 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 		for id := range edges {
 			edgeIDs = append(edgeIDs, id)
 		}
+
 		sort.Strings(nodeIDs)
 		sort.Strings(edgeIDs)
 		walk := ai.WalkResult{Truncated: response.Search.Truncated}
@@ -191,6 +215,7 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 		for _, id := range edgeIDs {
 			walk.Edges = append(walk.Edges, edges[id])
 		}
+
 		_, err := fmt.Fprint(out, ai.Mermaid(walk))
 		return err
 	default:

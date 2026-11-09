@@ -16,8 +16,10 @@ func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		id := fmt.Sprintf("url-%02d", i)
 		g.assets[id] = Asset{ID: id, Type: "URL", Key: "https://example.org/" + id}
-		g.links = append(g.links, Relation{ID: fmt.Sprintf("e%02d", i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
+		g.links = append(g.links, Relation{ID: fmt.Sprintf("e%02d",
+			i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
 	}
+
 	model := &plannerModel{replies: []string{`{"preferred_labels":["website"],"priority_asset_ids":[]}`}}
 	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: testOAMCatalog, Limits: DefaultLimits()}}
 	var investigation Investigation
@@ -29,7 +31,8 @@ func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
 		t.Fatal(err)
 	}
 	if model.calls != 1 || len(investigation.Observations) != 1 || investigation.Observations[0].Tool != "guide_graph" {
-		t.Fatalf("expected intermediate model guidance: calls=%d observations=%+v", model.calls, investigation.Observations)
+		t.Fatalf("expected intermediate model guidance: calls=%d observations=%+v", model.calls,
+			investigation.Observations)
 	}
 	if result.Truncated || !result.Exhausted || len(result.Matches) != 15 {
 		t.Fatalf("guided traversal lost graph results: %+v", result)
@@ -41,8 +44,10 @@ func TestGuidedInvestigationInvalidAdviceCannotInventGraphLabels(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		id := fmt.Sprintf("url-%02d", i)
 		g.assets[id] = Asset{ID: id, Type: "URL", Key: id}
-		g.links = append(g.links, Relation{ID: fmt.Sprint(i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
+		g.links = append(g.links,
+			Relation{ID: fmt.Sprint(i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
 	}
+
 	model := &plannerModel{replies: []string{`{"preferred_labels":["nonexistent-ownership"],"priority_asset_ids":[]}`}}
 	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: testOAMCatalog, Limits: DefaultLimits()}}
 	var inv Investigation

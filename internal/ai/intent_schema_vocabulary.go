@@ -16,29 +16,125 @@ import (
 // catalog (underscores, hyphens, spaces, common singular/plural forms).
 // All interpretations remain constrained to real catalog relationships.
 var relationVocabulary = map[string][]string{
-	"node":               {"subdomain hierarchy", "hostname hierarchy", "dns name hierarchy", "child hostname", "child domain", "parent hostname", "parent domain", "dns tree", "fqdn tree", "subdomain node"},
-	"dns_record":         {"dns records", "dns record", "dns resolution", "dns mappings", "dns mapping", "dns lookup", "dns lookup records", "dns resource record", "dns resource records"},
-	"ptr_record":         {"reverse dns", "reverse dns lookup", "reverse dns record", "reverse dns records", "ptr lookup", "ptr records", "reverse resolution"},
-	"website":            {"website", "websites", "web site", "web sites", "homepage", "home page", "web presence", "official site", "official website"},
-	"registration":       {"registration", "registrations", "domain registration", "registration record", "registration records", "whois registration", "rdap registration"},
-	"registrant_contact": {"registrant", "registrant contact", "registrant details", "domain registrant", "registered contact", "registrant information"},
-	"organization":       {"organization", "organisations", "organisation", "corporate entity", "corporate organization", "business entity"},
-	"subsidiary":         {"subsidiary", "subsidiaries", "subsidiary relationship", "subsidiary relationships", "parent company relationship", "corporate parent relationship"},
-	"org_unit":           {"organization unit", "organisational unit", "organizational unit", "business unit", "division", "department"},
-	"provider":           {"provider", "service provider", "cloud provider", "hosting provider", "provided by"},
-	"verified_for":       {"verification", "domain verification", "domain ownership verification", "verified for", "verified association"},
-	"certificate":        {"certificate", "certificates", "tls cert", "ssl cert", "server certificate", "tls certificate"},
-	"san_dns_name":       {"subject alternative name", "subject alternative names", "san", "sans", "certificate san", "certificate dns name", "certificate dns names"},
-	"contains":           {"containment", "contains", "contained within", "encompasses", "includes"},
-	"ip_address":         {"ip address", "ip addresses", "network address", "network addresses"},
-	"location":           {"location", "locations", "physical location", "geolocation"},
-	"account":            {"account", "accounts", "user account", "cloud account"},
-	"contact":            {"contact", "contacts", "point of contact"},
-	"domain":             {"domain", "domain name", "domain names", "url domain", "url hostname"},
+	"node": {
+		"subdomain hierarchy",
+		"hostname hierarchy",
+		"dns name hierarchy",
+		"child hostname",
+		"child domain",
+		"parent hostname",
+		"parent domain",
+		"dns tree",
+		"fqdn tree",
+		"subdomain node",
+	},
+	"dns_record": {
+		"dns records",
+		"dns record",
+		"dns resolution",
+		"dns mappings",
+		"dns mapping",
+		"dns lookup",
+		"dns lookup records",
+		"dns resource record",
+		"dns resource records",
+	},
+	"ptr_record": {
+		"reverse dns",
+		"reverse dns lookup",
+		"reverse dns record",
+		"reverse dns records",
+		"ptr lookup",
+		"ptr records",
+		"reverse resolution",
+	},
+	"website": {
+		"website",
+		"websites",
+		"web site",
+		"web sites",
+		"homepage",
+		"home page",
+		"web presence",
+		"official site",
+		"official website",
+	},
+	"registration": {
+		"registration",
+		"registrations",
+		"domain registration",
+		"registration record",
+		"registration records",
+		"whois registration",
+		"rdap registration",
+	},
+	"registrant_contact": {
+		"registrant",
+		"registrant contact",
+		"registrant details",
+		"domain registrant",
+		"registered contact",
+		"registrant information",
+	},
+	"organization": {
+		"organization",
+		"organisations",
+		"organisation",
+		"corporate entity",
+		"corporate organization",
+		"business entity",
+	},
+	"subsidiary": {
+		"subsidiary",
+		"subsidiaries",
+		"subsidiary relationship",
+		"subsidiary relationships",
+		"parent company relationship",
+		"corporate parent relationship",
+	},
+	"org_unit": {
+		"organization unit",
+		"organisational unit",
+		"organizational unit",
+		"business unit",
+		"division",
+		"department",
+	},
+	"provider": {"provider", "service provider", "cloud provider", "hosting provider", "provided by"},
+	"verified_for": {
+		"verification",
+		"domain verification",
+		"domain ownership verification",
+		"verified for",
+		"verified association",
+	},
+	"certificate": {"certificate", "certificates", "tls cert", "ssl cert", "server certificate", "tls certificate"},
+	"san_dns_name": {
+		"subject alternative name",
+		"subject alternative names",
+		"san",
+		"sans",
+		"certificate san",
+		"certificate dns name",
+		"certificate dns names",
+	},
+	"contains":   {"containment", "contains", "contained within", "encompasses", "includes"},
+	"ip_address": {"ip address", "ip addresses", "network address", "network addresses"},
+	"location":   {"location", "locations", "physical location", "geolocation"},
+	"account":    {"account", "accounts", "user account", "cloud account"},
+	"contact":    {"contact", "contacts", "point of contact"},
+	"domain":     {"domain", "domain name", "domain names", "url domain", "url hostname"},
 	// Labels whose meaning depends on relation content (A, AAAA, MX, TXT,
 	// CNAME records are all "dns_record" edges distinguished by RR type) are
 	// deliberately absent until the planner can filter on that content.
-	"port":         {"open port", "open ports", "exposed service", "exposed services", "network service", "listening service"},
+	"port": {
+		"open port",
+		"open ports",
+		"exposed service",
+		"exposed services",
+		"network service",
+		"listening service",
+	},
 	"name_server":  {"name server", "name servers", "nameserver", "nameservers", "registered name servers"},
 	"product_used": {"product used", "products used", "software in use", "technology used", "technologies used"},
 	"announces":    {"announces", "announced by", "bgp announcement", "bgp announcements", "bgp origin"},
@@ -57,11 +153,16 @@ func normalizeSchemaAlias(raw string) string {
 // selector fields. Field names are only presented to the model when actually
 // registered on an OAM asset type.
 var searchableFieldVocabulary = map[string][]string{
-	"name":                {"name", "asset name", "hostname", "title", "display name"},
-	"legal_name":          {"legal name", "registered name", "official name", "legal entity name"},
-	"unique_id":           {"unique id", "unique identifier", "identifier", "external id"},
-	"id":                  {"id", "record id", "identifier"},
-	"registration_id":     {"registration number", "registration id", "company registration", "corporate registration number"},
+	"name":       {"name", "asset name", "hostname", "title", "display name"},
+	"legal_name": {"legal name", "registered name", "official name", "legal entity name"},
+	"unique_id":  {"unique id", "unique identifier", "identifier", "external id"},
+	"id":         {"id", "record id", "identifier"},
+	"registration_id": {
+		"registration number",
+		"registration id",
+		"company registration",
+		"corporate registration number",
+	},
 	"jurisdiction":        {"jurisdiction", "registration jurisdiction", "country of incorporation"},
 	"address":             {"address", "ip address", "street address", "physical address"},
 	"url":                 {"url", "uri", "web address", "link", "website url"},
@@ -105,7 +206,7 @@ var searchableFieldVocabulary = map[string][]string{
 	"account_id":          {"account id", "account identifier", "cloud account id"},
 }
 
-// relationLabelAliases derives spelling and inflection variants for EVERY
+// relationLabelAliases derives spelling and inflection variants for every
 // registered relation label, then adds carefully curated semantic synonyms.
 // This avoids needing to maintain a handcrafted entry for each new label.
 func relationLabelAliases(label string) []string {
@@ -117,6 +218,7 @@ func relationLabelAliases(label string) []string {
 		if len(words) == 0 {
 			continue
 		}
+
 		last := words[len(words)-1]
 		// A trailing preposition is not a noun to pluralize.
 		switch last {
@@ -135,8 +237,10 @@ func relationLabelAliases(label string) []string {
 		default:
 			words[len(words)-1] = last + "s"
 		}
+
 		all = append(all, strings.Join(words, " "))
 	}
+
 	seen := map[string]bool{}
 	result := make([]string, 0, len(all))
 	for _, raw := range all {
@@ -144,9 +248,11 @@ func relationLabelAliases(label string) []string {
 		if term == "" || seen[term] {
 			continue
 		}
+
 		seen[term] = true
 		result = append(result, term)
 	}
+
 	return result
 }
 
@@ -162,26 +268,30 @@ func searchableFieldAliases(field string) []string {
 		if normalized == "" || seen[normalized] {
 			continue
 		}
+
 		seen[normalized] = true
 		result = append(result, normalized)
 	}
+
 	return result
 }
 
 // schemaRelationAliasCandidates returns every *registered* OAM label that can
 // match an explicit user phrase. An ambiguous alias produces multiple labels
-// and MUST NOT be silently reduced to one.
+// and must not be silently reduced to one.
 func schemaRelationAliasCandidates(phrase string, catalog []RelationshipSchema) []string {
 	needle := normalizeSchemaAlias(phrase)
 	if needle == "" {
 		return nil
 	}
+
 	available := map[string]bool{}
 	for _, r := range catalog {
 		if r.Label != "" {
 			available[r.Label] = true
 		}
 	}
+
 	var matched []string
 	for label := range available {
 		aliases := relationLabelAliases(label)
@@ -192,6 +302,7 @@ func schemaRelationAliasCandidates(phrase string, catalog []RelationshipSchema) 
 			}
 		}
 	}
+
 	sort.Strings(matched)
 	return matched
 }
@@ -203,10 +314,12 @@ func compactRelationshipVocabulary(catalog []RelationshipSchema) string {
 	for _, r := range catalog {
 		unique[r.Label] = true
 	}
+
 	labels := make([]string, 0, len(unique))
 	for label := range unique {
 		labels = append(labels, label)
 	}
+
 	sort.Strings(labels)
 	var lines []string
 	for _, label := range labels {
@@ -217,10 +330,13 @@ func compactRelationshipVocabulary(catalog []RelationshipSchema) string {
 		if len(aliases) == 0 {
 			continue
 		}
+
 		lines = append(lines, label+": "+strings.Join(aliases, ", "))
 	}
+
 	return strings.Join(lines, "\n")
 }
+
 func compactSearchVocabulary(selectors []AssetSearchSchema) string {
 	fields := map[string]bool{}
 	for _, selector := range selectors {
@@ -228,10 +344,12 @@ func compactSearchVocabulary(selectors []AssetSearchSchema) string {
 			fields[field] = true
 		}
 	}
+
 	sorted := make([]string, 0, len(fields))
 	for field := range fields {
 		sorted = append(sorted, field)
 	}
+
 	sort.Strings(sorted)
 	var lines []string
 	for _, field := range sorted {
@@ -239,12 +357,14 @@ func compactSearchVocabulary(selectors []AssetSearchSchema) string {
 		if len(aliases) > 7 {
 			aliases = aliases[:7]
 		}
+
 		lines = append(lines, field+": "+strings.Join(aliases, ", "))
 	}
+
 	return strings.Join(lines, "\n")
 }
 
-// Intent-operation paraphrases are semantic signals for goal planning, NOT
+// Intent-operation paraphrases are semantic signals for goal planning, not
 // stand-ins for OAM edge labels. In particular "owns" and "associated with"
 // must not be treated as synonyms for an observed ownership relationship.
 var investigationOperationVocabulary = map[string][]string{
@@ -276,6 +396,7 @@ func compactOperationVocabulary() string {
 	for k := range investigationOperationVocabulary {
 		intents = append(intents, k)
 	}
+
 	sort.Strings(intents)
 	var lines []string
 	for _, kind := range intents {
@@ -283,8 +404,10 @@ func compactOperationVocabulary() string {
 		if len(values) > 7 {
 			values = values[:7]
 		}
+
 		lines = append(lines, kind+": "+strings.Join(values, ", "))
 	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -295,6 +418,7 @@ func CuratedRelationLabels() []string {
 	for label := range relationVocabulary {
 		labels = append(labels, label)
 	}
+
 	sort.Strings(labels)
 	return labels
 }

@@ -35,17 +35,22 @@ func TestExplicitOrganizationQuestionUsesZeroModelCalls(t *testing.T) {
 		t.Fatalf("direct Organization should be only primary result: %+v", result.Matches)
 	}
 	if len(result.AnswerGroups) != 3 || result.EvidenceDossier == nil || len(result.EvidenceDossier.Paths) != 3 {
-		t.Fatalf("indirect candidates or evidence discarded: groups=%+v dossier=%+v", result.AnswerGroups, result.EvidenceDossier)
+		t.Fatalf("indirect candidates or evidence discarded: groups=%+v dossier=%+v", result.AnswerGroups,
+			result.EvidenceDossier)
 	}
+
 	stages := map[string]string{}
 	for _, event := range result.Trace {
 		stages[event.Stage] = event.Detail
 	}
-	if stages["goal_planning"] != "deterministic_schema_grounding" || stages["path_selection"] != "deterministic_destination_grouping" {
+	if stages["goal_planning"] != "deterministic_schema_grounding" ||
+		stages["path_selection"] != "deterministic_destination_grouping" {
 		t.Fatalf("missing model-bypass stage tracing: %+v", result.Trace)
 	}
+
 	t.Logf("FAST PATH: model_calls=%d, graph_candidates=%d, answer_groups=%d, selected=%d, planning=%s, selection=%s",
-		model.calls, len(result.Search.Matches), len(result.AnswerGroups), len(result.Matches), stages["goal_planning"], stages["path_selection"])
+		model.calls, len(result.Search.Matches), len(result.AnswerGroups), len(result.Matches),
+		stages["goal_planning"], stages["path_selection"])
 }
 
 func TestDeterministicGoalFastPathFailsClosedForAmbiguity(t *testing.T) {
@@ -121,7 +126,8 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 	resolved := plannedGraph{fakeGraph: g}
 	a := Agent{Model: model, Runner: ToolRunner{Graph: resolved, Catalog: testOAMCatalog, Limits: DefaultLimits()}}
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
-	out, err := a.AskAdaptive(context.Background(), question, AdaptiveOptions{MaxDepth: 8, MaxPathsPerAsset: 3, GuidanceRounds: 0})
+	out, err := a.AskAdaptive(context.Background(), question,
+		AdaptiveOptions{MaxDepth: 8, MaxPathsPerAsset: 3, GuidanceRounds: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +147,7 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 	if len(out.AnswerGroups) != 3 {
 		t.Fatalf("parent/sibling context lost: %+v", out.AnswerGroups)
 	}
+
 	var preferred, alternate string
 	var contextual int
 	for _, summary := range out.AnswerGroups {
@@ -149,6 +156,7 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 			if len(summary.AlternativePathIDs) != 1 {
 				t.Fatalf("direct alternate route not retained: %+v", summary)
 			}
+
 			alternate = summary.AlternativePathIDs[0]
 		} else if !summary.DirectToGoal {
 			contextual++
@@ -157,6 +165,7 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 	if contextual != 2 || preferred != out.Matches[0].PathID || alternate == preferred {
 		t.Fatalf("context or alternate selection wrong: %+v", out.AnswerGroups)
 	}
+
 	t.Logf("SIX PATHS: model_calls=%d candidates=%d primary=%s preferred=%s weaker=%s indirect_groups=%d",
 		model.calls, len(out.Search.Matches), out.Matches[0].Nodes[2].ID, preferred, alternate, contextual)
 }

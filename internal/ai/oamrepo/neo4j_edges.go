@@ -34,12 +34,15 @@ func Neo4jDatabaseName(cfg *config.Config) string {
 		if db == nil || !db.Primary || !strings.EqualFold(db.System, "bolt") {
 			continue
 		}
+
 		u, err := url.Parse(db.URL)
 		if err != nil {
 			return ""
 		}
+
 		return strings.TrimPrefix(u.Path, "/")
 	}
+
 	return ""
 }
 
@@ -53,6 +56,7 @@ func neo4jBoundedEdgeQuery(entityID, direction string, since time.Time, limit in
 	if limit < 1 || limit > 500 {
 		return "", nil, errors.New("edge limit must be 1..500")
 	}
+
 	var pattern string
 	switch direction {
 	case "in":
@@ -67,6 +71,7 @@ func neo4jBoundedEdgeQuery(entityID, direction string, since time.Time, limit in
 	if len(labels) > 8 {
 		return "", nil, errors.New("too many edge labels")
 	}
+
 	params := map[string]any{"eid": entityID, "lim": int64(limit + 1)}
 	var where []string
 	if !since.IsZero() {
@@ -81,15 +86,19 @@ func neo4jBoundedEdgeQuery(entityID, direction string, since time.Time, limit in
 			if l == "" || len(l) > 128 {
 				return "", nil, errors.New("invalid edge label")
 			}
+
 			types = append(types, strings.ToUpper(l))
 		}
+
 		params["types"] = types
 		where = append(where, "type(r) IN $types")
 	}
+
 	query := "MATCH " + pattern
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
+
 	query += " RETURN DISTINCT elementId(r) AS rid, r.updated_at AS updated ORDER BY updated DESC, rid DESC LIMIT $lim"
 	return query, params, nil
 }
@@ -102,35 +111,43 @@ func neo4jEdgesLimited(ctx context.Context, repo *neo4jrepo.NeoRepository, datab
 	if repo == nil || repo.DB == nil || entity == nil {
 		return nil, false, errors.New("missing Neo4j repository or entity")
 	}
+
 	query, params, err := neo4jBoundedEdgeQuery(entity.ID, direction, since, limit, labels)
 	if err != nil {
 		return nil, false, err
 	}
+
 	tctx, cancel := context.WithTimeout(ctx, neo4jEdgeTimeout)
 	defer cancel()
 	opts := []neo4jdb.ExecuteQueryConfigurationOption{}
 	if database != "" {
 		opts = append(opts, neo4jdb.ExecuteQueryWithDatabase(database))
 	}
+
 	result, err := neo4jdb.ExecuteQuery(tctx, repo.DB, query, params, neo4jdb.EagerResultTransformer, opts...)
 	if err != nil {
 		return nil, false, fmt.Errorf("bounded Neo4j edge query: %w", err)
 	}
+
 	more := len(result.Records) > limit
 	out := make([]*dbt.Edge, 0, min(len(result.Records), limit))
 	for _, record := range result.Records {
 		if len(out) >= limit {
 			break
 		}
+
 		rid, isnil, err := neo4jdb.GetRecordValue[string](record, "rid")
 		if err != nil || isnil || rid == "" {
 			return nil, false, errors.New("malformed Neo4j relationship ID")
 		}
+
 		edge, err := repo.FindEdgeById(tctx, rid)
 		if err != nil {
 			return nil, false, fmt.Errorf("hydrate Neo4j edge %s: %w", rid, err)
 		}
+
 		out = append(out, edge)
 	}
+
 	return out, more, nil
 }

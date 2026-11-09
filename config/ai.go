@@ -63,6 +63,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 			*pair.target = value
 		}
 	}
+
 	bools := []struct {
 		key    string
 		target *bool
@@ -77,9 +78,11 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 			if err != nil {
 				return c, fmt.Errorf("%s: invalid boolean", pair.key)
 			}
+
 			*pair.target = value
 		}
 	}
+
 	ints := []struct {
 		key    string
 		target *int
@@ -98,6 +101,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 			if err != nil || value < 0 {
 				return c, fmt.Errorf("%s: invalid nonnegative integer", pair.key)
 			}
+
 			*pair.target = value
 		}
 	}
@@ -128,6 +132,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 	if _, err := ParseAITemperature(c.Temperature); err != nil {
 		return c, err
 	}
+
 	return c, nil
 }
 
@@ -138,9 +143,11 @@ func ParseAITemperature(raw string) (*float64, error) {
 	if raw == "" {
 		return nil, nil
 	}
+
 	v, err := strconv.ParseFloat(raw, 64)
 	if err != nil || v < 0 || v > 2 {
 		return nil, fmt.Errorf("AI temperature must be a number from 0 to 2")
 	}
+
 	return &v, nil
 }

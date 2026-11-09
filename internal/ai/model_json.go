@@ -36,8 +36,10 @@ func ModelJSON(raw string) string {
 				s = strings.TrimPrefix(s, tag)
 			}
 		}
+
 		s = strings.TrimSpace(s)
 	}
+
 	return s
 }
 
@@ -47,5 +49,6 @@ func isFenceTag(tag string) bool {
 			return false
 		}
 	}
+
 	return true
 }

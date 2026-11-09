@@ -24,29 +24,36 @@ func TestAnswerGroupingCollapsesEquivalentRoutesWithoutModelCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = exp.Advance(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	paths := exp.Result().Matches
 	if len(paths) != 2 {
 		t.Fatalf("expected 2 alternatives, got %d", len(paths))
 	}
+
 	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), paths)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	model := &plannerModel{replies: []string{`{"selected_path_ids":[]}`}}
-	selected, groups, deterministic, err := (Agent{Model: model}).selectAnswerPaths(context.Background(), "Which organization?", InvestigationGoal{Purpose: "connected"}, paths, &dossier)
+	selected, groups, deterministic, err := (Agent{Model: model}).selectAnswerPaths(context.Background(),
+		"Which organization?", InvestigationGoal{Purpose: "connected"}, paths, &dossier)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !deterministic || model.calls != 0 || len(groups) != 1 || len(selected) != 1 {
-		t.Fatalf("equivalent routes should not require a model: groups=%+v selected=%+v calls=%d", groups, selected, model.calls)
+		t.Fatalf("equivalent routes should not require a model: groups=%+v selected=%+v calls=%d", groups,
+			selected, model.calls)
 	}
 	if len(groups[0].AlternativePathIDs) != 1 || groups[0].PreferredPathID != selected[0].PathID {
 		t.Fatalf("lost alternative path or selected wrong representative: %+v", groups[0])
 	}
+
 	ev := map[string]PathEvidence{}
 	for _, p := range dossier.Paths {
 		ev[p.PathID] = p
@@ -70,23 +77,29 @@ func TestAnswerGroupingKeepsIndirectOrganizationsAsContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = exp.Advance(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	paths := eligibleAdaptivePaths(goal, exp.Result().Matches)
 	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), paths)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	model := &plannerModel{replies: []string{`{"selected_path_ids":[]}`}}
-	selected, groups, deterministic, err := (Agent{Model: model}).selectAnswerPaths(context.Background(), "Organization via domain and website?", goal, paths, &dossier)
+	selected, groups, deterministic, err := (Agent{Model: model}).selectAnswerPaths(context.Background(),
+		"Organization via domain and website?", goal, paths, &dossier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !deterministic || model.calls != 0 || len(selected) != 1 || selected[0].Nodes[len(selected[0].Nodes)-1].ID != "tech" {
+	if !deterministic || model.calls != 0 || len(selected) != 1 ||
+		selected[0].Nodes[len(selected[0].Nodes)-1].ID != "tech" {
 		t.Fatalf("indirect parent/sibling was not separated from direct answer: %+v", selected)
 	}
+
 	contextual := 0
 	for _, g := range groups {
 		if !g.DirectToGoal {

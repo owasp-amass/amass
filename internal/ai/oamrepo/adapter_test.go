@@ -16,6 +16,7 @@ func TestSourceIdentityExcludesConfidence(t *testing.T) {
 	if source(low) != source(high) || source(low) != "registrar-example" {
 		t.Fatalf("source identity incorrectly depends on confidence: %q vs %q", source(low), source(high))
 	}
+
 	other := &general.SimpleProperty{PropertyName: "registrar-example", PropertyValue: "yes"}
 	if source(other) != "" {
 		t.Fatal("non-source properties counted as independent provenance")
@@ -32,6 +33,7 @@ func TestOAMCatalogContainsSubsidiaryWebsitePaths(t *testing.T) {
 				return
 			}
 		}
+
 		t.Fatalf("OAM catalog missing %s -%s(%s)-> %s", source, label, relationType, destination)
 	}
 	check("Organization", "subsidiary", "SimpleRelation", "Organization")

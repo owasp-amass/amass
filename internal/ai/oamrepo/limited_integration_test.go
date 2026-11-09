@@ -27,12 +27,14 @@ func TestAdapterBoundedTraversalOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	if _, ok := repo.(interface {
 		ReadEdgesLimited(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, bool, error)
 	}); !ok {
 		t.Skip("bounded reader not yet present in released asset-db; paired feature-branch test must execute")
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	root, err := repo.CreateAsset(ctx, &oamdns.FQDN{Name: "root.example"})
@@ -44,15 +46,18 @@ func TestAdapterBoundedTraversalOnSQLite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = repo.CreateEdge(ctx, &dbt.Edge{FromEntity: root, ToEntity: dest, Relation: &oamgen.SimpleRelation{Name: "node"}}); err != nil {
+		if _, err = repo.CreateEdge(ctx,
+			&dbt.Edge{FromEntity: root, ToEntity: dest, Relation: &oamgen.SimpleRelation{Name: "node"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	adapter := Adapter{Repo: repo}
 	edges, more, err := adapter.EdgesLimited(ctx, root.ID, "out", "node", time.Time{}, 1)
 	if err != nil || len(edges) != 1 || !more {
 		t.Fatalf("bounded page: len=%d more=%v err=%v", len(edges), more, err)
 	}
+
 	edges, more, err = adapter.EdgesLimited(ctx, root.ID, "out", "node", time.Time{}, 2)
 	if err != nil || len(edges) != 2 || more {
 		t.Fatalf("complete page: len=%d more=%v err=%v", len(edges), more, err)
@@ -64,6 +69,7 @@ func TestLookupOrganizationsTrailingPeriodAndAmbiguityOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -74,22 +80,25 @@ func TestLookupOrganizationsTrailingPeriodAndAmbiguityOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	adapter := Adapter{Repo: repo}
 
 	withoutPeriod, err := adapter.LookupOrganizations(ctx, "Acme Holdings Inc", 10)
 	if err != nil || len(withoutPeriod) != 1 || withoutPeriod[0].ID != first.ID {
 		t.Fatalf("trailing-period fallback failed: matches=%+v err=%v", withoutPeriod, err)
 	}
+
 	withPeriod, err := adapter.LookupOrganizations(ctx, "Acme Holdings Inc.", 10)
 	if err != nil || len(withPeriod) != 1 || withPeriod[0].ID != first.ID {
 		t.Fatalf("exact-name lookup failed: matches=%+v err=%v", withPeriod, err)
 	}
+
 	missing, err := adapter.LookupOrganizations(ctx, "Unknown Demo Corp.", 10)
 	if err != nil || len(missing) != 0 {
 		t.Fatalf("unknown entity should be no-match: matches=%+v err=%v", missing, err)
 	}
 
-	// If two distinct assets differ only by final punctuation, do NOT
+	// If two distinct assets differ only by final punctuation, do not
 	// silently select one identity. The planner must surface ambiguity.
 	second, err := repo.CreateAsset(ctx, &oamorg.Organization{
 		ID: "synthetic-acme-separate", Name: "Acme Holdings Inc",
@@ -97,10 +106,12 @@ func TestLookupOrganizationsTrailingPeriodAndAmbiguityOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	ambiguous, err := adapter.LookupOrganizations(ctx, "Acme Holdings Inc", 10)
 	if err != nil || len(ambiguous) != 2 {
 		t.Fatalf("expected two ambiguous organizations, got=%+v err=%v", ambiguous, err)
 	}
+
 	matched := map[string]bool{}
 	for _, asset := range ambiguous {
 		matched[asset.ID] = true
@@ -115,6 +126,7 @@ func TestResolveOrganizationNativeIdentifiersAndSourcedAliasSQLite(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -125,6 +137,7 @@ func TestResolveOrganizationNativeIdentifiersAndSourcedAliasSQLite(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	secondary, err := repo.CreateAsset(ctx, &oamorg.Organization{
 		ID: "acme-holdings-uk", Name: "Acme Holdings Inc.", LegalName: "Acme Holdings UK Ltd.",
 		Jurisdiction: "GB", RegistrationID: "REG-100",
@@ -132,6 +145,7 @@ func TestResolveOrganizationNativeIdentifiersAndSourcedAliasSQLite(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	a := Adapter{Repo: repo, Aliases: []ai.OrganizationAlias{
 		{Alias: "Acme Group", UniqueID: "acme-holdings", Source: "curated-registry-record-001", Jurisdiction: "US-NY"},
 	}}
@@ -143,10 +157,20 @@ func TestResolveOrganizationNativeIdentifiersAndSourcedAliasSQLite(t *testing.T)
 	}{
 		{"legal name", ai.OrganizationQuery{LegalName: "Acme Holdings Incorporated"}, "matched", primary.ID},
 		{"unique id", ai.OrganizationQuery{UniqueID: "acme-holdings"}, "matched", primary.ID},
-		{"registration id", ai.OrganizationQuery{RegistrationID: "REG-100", Jurisdiction: "GB"}, "matched", secondary.ID},
+		{
+			"registration id",
+			ai.OrganizationQuery{RegistrationID: "REG-100", Jurisdiction: "GB"},
+			"matched",
+			secondary.ID,
+		},
 		{"alias", ai.OrganizationQuery{Name: "Acme Group"}, "matched", primary.ID},
 		{"ambiguous display", ai.OrganizationQuery{Name: "Acme Holdings Inc"}, "ambiguous", ""},
-		{"jurisdiction display", ai.OrganizationQuery{Name: "Acme Holdings Inc", Jurisdiction: "US-NY"}, "matched", primary.ID},
+		{
+			"jurisdiction display",
+			ai.OrganizationQuery{Name: "Acme Holdings Inc", Jurisdiction: "US-NY"},
+			"matched",
+			primary.ID,
+		},
 		{"unknown", ai.OrganizationQuery{Name: "Unknown Corp."}, "not_found", ""},
 	}
 	for _, tc := range cases {
@@ -174,6 +198,7 @@ func TestResolveFQDNAndURLOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -181,10 +206,13 @@ func TestResolveFQDNAndURLOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	url, err := repo.CreateAsset(ctx, &oamurl.URL{Raw: "https://test.example/", Scheme: "https", Host: "test.example", Path: "/"})
+
+	url, err := repo.CreateAsset(ctx,
+		&oamurl.URL{Raw: "https://test.example/", Scheme: "https", Host: "test.example", Path: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	adapter := Adapter{Repo: repo}
 	cases := []struct {
 		selector ai.AssetSelector
@@ -201,7 +229,8 @@ func TestResolveFQDNAndURLOnSQLite(t *testing.T) {
 			t.Fatalf("selector=%+v result=%+v err=%v", tc.selector, got, err)
 		}
 	}
-	if _, err := adapter.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "unknown", Value: "x"}, 10); err == nil {
+	if _, err := adapter.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "unknown", Value: "x"},
+		10); err == nil {
 		t.Fatal("invalid selector field accepted")
 	}
 }

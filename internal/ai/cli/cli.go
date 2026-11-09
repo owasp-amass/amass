@@ -34,6 +34,7 @@ func CLIWorkflow(_ string, args []string) {
 		os.Exit(1)
 	}
 }
+
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs := flag.NewFlagSet("ai", flag.ContinueOnError)
 	fs.SetOutput(errout)
@@ -50,54 +51,73 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&endpoint, "endpoint", "", "Provider endpoint (defaults depend on provider)")
-	fs.BoolVar(&allowHTTP, "allow-http", false, "Explicitly allow plaintext HTTP inference for a trusted internal endpoint")
-	fs.StringVar(&providerName, "provider", "compatible", "Model provider: ollama (native API), compatible (OpenAI-style) or anthropic")
+	fs.BoolVar(&allowHTTP, "allow-http", false,
+		"Explicitly allow plaintext HTTP inference for a trusted internal endpoint")
+	fs.StringVar(&providerName, "provider", "compatible",
+		"Model provider: ollama (native API), compatible (OpenAI-style) or anthropic")
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
-	fs.StringVar(&queryPath, "query", "", "JSON Query file to execute with ask (\"-\" reads stdin); route and hierarchy queries need no model")
+	fs.StringVar(&queryPath, "query", "",
+		"JSON Query file to execute with ask (\"-\" reads stdin); route and hierarchy queries need no model")
 	fs.StringVar(&subjectType, "subject-type", "", "Starting OAM asset type (FQDN, IPAddress, Organization, etc.)")
 	fs.StringVar(&subjectField, "subject-field", "", "Indexed OAM field used to resolve the subject")
 	fs.StringVar(&subjectValue, "subject-value", "", "Exact subject identifier")
 	fs.StringVar(&subjectID, "subject-id", "", "Database entity ID, alternative to indexed subject lookup")
-	fs.StringVar(&targetTypes, "target-types", "", "Comma-separated destination OAM asset types; empty discovers any type")
+	fs.StringVar(&targetTypes, "target-types", "",
+		"Comma-separated destination OAM asset types; empty discovers any type")
 	fs.StringVar(&graphDirection, "direction", "both", "Stored graph edge direction: in, out, or both")
-	fs.IntVar(&graphDepth, "depth", 0, "Maximum path length for graph search (default 16 with target types, otherwise 1)")
+	fs.IntVar(&graphDepth, "depth", 0,
+		"Maximum path length for graph search (default 16 with target types, otherwise 1)")
 	fs.IntVar(&graphMatches, "max-matches", 20, "Maximum graph path matches to return")
 	fs.IntVar(&graphAlternates, "max-paths-per-asset", 3, "Maximum witnessed simple paths retained per asset (1..8)")
 	fs.IntVar(&graphExpansions, "max-expansions", 0, "Maximum guided path expansions (bounded by global policy)")
-	fs.IntVar(&guidanceRounds, "guidance-rounds", 2, "Maximum intermediate model navigation rounds (0 disables; default 2; max 3)")
+	fs.IntVar(&guidanceRounds, "guidance-rounds", 2,
+		"Maximum intermediate model navigation rounds (0 disables; default 2; max 3)")
 	fs.StringVar(&graphSince, "since", "", "Only graph edges last seen since this RFC3339 timestamp")
 	fs.StringVar(&outputFormat, "format", "json", "Search format: json, text, or mermaid")
-	fs.StringVar(&collectionApproval, "approve-collection", "", "Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
+	fs.StringVar(&collectionApproval, "approve-collection", "",
+		"Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
 	fs.StringVar(&journalPath, "journal", "", "Inference proposal journal path")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
-	fs.StringVar(&aliasesPath, "organization-aliases", "", "Optional JSON file with explicitly sourced organization alias mappings (read-only)")
-	fs.StringVar(&classifierPath, "classifier-model", "", "Optional local linear model JSON (untrained weights should not be used for production decisions)")
-	fs.StringVar(&classifierEndpoint, "classifier-endpoint", "", "Provider-neutral classifier service URL, e.g., http://classifier:8092")
-	fs.BoolVar(&classifierReview, "classifier-review", true, "Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
+	fs.StringVar(&aliasesPath, "organization-aliases", "",
+		"Optional JSON file with explicitly sourced organization alias mappings (read-only)")
+	fs.StringVar(&classifierPath, "classifier-model", "",
+		"Optional local linear model JSON (untrained weights should not be used for production decisions)")
+	fs.StringVar(&classifierEndpoint, "classifier-endpoint", "",
+		"Provider-neutral classifier service URL, e.g., http://classifier:8092")
+	fs.BoolVar(&classifierReview, "classifier-review", true,
+		"Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
-	fs.IntVar(&maxTokens, "max-tokens", 0, "Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
-	fs.StringVar(&temperatureFlag, "temperature", "", "Model temperature 0..2 (empty = provider default; 0 is most reproducible)")
+	fs.IntVar(&maxTokens, "max-tokens", 0,
+		"Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
+	fs.StringVar(&temperatureFlag, "temperature", "",
+		"Model temperature 0..2 (empty = provider default; 0 is most reproducible)")
 	fs.IntVar(&contextTokens, "context-tokens", 0, "Ollama context window in tokens (0 = 8192)")
 	fs.BoolVar(&think, "think", false, "Let an Ollama reasoning model think before answering (slower; off by default)")
 	fs.BoolVar(&showTrace, "trace", false, "Print stage timings and model usage to stderr after ask")
-	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute, "Maximum time per model request (e.g., 4m for local Ollama)")
-	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute, "Maximum total time for a single investigation")
+	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute,
+		"Maximum time per model request (e.g., 4m for local Ollama)")
+	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute,
+		"Maximum total time for a single investigation")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		return errors.New("usage: amass ai [flags] ask|plan|mcp|infer|scan|search|collect-plan|collect")
 	}
+
 	operation := fs.Arg(0)
-	if operation != "ask" && operation != "plan" && operation != "mcp" && operation != "infer" && operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
+	if operation != "ask" && operation != "plan" && operation != "mcp" && operation != "infer" &&
+		operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
 		return fmt.Errorf("unknown operation %q", operation)
 	}
+
 	cfg := config.NewConfig()
 	if err := config.AcquireConfig(dir, configPath, cfg); err != nil && configPath != "" {
 		return fmt.Errorf("load Amass config: %w", err)
 	}
+
 	// Settings precedence: explicit flags > AMASS_AI_* environment >
 	// YAML ai: section > CLI defaults. No AI service starts implicitly.
 	explicitFlags := map[string]bool{}
@@ -106,6 +126,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if cfg.AI != nil {
 		fileAI = *cfg.AI
 	}
+
 	effective, err := config.ResolveAISettings(fileAI, os.LookupEnv)
 	if err != nil {
 		return fmt.Errorf("load AI settings: %w", err)
@@ -158,6 +179,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if maxTokens < 0 || maxTokens > 128000 {
 		return errors.New("max tokens must be 0..128000")
 	}
+
 	temperature, err := config.ParseAITemperature(temperatureFlag)
 	if err != nil {
 		return err
@@ -185,6 +207,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
+
 		modelTimeout = value
 	}
 	if !explicitFlags["investigation-timeout"] && effective.InvestigationTimeout != "" {
@@ -192,6 +215,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
+
 		investigationTimeout = value
 	}
 	if modelTimeout < 5*time.Second || modelTimeout > 15*time.Minute {
@@ -200,6 +224,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if investigationTimeout < modelTimeout || investigationTimeout > 30*time.Minute {
 		return errors.New("investigation timeout must be at least model timeout and at most 30m")
 	}
+
 	// Only plan, ask, infer and scan can use a model, and plan and ask can
 	// run deterministic queries without one. MCP, search and collection never
 	// build a model client, so a model setting cannot break them.
@@ -220,19 +245,26 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if question == "" {
 			return errors.New("-question required")
 		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 		defer cancel()
-		agent := ai.Agent{Model: provider, Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}}
+		agent := ai.Agent{
+			Model:  provider,
+			Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}},
+		}
 		q, err := agent.CompileQuestion(ctx, question)
 		if err != nil {
 			return err
 		}
+
 		return writeJSON(out, q)
 	}
+
 	repo := tools.OpenGraphDatabase(cfg)
 	if repo == nil {
 		return errors.New("unable to open OAM database")
 	}
+
 	defer repo.Close()
 	var aliases []ai.OrganizationAlias
 	if aliasesPath != "" {
@@ -240,12 +272,14 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if err != nil {
 			return fmt.Errorf("open organization aliases: %w", err)
 		}
+
 		aliases, err = ai.LoadOrganizationAliases(f)
 		_ = f.Close()
 		if err != nil {
 			return fmt.Errorf("load organization aliases: %w", err)
 		}
 	}
+
 	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
@@ -266,6 +300,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if subjectID != "" || subjectType == "" || subjectField == "" || subjectValue == "" {
 			return errors.New("collection requires exact -subject-type, -subject-field and -subject-value (not -subject-id)")
 		}
+
 		plan := ai.PlanCollection(ai.AssetSelector{Type: subjectType, Field: subjectField, Value: subjectValue})
 		return collectTarget(ctx, cfg, plan, collectionApproval, operation == "collect", out)
 	}
@@ -280,13 +315,18 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if err := validateClassifierEndpoint(classifierEndpoint); err != nil {
 			return err
 		}
-		localClassifier = classify.HTTPClient{Endpoint: classifierEndpoint, Client: &http.Client{Timeout: 10 * time.Second}}
+
+		localClassifier = classify.HTTPClient{
+			Endpoint: classifierEndpoint,
+			Client:   &http.Client{Timeout: 10 * time.Second},
+		}
 	}
 	if classifierPath != "" {
 		raw, err := os.ReadFile(classifierPath)
 		if err != nil {
 			return err
 		}
+
 		model, err := classify.Load(bytes.NewReader(raw))
 		if err != nil {
 			return fmt.Errorf("load local classifier: %w", err)
@@ -294,23 +334,34 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if model.FeatureVersion != ai.OrganizationFeatureVersion || model.Task != ai.OrganizationClassificationTask {
 			return errors.New("classifier model has incompatible task or feature version")
 		}
+
 		localClassifier = model
 	}
 	if operation == "ask" && queryPath != "" {
 		if question != "" {
 			return errors.New("use either -question or -query, not both")
 		}
+
 		q, err := readQuery(queryPath, in)
 		if err != nil {
 			return err
 		}
-		result, err := (ai.Agent{Model: provider, Runner: runner}).AskQuery(ctx, q, ai.AdaptiveOptions{MaxDepth: graphDepth, MaxMatches: graphMatches, MaxPathsPerAsset: graphAlternates, MaxExpansions: graphExpansions, GuidanceRounds: guidanceRounds})
+
+		result, err := (ai.Agent{Model: provider, Runner: runner}).AskQuery(ctx, q,
+			ai.AdaptiveOptions{
+				MaxDepth:         graphDepth,
+				MaxMatches:       graphMatches,
+				MaxPathsPerAsset: graphAlternates,
+				MaxExpansions:    graphExpansions,
+				GuidanceRounds:   guidanceRounds,
+			})
 		if showTrace {
 			writeTrace(errout, result)
 		}
 		if err != nil {
 			return err
 		}
+
 		return writeInvestigation(out, outputFormat, result)
 	}
 	if provider == nil {
@@ -323,22 +374,33 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if question == "" {
 			return errors.New("-question required")
 		}
-		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth: graphDepth, MaxMatches: graphMatches, MaxPathsPerAsset: graphAlternates, MaxExpansions: graphExpansions, GuidanceRounds: guidanceRounds})
+
+		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question,
+			ai.AdaptiveOptions{
+				MaxDepth:         graphDepth,
+				MaxMatches:       graphMatches,
+				MaxPathsPerAsset: graphAlternates,
+				MaxExpansions:    graphExpansions,
+				GuidanceRounds:   guidanceRounds,
+			})
 		if showTrace {
 			writeTrace(errout, result)
 		}
 		if err != nil {
 			return err
 		}
+
 		return writeInvestigation(out, outputFormat, result)
 	case "infer":
 		if candidatePath == "" || journalPath == "" {
 			return errors.New("-candidate and -journal required")
 		}
+
 		file, err := os.ReadFile(candidatePath)
 		if err != nil {
 			return err
 		}
+
 		var c ai.Candidate
 		if err := json.Unmarshal(file, &c); err != nil {
 			return err
@@ -349,50 +411,61 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if _, err := graph.GetAsset(ctx, c.ObjectID); err != nil {
 			return fmt.Errorf("object missing: %w", err)
 		}
+
 		// Never trust unverified evidence supplied by a file: retrieve evidence
 		// for both assets and check each selected ID against the database.
 		a, err := graph.Evidence(ctx, c.SubjectID, runner.Limits.MaxEvidence)
 		if err != nil {
 			return err
 		}
+
 		b, err := graph.Evidence(ctx, c.ObjectID, runner.Limits.MaxEvidence)
 		if err != nil {
 			return err
 		}
+
 		actual := map[string]ai.Evidence{}
 		for _, e := range append(a, b...) {
 			actual[e.ID] = e
 		}
+
 		verified := make([]ai.Evidence, 0, len(c.Evidence))
 		for _, e := range c.Evidence {
 			v, ok := actual[e.ID]
 			if !ok {
 				return fmt.Errorf("evidence %s not found on candidate endpoints", e.ID)
 			}
+
 			verified = append(verified, v)
 		}
+
 		c.Evidence = verified
 		// Taxonomy is verified in the CLI in addition to the generic inference layer.
 		subject, err := graph.GetAsset(ctx, c.SubjectID)
 		if err != nil {
 			return err
 		}
+
 		object, err := graph.GetAsset(ctx, c.ObjectID)
 		if err != nil {
 			return err
 		}
+
 		var allowed []string
 		for _, label := range c.AllowedLabels {
 			if oamrepo.AllowedRelation(subject.Type, label, object.Type) {
 				allowed = append(allowed, label)
 			}
 		}
+
 		c.AllowedLabels = allowed
 		inferrer := ai.Inferrer{Model: provider, Plugin: "entity-resolution", ModelID: modelName, MinSources: 2}
-		routing, err := inferrer.AnalyzeRouted(ctx, c, localClassifier, ai.RoutingPolicy{AllowLocalReview: classifierReview})
+		routing, err := inferrer.AnalyzeRouted(ctx, c, localClassifier,
+			ai.RoutingPolicy{AllowLocalReview: classifierReview})
 		if err != nil {
 			return err
 		}
+
 		journal := &ai.Journal{Path: journalPath}
 		if routing.Decision == "review" {
 			if err := journal.SubmitTriage(c, routing); err != nil {
@@ -404,13 +477,16 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 				return err
 			}
 		}
+
 		result, err := json.MarshalIndent(routing, "", "  ")
 		if err != nil {
 			return err
 		}
+
 		_, err = fmt.Fprintln(out, string(result))
 		return err
 	}
+
 	return nil
 }
 
@@ -436,6 +512,7 @@ func validateModelEndpoint(endpoint string, allowHTTP bool) error {
 	if !allowHTTP {
 		return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_AI_ALLOW_HTTP=true for a trusted internal endpoint")
 	}
+
 	return nil
 }
 
@@ -444,8 +521,10 @@ func validateClassifierEndpoint(endpoint string) error {
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return errors.New("invalid classifier endpoint")
 	}
-	if u.Scheme != "https" && (u.Scheme != "http" || (u.Hostname() != "classifier" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1")) {
+	if u.Scheme != "https" && (u.Scheme != "http" || (u.Hostname() != "classifier" && u.Hostname() != "localhost" &&
+		u.Hostname() != "127.0.0.1")) {
 		return errors.New("classifier HTTP is permitted only on the trusted Compose service hostname or localhost; otherwise use HTTPS")
 	}
+
 	return nil
 }

@@ -22,7 +22,8 @@ func TestPlanCollectionRequiresExactSupportedSelector(t *testing.T) {
 	}
 	for _, tc := range cases {
 		plan := PlanCollection(tc.selector)
-		if plan.Status != "approval_required" || plan.ID == "" || !plan.RequiresApproval || len(plan.Methods) != 1 || plan.ScopeType != tc.wantType || plan.ScopeValue != tc.wantValue {
+		if plan.Status != "approval_required" || plan.ID == "" || !plan.RequiresApproval ||
+			len(plan.Methods) != 1 || plan.ScopeType != tc.wantType || plan.ScopeValue != tc.wantValue {
 			t.Errorf("unexpected collection plan for %+v: %+v", tc.selector, plan)
 		}
 		if second := PlanCollection(tc.selector); second.ID != plan.ID {
@@ -30,6 +31,7 @@ func TestPlanCollectionRequiresExactSupportedSelector(t *testing.T) {
 		}
 	}
 }
+
 func TestCollectionCannotExpandToUnsupportedOrInvalidTargets(t *testing.T) {
 	cases := []AssetSelector{
 		{Type: "Organization", Field: "name", Value: "Acme"},
@@ -44,11 +46,13 @@ func TestCollectionCannotExpandToUnsupportedOrInvalidTargets(t *testing.T) {
 	}
 	for _, target := range cases {
 		plan := PlanCollection(target)
-		if plan.Status != "unsupported" || plan.ID != "" || len(plan.Methods) != 0 || strings.TrimSpace(plan.Reason) == "" {
+		if plan.Status != "unsupported" || plan.ID != "" || len(plan.Methods) != 0 ||
+			strings.TrimSpace(plan.Reason) == "" {
 			t.Errorf("unsafe collection plan: %+v", plan)
 		}
 	}
 }
+
 func TestCollectionApprovalsBindScopeAndMethod(t *testing.T) {
 	a := PlanCollection(AssetSelector{Type: "FQDN", Field: "name", Value: "a.example.org"})
 	b := PlanCollection(AssetSelector{Type: "FQDN", Field: "name", Value: "b.example.org"})

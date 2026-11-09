@@ -55,6 +55,7 @@ func stepAttribution(cat AttributionCatalog, p PlanMatch, i int) (bool, string) 
 	if !forward {
 		src, dst = to.Type, from.Type
 	}
+
 	attr, ok := cat.Attribution(src, e.Label, e.Type, dst)
 	if !ok {
 		return false, ""
@@ -67,6 +68,7 @@ func stepAttribution(cat AttributionCatalog, p PlanMatch, i int) (bool, string) 
 	case attrControls:
 		return !forward, attr
 	}
+
 	return false, attr
 }
 
@@ -83,6 +85,7 @@ func ownerAttributed(cat AttributionCatalog, p PlanMatch) (bool, int, string) {
 			return true, -1, ""
 		}
 	}
+
 	return false, -1, ""
 }
 
@@ -100,6 +103,7 @@ func thirdPartyConnections(cat AttributionCatalog, paths []PlanMatch) []ThirdPar
 		if len(p.Nodes) < 2 || len(p.Edges) != len(p.Nodes)-1 || p.Nodes[len(p.Nodes)-1].Type != "Organization" {
 			continue
 		}
+
 		last, lastAttr := -1, ""
 		for i := range p.Edges {
 			if pass, attr := stepAttribution(cat, p, i); !pass {
@@ -109,22 +113,27 @@ func thirdPartyConnections(cat AttributionCatalog, paths []PlanMatch) []ThirdPar
 		if last < 0 || lastAttr != attrThirdParty {
 			continue
 		}
+
 		org := p.Nodes[len(p.Nodes)-1]
 		if d, seen := depth[org.ID]; seen && d <= len(p.Edges) {
 			continue
 		}
+
 		id := p.PathID
 		if id == "" {
 			id = WitnessPathID(p)
 		}
+
 		depth[org.ID] = len(p.Edges)
 		best[org.ID] = ThirdPartyConnection{AssetID: org.ID, Display: humanAsset(org),
 			Via: p.Nodes[last].Type + " " + p.Edges[last].Label, Attribution: attrThirdParty, PathID: id}
 	}
+
 	out := make([]ThirdPartyConnection, 0, len(best))
 	for _, c := range best {
 		out = append(out, c)
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].Display < out[j].Display })
 	return out
 }
@@ -134,10 +143,12 @@ func thirdPartySummary(conns []ThirdPartyConnection) string {
 	if len(conns) == 0 {
 		return ""
 	}
+
 	parts := make([]string, 0, len(conns))
 	for _, c := range conns {
 		parts = append(parts, fmt.Sprintf("%s via %s", c.Display, c.Via))
 	}
+
 	return " Organizations connected only as third parties (providers, issuers or registrars, not owners): " +
 		strings.Join(parts, "; ") + "."
 }

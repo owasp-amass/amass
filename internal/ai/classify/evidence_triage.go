@@ -15,8 +15,8 @@ import (
 // supervised, versioned classifier artifact is available. It interprets
 // bounded, extracted OAM provenance features as a workflow-routing signal.
 //
-// IMPORTANT: More source tags do NOT establish independent evidence,
-// legal ownership or a probability. This code NEVER decides "unrelated",
+// More source tags do not establish independent evidence,
+// legal ownership or a probability. This code never decides "unrelated",
 // skips a possible relation, creates a proposal or writes OAM edges.
 func EvidenceTriage(in Input) (Prediction, error) {
 	const task = "organization_relation"
@@ -35,6 +35,7 @@ func EvidenceTriage(in Input) (Prediction, error) {
 	if len(in.Features) != 4 {
 		return Prediction{}, errors.New("expected exactly four OAM provenance features")
 	}
+
 	fields := []string{"distinct_sources", "evidence_count", "source_property_fraction", "unattributed_fraction"}
 	for _, field := range fields {
 		value, ok := in.Features[field]
@@ -43,7 +44,7 @@ func EvidenceTriage(in Input) (Prediction, error) {
 		}
 	}
 	// Only route candidates with meaningful attributed observations to a
-	// HUMAN review queue. All other cases require more evidence or an LLM.
+	// human review queue. All other cases require more evidence or an LLM.
 	// This is not a positive classification of the actual relationship.
 	if in.Features["distinct_sources"] >= 2.0/3.0 &&
 		in.Features["evidence_count"] >= 0.25 &&
@@ -51,6 +52,7 @@ func EvidenceTriage(in Input) (Prediction, error) {
 		in.Features["unattributed_fraction"] <= 0.25 {
 		output.Decision = "review"
 	}
+
 	return output, nil
 }
 
@@ -66,5 +68,6 @@ func (EvidenceRuleClassifier) Classify(ctx context.Context, in Input) (Predictio
 	if err := ctx.Err(); err != nil {
 		return Prediction{}, err
 	}
+
 	return EvidenceTriage(in)
 }

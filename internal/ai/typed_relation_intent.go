@@ -39,10 +39,12 @@ func intentAssetAliases(kind string) []string {
 			candidates = append(candidates, base+"s")
 		}
 	}
+
 	candidates = append(candidates, intentVocabulary[kind]...)
 	if kind == "FQDN" {
 		candidates = append(candidates, "fqdn", "fqdns", "fully qualified domain name", "fully qualified domain names")
 	}
+
 	unique := map[string]bool{}
 	out := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
@@ -50,9 +52,11 @@ func intentAssetAliases(kind string) []string {
 		if normalized == "" || unique[normalized] {
 			continue
 		}
+
 		unique[normalized] = true
 		out = append(out, normalized)
 	}
+
 	return out
 }
 
@@ -61,6 +65,7 @@ func intentTargetType(raw string, selector []AssetSearchSchema, relations []Rela
 	if len(candidates) != 1 {
 		return "", false
 	}
+
 	return candidates[0], true
 }
 
@@ -71,10 +76,12 @@ func intentSubject(raw string, selectors []AssetSearchSchema) (PlanSubject, bool
 		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
 			value = value[1 : len(value)-1]
 		}
+
 		subject := PlanSubject{Type: m[1], Field: m[2], Value: value}
 		if err := subject.AssetSelector().Validate(selectors); err == nil {
 			return subject, true
 		}
+
 		return PlanSubject{}, false
 	}
 	if strings.ContainsAny(raw, " \t\n\r") || strings.Contains(raw, "@") {
@@ -86,10 +93,12 @@ func intentSubject(raw string, selectors []AssetSearchSchema) (PlanSubject, bool
 		if err != nil || parsed.Host == "" || parsed.User != nil {
 			return PlanSubject{}, false
 		}
+
 		subject := PlanSubject{Type: "URL", Field: "url", Value: raw}
 		if subject.AssetSelector().Validate(selectors) == nil {
 			return subject, true
 		}
+
 		return PlanSubject{}, false
 	}
 	if ip, err := netip.ParseAddr(raw); err == nil {
@@ -97,18 +106,22 @@ func intentSubject(raw string, selectors []AssetSearchSchema) (PlanSubject, bool
 		if subject.AssetSelector().Validate(selectors) == nil {
 			return subject, true
 		}
+
 		return PlanSubject{}, false
 	}
-	if !hostnameInQuestion.MatchString(raw) || strings.Contains(raw, "..") || strings.HasPrefix(raw, ".") || strings.HasSuffix(raw, ".") {
+	if !hostnameInQuestion.MatchString(raw) || strings.Contains(raw, "..") || strings.HasPrefix(raw,
+		".") || strings.HasSuffix(raw, ".") {
 		return PlanSubject{}, false
 	}
 	if matches := hostnameInQuestion.FindAllStringSubmatch(raw, -1); len(matches) != 1 || matches[0][1] != raw {
 		return PlanSubject{}, false
 	}
+
 	subject := PlanSubject{Type: "FQDN", Field: "name", Value: strings.ToLower(raw)}
 	if subject.AssetSelector().Validate(selectors) == nil {
 		return subject, true
 	}
+
 	return PlanSubject{}, false
 }
 
@@ -119,6 +132,7 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 	if len(hint.Labels) == 0 || len(hint.Labels) > maxPlanHops {
 		return nil, false
 	}
+
 	type state struct {
 		kind string
 		hops []PlanHop
@@ -134,6 +148,7 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 			if s.kind != target {
 				return
 			}
+
 			var signature strings.Builder
 			for _, hop := range s.hops {
 				signature.WriteString(hop.Direction)
@@ -145,6 +160,7 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 				signature.WriteString(hop.DestinationType)
 				signature.WriteByte(0)
 			}
+
 			unique[signature.String()] = append([]PlanHop(nil), s.hops...)
 			return
 		}
@@ -159,15 +175,25 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 				if !strings.EqualFold(r.Label, label) {
 					continue
 				}
-				for _, choice := range []struct{ from, to, dir string }{{r.SourceType, r.DestinationType, "out"}, {r.DestinationType, r.SourceType, "in"}} {
+				for _, choice := range []struct{ from, to, dir string }{
+					{r.SourceType, r.DestinationType, "out"},
+					{r.DestinationType, r.SourceType, "in"},
+				} {
 					if choice.from != s.kind {
 						continue
 					}
 					if len(s.hops) == 0 && requiredFirstDirection != "" && choice.dir != requiredFirstDirection {
 						continue
 					}
-					hop := PlanHop{Direction: choice.dir, Label: r.Label, RelationType: r.RelationType, DestinationType: choice.to}
-					visit(state{kind: choice.to, hops: append(append([]PlanHop(nil), s.hops...), hop), used: s.used | (1 << uint(i))})
+
+					hop := PlanHop{
+						Direction:       choice.dir,
+						Label:           r.Label,
+						RelationType:    r.RelationType,
+						DestinationType: choice.to,
+					}
+					visit(state{kind: choice.to, hops: append(append([]PlanHop(nil),
+						s.hops...), hop), used: s.used | (1 << uint(i))})
 				}
 			}
 		}
@@ -179,6 +205,7 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 	for _, hops := range unique {
 		return hops, true
 	}
+
 	return nil, false
 }
 
@@ -188,23 +215,28 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 	if !ok {
 		return zero, false
 	}
+
 	matches := typedRelationQuestion.FindStringSubmatch(question)
 	if len(matches) != 4 {
 		return zero, false
 	}
+
 	relations, fields := catalog.Relations(), selectors.SearchFields()
 	candidates := intentTypeCandidates(matches[1], fields, relations)
 	if len(candidates) == 0 {
 		return zero, false
 	}
+
 	subject, ok := intentSubject(matches[2], fields)
 	if !ok {
 		return zero, false
 	}
+
 	hint, ok := explicitRelationLabels(question, relations)
 	if !ok || len(hint.Labels) > maxPlanHops {
 		return zero, false
 	}
+
 	var target string
 	var hops []PlanHop
 	for _, candidate := range candidates {
@@ -212,6 +244,7 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 		if subdomainTerm(matches[1]) {
 			direction = "out"
 		}
+
 		candidateHops, valid := compileCatalogHopsDirected(subject.Type, candidate, hint, relations, direction)
 		if !valid {
 			continue
@@ -225,19 +258,22 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 			}
 		}
 		// A generic word such as "addresses" can mean a Location or an
-		// IPAddress. Only a UNIQUE catalog path may disambiguate it.
+		// IPAddress. Only a unique catalog path may disambiguate it.
 		if target != "" {
 			return zero, false
 		}
+
 		target, hops = candidate, candidateHops
 	}
 	if target == "" {
 		return zero, false
 	}
+
 	plan := TypedPlan{Subject: subject, Hops: hops}
 	if err := validatePlanWithSelectors(plan, relations, fields, DefaultLimits()); err != nil {
 		return zero, false
 	}
+
 	required := make([]GoalRelation, 0, len(hops))
 	current := subject.Type
 	for _, h := range hops {
@@ -251,16 +287,19 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 				break
 			}
 		}
+
 		current = h.DestinationType
 	}
 	if len(required) != len(hops) {
 		return zero, false
 	}
+
 	goal := InvestigationGoal{Subject: subject, TargetTypes: []string{target}, Direction: "both",
 		Purpose: "connected", Relationships: required, PathRule: "ordered"}
 	if err := validateGoal(goal, relations, fields); err != nil {
 		return zero, false
 	}
+
 	return TypedRelationIntent{Goal: goal, Hops: hops}, true
 }
 
@@ -272,6 +311,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 	if err := limits.Validate(); err != nil {
 		return out, err
 	}
+
 	bounded, ok := graph.(BoundedGraph)
 	if !ok {
 		return out, errors.New("bounded graph reader required")
@@ -282,6 +322,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 	if len(intent.Hops) < 1 || len(intent.Hops) > maxPlanHops {
 		return out, errors.New("invalid typed intent hop count")
 	}
+
 	depth := opts.MaxDepth
 	if depth == 0 {
 		depth = limits.MaxDepth
@@ -295,6 +336,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 		out.VisitedNodes = 1
 		return out, nil
 	}
+
 	maxMatches := opts.MaxMatches
 	if maxMatches == 0 {
 		maxMatches = min(20, limits.MaxFind)
@@ -302,6 +344,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 	if maxMatches < 1 || maxMatches > limits.MaxFind {
 		return out, errors.New("max matches exceeds policy")
 	}
+
 	maxExpansions := opts.MaxExpansions
 	if maxExpansions == 0 {
 		maxExpansions = min(200, limits.MaxNodes)
@@ -309,6 +352,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 	if maxExpansions < 1 || maxExpansions > min(400, limits.MaxNodes*8) {
 		return out, errors.New("max expansions exceeds policy")
 	}
+
 	paths := []PlanMatch{{Nodes: []Asset{root}}}
 	seenNodes := map[string]bool{root.ID: true}
 	seenEdges := map[string]bool{}
@@ -318,6 +362,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 		if index > 0 {
 			previousType = intent.Hops[index-1].DestinationType
 		}
+
 		diagnostic := GraphHopDiagnostic{
 			Hop: index + 1, SourceType: previousType, TargetType: hop.DestinationType,
 			Direction: hop.Direction, Label: hop.Label, RelationType: hop.RelationType,
@@ -333,13 +378,16 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 				out.Reason = "path expansion limit"
 				break
 			}
+
 			out.ExpandedPaths++
 			diagnostic.QueriedPaths++
 			last := path.Nodes[len(path.Nodes)-1]
-			edges, more, err := bounded.EdgesLimited(ctx, last.ID, hop.Direction, hop.Label, time.Time{}, limits.MaxPerNode)
+			edges, more, err := bounded.EdgesLimited(ctx, last.ID, hop.Direction, hop.Label, time.Time{},
+				limits.MaxPerNode)
 			if err != nil {
 				return out, err
 			}
+
 			diagnostic.ReturnedEdges += len(edges)
 			if len(edges) > limits.MaxPerNode {
 				return out, errors.New("bounded graph exceeded per-node edge policy")
@@ -350,6 +398,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					out.Reason = "per-node edge limit"
 				}
 			}
+
 			sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 			for _, edge := range edges {
 				if err := ctx.Err(); err != nil {
@@ -359,6 +408,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					out.SchemaRejected++
 					continue
 				}
+
 				dest := ""
 				if hop.Direction == "out" && edge.FromID == last.ID {
 					dest = edge.ToID
@@ -370,6 +420,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					out.SchemaRejected++
 					continue
 				}
+
 				cycle := false
 				for _, node := range path.Nodes {
 					if node.ID == dest {
@@ -386,6 +437,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 						out.Reason = "edge limit"
 						break
 					}
+
 					seenEdges[edge.ID] = true
 				}
 				if !seenNodes[dest] && len(seenNodes) >= limits.MaxNodes {
@@ -393,6 +445,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					out.Reason = "node limit"
 					break
 				}
+
 				asset, err := graph.GetAsset(ctx, dest)
 				if err != nil {
 					return out, err
@@ -401,6 +454,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					out.SchemaRejected++
 					continue
 				}
+
 				seenNodes[dest] = true
 				diagnostic.AcceptedEdges++
 				witness := PlanMatch{
@@ -412,6 +466,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					if seenMatches[asset.ID] {
 						continue
 					}
+
 					seenMatches[asset.ID] = true
 					out.Matches = append(out.Matches, witness)
 					if len(out.Matches) >= maxMatches {
@@ -428,21 +483,26 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 						out.Reason = "intermediate path limit"
 						break
 					}
+
 					nextPaths = append(nextPaths, witness)
 				}
 			}
-			if out.Reason == "match limit" || out.Reason == "edge limit" || out.Reason == "node limit" || out.Reason == "intermediate path limit" {
+			if out.Reason == "match limit" || out.Reason == "edge limit" || out.Reason == "node limit" ||
+				out.Reason == "intermediate path limit" {
 				break
 			}
 		}
+
 		diagnostic.Truncated = out.Truncated
 		if index == len(intent.Hops)-1 {
 			diagnostic.OutputPaths = len(out.Matches)
 		} else {
 			diagnostic.OutputPaths = len(nextPaths)
 		}
+
 		out.HopDiagnostics = append(out.HopDiagnostics, diagnostic)
-		if out.Reason == "match limit" || out.Reason == "edge limit" || out.Reason == "node limit" || out.Reason == "intermediate path limit" || out.Reason == "path expansion limit" {
+		if out.Reason == "match limit" || out.Reason == "edge limit" || out.Reason == "node limit" ||
+			out.Reason == "intermediate path limit" || out.Reason == "path expansion limit" {
 			break
 		}
 		// Do not issue empty subsequent hops. Preserve the first failing hop
@@ -450,8 +510,10 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 		if len(nextPaths) == 0 && index < len(intent.Hops)-1 {
 			break
 		}
+
 		paths = nextPaths
 	}
+
 	out.VisitedNodes = len(seenNodes)
 	out.VisitedEdges = len(seenEdges)
 	out.Exhausted = !out.Truncated
@@ -461,6 +523,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 		if x.Key == y.Key {
 			return a.PathID < b.PathID
 		}
+
 		return x.Key < y.Key
 	})
 	return out, nil
@@ -471,30 +534,35 @@ func typedRelationAnswer(root Asset, intent TypedRelationIntent, paths []PlanMat
 	if len(intent.Goal.TargetTypes) > 0 {
 		target = intent.Goal.TargetTypes[0]
 	}
+
 	names := make([]string, 0, len(paths))
 	for _, path := range paths {
 		if len(path.Nodes) > 0 {
 			names = append(names, path.Nodes[len(path.Nodes)-1].Key)
 		}
 	}
+
 	sort.Strings(names)
 	labels := make([]string, 0, len(intent.Hops))
 	for _, hop := range intent.Hops {
 		labels = append(labels, hop.Direction+":"+hop.Label+"/"+hop.RelationType)
 	}
+
 	answer := fmt.Sprintf("Found %d %s asset(s) connected to %s through stored OAM relationship path [%s]:",
 		len(names), target, root.Key, strings.Join(labels, " -> "))
 	if len(names) > 0 {
 		answer += "\n" + strings.Join(names, "\n")
 	}
+
 	answer += "\nThese are stored graph associations, not independently verified ownership or current reachability."
 	if truncated {
 		answer += " Results are partial (search truncated: " + reason + "); additional matches may exist."
 	}
+
 	return answer
 }
 
-// typedRelationEmptyExplanation identifies the FIRST missing typed hop rather
+// typedRelationEmptyExplanation identifies the first missing typed hop rather
 // than treating an unexecuted downstream relationship as disproved. This
 // only describes edges returned by the bounded OAM reader, never global
 // absence or independent ownership evidence.
@@ -506,6 +574,7 @@ func typedRelationEmptyExplanation(search GraphSearchResult, intent TypedRelatio
 		if hop.OutputPaths > 0 {
 			continue
 		}
+
 		description := fmt.Sprintf(" The first empty relationship hop was %d (%s --%s:%s/%s--> %s).",
 			hop.Hop, hop.SourceType, hop.Direction, hop.Label, hop.RelationType, hop.TargetType)
 		if hop.ReturnedEdges == 0 {
@@ -516,8 +585,10 @@ func typedRelationEmptyExplanation(search GraphSearchResult, intent TypedRelatio
 		if len(search.HopDiagnostics) < len(intent.Hops) {
 			description += fmt.Sprintf(" The %d subsequent hop(s) were not evaluated because there were no candidates to continue from.", len(intent.Hops)-len(search.HopDiagnostics))
 		}
+
 		description += " This does not prove the target assets or other OAM relationship paths are absent."
 		return description
 	}
+
 	return ""
 }

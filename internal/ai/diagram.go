@@ -27,13 +27,16 @@ func Mermaid(w WalkResult) string {
 		if !ok1 || !ok2 {
 			continue
 		}
+
 		fmt.Fprintf(&b, "  %s -->|%s| %s\n", from, safeDiagramText(edge.Label), to)
 	}
 	if w.Truncated {
 		b.WriteString("  %% Partial graph: traversal was truncated\n")
 	}
+
 	return b.String()
 }
+
 func safeDiagramText(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -47,5 +50,6 @@ func safeDiagramText(s string) string {
 	if b.Len() == 0 {
 		return "unknown"
 	}
+
 	return b.String()
 }

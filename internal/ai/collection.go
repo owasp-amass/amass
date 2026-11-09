@@ -56,22 +56,27 @@ func PlanCollection(target AssetSelector) CollectionPlan {
 				return plan
 			}
 		}
+
 		plan.ScopeType = "domain"
 		plan.ScopeValue = value
 	case target.Type == "IPAddress" && target.Field == "address":
 		addr, err := netip.ParseAddr(value)
-		if err != nil || !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsUnspecified() {
+		if err != nil || !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() ||
+			addr.IsLinkLocalUnicast() || addr.IsUnspecified() {
 			plan.Reason = "only valid public unicast IPs are supported for collection"
 			return plan
 		}
+
 		plan.ScopeType = "ip"
 		plan.ScopeValue = addr.Unmap().String()
 	case target.Type == "Netblock" && target.Field == "cidr":
 		prefix, err := netip.ParsePrefix(value)
-		if err != nil || !prefix.IsValid() || !prefix.Addr().IsGlobalUnicast() || prefix.Addr().IsPrivate() || prefix.Addr().IsLoopback() || prefix.Addr().IsLinkLocalUnicast() {
+		if err != nil || !prefix.IsValid() || !prefix.Addr().IsGlobalUnicast() || prefix.Addr().IsPrivate() ||
+			prefix.Addr().IsLoopback() || prefix.Addr().IsLinkLocalUnicast() {
 			plan.Reason = "only public CIDR ranges are supported for collection"
 			return plan
 		}
+
 		plan.ScopeType = "cidr"
 		plan.ScopeValue = prefix.Masked().String()
 	case target.Type == "AutonomousSystem" && target.Field == "number":
@@ -80,12 +85,14 @@ func PlanCollection(target AssetSelector) CollectionPlan {
 			plan.Reason = "invalid autonomous system number"
 			return plan
 		}
+
 		plan.ScopeType = "asn"
 		plan.ScopeValue = fmt.Sprint(asn)
 	default:
 		plan.Reason = "this OAM selector has no approved direct enumeration adapter"
 		return plan
 	}
+
 	plan.Methods = []string{"amass-engine-passive"}
 	plan.Status = "approval_required"
 	sum := sha256.Sum256([]byte("amass-ai-collect-v1\x00" + plan.ScopeType + "\x00" + plan.ScopeValue + "\x00passive"))

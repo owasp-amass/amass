@@ -36,6 +36,7 @@ func Evaluate(ctx context.Context, model Classifier, cases []LabeledCase) (Metri
 	if model == nil || len(cases) == 0 || len(cases) > 100000 {
 		return out, errors.New("valid classifier and 1..100000 held-out cases required")
 	}
+
 	seen := map[string]bool{}
 	for _, c := range cases {
 		if err := ctx.Err(); err != nil {
@@ -44,10 +45,12 @@ func Evaluate(ctx context.Context, model Classifier, cases []LabeledCase) (Metri
 		if c.ID == "" || seen[c.ID] {
 			return out, fmt.Errorf("duplicate/invalid case ID %q", c.ID)
 		}
+
 		seen[c.ID] = true
 		if c.ExpectedLabel != "unrelated" && c.ExpectedLabel != "potential_relation" {
 			return out, fmt.Errorf("unknown expected label in case %q", c.ID)
 		}
+
 		got, err := model.Classify(ctx, c.Input)
 		if err != nil {
 			return out, fmt.Errorf("evaluate case %q: %w", c.ID, err)
@@ -76,7 +79,9 @@ func Evaluate(ctx context.Context, model Classifier, cases []LabeledCase) (Metri
 		} else {
 			out.Incorrect++
 		}
+
 		out.Total++
 	}
+
 	return out, nil
 }

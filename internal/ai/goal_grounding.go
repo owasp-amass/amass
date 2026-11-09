@@ -31,6 +31,7 @@ func explicitRelationLabels(question string, catalog []RelationshipSchema) (expl
 	if len(matches) != 1 {
 		return hint, false
 	}
+
 	phrase := normalizeSchemaAlias(matches[0][1])
 	if phrase == "" {
 		return hint, false
@@ -57,21 +58,25 @@ func explicitRelationLabels(question string, catalog []RelationshipSchema) (expl
 			if alias == "" {
 				continue
 			}
+
 			start := 0
 			for start < len(phrase) {
 				n := strings.Index(phrase[start:], alias)
 				if n < 0 {
 					break
 				}
+
 				n += start
 				end := n + len(alias)
 				if (n == 0 || phrase[n-1] == ' ') && (end == len(phrase) || phrase[end] == ' ') {
 					occurrences = append(occurrences, occurrence{start: n, end: end, label: label, alias: alias})
 				}
+
 				start = n + 1
 			}
 		}
 	}
+
 	sort.Slice(occurrences, func(i, j int) bool {
 		a, b := occurrences[i], occurrences[j]
 		if a.start != b.start {
@@ -80,6 +85,7 @@ func explicitRelationLabels(question string, catalog []RelationshipSchema) (expl
 		if a.end != b.end {
 			return a.end > b.end
 		}
+
 		return a.label < b.label
 	})
 	chosen := map[string]int{}
@@ -93,11 +99,13 @@ func explicitRelationLabels(question string, catalog []RelationshipSchema) (expl
 			if next.start != current.start || next.end != current.end {
 				break
 			}
+
 			competing[next.label] = true
 		}
 		if len(competing) > 1 {
 			return hint, false
 		}
+
 		chosen[current.label] = current.start
 		// Ignore overlapping shorter aliases, but never silently use an
 		// unrelated competing interpretation for the same matched words.
@@ -111,17 +119,20 @@ func explicitRelationLabels(question string, catalog []RelationshipSchema) (expl
 	for label := range chosen {
 		hint.Labels = append(hint.Labels, label)
 	}
+
 	sort.Slice(hint.Labels, func(i, j int) bool {
 		a, b := chosen[hint.Labels[i]], chosen[hint.Labels[j]]
 		if a == b {
 			return hint.Labels[i] < hint.Labels[j]
 		}
+
 		return a < b
 	})
 	hint.Rule = "all"
 	if explicitlyOrderedRelations.MatchString(question) {
 		hint.Rule = "ordered"
 	}
+
 	hint.RawPhrase = strings.TrimSpace(matches[0][1])
 	return hint, true
 }
@@ -138,6 +149,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 	if rootType == "" || targetType == "" || len(hint.Labels) == 0 {
 		return nil, false
 	}
+
 	type pathState struct {
 		kind  string
 		steps []GoalRelation
@@ -155,6 +167,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 			if st.kind != targetType {
 				return
 			}
+
 			var key strings.Builder
 			for _, r := range st.steps {
 				key.WriteString(relationKey(r.SourceType, r.Label, r.RelationType, r.DestinationType))
@@ -164,6 +177,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 				distinct[key.String()] = true
 				found = append(found, append([]GoalRelation(nil), st.steps...))
 			}
+
 			return
 		}
 		for i, label := range hint.Labels {
@@ -177,6 +191,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 				if !strings.EqualFold(r.Label, label) {
 					continue
 				}
+
 				next := ""
 				switch st.kind {
 				case r.SourceType:
@@ -186,6 +201,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 				default:
 					continue
 				}
+
 				step := GoalRelation(r)
 				nextSteps := append(append([]GoalRelation(nil), st.steps...), step)
 				walk(pathState{kind: next, steps: nextSteps, seen: st.seen | (1 << uint(i))})
@@ -196,10 +212,11 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 	if len(found) != 1 {
 		return nil, false
 	}
+
 	return found[0], true
 }
 
-// applyExplicitRelationGrounding changes ONLY relationship constraints.
+// applyExplicitRelationGrounding changes only relationship constraints.
 // It is called after the model's subject, targets, direction and purpose
 // have been validated independently. It never changes the user-selected
 // asset identifier or destination types and does not fabricate OAM edges.
@@ -207,10 +224,12 @@ func applyExplicitRelationGrounding(goal InvestigationGoal, hint explicitRelatio
 	if len(goal.TargetTypes) != 1 {
 		return goal, false
 	}
+
 	rels, ok := groundedRelationshipGoal(hint, goal.Subject.Type, goal.TargetTypes[0], catalog)
 	if !ok {
 		return goal, false
 	}
+
 	goal.Relationships = rels
 	goal.PathRule = hint.Rule
 	return goal, true

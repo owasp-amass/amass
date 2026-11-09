@@ -18,6 +18,7 @@ func TestLinearModelRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cases := []struct {
 		features map[string]float64
 		want     string
@@ -36,14 +37,20 @@ func TestLinearModelRoutes(t *testing.T) {
 		}
 	}
 }
+
 func TestLinearRejectsInvalidFeatures(t *testing.T) {
 	m, _ := Load(strings.NewReader(fixture))
-	for _, features := range []map[string]float64{{"unknown_feature": 1}, {"verified_negative": math.NaN()}, {"verified_negative": 1.5}} {
+	for _, features := range []map[string]float64{
+		{"unknown_feature": 1},
+		{"verified_negative": math.NaN()},
+		{"verified_negative": 1.5},
+	} {
 		if _, err := m.Classify(context.Background(), Input{Task: m.Task, Features: features}); err == nil {
 			t.Fatal("accepted invalid feature")
 		}
 	}
 }
+
 func TestLinearRejectsMalformedModel(t *testing.T) {
 	for _, raw := range []string{`{}`, fixture + "{}", strings.Replace(fixture, `"model_id"`, `"surprise"`, 1)} {
 		if _, err := Load(strings.NewReader(raw)); err == nil {
@@ -51,11 +58,13 @@ func TestLinearRejectsMalformedModel(t *testing.T) {
 		}
 	}
 }
+
 func TestLinearContext(t *testing.T) {
 	m, _ := Load(strings.NewReader(fixture))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := m.Classify(ctx, Input{Task: m.Task, Features: map[string]float64{"verified_negative": 1}}); err == nil {
+	if _, err := m.Classify(ctx,
+		Input{Task: m.Task, Features: map[string]float64{"verified_negative": 1}}); err == nil {
 		t.Fatal("cancellation ignored")
 	}
 }

@@ -82,26 +82,32 @@ func parse(data []byte) (*Table, error) {
 	if len(t.Relations) == 0 {
 		return nil, errors.New("OAM relation semantics table is empty")
 	}
+
 	t.index = make(map[string]Relation, len(t.Relations))
 	for i, r := range t.Relations {
 		if r.Source == "" || r.Label == "" || r.RelationType == "" || r.Destination == "" {
 			return nil, fmt.Errorf("relation %d: source, label, relation_type and destination are required", i+1)
 		}
 		if !attributions[r.Attribution] {
-			return nil, fmt.Errorf("%s --%s--> %s: unknown attribution %q", r.Source, r.Label, r.Destination, r.Attribution)
+			return nil, fmt.Errorf("%s --%s--> %s: unknown attribution %q", r.Source, r.Label, r.Destination,
+				r.Attribution)
 		}
 		if !purposes[r.Purpose] {
 			return nil, fmt.Errorf("%s --%s--> %s: unknown purpose %q", r.Source, r.Label, r.Destination, r.Purpose)
 		}
 		if r.Note == "" {
-			return nil, fmt.Errorf("%s --%s--> %s: a note explaining the choice is required", r.Source, r.Label, r.Destination)
+			return nil, fmt.Errorf("%s --%s--> %s: a note explaining the choice is required", r.Source,
+				r.Label, r.Destination)
 		}
+
 		k := key(r.Source, r.Label, r.RelationType, r.Destination)
 		if _, dup := t.index[k]; dup {
 			return nil, fmt.Errorf("%s --%s/%s--> %s is listed twice", r.Source, r.Label, r.RelationType, r.Destination)
 		}
+
 		t.index[k] = r
 	}
+
 	return &t, nil
 }
 

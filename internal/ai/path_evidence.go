@@ -64,13 +64,15 @@ type EvidenceDossier struct {
 // accept a model-supplied evidence list, and never treats generic asset tags
 // as proof of a particular relationship.
 func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths []PlanMatch) (EvidenceDossier, error) {
-	out := EvidenceDossier{Paths: make([]PathEvidence, 0, len(paths)), EdgeLookupsLimit: min(40, limits.MaxEdges), RecordsPerEdgeLimit: min(8, limits.MaxEvidence)}
+	out := EvidenceDossier{Paths: make([]PathEvidence, 0, len(paths)), EdgeLookupsLimit: min(40,
+		limits.MaxEdges), RecordsPerEdgeLimit: min(8, limits.MaxEvidence)}
 	if graph == nil {
 		return out, fmt.Errorf("graph evidence interface required")
 	}
 	if err := limits.Validate(); err != nil {
 		return out, err
 	}
+
 	reader, ok := graph.(EdgeEvidenceReader)
 	if !ok {
 		return out, fmt.Errorf("explicit edge evidence reader required (asset and edge identifiers can overlap)")
@@ -78,11 +80,13 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 	if len(paths) > limits.MaxFind {
 		return out, fmt.Errorf("path evidence request exceeds bounded find limit")
 	}
+
 	cache := map[string]EdgeEvidence{}
 	for _, p := range paths {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
+
 		report := PathEvidence{PathID: p.PathID, Edges: make([]EdgeEvidence, 0, len(p.Edges))}
 		if report.PathID == "" {
 			report.PathID = WitnessPathID(p)
@@ -90,6 +94,7 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 		if len(p.Edges)+1 != len(p.Nodes) {
 			return out, fmt.Errorf("malformed witnessed path %s", report.PathID)
 		}
+
 		worst := ""
 		good := true
 		for _, edge := range p.Edges {
@@ -116,6 +121,7 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 							out.Reason = "per-edge evidence record limit"
 						}
 					}
+
 					sources := map[string]bool{}
 					seen := map[string]bool{}
 					for _, record := range records {
@@ -128,12 +134,20 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 						if seen[record.ID] {
 							continue
 						}
+
 						seen[record.ID] = true
 						sourceID := ""
 						if record.Kind == string(oam.SourceProperty) {
 							sourceID = strings.TrimSpace(record.SourceID)
 						}
-						tag := SourceRecord{EvidenceID: record.ID, EdgeID: edge.ID, SourceID: sourceID, Kind: record.Kind, LastSeen: record.LastSeen}
+
+						tag := SourceRecord{
+							EvidenceID: record.ID,
+							EdgeID:     edge.ID,
+							SourceID:   sourceID,
+							Kind:       record.Kind,
+							LastSeen:   record.LastSeen,
+						}
 						item.Records = append(item.Records, tag)
 						if tag.SourceID == "" {
 							item.UnattributedTags++
@@ -144,6 +158,7 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 					for src := range sources {
 						item.AttributedSources = append(item.AttributedSources, src)
 					}
+
 					sort.Strings(item.AttributedSources)
 					switch len(item.AttributedSources) {
 					case 0:
@@ -153,12 +168,16 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 					default:
 						item.Status = "multiple_source_tags"
 					}
+
 					out.InspectedEdges++
 				}
+
 				cache[edge.ID] = item
 			}
+
 			report.Edges = append(report.Edges, item)
-			if item.Truncated || item.Status == "not_assessed" || item.Status == "no_attributed_sources" || item.Status == "single_source" {
+			if item.Truncated || item.Status == "not_assessed" || item.Status == "no_attributed_sources" ||
+				item.Status == "single_source" {
 				good = false
 				if worst == "" {
 					worst = edge.ID
@@ -172,8 +191,10 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 		} else {
 			report.Status = "limited_source_support"
 		}
+
 		report.WeakestLink = worst
 		out.Paths = append(out.Paths, report)
 	}
+
 	return out, nil
 }

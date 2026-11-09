@@ -40,11 +40,13 @@ func questionFocus(question string, relations []RelationshipSchema, selectors []
 	for _, s := range selectors {
 		registered[s.Type] = true
 	}
+
 	labels := map[string]bool{}
 	for _, r := range relations {
 		registered[r.SourceType], registered[r.DestinationType] = true, true
 		labels[r.Label] = true
 	}
+
 	typeAliases := map[string]bool{}
 	for typ := range registered {
 		for _, alias := range intentAssetAliases(typ) {
@@ -67,6 +69,7 @@ func questionFocus(question string, relations []RelationshipSchema, selectors []
 			}
 		}
 	}
+
 	implied := func(typ string) {
 		if registered[typ] {
 			f.Types[typ] = true
@@ -91,6 +94,7 @@ func questionFocus(question string, relations []RelationshipSchema, selectors []
 	if hostnameInQuestion.MatchString(rest) && !strings.Contains(rest, "@") {
 		implied("FQDN")
 	}
+
 	return f
 }
 
@@ -121,10 +125,12 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 	for _, r := range relations {
 		types[r.SourceType], types[r.DestinationType] = true, true
 	}
+
 	allTypes := make([]string, 0, len(types))
 	for typ := range types {
 		allTypes = append(allTypes, typ)
 	}
+
 	sort.Strings(allTypes)
 
 	out.Hint, out.Explicit = explicitRelationLabels(question, relations)
@@ -143,6 +149,7 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 		for l := range focus.Labels {
 			labels = append(labels, l)
 		}
+
 		promptRelations = relationsWithLabels(relations, labels)
 	}
 	if sliced && len(focus.Types) > 0 {
@@ -158,14 +165,17 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 	if sliced && len(promptRelations) < len(relations) {
 		out.Sliced = true
 	}
+
 	relationCatalog := compactRelationshipCatalog(promptRelations)
 	if len(promptRelations) == 0 {
 		relationCatalog = "(The question names no OAM relationship: use relationships [] and path_rule \"\".)\n"
 	}
+
 	selectorNote := ""
 	if len(promptSelectors) < len(selectors) {
 		selectorNote = " (types mentioned in the question; any OAM type below is valid)"
 	}
+
 	out.Text = `You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
 Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}.
 The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
@@ -182,8 +192,10 @@ SELECTOR CATALOG` + selectorNote + `:
 		"\nUSER LANGUAGE ALIASES FOR OAM TYPES (not new OAM types):\n" + compactIntentVocabularyFor(typeAliasTypes) +
 		"\nALL AVAILABLE OAM TARGET TYPES: " + strings.Join(allTypes, ",") +
 		"\nUSER QUESTION OPERATION PARAPHRASES (do not invent OAM edge labels):\n" + compactOperationVocabulary() +
-		"\nOAM RELATIONSHIP LABEL LANGUAGE ALIASES (labels must exist in catalog):\n" + compactRelationshipVocabulary(promptRelations) +
-		"\nOAM INDEXED SEARCH FIELD LANGUAGE ALIASES (selectors must exist in catalog):\n" + compactSearchVocabulary(promptSelectors) +
+		"\nOAM RELATIONSHIP LABEL LANGUAGE ALIASES (labels must exist in catalog):\n" +
+		compactRelationshipVocabulary(promptRelations) +
+		"\nOAM INDEXED SEARCH FIELD LANGUAGE ALIASES (selectors must exist in catalog):\n" +
+		compactSearchVocabulary(promptSelectors) +
 		"\nOAM RELATIONSHIP CATALOG:\n" + relationCatalog
 	if out.Explicit {
 		// Promote user-named OAM labels above model-assumed WHOIS/DNS hops.
@@ -193,6 +205,7 @@ SELECTOR CATALOG` + selectorNote + `:
 			". Avoid unrelated registration and WHOIS hops. If multiple relations are requested, " +
 			"retain each named label. The application will verify and resolve any ambiguity against OAM schema.\n"
 	}
+
 	out.Schema = goalJSONSchemaFor(relations, selectors, promptRelations)
 	return out
 }
@@ -202,12 +215,14 @@ func relationsWithLabels(relations []RelationshipSchema, labels []string) []Rela
 	for _, l := range labels {
 		selected[strings.ToLower(l)] = true
 	}
+
 	out := make([]RelationshipSchema, 0)
 	for _, r := range relations {
 		if selected[strings.ToLower(r.Label)] {
 			out = append(out, r)
 		}
 	}
+
 	return out
 }
 
@@ -217,6 +232,7 @@ func compactIntentVocabularyFor(types map[string]bool) string {
 	for typ := range types {
 		names = append(names, typ)
 	}
+
 	sort.Strings(names)
 	var rows []string
 	for _, typ := range names {
@@ -224,5 +240,6 @@ func compactIntentVocabularyFor(types map[string]bool) string {
 			rows = append(rows, typ+": "+strings.Join(aliases, ", "))
 		}
 	}
+
 	return strings.Join(rows, "\n")
 }

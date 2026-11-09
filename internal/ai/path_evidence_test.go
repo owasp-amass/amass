@@ -23,6 +23,7 @@ func provenancePath() PlanMatch {
 		{ID: "ownership", FromID: "p", ToID: "o", Label: "subsidiary", Type: "SimpleRelation"},
 	}}
 }
+
 func TestPathEvidenceDistinguishesSourcedFromUnsupportedLinks(t *testing.T) {
 	path := provenancePath()
 	graph := fakeGraph{evidence: map[string][]Evidence{
@@ -45,12 +46,14 @@ func TestPathEvidenceDistinguishesSourcedFromUnsupportedLinks(t *testing.T) {
 	if dossier.Paths[0].VerifiedOwnership {
 		t.Fatal("source tags cannot verify legal ownership")
 	}
-	if dossier.Paths[0].Edges[0].Status != "single_source" || dossier.Paths[0].Edges[2].Status != "multiple_source_tags" {
+	if dossier.Paths[0].Edges[0].Status != "single_source" ||
+		dossier.Paths[0].Edges[2].Status != "multiple_source_tags" {
 		t.Fatalf("edge-level provenance misclassified: %+v", dossier.Paths[0].Edges)
 	}
 	if dossier.Truncated {
 		t.Fatal("unexpected evidence truncation")
 	}
+
 	t.Logf("source support: DNS=%s website=%s subsidiary=%s path=%s", dossier.Paths[0].Edges[0].Status,
 		dossier.Paths[0].Edges[1].Status, dossier.Paths[0].Edges[2].Status, dossier.Paths[0].Status)
 }
@@ -95,8 +98,10 @@ func TestPathEvidenceReportsLookupBudgetAndNoFictitiousCoverage(t *testing.T) {
 		p.Nodes = append(p.Nodes, Asset{ID: fmt.Sprintf("n%d", i), Type: "FQDN"})
 	}
 	for i := 0; i < 42; i++ {
-		p.Edges = append(p.Edges, Relation{ID: fmt.Sprintf("e%d", i), FromID: p.Nodes[i].ID, ToID: p.Nodes[i+1].ID, Label: "test"})
+		p.Edges = append(p.Edges, Relation{ID: fmt.Sprintf("e%d",
+			i), FromID: p.Nodes[i].ID, ToID: p.Nodes[i+1].ID, Label: "test"})
 	}
+
 	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{p})
 	if err != nil {
 		t.Fatal(err)
@@ -112,8 +117,10 @@ func TestPathEvidenceReportsLookupBudgetAndNoFictitiousCoverage(t *testing.T) {
 func TestPathEvidenceReportsPerEdgeRecordTruncation(t *testing.T) {
 	graph := fakeGraph{evidence: map[string][]Evidence{}}
 	for i := 0; i < 10; i++ {
-		graph.evidence["dns"] = append(graph.evidence["dns"], Evidence{ID: fmt.Sprintf("t%d", i), SubjectID: "dns", SourceID: fmt.Sprintf("src%d", i), Kind: "SourceProperty"})
+		graph.evidence["dns"] = append(graph.evidence["dns"], Evidence{ID: fmt.Sprintf("t%d",
+			i), SubjectID: "dns", SourceID: fmt.Sprintf("src%d", i), Kind: "SourceProperty"})
 	}
+
 	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{provenancePath()})
 	if err != nil {
 		t.Fatal(err)

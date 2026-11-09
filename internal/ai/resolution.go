@@ -20,21 +20,25 @@ type OrganizationQuery struct {
 	RegistrationID string `json:"registration_id,omitempty"`
 	Jurisdiction   string `json:"jurisdiction,omitempty"`
 }
+
 type OrganizationAlias struct {
 	Alias        string `json:"alias"`
 	UniqueID     string `json:"unique_id"`
 	Source       string `json:"source"`
 	Jurisdiction string `json:"jurisdiction,omitempty"`
 }
+
 type ResolutionMatch struct {
 	Field  string `json:"field"`
 	Value  string `json:"value"`
 	Source string `json:"source,omitempty"`
 }
+
 type OrganizationCandidate struct {
 	Asset   Asset             `json:"asset"`
 	Matches []ResolutionMatch `json:"matches"`
 }
+
 type OrganizationResolution struct {
 	Query      OrganizationQuery       `json:"query"`
 	Status     string                  `json:"status"`
@@ -62,6 +66,7 @@ func (q OrganizationQuery) Validate() error {
 	if q.RegistrationID != "" && q.Jurisdiction == "" {
 		return errors.New("registration_id requires jurisdiction")
 	}
+
 	return nil
 }
 
@@ -71,6 +76,7 @@ func NormalizeOrganizationAlias(s string) string {
 	s = strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(s)), " "))
 	return strings.TrimSuffix(s, ".")
 }
+
 func LoadOrganizationAliases(r io.Reader) ([]OrganizationAlias, error) {
 	const maxBytes = 1024 * 1024
 	b, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
@@ -80,6 +86,7 @@ func LoadOrganizationAliases(r io.Reader) ([]OrganizationAlias, error) {
 	if len(b) > maxBytes {
 		return nil, errors.New("organization aliases file exceeds 1 MiB")
 	}
+
 	var doc struct {
 		Aliases []OrganizationAlias `json:"aliases"`
 	}
@@ -96,5 +103,6 @@ func LoadOrganizationAliases(r io.Reader) ([]OrganizationAlias, error) {
 			return nil, fmt.Errorf("invalid alias at index %d: alias, unique_id and source are required", i)
 		}
 	}
+
 	return doc.Aliases, nil
 }

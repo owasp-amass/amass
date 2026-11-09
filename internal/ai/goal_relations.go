@@ -33,25 +33,30 @@ func validGoalRelations(requirements []GoalRelation, rule string, catalog []Rela
 	if rule != "" && len(requirements) == 0 {
 		return errors.New("path_rule requires at least one relationship constraint")
 	}
+
 	allowed := map[string]bool{}
 	for _, r := range catalog {
 		allowed[relationKey(r.SourceType, r.Label, r.RelationType, r.DestinationType)] = true
 	}
+
 	seen := map[string]bool{}
 	for _, r := range requirements {
 		key := relationKey(r.SourceType, r.Label, r.RelationType, r.DestinationType)
 		if !allowed[key] {
-			return fmt.Errorf("relationship %s --%s/%s--> %s absent from OAM taxonomy", r.SourceType, r.Label, r.RelationType, r.DestinationType)
+			return fmt.Errorf("relationship %s --%s/%s--> %s absent from OAM taxonomy", r.SourceType,
+				r.Label, r.RelationType, r.DestinationType)
 		}
 		if seen[key] && rule != "ordered" {
 			return errors.New("duplicate relationship constraint")
 		}
+
 		seen[key] = true
 	}
+
 	return nil
 }
 
-// pathSatisfiesGoal matches STORED edge orientation and exact relation type.
+// pathSatisfiesGoal matches stored edge orientation and exact relation type.
 // "any" permits any requested transition, "all" requires each transition,
 // and "ordered" requires a subsequence, not necessarily consecutive edges.
 // Unspecified constraints do not restrict any path.
@@ -62,6 +67,7 @@ func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) boo
 	if len(path.Edges)+1 != len(path.Nodes) {
 		return false
 	}
+
 	match := func(edge Relation, r GoalRelation) bool {
 		if edge.Label != r.Label || edge.Type != r.RelationType {
 			return false
@@ -80,8 +86,10 @@ func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) boo
 					return dest.Type == r.DestinationType
 				}
 			}
+
 			return false
 		}
+
 		return false
 	}
 	if rule == "" {
@@ -96,6 +104,7 @@ func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) boo
 				}
 			}
 		}
+
 		return false
 	case "all":
 		covered := make([]bool, len(required))
@@ -111,6 +120,7 @@ func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) boo
 				return false
 			}
 		}
+
 		return true
 	case "ordered":
 		next := 0
@@ -122,7 +132,9 @@ func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) boo
 				}
 			}
 		}
+
 		return false
 	}
+
 	return false
 }

@@ -13,16 +13,21 @@ import (
 )
 
 func TestReviewTriageJournalNeverCreatesProposal(t *testing.T) {
-	local := &routingClassifier{prediction: classify.Prediction{Decision: "review", ModelID: "classifier-1", ScoreKind: "uncalibrated_softmax"}}
+	local := &routingClassifier{
+		prediction: classify.Prediction{Decision: "review", ModelID: "classifier-1", ScoreKind: "uncalibrated_softmax"},
+	}
 	c := routedCandidate()
-	result, err := (Inferrer{MinSources: 2}).AnalyzeRouted(context.Background(), c, local, RoutingPolicy{AllowLocalReview: true})
+	result, err := (Inferrer{MinSources: 2}).AnalyzeRouted(context.Background(), c, local,
+		RoutingPolicy{AllowLocalReview: true})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	j := &Journal{Path: t.TempDir() + "/journal.jsonl"}
 	if err := j.SubmitTriage(c, result); err != nil {
 		t.Fatal(err)
 	}
+
 	entries, err := j.History()
 	if err != nil {
 		t.Fatal(err)
@@ -30,6 +35,7 @@ func TestReviewTriageJournalNeverCreatesProposal(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("entries=%d", len(entries))
 	}
+
 	var event map[string]any
 	if err := json.Unmarshal(entries[0], &event); err != nil {
 		t.Fatal(err)

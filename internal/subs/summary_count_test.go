@@ -17,10 +17,12 @@ func TestAddInfrastructureInfoPreservesDiscoveredNamesWithoutASNs(t *testing.T) 
 	for _, name := range names {
 		lookup[name] = &amassnet.Output{Name: name}
 	}
+
 	result := addInfrastructureInfo(lookup, amassnet.NewASNCache())
 	if len(result) != len(names) {
 		t.Fatalf("ASN enrichment incorrectly removed FQDNs: want=%d got=%d", len(names), len(result))
 	}
+
 	present := map[string]bool{}
 	for _, out := range result {
 		present[out.Name] = true

@@ -43,6 +43,7 @@ func newProvider(s providerSettings) (ai.Model, error) {
 		if _, err := ai.OllamaChatURL(endpoint); err != nil {
 			return nil, err
 		}
+
 		m := ai.NewOllamaModel(endpoint, modelName, &http.Client{Timeout: timeout})
 		m.Think, m.ContextTokens, m.MaxTokens, m.Temperature = s.Think, s.ContextTokens, maxTokens, temperature
 		provider = m
@@ -50,18 +51,35 @@ func newProvider(s providerSettings) (ai.Model, error) {
 		if endpoint == "" {
 			endpoint = "http://127.0.0.1:11434/v1/chat/completions"
 		}
-		provider = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: &http.Client{Timeout: timeout}, MaxTokens: maxTokens, Temperature: temperature}
+
+		provider = ai.CompatibleModel{
+			Endpoint:    endpoint,
+			ModelName:   modelName,
+			APIKey:      apiKey,
+			Client:      &http.Client{Timeout: timeout},
+			MaxTokens:   maxTokens,
+			Temperature: temperature,
+		}
 	case "anthropic":
 		if endpoint == "" {
 			endpoint = "https://api.anthropic.com/v1/messages"
 		}
-		provider = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: &http.Client{Timeout: timeout}, MaxTokens: maxTokens, Temperature: temperature}
+
+		provider = ai.AnthropicModel{
+			Endpoint:    endpoint,
+			ModelName:   modelName,
+			APIKey:      apiKey,
+			Client:      &http.Client{Timeout: timeout},
+			MaxTokens:   maxTokens,
+			Temperature: temperature,
+		}
 	default:
 		return nil, fmt.Errorf("unknown model provider %q", providerName)
 	}
 	if err := validateModelEndpoint(endpoint, allowHTTP); err != nil {
 		return nil, err
 	}
+
 	return provider, nil
 }
 
@@ -75,9 +93,11 @@ func readQuery(path string, stdin io.Reader) (ai.Query, error) {
 		if err != nil {
 			return q, fmt.Errorf("open query: %w", err)
 		}
+
 		defer func() { _ = f.Close() }()
 		r = f
 	}
+
 	raw, err := io.ReadAll(io.LimitReader(r, maxQueryFileBytes+1))
 	if err != nil {
 		return q, fmt.Errorf("read query: %w", err)
@@ -85,6 +105,7 @@ func readQuery(path string, stdin io.Reader) (ai.Query, error) {
 	if len(raw) > maxQueryFileBytes {
 		return q, errors.New("query file exceeds 1 MiB")
 	}
+
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&q); err != nil {
@@ -93,6 +114,7 @@ func readQuery(path string, stdin io.Reader) (ai.Query, error) {
 	if dec.More() {
 		return q, errors.New("query file must hold exactly one JSON object")
 	}
+
 	return q, nil
 }
 
@@ -101,6 +123,7 @@ func writeJSON(out io.Writer, v any) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = fmt.Fprintln(out, string(pretty))
 	return err
 }
@@ -115,6 +138,7 @@ func writeInvestigation(out io.Writer, format string, result ai.Investigation) e
 		if result.Diagram == "" {
 			return fmt.Errorf("investigation did not produce a diagram: %s", result.Answer)
 		}
+
 		_, err := fmt.Fprint(out, result.Diagram)
 		return err
 	case "json":
@@ -132,6 +156,7 @@ func writeTrace(w io.Writer, result ai.Investigation) {
 		if ev.Incomplete {
 			status = " (incomplete)"
 		}
+
 		_, _ = fmt.Fprintf(w, "trace: %-20s %8.1fs%s %s\n", ev.Stage, float64(ev.DurationMS)/1000, status, ev.Detail)
 	}
 	if u := result.Usage; u != nil {

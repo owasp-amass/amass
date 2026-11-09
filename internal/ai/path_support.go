@@ -23,7 +23,7 @@ type PathSourceCoverage struct {
 	TotalEdges          int `json:"total_edges"`
 }
 
-// pathSourceCoverage deliberately counts TAG COVERAGE, not source quality.
+// pathSourceCoverage deliberately counts TAG coverage, not source quality.
 // Neither this tuple nor the display order is a calibrated confidence score.
 func pathSourceCoverage(p PathEvidence) (PathSourceCoverage, []EdgeSourceSummary) {
 	v := PathSourceCoverage{TotalEdges: len(p.Edges)}
@@ -46,27 +46,30 @@ func pathSourceCoverage(p PathEvidence) (PathSourceCoverage, []EdgeSourceSummary
 			}
 		}
 	}
+
 	return v, out
 }
 
 // rankComparableAlternates returns a deterministic ordering of exactly the
-// same witnessed candidates. The evidence preference ONLY compares paths
+// same witnessed candidates. The evidence preference only compares paths
 // reaching the same destination asset: unrelated destinations are sorted by
 // asset ID, never ranked for factual relevance by source-tag counts.
 //
 // Fewer unassessed edges take priority; then coverage of every path edge,
 // then more multiply-tagged edges, then fewer hops, then stable path ID.
-// A higher rank is NOT a claim of provenance independence or graph truth.
+// A higher rank is not a claim of provenance independence or graph truth.
 func rankComparableAlternates(items []adaptiveCandidate) {
 	sort.SliceStable(items, func(i, j int) bool {
 		a, b := items[i], items[j]
 		if a.AssetID != b.AssetID {
 			return a.AssetID < b.AssetID
 		}
+
 		x, y := a.Coverage, b.Coverage
 		if x.UnassessedEdges != y.UnassessedEdges {
 			return x.UnassessedEdges < y.UnassessedEdges
 		}
+
 		// Prefer the fraction of edges with at least one named source, avoiding
 		// a bias toward longer paths purely because they contain more tags.
 		left, right := x.AttributedEdges*y.TotalEdges, y.AttributedEdges*x.TotalEdges
@@ -79,6 +82,7 @@ func rankComparableAlternates(items []adaptiveCandidate) {
 		if a.Depth != b.Depth {
 			return a.Depth < b.Depth
 		}
+
 		return a.PathID < b.PathID
 	})
 }

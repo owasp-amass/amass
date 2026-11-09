@@ -26,10 +26,12 @@ func (s *ollamaStub) server(t *testing.T) *httptest.Server {
 		if r.URL.Path != "/api/chat" {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
+
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Error(err)
 		}
+
 		s.mu.Lock()
 		s.requests = append(s.requests, req)
 		s.mu.Unlock()
@@ -50,23 +52,29 @@ func TestOllamaRequestShapeAndToolCalls(t *testing.T) {
 	history := []Message{
 		{Role: "system", Text: "sys"},
 		{Role: "user", Text: "q"},
-		{Role: "assistant", Calls: []Call{{ID: "c1", Name: "find_assets", Arguments: json.RawMessage(`{"type":"FQDN"}`)}}},
+		{
+			Role:  "assistant",
+			Calls: []Call{{ID: "c1", Name: "find_assets", Arguments: json.RawMessage(`{"type":"FQDN"}`)}},
+		},
 		{Role: "tool", ToolCallID: "c1", Text: "[]"},
 	}
 	got, err := m.Generate(context.Background(), history, Specs()[:1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Calls) != 1 || got.Calls[0].Name != "get_asset" || string(got.Calls[0].Arguments) != `{"id":"a"}` || got.Calls[0].ID == "" {
+	if len(got.Calls) != 1 || got.Calls[0].Name != "get_asset" || string(got.Calls[0].Arguments) != `{"id":"a"}` ||
+		got.Calls[0].ID == "" {
 		t.Fatalf("tool call not decoded: %+v", got.Calls)
 	}
 	if got.InputTokens != 11 || got.OutputTokens != 7 {
 		t.Fatalf("token counts: %+v", got)
 	}
+
 	req := stub.requests[0]
 	if req["think"] != false || req["stream"] != false || req["keep_alive"] != DefaultOllamaKeepAlive {
 		t.Fatalf("think/stream/keep_alive: %v %v %v", req["think"], req["stream"], req["keep_alive"])
 	}
+
 	opts, _ := req["options"].(map[string]any)
 	if opts["num_ctx"] != float64(DefaultOllamaContextTokens) {
 		t.Fatalf("num_ctx: %v", opts)
@@ -74,11 +82,13 @@ func TestOllamaRequestShapeAndToolCalls(t *testing.T) {
 	if _, set := opts["temperature"]; set {
 		t.Fatal("temperature must be omitted when unset")
 	}
+
 	msgs, _ := req["messages"].([]any)
 	tool, _ := msgs[3].(map[string]any)
 	if tool["role"] != "tool" || tool["tool_name"] != "find_assets" {
 		t.Fatalf("tool result must name its call: %v", tool)
 	}
+
 	assistant, _ := msgs[2].(map[string]any)
 	calls, _ := assistant["tool_calls"].([]any)
 	fn, _ := calls[0].(map[string]any)["function"].(map[string]any)
@@ -103,9 +113,11 @@ func TestOllamaStructuredAndOptions(t *testing.T) {
 	if err != nil || got.Text != `{"ok":true}` {
 		t.Fatalf("structured reply: %+v err=%v", got, err)
 	}
+
 	req := stub.requests[0]
 	opts, _ := req["options"].(map[string]any)
-	if req["think"] != true || req["keep_alive"] != "5m" || opts["num_ctx"] != 4096.0 || opts["num_predict"] != 512.0 || opts["temperature"] != 0.0 {
+	if req["think"] != true || req["keep_alive"] != "5m" || opts["num_ctx"] != 4096.0 ||
+		opts["num_predict"] != 512.0 || opts["temperature"] != 0.0 {
 		t.Fatalf("options not applied: %v", req)
 	}
 	if format, _ := req["format"].(map[string]any); format["type"] != "object" {
@@ -118,12 +130,14 @@ func TestOllamaRetriesWithoutThinkForNonReasoningModels(t *testing.T) {
 		if _, set := req["think"]; set {
 			return 400, `{"error":"\"llama3\" does not support thinking"}`
 		}
+
 		return 200, `{"message":{"role":"assistant","content":"READY"},"done":true,"done_reason":"stop"}`
 	}}
 	srv := stub.server(t)
 	m := NewOllamaModel(srv.URL, "llama3", nil)
 	for i := 0; i < 2; i++ {
-		if got, err := m.Generate(context.Background(), []Message{{Role: "user", Text: "q"}}, nil); err != nil || got.Text != "READY" {
+		if got, err := m.Generate(context.Background(), []Message{{Role: "user", Text: "q"}},
+			nil); err != nil || got.Text != "READY" {
 			t.Fatalf("call %d: %+v err=%v", i, got, err)
 		}
 	}
@@ -141,13 +155,18 @@ func TestOllamaErrorsAndEndpoint(t *testing.T) {
 		return 200, `{"message":{"role":"assistant","content":"partial"},"done":true,"done_reason":"length"}`
 	}}
 	srv := stub.server(t)
-	if _, err := NewOllamaModel(srv.URL, "m", nil).Generate(context.Background(), []Message{{Role: "user", Text: "q"}}, nil); err == nil || !strings.Contains(err.Error(), "token limit") {
+	if _, err := NewOllamaModel(srv.URL, "m",
+		nil).Generate(context.Background(), []Message{{Role: "user", Text: "q"}},
+		nil); err == nil || !strings.Contains(err.Error(), "token limit") {
 		t.Fatalf("truncated reply must fail: %v", err)
 	}
+
 	stub.reply = func(map[string]any) (int, string) {
 		return 404, `{"error":"model \"nope\" not found, try pulling it first"}`
 	}
-	if _, err := NewOllamaModel(srv.URL, "nope", nil).Generate(context.Background(), []Message{{Role: "user", Text: "q"}}, nil); err == nil || !strings.Contains(err.Error(), "not found") {
+	if _, err := NewOllamaModel(srv.URL, "nope",
+		nil).Generate(context.Background(), []Message{{Role: "user", Text: "q"}},
+		nil); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("error body must be surfaced: %v", err)
 	}
 	for in, want := range map[string]string{
@@ -178,6 +197,7 @@ func TestAnthropicStructuredForcesTool(t *testing.T) {
 	if err != nil || got.Text != `{"purpose":"connected"}` || got.InputTokens != 5 {
 		t.Fatalf("structured reply: %+v err=%v", got, err)
 	}
+
 	choice, _ := body["tool_choice"].(map[string]any)
 	if choice["type"] != "tool" || choice["name"] != "investigation_goal" {
 		t.Fatalf("tool_choice must force the schema tool: %v", body["tool_choice"])
@@ -200,7 +220,9 @@ func TestGoalSchemaEnumeratesCatalogAndMetersUsage(t *testing.T) {
 	}
 
 	// The planner uses structured generation; metering wraps it and counts usage.
-	model := &structuredRecorder{reply: `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["URL"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`}
+	model := &structuredRecorder{
+		reply: `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["URL"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`,
+	}
 	agent := Agent{Model: model, Runner: ToolRunner{Limits: DefaultLimits(), Catalog: testOAMCatalog}}
 	agent, meter := agent.metered()
 	q, err := agent.CompileQuestion(context.Background(), "Tell me about the URLs near tech.acme.example")
@@ -230,6 +252,7 @@ func (m *structuredRecorder) GenerateStructured(_ context.Context, _ []Message, 
 	if s.Name != "investigation_goal" {
 		return Response{}, nil
 	}
+
 	return Response{Text: m.reply, InputTokens: 100, OutputTokens: 20}, nil
 }
 
@@ -238,6 +261,7 @@ func TestOllamaStructuredFallsBackWhenSchemaIsRejected(t *testing.T) {
 		if _, set := req["format"]; set {
 			return 400, `{"error":"invalid JSON schema in format"}`
 		}
+
 		return 200, `{"message":{"role":"assistant","content":"{}"},"done":true,"done_reason":"stop"}`
 	}}
 	srv := stub.server(t)

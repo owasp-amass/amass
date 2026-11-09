@@ -21,6 +21,7 @@ type TypedPlan struct {
 	Subject PlanSubject `json:"subject"`
 	Hops    []PlanHop   `json:"hops"`
 }
+
 type PlanSubject struct {
 	Type           string `json:"type"`
 	Name           string `json:"name,omitempty"`
@@ -36,11 +37,19 @@ type PlanSubject struct {
 func (s PlanSubject) AssetSelector() AssetSelector {
 	return AssetSelector{Type: s.Type, Field: s.Field, Value: s.Value, EntityID: s.EntityID}
 }
+
 func (s PlanSubject) UsesOrganizationResolution() bool {
 	return s.Type == "Organization" && s.Field == "" && s.Value == "" && s.EntityID == ""
 }
+
 func (s PlanSubject) OrganizationQuery() OrganizationQuery {
-	return OrganizationQuery{Name: s.Name, LegalName: s.LegalName, UniqueID: s.UniqueID, RegistrationID: s.RegistrationID, Jurisdiction: s.Jurisdiction}
+	return OrganizationQuery{
+		Name:           s.Name,
+		LegalName:      s.LegalName,
+		UniqueID:       s.UniqueID,
+		RegistrationID: s.RegistrationID,
+		Jurisdiction:   s.Jurisdiction,
+	}
 }
 
 type PlanHop struct {
@@ -49,11 +58,13 @@ type PlanHop struct {
 	RelationType    string `json:"relation_type"`
 	DestinationType string `json:"destination_type"`
 }
+
 type PlanMatch struct {
 	Nodes  []Asset    `json:"nodes"`
 	Edges  []Relation `json:"edges"`
 	PathID string     `json:"path_id,omitempty"`
 }
+
 type partialPath struct {
 	nodes []Asset
 	edges []Relation
@@ -74,18 +85,21 @@ func validatePlanWithSelectors(plan TypedPlan, catalog []RelationshipSchema, sel
 		if err := plan.Subject.AssetSelector().Validate(selectors); err != nil {
 			return fmt.Errorf("invalid asset subject: %w", err)
 		}
-		if plan.Subject.Name != "" || plan.Subject.LegalName != "" || plan.Subject.UniqueID != "" || plan.Subject.RegistrationID != "" || plan.Subject.Jurisdiction != "" {
+		if plan.Subject.Name != "" || plan.Subject.LegalName != "" || plan.Subject.UniqueID != "" ||
+			plan.Subject.RegistrationID != "" || plan.Subject.Jurisdiction != "" {
 			return errors.New("typed asset selector cannot mix organization-specific fields")
 		}
 	}
 	if len(plan.Hops) < 1 || len(plan.Hops) > maxPlanHops || len(plan.Hops) > limits.MaxDepth {
 		return errors.New("plan must contain 1..3 bounded graph hops")
 	}
+
 	current := plan.Subject.Type
 	for i, step := range plan.Hops {
 		if step.Direction != "out" && step.Direction != "in" {
 			return fmt.Errorf("hop %d direction must be out or in", i+1)
 		}
+
 		found := false
 		for _, rel := range catalog {
 			if step.Label != rel.Label || step.RelationType != rel.RelationType {
@@ -101,8 +115,10 @@ func validatePlanWithSelectors(plan TypedPlan, catalog []RelationshipSchema, sel
 			return fmt.Errorf("hop %d is not permitted by the OAM taxonomy: %s %s %s -> %s (%s)",
 				i+1, current, step.Direction, step.Label, step.DestinationType, step.RelationType)
 		}
+
 		current = step.DestinationType
 	}
+
 	return nil
 }
 
@@ -132,6 +148,7 @@ func normalizePlannedSubject(subject PlanSubject, selectors []AssetSearchSchema)
 			}
 		}
 	}
+
 	return subject
 }
 
@@ -140,6 +157,7 @@ func selectorCorrectionHint(subject PlanSubject, selectors []AssetSearchSchema) 
 		if schema.Type != subject.Type {
 			continue
 		}
+
 		return fmt.Sprintf("For subject type %q, the valid indexed fields are %q. "+
 			"Specify both subject.field and subject.value (copy the exact identifier "+
 			"from the user question), or specify a user-provided subject.entity_id. "+
@@ -147,6 +165,7 @@ func selectorCorrectionHint(subject PlanSubject, selectors []AssetSearchSchema) 
 			"Example FQDN selector: {\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"host.example\"}. "+
 			"Do not invent an identifier.", subject.Type, schema.Fields)
 	}
+
 	return "The subject type must be registered in the OAM selector catalog."
 }
 
@@ -160,18 +179,22 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return raw, nil
 	}
+
 	subjectRaw, ok := envelope["subject"]
 	if !ok {
 		return raw, nil
 	}
+
 	var subject map[string]json.RawMessage
 	if err := json.Unmarshal(subjectRaw, &subject); err != nil {
 		return raw, nil
 	}
+
 	fieldsRaw, ok := subject["fields"]
 	if !ok {
 		return raw, nil
 	}
+
 	var typ string
 	if err := json.Unmarshal(subject["type"], &typ); err != nil {
 		return raw, nil
@@ -182,10 +205,12 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 		subject["registration_id"] != nil {
 		return raw, nil
 	}
+
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(fieldsRaw, &fields); err != nil || len(fields) != 1 {
 		return raw, nil
 	}
+
 	var field, value string
 	for f, v := range fields {
 		field = f
@@ -193,6 +218,7 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 			return raw, nil
 		}
 	}
+
 	allowed := false
 	for _, schema := range schemas {
 		if schema.Type != typ {
@@ -208,6 +234,7 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 	if !allowed {
 		return raw, nil
 	}
+
 	subject["field"], _ = json.Marshal(field)
 	subject["value"], _ = json.Marshal(value)
 	delete(subject, "fields")
@@ -216,6 +243,7 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 	if err != nil {
 		return nil, err
 	}
+
 	return converted, nil
 }
 
@@ -230,6 +258,7 @@ func parseTypedPlanWithSelectors(raw string, selectors []AssetSearchSchema) (Typ
 	if err := decodeStrict(data, &plan); err != nil {
 		return plan, fmt.Errorf("model did not return a valid typed JSON plan: %w", err)
 	}
+
 	return plan, nil
 }
 
@@ -240,6 +269,7 @@ func parseTypedPlan(raw string) (TypedPlan, error) {
 	if err := decodeStrict([]byte(strings.TrimSpace(raw)), &plan); err != nil {
 		return plan, fmt.Errorf("model did not return a valid typed JSON plan: %w", err)
 	}
+
 	return plan, nil
 }
 
@@ -254,12 +284,15 @@ func compactRelationshipCatalog(catalog []RelationshipSchema) string {
 		if groups[key] == nil {
 			groups[key] = map[string]bool{}
 		}
+
 		groups[key][rel.DestinationType] = true
 	}
+
 	keys := make([]string, 0, len(groups))
 	for k := range groups {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	var b strings.Builder
 	b.WriteString("source|label|relation_type|destinations (comma-separated); incoming hops reverse source and destination:\n")
@@ -268,12 +301,14 @@ func compactRelationshipCatalog(catalog []RelationshipSchema) string {
 		for d := range groups[key] {
 			dest = append(dest, d)
 		}
+
 		sort.Strings(dest)
 		b.WriteString(key)
 		b.WriteString("|")
 		b.WriteString(strings.Join(dest, ","))
 		b.WriteByte('\n')
 	}
+
 	return b.String()
 }
 
@@ -291,11 +326,13 @@ func compactSelectorCatalog(catalog []AssetSearchSchema) string {
 		if len(fields) == 0 {
 			fields = []string{"(entity_id only)"}
 		}
+
 		b.WriteString(entry.Type)
 		b.WriteString(": ")
 		b.WriteString(strings.Join(fields, ","))
 		b.WriteByte('\n')
 	}
+
 	return b.String()
 }
 
@@ -304,11 +341,13 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 	if a.Runner.Catalog == nil {
 		return zero, errors.New("OAM schema catalog is unavailable")
 	}
+
 	catalog := a.Runner.Catalog.Relations()
 	var selectors []AssetSearchSchema
 	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
 		selectors = c.SearchFields()
 	}
+
 	compactRelations := compactRelationshipCatalog(catalog)
 	compactSelectors := compactSelectorCatalog(selectors)
 	system := "You are an OWASP Open Asset Model query planner. Return ONLY one JSON object (no markdown). " +
@@ -349,6 +388,7 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		if len(response.Calls) > 0 {
 			return zero, errors.New("planner attempted a tool call instead of returning typed JSON")
 		}
+
 		plan, err := parseTypedPlanWithSelectors(response.Text, selectors)
 		if err == nil {
 			plan.Subject = normalizePlannedSubject(plan.Subject, selectors)
@@ -358,19 +398,23 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 			return plan, nil
 		}
 		if attempt == maxPlanAttempts-1 {
-			return zero, fmt.Errorf("unable to produce valid OAM query plan after %d attempts: %w", maxPlanAttempts, err)
+			return zero, fmt.Errorf("unable to produce valid OAM query plan after %d attempts: %w",
+				maxPlanAttempts, err)
 		}
+
 		hint := selectorCorrectionHint(plan.Subject, selectors)
 		if strings.Contains(err.Error(), `json: unknown field "fields"`) {
 			hint = "You returned an unsupported key named fields. The output subject MUST use singular field and value strings, " +
 				"not a fields array or catalog object. " + hint
 		}
+
 		conversation = append(conversation, Message{Role: "assistant", Text: response.Text},
 			Message{Role: "user", Text: "Your plan is invalid: " + err.Error() + ". " +
 				"Correct the subject first. " + hint + " " +
 				"Then validate each hop using the OAM RELATIONSHIP CATALOG, including direction and destination type. " +
 				"Return the COMPLETE corrected JSON plan only."})
 	}
+
 	return zero, errors.New("query planner exhausted correction attempts")
 }
 
@@ -384,11 +428,13 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 	if err := a.Runner.Limits.Validate(); err != nil {
 		return out, err
 	}
+
 	plan, err := a.planQuestion(ctx, question)
 	if err != nil {
 		out.Incomplete = true
 		return out, err
 	}
+
 	out.Plan = &plan
 	var root Asset
 	if plan.Subject.UsesOrganizationResolution() {
@@ -401,18 +447,22 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 			out.Incomplete = true
 			return out, fmt.Errorf("organization lookup failed: %w", err)
 		}
+
 		out.ToolCalls++
-		out.Observations = append(out.Observations, Observation{Tool: "resolve_organization", CallID: "planned-root", Result: string(raw)})
+		out.Observations = append(out.Observations,
+			Observation{Tool: "resolve_organization", CallID: "planned-root", Result: string(raw)})
 		var resolution OrganizationResolution
 		if err := json.Unmarshal(raw, &resolution); err != nil {
 			return out, fmt.Errorf("decode organization resolution: %w", err)
 		}
+
 		out.Resolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
 			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates)
 			return out, nil
 		}
+
 		root = resolution.Candidates[0].Asset
 	} else {
 		lookupJSON, _ := json.Marshal(struct {
@@ -424,20 +474,25 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 			out.Incomplete = true
 			return out, fmt.Errorf("asset lookup failed: %w", err)
 		}
+
 		out.ToolCalls++
-		out.Observations = append(out.Observations, Observation{Tool: "resolve_asset", CallID: "planned-root", Result: string(raw)})
+		out.Observations = append(out.Observations,
+			Observation{Tool: "resolve_asset", CallID: "planned-root", Result: string(raw)})
 		var resolution AssetResolution
 		if err := json.Unmarshal(raw, &resolution); err != nil {
 			return out, fmt.Errorf("decode asset resolution: %w", err)
 		}
+
 		out.AssetResolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
 			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates)
 			return out, nil
 		}
+
 		root = resolution.Candidates[0].Asset
 	}
+
 	paths := []partialPath{{nodes: []Asset{root}}}
 	edgesSeen := map[string]bool{}
 	nodesSeen := map[string]bool{root.ID: true}
@@ -450,16 +505,24 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 				out.Answer = "Graph query stopped at its tool-call budget; no complete result can be asserted."
 				return out, nil
 			}
+
 			startID := path.nodes[len(path.nodes)-1].ID
-			req, _ := json.Marshal(WalkRequest{StartID: startID, Direction: step.Direction, Label: step.Label, Depth: 1})
+			req, _ := json.Marshal(WalkRequest{
+				StartID:   startID,
+				Direction: step.Direction,
+				Label:     step.Label,
+				Depth:     1,
+			})
 			walkRaw, err := a.Runner.Run(ctx, "walk_relations", req)
 			if err != nil {
 				out.Incomplete = true
 				return out, fmt.Errorf("hop %d traversal failed: %w", hopIndex+1, err)
 			}
+
 			out.ToolCalls++
 			out.Observations = append(out.Observations, Observation{
-				Tool: "walk_relations", CallID: fmt.Sprintf("planned-hop-%d-%d", hopIndex+1, out.ToolCalls), Result: string(walkRaw),
+				Tool: "walk_relations", CallID: fmt.Sprintf("planned-hop-%d-%d", hopIndex+1,
+					out.ToolCalls), Result: string(walkRaw),
 			})
 			var walk WalkResult
 			if err := json.Unmarshal(walkRaw, &walk); err != nil {
@@ -468,6 +531,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 			if walk.Truncated {
 				out.Incomplete = true
 			}
+
 			byID := map[string]Asset{}
 			for _, node := range walk.Nodes {
 				byID[node.ID] = node
@@ -476,6 +540,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 				if edge.Label != step.Label || edge.Type != step.RelationType {
 					continue
 				}
+
 				var destID string
 				if step.Direction == "out" && edge.FromID == startID {
 					destID = edge.ToID
@@ -486,6 +551,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 				if destID == "" {
 					continue
 				}
+
 				dest, ok := byID[destID]
 				if !ok || dest.Type != step.DestinationType {
 					out.Incomplete = true
@@ -497,6 +563,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 					out.Incomplete = true
 					break
 				}
+
 				edgesSeen[edge.ID] = true
 				nodesSeen[dest.ID] = true
 				np := partialPath{
@@ -506,6 +573,7 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 				next = append(next, np)
 			}
 		}
+
 		paths = next
 		if len(paths) == 0 {
 			// A missing intermediate edge means subsequent planned hops were
@@ -516,13 +584,16 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 				out.PlanStoppedAtHop = stoppedAtHop
 				out.Incomplete = true
 			}
+
 			break
 		}
 	}
+
 	out.Matches = make([]PlanMatch, 0, len(paths))
 	for _, path := range paths {
 		out.Matches = append(out.Matches, PlanMatch{Nodes: path.nodes, Edges: path.edges})
 	}
+
 	sort.Slice(out.Matches, func(i, j int) bool { return formatMatch(out.Matches[i]) < formatMatch(out.Matches[j]) })
 	if stoppedAtHop > 0 {
 		hop := plan.Hops[stoppedAtHop-1]
@@ -536,11 +607,13 @@ func (a Agent) AskPlanned(ctx context.Context, question string) (Investigation, 
 		for _, match := range out.Matches {
 			segments = append(segments, formatMatch(match))
 		}
+
 		out.Answer = fmt.Sprintf("Found %d matching OAM path(s): %s. Results reflect stored graph relationships, not independent ownership verification.", len(segments), strings.Join(segments, "; "))
 	}
 	if out.Incomplete && stoppedAtHop == 0 {
 		out.Answer += " The traversal was truncated or otherwise budget-limited; results may be incomplete."
 	}
+
 	return out, nil
 }
 
@@ -548,11 +621,13 @@ func formatMatch(p PlanMatch) string {
 	if len(p.Nodes) == 0 {
 		return ""
 	}
+
 	parts := []string{humanAsset(p.Nodes[0])}
 	for i, e := range p.Edges {
 		if i+1 >= len(p.Nodes) {
 			break
 		}
+
 		current, next := p.Nodes[i], p.Nodes[i+1]
 		switch {
 		case e.FromID == current.ID && e.ToID == next.ID:
@@ -561,11 +636,14 @@ func formatMatch(p PlanMatch) string {
 			parts = append(parts, fmt.Sprintf("<--%s [edge %s]-- %s", e.Label, e.ID, humanAsset(next)))
 		default:
 			// Malformed edge endpoints must not be presented as a directed claim.
-			parts = append(parts, fmt.Sprintf("--%s [edge %s]-- %s (direction unknown)", e.Label, e.ID, humanAsset(next)))
+			parts = append(parts, fmt.Sprintf("--%s [edge %s]-- %s (direction unknown)", e.Label, e.ID,
+				humanAsset(next)))
 		}
 	}
+
 	return strings.Join(parts, " ")
 }
+
 func humanAsset(a Asset) string {
 	display := a.Key
 	// Content is an OAM struct in database adapters and a map after JSON
@@ -583,6 +661,7 @@ func humanAsset(a Asset) string {
 			}
 		}
 	}
+
 	return fmt.Sprintf("%s (asset %s)", display, a.ID)
 }
 
@@ -603,8 +682,10 @@ func resolutionAnswer(status string, candidates []OrganizationCandidate) string 
 					src = append(src, m.Field+"="+m.Value)
 				}
 			}
+
 			choices = append(choices, humanAsset(c.Asset)+" ["+strings.Join(src, ", ")+"]")
 		}
+
 		return "Ambiguous asset identity; specify an explicit entity_id or a more selective typed field. Candidates: " + strings.Join(choices, "; ")
 	default:
 		return "Unable to resolve the starting asset safely."
@@ -630,5 +711,6 @@ func formatPlanSubject(subject PlanSubject) string {
 	if subject.RegistrationID != "" {
 		return fmt.Sprintf("%s registration_id=%q in %q", subject.Type, subject.RegistrationID, subject.Jurisdiction)
 	}
+
 	return subject.Type
 }
