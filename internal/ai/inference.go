@@ -114,8 +114,10 @@ and an empty evidence_ids array. Use ONLY the provided IDs and allowed_labels.`
 		return nil, err
 	}
 	var p Proposal
-	// Strict JSON: do not accept prose wrapped around machine-readable assertions.
-	if err := decodeStrict([]byte(strings.TrimSpace(answer.Text)), &struct {
+	// Strict JSON: do not accept prose wrapped around machine-readable
+	// assertions. ModelJSON removes only a code fence or reasoning block.
+	payload := []byte(ModelJSON(answer.Text))
+	if err := decodeStrict(payload, &struct {
 		SubjectID      *string   `json:"subject_id"`
 		Predicate      *string   `json:"predicate"`
 		ObjectID       *string   `json:"object_id"`
@@ -126,7 +128,7 @@ and an empty evidence_ids array. Use ONLY the provided IDs and allowed_labels.`
 	}{}); err != nil {
 		return nil, fmt.Errorf("invalid structured inference: %w", err)
 	}
-	if err := json.Unmarshal([]byte(answer.Text), &p); err != nil {
+	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
 	}
 	if p.Predicate == "none" {

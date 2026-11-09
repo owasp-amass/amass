@@ -60,11 +60,7 @@ Use only relationship labels in allowed_labels, asset IDs and path IDs in pendin
 		return zero, fmt.Errorf("navigator attempted a tool call")
 	}
 	result := strings.TrimSpace(reply.Text)
-	if strings.HasPrefix(result, "```") {
-		result = strings.TrimPrefix(result, "```json")
-		result = strings.TrimPrefix(result, "```")
-		result = strings.TrimSuffix(strings.TrimSpace(result), "```")
-	}
+	result = ModelJSON(result)
 	if err := decodeStrict([]byte(strings.TrimSpace(result)), &zero); err != nil {
 		return guidedAdvice{}, err
 	}

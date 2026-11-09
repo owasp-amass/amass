@@ -219,11 +219,7 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 func parseTypedPlanWithSelectors(raw string, selectors []AssetSearchSchema) (TypedPlan, error) {
 	var plan TypedPlan
 	raw = strings.TrimSpace(raw)
-	if strings.HasPrefix(raw, "\x60\x60\x60") {
-		raw = strings.TrimPrefix(raw, "\x60\x60\x60json")
-		raw = strings.TrimPrefix(raw, "\x60\x60\x60")
-		raw = strings.TrimSuffix(strings.TrimSpace(raw), "\x60\x60\x60")
-	}
+	raw = ModelJSON(raw)
 	data, err := canonicalizeSelectorFields([]byte(strings.TrimSpace(raw)), selectors)
 	if err != nil {
 		return plan, err
@@ -237,11 +233,7 @@ func parseTypedPlanWithSelectors(raw string, selectors []AssetSearchSchema) (Typ
 func parseTypedPlan(raw string) (TypedPlan, error) {
 	var plan TypedPlan
 	raw = strings.TrimSpace(raw)
-	if strings.HasPrefix(raw, "\x60\x60\x60") {
-		raw = strings.TrimPrefix(raw, "\x60\x60\x60json")
-		raw = strings.TrimPrefix(raw, "\x60\x60\x60")
-		raw = strings.TrimSuffix(strings.TrimSpace(raw), "\x60\x60\x60")
-	}
+	raw = ModelJSON(raw)
 	if err := decodeStrict([]byte(strings.TrimSpace(raw)), &plan); err != nil {
 		return plan, fmt.Errorf("model did not return a valid typed JSON plan: %w", err)
 	}
