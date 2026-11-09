@@ -86,5 +86,15 @@ rejected. The JSON output of `ask` now includes the executed `query`.
 - `Agent.AskAdaptive(ctx, question, opts)` is `CompileQuestion` then
   execution, with the same trace stages as before.
 
-`AskPlanned`, the earlier hop-only planner, is retained for now and will be
-folded into a single schema-constrained model planner that emits a Query.
+Every model reply that drives execution is schema-constrained when the
+provider supports it (Ollama `format`, Anthropic forced tool use):
+
+| Call | Schema | Allowed values |
+|------|--------|----------------|
+| Goal planner | `investigation_goal` | whole OAM transitions from the catalog |
+| Path selection | `path_selection` | witnessed candidate path IDs, at most 5 |
+| Navigation advice | `navigation_priorities` | allowed labels and pending frontier IDs, at most 5 each |
+| Relation inference | `relation_proposal` | the candidate's endpoints, allowed labels or `none`, its evidence IDs |
+
+A schema narrows what the model can say; Go validation still decides what is
+accepted. Route queries (explicit hops) replace the earlier hop-only planner.

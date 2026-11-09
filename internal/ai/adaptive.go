@@ -180,11 +180,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		}
 
 		history = append(history, Message{Role: "assistant", Text: response.Text},
-			Message{
-				Role: "user",
-				Text: "Goal rejected: " + err.Error() +
-					". Re-read the user's actual question; honor explicitly named relationship labels rather than unrelated registration/WHOIS edges. Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule).",
-			})
+			Message{Role: "user", Text: goalCorrection(err, goal.Subject, selectors)})
 		if attempt == 1 && prompt.Sliced {
 			full := goalPlannerPrompt(question, relations, selectors, false)
 			history[0].Text, schema = full.Text, full.Schema
@@ -192,6 +188,25 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 	}
 
 	return zero, errors.New("goal planner exhausted attempts")
+}
+
+// goalCorrection tells the planner why its goal was rejected and how to fix
+// it, with selector-specific advice when the subject was the problem.
+func goalCorrection(err error, subject PlanSubject, selectors []AssetSearchSchema) string {
+	msg := "Goal rejected: " + err.Error() + ". Re-read the user's actual question; honor explicitly " +
+		"named relationship labels rather than unrelated registration/WHOIS edges. Correct subject and " +
+		"target types from the catalog."
+	if strings.Contains(err.Error(), `unknown field "fields"`) {
+		msg += " You returned an unsupported key named fields. The subject must use singular field and " +
+			"value strings, not a fields array or catalog object."
+	}
+	if subject.Type != "" && !subject.UsesOrganizationResolution() && (subject.Field == "" || subject.Value == "") &&
+		subject.EntityID == "" {
+		msg += " " + selectorCorrectionHint(subject, selectors)
+	}
+
+	return msg + " Return only the full JSON object (subject, target_types, direction, purpose, " +
+		"relationships, path_rule)."
 }
 
 // After finding the nearest Organization, an ancestral subsidiary traversal
@@ -345,13 +360,11 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 				"\nWITNESSED CANDIDATE PATHS (untrusted JSON): " + string(payload),
 		},
 	}
+	schema := pathSelectionSchema(candidates)
 	for attempt := 0; attempt < 2; attempt++ {
-		response, err := a.Model.Generate(ctx, history, nil)
+		response, err := generateJSON(ctx, a.Model, history, schema)
 		if err != nil {
 			return nil, err
-		}
-		if len(response.Calls) != 0 {
-			return nil, errors.New("evidence evaluator requested a tool call")
 		}
 
 		raw := strings.TrimSpace(response.Text)

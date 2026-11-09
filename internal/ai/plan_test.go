@@ -146,31 +146,200 @@ func (m *plannerModel) Generate(_ context.Context, _ []Message, specs []ToolSpec
 	return Response{Text: m.replies[i]}, nil
 }
 
-const websitePlan = `{"subject":{"type":"Organization","name":"Acme Holdings Inc."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"},{"direction":"out","label":"website","relation_type":"SimpleRelation","destination_type":"URL"}]}`
+type inspectingPlannerModel struct {
+	calls    int
+	requests [][]Message
+	replies  []string
+}
 
-func TestTypedPlannerMultiHopReturnsBothWebsites(t *testing.T) {
-	model := &plannerModel{replies: []string{websitePlan}}
+func (m *inspectingPlannerModel) Generate(_ context.Context, messages []Message, _ []ToolSpec) (Response, error) {
+	m.requests = append(m.requests, append([]Message{}, messages...))
+	i := m.calls
+	m.calls++
+	if i >= len(m.replies) {
+		i = len(m.replies) - 1
+	}
+
+	return Response{Text: m.replies[i]}, nil
+}
+
+// routeQuery builds a caller-supplied route Query, the replacement for the
+// retired hop planner's plans.
+func routeQuery(subject PlanSubject, hops ...PlanHop) Query {
+	return Query{
+		Version:     QueryVersion,
+		Subject:     subject,
+		Traversal:   TraversalRoute,
+		TargetTypes: []string{hops[len(hops)-1].DestinationType},
+		Direction:   "both",
+		Purpose:     "connected",
+		Hops:        hops,
+		Source:      SourceCaller,
+	}
+}
+
+func hop(direction, label, destination string) PlanHop {
+	return PlanHop{Direction: direction, Label: label, RelationType: "SimpleRelation", DestinationType: destination}
+}
+
+func askRoute(t *testing.T, q Query) Investigation {
+	t.Helper()
+
 	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"What websites are associated with subsidiaries of Acme Holdings Inc.?")
+	out, err := (Agent{Runner: runner}).AskQuery(context.Background(), q, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Incomplete || model.calls != 1 || out.ToolCalls != 4 || len(out.Matches) != 2 {
-		t.Fatalf("unexpected planned result: %+v, calls %d", out, model.calls)
+
+	return out
+}
+
+func TestRouteMultiHopReturnsBothWebsites(t *testing.T) {
+	out := askRoute(t, routeQuery(PlanSubject{Type: "Organization", Name: "Acme Holdings Inc."},
+		hop("out", "subsidiary", "Organization"), hop("out", "website", "URL")))
+	if out.Incomplete || len(out.Matches) != 2 {
+		t.Fatalf("unexpected route result: %+v", out)
 	}
-	for _, s := range []string{
-		"Acme Technologies Ltd.",
-		"Acme Europe GmbH",
-		"https://tech.acme.example/",
-		"https://eu.acme.example/",
-	} {
+	for _, s := range []string{"https://tech.acme.example/", "https://eu.acme.example/"} {
 		if !strings.Contains(out.Answer, s) {
 			t.Errorf("missing %q from answer: %s", s, out.Answer)
 		}
 	}
-	if out.Plan == nil || len(out.Plan.Hops) != 2 {
-		t.Fatalf("missing typed plan: %+v", out.Plan)
+}
+
+func TestRouteUnknownOrganizationIsIncompleteNotError(t *testing.T) {
+	out := askRoute(t, routeQuery(PlanSubject{Type: "Organization", Name: "Unknown Corp."},
+		hop("out", "subsidiary", "Organization")))
+	if !out.Incomplete || !strings.Contains(out.Answer, "No asset matched") {
+		t.Fatalf("no-match response: %+v", out)
+	}
+}
+
+func TestRouteFQDNRootAndIncomingURLDomainEdge(t *testing.T) {
+	out := askRoute(t, routeQuery(PlanSubject{Type: "FQDN", Field: "name", Value: "tech.acme.example"},
+		hop("in", "domain", "URL")))
+	if out.Incomplete || len(out.Matches) != 1 || out.Matches[0].Nodes[1].Key != "https://tech.acme.example/" {
+		t.Fatalf("FQDN root error: %+v", out)
+	}
+	if out.AssetResolution == nil || out.AssetResolution.Status != "matched" {
+		t.Fatalf("missing typed root resolution: %+v", out.AssetResolution)
+	}
+}
+
+func TestRouteURLRootAndOutgoingDomainEdge(t *testing.T) {
+	out := askRoute(t, routeQuery(PlanSubject{Type: "URL", Field: "url", Value: "https://tech.acme.example/"},
+		hop("out", "domain", "FQDN")))
+	if out.Incomplete || len(out.Matches) != 1 || out.Matches[0].Nodes[1].Key != "tech.acme.example" {
+		t.Fatalf("URL root error: %+v", out)
+	}
+}
+
+func TestRouteIntermediateHopWithoutEdgesIsExplained(t *testing.T) {
+	// eu.acme.example has no domain edge, so the second hop never runs.
+	out := askRoute(t, routeQuery(PlanSubject{Type: "URL", Field: "url", Value: "https://eu.acme.example/"},
+		hop("out", "domain", "FQDN"), hop("in", "domain", "URL")))
+	if len(out.Matches) != 0 {
+		t.Fatalf("unexpected matches: %+v", out.Matches)
+	}
+	for _, want := range []string{"first empty relationship hop was 1", "subsequent hop(s) were not evaluated",
+		"does not prove"} {
+		if !strings.Contains(out.Answer, want) {
+			t.Errorf("answer lacks %q: %s", want, out.Answer)
+		}
+	}
+}
+
+func TestRouteSingleHopNoMatchIsNotTruncated(t *testing.T) {
+	out := askRoute(t, routeQuery(PlanSubject{Type: "URL", Field: "url", Value: "https://eu.acme.example/"},
+		hop("out", "domain", "FQDN")))
+	if out.Incomplete || len(out.Matches) != 0 {
+		t.Fatalf("single-hop empty search misclassified: %+v", out)
+	}
+}
+
+const urlGoal = `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["URL"],` +
+	`"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`
+
+func compileWith(t *testing.T, model Model, question string) (Query, error) {
+	t.Helper()
+
+	agent := Agent{Model: model, Runner: ToolRunner{Limits: DefaultLimits(), Catalog: testOAMCatalog}}
+	return agent.CompileQuestion(context.Background(), question)
+}
+
+func TestGoalPlannerNormalizesFQDNNameToIndexedSelector(t *testing.T) {
+	// Reproduces an Ollama reply that reused the Organization "name" key for
+	// an FQDN; the indexed selector catalog makes the correction unambiguous.
+	model := &plannerModel{replies: []string{`{"subject":{"type":"FQDN","name":"tech.acme.example"},` +
+		`"target_types":["URL"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`}}
+	q, err := compileWith(t, model, "Tell me which URL assets point at the FQDN tech.acme.example")
+	if err != nil || model.calls != 1 {
+		t.Fatalf("normalization failed: %+v err=%v calls=%d", q, err, model.calls)
+	}
+	if q.Subject.Field != "name" || q.Subject.Value != "tech.acme.example" || q.Subject.Name != "" {
+		t.Fatalf("subject not canonicalized: %+v", q.Subject)
+	}
+}
+
+func TestGoalPlannerRetriesMissingSelectorWithFocusedGuidance(t *testing.T) {
+	model := &inspectingPlannerModel{replies: []string{
+		`{"subject":{"type":"FQDN"},"target_types":["URL"],"direction":"both","purpose":"connected",` +
+			`"relationships":[],"path_rule":""}`,
+		urlGoal,
+	}}
+	if _, err := compileWith(t, model, "Tell me which URL assets point at the FQDN tech.acme.example"); err != nil ||
+		model.calls != 2 {
+		t.Fatalf("focused retry failed: err=%v calls=%d", err, model.calls)
+	}
+
+	retry := model.requests[1][len(model.requests[1])-1].Text
+	if !strings.Contains(retry, "subject.field") || !strings.Contains(retry, "subject.value") {
+		t.Fatalf("retry omitted selector-specific correction: %s", retry)
+	}
+}
+
+func TestGoalPlannerCorrectsUnexpectedFields(t *testing.T) {
+	model := &inspectingPlannerModel{replies: []string{
+		`{"subject":{"type":"URL","fields":["url"]},"target_types":["FQDN"],"direction":"both",` +
+			`"purpose":"connected","relationships":[],"path_rule":""}`,
+		urlGoal,
+	}}
+	if _, err := compileWith(t, model, "Tell me about the FQDN behind https://tech.acme.example/"); err != nil ||
+		model.calls != 2 {
+		t.Fatalf("retry failed: err=%v calls=%d", err, model.calls)
+	}
+
+	retry := model.requests[1][len(model.requests[1])-1].Text
+	if !strings.Contains(retry, "unsupported key named fields") || !strings.Contains(retry,
+		"singular field and value") {
+		t.Fatalf("retry prompt not specific enough: %s", retry)
+	}
+}
+
+func TestGoalParserCanonicalizesSingleFieldObject(t *testing.T) {
+	goal, err := parseGoal(`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"}},`+
+		`"target_types":["FQDN"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`,
+		testOAMCatalog.SearchFields())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if goal.Subject.Type != "URL" || goal.Subject.Field != "url" || goal.Subject.Value != "https://tech.acme.example/" {
+		t.Fatalf("unexpected normalized subject: %+v", goal.Subject)
+	}
+}
+
+func TestGoalParserRejectsUntrustedFieldCatalogs(t *testing.T) {
+	rest := `,"target_types":["FQDN"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`
+	for _, subject := range []string{
+		`{"subject":{"type":"URL","fields":["url"]}`,
+		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/","scheme":"https"}}`,
+		`{"subject":{"type":"URL","fields":{"invented":"https://tech.acme.example/"}}`,
+		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"unexpected":true}`,
+		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"value":"https://elsewhere.example/"}`,
+	} {
+		if _, err := parseGoal(subject+rest, testOAMCatalog.SearchFields()); err == nil {
+			t.Fatalf("unexpectedly accepted malformed goal: %s", subject)
+		}
 	}
 }
 
@@ -183,30 +352,6 @@ func TestPlannerRejectsInventedLabelBeforeDatabaseAccess(t *testing.T) {
 	}
 	if err := validatePlan(p, testOAMCatalog, DefaultLimits()); err == nil {
 		t.Fatal("made-up label accepted")
-	}
-}
-
-func TestPlannerCorrectsWrongLabels(t *testing.T) {
-	bad := `{"subject":{"type":"Organization","name":"Acme Holdings Inc."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"},{"direction":"out","label":"hosted-on","relation_type":"SimpleRelation","destination_type":"URL"}]}`
-	m := &plannerModel{replies: []string{bad, websitePlan}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	result, err := (Agent{Model: m, Runner: runner}).AskPlanned(context.Background(), "Show subsidiary websites")
-	if err != nil || len(result.Matches) != 2 || m.calls != 2 {
-		t.Fatalf("correction failed: %+v err=%v calls=%d", result, err, m.calls)
-	}
-}
-
-func TestUnknownOrganizationIsIncompleteNotError(t *testing.T) {
-	m := &plannerModel{
-		replies: []string{
-			`{"subject":{"type":"Organization","name":"Unknown Corp."},"hops":[{"direction":"out","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"}]}`,
-		},
-	}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	result, err := (Agent{Model: m, Runner: runner}).AskPlanned(context.Background(),
-		"What subsidiaries does Unknown Corp. have?")
-	if err != nil || !result.Incomplete || !strings.Contains(result.Answer, "No asset matched") {
-		t.Fatalf("no-match response: %+v err=%v", result, err)
 	}
 }
 
@@ -227,97 +372,12 @@ func TestSchemaCatalogTool(t *testing.T) {
 	}
 }
 
-func TestFQDNAsRootAndIncomingURLDomainEdge(t *testing.T) {
-	model := &plannerModel{
-		replies: []string{
-			`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
-		},
-	}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"Which URLs refer to the domain tech.acme.example?")
-	if err != nil || out.Incomplete || len(out.Matches) != 1 ||
-		out.Matches[0].Nodes[1].Key != "https://tech.acme.example/" {
-		t.Fatalf("FQDN root error: %+v err=%v", out, err)
-	}
-	if out.AssetResolution == nil || out.AssetResolution.Status != "matched" {
-		t.Fatalf("missing typed root resolution: %+v", out.AssetResolution)
-	}
-}
-
-func TestURLAsRootAndOutgoingDomainEdge(t *testing.T) {
-	model := &plannerModel{replies: []string{
-		`{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"What FQDN is associated with https://tech.acme.example/?")
-	if err != nil || out.Incomplete || len(out.Matches) != 1 || out.Matches[0].Nodes[1].Key != "tech.acme.example" {
-		t.Fatalf("URL root error: %+v err=%v", out, err)
-	}
-}
-
 func TestGenericSelectorRejectsUnsupportedFields(t *testing.T) {
 	if err := validatePlanWithSelectors(TypedPlan{
 		Subject: PlanSubject{Type: "FQDN", Field: "domain", Value: "tech.acme.example"},
 		Hops:    []PlanHop{{Direction: "in", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"}},
 	}, testOAMCatalog.Relations(), testOAMCatalog.SearchFields(), DefaultLimits()); err == nil {
 		t.Fatal("unsupported FQDN selector should fail validation")
-	}
-}
-
-// This reproduces the Ollama failure reported during a real FQDN-root query.
-// The model reused the Organization "name" key for a non-Organization type;
-// the indexed OAM selector catalog makes the correction unambiguous.
-func TestPlannerNormalizesFQDNNameToIndexedSelector(t *testing.T) {
-	model := &plannerModel{replies: []string{
-		`{"subject":{"type":"FQDN","name":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
-	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"Which URL assets have a domain relationship pointing to the FQDN tech.acme.example?")
-	if err != nil || out.Incomplete || model.calls != 1 || len(out.Matches) != 1 {
-		t.Fatalf("FQDN normalization failed: %+v err=%v model calls=%d", out, err, model.calls)
-	}
-	if out.Plan.Subject.Field != "name" || out.Plan.Subject.Value != "tech.acme.example" ||
-		out.Plan.Subject.Name != "" {
-		t.Fatalf("subject not canonicalized: %+v", out.Plan.Subject)
-	}
-	if out.Matches[0].Nodes[1].Key != "https://tech.acme.example/" {
-		t.Fatalf("wrong URL destination: %+v", out.Matches)
-	}
-}
-
-type inspectingPlannerModel struct {
-	calls    int
-	requests [][]Message
-	replies  []string
-}
-
-func (m *inspectingPlannerModel) Generate(_ context.Context, messages []Message, _ []ToolSpec) (Response, error) {
-	m.requests = append(m.requests, append([]Message{}, messages...))
-	i := m.calls
-	m.calls++
-	if i >= len(m.replies) {
-		i = len(m.replies) - 1
-	}
-
-	return Response{Text: m.replies[i]}, nil
-}
-
-func TestPlannerRetriesMissingTypedSelectorWithFocusedGuidance(t *testing.T) {
-	model := &inspectingPlannerModel{replies: []string{
-		`{"subject":{"type":"FQDN"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
-		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"hops":[{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
-	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"Which URL assets have a domain relationship pointing to the FQDN tech.acme.example?")
-	if err != nil || out.Incomplete || len(out.Matches) != 1 || model.calls != 2 {
-		t.Fatalf("focused retry failed: %+v err=%v calls=%d", out, err, model.calls)
-	}
-	if len(model.requests[1]) < 4 || !strings.Contains(model.requests[1][3].Text, "subject.field") ||
-		!strings.Contains(model.requests[1][3].Text, "subject.value") {
-		t.Fatalf("retry omitted selector-specific correction: %+v", model.requests[1])
 	}
 }
 
@@ -334,55 +394,6 @@ func TestNormalizationDoesNotGuessUnsupportedSelectors(t *testing.T) {
 			got.Name != candidate.Name {
 			t.Fatalf("should not infer selector for %+v, got %+v", candidate, got)
 		}
-	}
-}
-
-func TestPlanParserCanonicalizesSingleFieldObject(t *testing.T) {
-	raw := `{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"}},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`
-	p, err := parseTypedPlanWithSelectors(raw, testOAMCatalog.SearchFields())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Subject.Type != "URL" || p.Subject.Field != "url" || p.Subject.Value != "https://tech.acme.example/" {
-		t.Fatalf("unexpected normalized subject: %+v", p.Subject)
-	}
-	if err := validatePlanWithSelectors(p, testOAMCatalog.Relations(), testOAMCatalog.SearchFields(),
-		DefaultLimits()); err != nil {
-		t.Fatalf("normalized plan rejected: %v", err)
-	}
-}
-
-func TestPlanParserRejectsUntrustedFieldCatalogs(t *testing.T) {
-	tests := []string{
-		`{"subject":{"type":"URL","fields":["url"]},"hops":[]}`,
-		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/","scheme":"https"}},"hops":[]}`,
-		`{"subject":{"type":"URL","fields":{"invented":"https://tech.acme.example/"}},"hops":[]}`,
-		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"unexpected":true},"hops":[]}`,
-		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"value":"https://elsewhere.example/" },"hops":[]}`,
-	}
-	for _, raw := range tests {
-		if _, err := parseTypedPlanWithSelectors(raw, testOAMCatalog.SearchFields()); err == nil {
-			t.Fatalf("unexpectedly accepted malformed plan: %s", raw)
-		}
-	}
-}
-
-func TestPlannerCorrectsUnexpectedFields(t *testing.T) {
-	model := &inspectingPlannerModel{replies: []string{
-		`{"subject":{"type":"URL","fields":["url"]},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
-		`{"subject":{"type":"URL","field":"url","value":"https://tech.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
-	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	got, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"What FQDN is associated with the URL https://tech.acme.example/?")
-	if err != nil || got.Incomplete || len(got.Matches) != 1 || model.calls != 2 {
-		t.Fatalf("retry failed: result=%+v err=%v calls=%d", got, err, model.calls)
-	}
-
-	retry := model.requests[1][len(model.requests[1])-1].Text
-	if !strings.Contains(retry, "unsupported key named fields") || !strings.Contains(retry,
-		"singular field and value") {
-		t.Fatalf("retry prompt not specific enough: %s", retry)
 	}
 }
 
@@ -452,36 +463,5 @@ func TestFormattedSubjectForGenericRootWithoutMatches(t *testing.T) {
 	root := PlanSubject{Type: "FQDN", Field: "name", Value: "tech.acme.example"}
 	if got := formatPlanSubject(root); !strings.Contains(got, "tech.acme.example") {
 		t.Fatalf("generic subject identifier omitted: %s", got)
-	}
-}
-
-func TestIntermediateHopWithoutEdgesIsUnresolved(t *testing.T) {
-	model := &plannerModel{replies: []string{
-		`{"subject":{"type":"URL","field":"url","value":"https://eu.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"},{"direction":"in","label":"domain","relation_type":"SimpleRelation","destination_type":"URL"}]}`,
-	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"Find the URLs linked through the domain of https://eu.acme.example/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !out.Incomplete || out.PlanStoppedAtHop != 1 || out.ToolCalls != 2 || len(out.Matches) != 0 {
-		t.Fatalf("unresolved intermediate query appeared complete: %+v", out)
-	}
-	if !strings.Contains(out.Answer, "Later hops were not executed") || !strings.Contains(out.Answer,
-		"Other valid OAM paths may exist") {
-		t.Fatalf("answer does not explain plan exhaustion: %s", out.Answer)
-	}
-}
-
-func TestSingleHopNoMatchIsQualifiedButNotTruncated(t *testing.T) {
-	model := &plannerModel{replies: []string{
-		`{"subject":{"type":"URL","field":"url","value":"https://eu.acme.example/"},"hops":[{"direction":"out","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"}]}`,
-	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
-	out, err := (Agent{Model: model, Runner: runner}).AskPlanned(context.Background(),
-		"What FQDN is linked to https://eu.acme.example/?")
-	if err != nil || out.Incomplete || out.PlanStoppedAtHop != 0 || len(out.Matches) != 0 {
-		t.Fatalf("single-hop empty search misclassified: %+v err=%v", out, err)
 	}
 }

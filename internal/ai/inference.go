@@ -120,8 +120,8 @@ Do not infer common ownership from shared CDN, ASN, cloud hosting, or certificat
 Return ONLY a JSON object with subject_id, predicate, object_id, confidence (0-1), reason,
 evidence_ids (array), and contradictions (array). If evidence is insufficient, choose predicate "none"
 and an empty evidence_ids array. Use ONLY the provided IDs and allowed_labels.`
-	answer, err := i.Model.Generate(ctx,
-		[]Message{{Role: "system", Text: prompt}, {Role: "user", Text: string(data)}}, nil)
+	answer, err := generateJSON(ctx, i.Model,
+		[]Message{{Role: "system", Text: prompt}, {Role: "user", Text: string(data)}}, proposalSchema(c))
 	if err != nil {
 		return nil, err
 	}
