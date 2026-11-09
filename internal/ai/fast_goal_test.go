@@ -71,3 +71,70 @@ func BenchmarkDeterministicExplicitOrganizationGoal(b *testing.B){
   }
  }
 }
+
+
+// This graph reproduces the six candidates in the disposable semantic
+// fixture: two equivalent direct routes, two routes to the parent, and two
+// routes to the sibling. The better-tagged URL path must win without Qwen.
+func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.T){
+ g:=fakeGraph{
+  assets:map[string]Asset{
+   "f":{ID:"f",Type:"FQDN",Key:"tech.acme.example"},
+   "u1":{ID:"u1",Type:"URL",Key:"https://tech.acme.example/"},
+   "u2":{ID:"u2",Type:"URL",Key:"https://tech.acme.example/alternate"},
+   "tech":{ID:"tech",Type:"Organization",Key:"synthetic-acme-tech"},
+   "parent":{ID:"parent",Type:"Organization",Key:"synthetic-acme-holdings"},
+   "sibling":{ID:"sibling",Type:"Organization",Key:"synthetic-acme-europe"},
+  },
+  links:[]Relation{
+   {ID:"d1",FromID:"u1",ToID:"f",Label:"domain",Type:"SimpleRelation"},
+   {ID:"d2",FromID:"u2",ToID:"f",Label:"domain",Type:"SimpleRelation"},
+   {ID:"w1",FromID:"tech",ToID:"u1",Label:"website",Type:"SimpleRelation"},
+   {ID:"w2",FromID:"tech",ToID:"u2",Label:"website",Type:"SimpleRelation"},
+   {ID:"s1",FromID:"parent",ToID:"tech",Label:"subsidiary",Type:"SimpleRelation"},
+   {ID:"s2",FromID:"parent",ToID:"sibling",Label:"subsidiary",Type:"SimpleRelation"},
+  },
+  evidence:map[string][]Evidence{
+   "d1":{{ID:"d1-a",SubjectID:"d1",SourceID:"dns-a",Kind:"SourceProperty"}},
+   "w1":{{ID:"w1-a",SubjectID:"w1",SourceID:"website-a",Kind:"SourceProperty"}},
+   "d2":{{ID:"d2-a",SubjectID:"d2",SourceID:"dns-a",Kind:"SourceProperty"},
+         {ID:"d2-b",SubjectID:"d2",SourceID:"dns-b",Kind:"SourceProperty"}},
+   "w2":{{ID:"w2-a",SubjectID:"w2",SourceID:"website-a",Kind:"SourceProperty"},
+         {ID:"w2-b",SubjectID:"w2",SourceID:"website-b",Kind:"SourceProperty"}},
+   "s1":{{ID:"s1-a",SubjectID:"s1",SourceID:"registry-a",Kind:"SourceProperty"},
+         {ID:"s1-b",SubjectID:"s1",SourceID:"registry-b",Kind:"SourceProperty"}},
+   "s2":{{ID:"s2-a",SubjectID:"s2",SourceID:"registry-a",Kind:"SourceProperty"}},
+  },
+ }
+ model:=&plannerModel{replies:[]string{}}
+ a:=Agent{Model:model,Runner:ToolRunner{Graph:g,Catalog:testOAMCatalog,Limits:DefaultLimits()}}
+ question:="Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
+ out,err:=a.AskAdaptive(context.Background(),question,AdaptiveOptions{MaxDepth:8,MaxPathsPerAsset:3,GuidanceRounds:0})
+ if err!=nil{t.Fatal(err)}
+ if model.calls!=0{t.Fatalf("expected zero model calls, got %d",model.calls)}
+ if out.Search==nil||len(out.Search.Matches)!=6||out.Search.Truncated||out.Search.AlternativeMatches!=3{
+  t.Fatalf("lost alternate graph candidates: %+v",out.Search)
+ }
+ if out.EvidenceDossier==nil||len(out.EvidenceDossier.Paths)!=6||out.EvidenceDossier.InspectedEdges!=6{
+  t.Fatalf("wrong full-path evidence coverage: %+v",out.EvidenceDossier)
+ }
+ if len(out.Matches)!=1 || out.Matches[0].Nodes[len(out.Matches[0].Nodes)-1].ID!="tech" ||
+  out.Matches[0].Nodes[1].ID!="u2"{
+  t.Fatalf("should select direct Acme Technologies via better tagged URL: %+v",out.Matches)
+ }
+ if len(out.AnswerGroups)!=3{t.Fatalf("parent/sibling context lost: %+v",out.AnswerGroups)}
+ var preferred,alternate string
+ var contextual int
+ for _,summary:=range out.AnswerGroups{
+  if summary.AssetID=="tech" {
+   preferred=summary.PreferredPathID
+   if len(summary.AlternativePathIDs)!=1{t.Fatalf("direct alternate route not retained: %+v",summary)}
+   alternate=summary.AlternativePathIDs[0]
+  } else if !summary.DirectToGoal{contextual++}
+ }
+ if contextual!=2||preferred!=out.Matches[0].PathID||alternate==preferred{
+  t.Fatalf("context or alternate selection wrong: %+v",out.AnswerGroups)
+ }
+ t.Logf("SIX PATHS: model_calls=%d candidates=%d primary=%s preferred=%s weaker=%s indirect_groups=%d",
+  model.calls,len(out.Search.Matches),out.Matches[0].Nodes[2].ID,preferred,alternate,contextual)
+}
