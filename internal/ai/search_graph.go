@@ -23,6 +23,24 @@ type GraphSearchRequest struct {
 
 // Exhausted means the bounded search completed within MaxDepth, NOT that all
 // relationships in the full Asset Database have been enumerated.
+// GraphHopDiagnostic describes one executed schema-grounded relationship hop.
+// Counts reflect edges returned by the bounded graph reader, not the existence
+// or absence of assets elsewhere in the OAM database.
+type GraphHopDiagnostic struct {
+    Hop int `json:"hop"`
+    SourceType string `json:"source_type"`
+    TargetType string `json:"target_type"`
+    Direction string `json:"direction"`
+    Label string `json:"label"`
+    RelationType string `json:"relation_type"`
+    InputPaths int `json:"input_paths"`
+    QueriedPaths int `json:"queried_paths"`
+    ReturnedEdges int `json:"returned_edges"`
+    AcceptedEdges int `json:"accepted_edges"`
+    OutputPaths int `json:"output_paths"`
+    Truncated bool `json:"truncated"`
+}
+
 type GraphSearchResult struct {
     Root Asset `json:"root"`
     Matches []PlanMatch `json:"matches"`
@@ -36,6 +54,7 @@ type GraphSearchResult struct {
     ExpandedPaths int `json:"expanded_paths,omitempty"`
     AlternativeMatches int `json:"alternative_matches,omitempty"`
     AlternativePathsSkipped int `json:"alternative_paths_skipped,omitempty"`
+    HopDiagnostics []GraphHopDiagnostic `json:"hop_diagnostics,omitempty"`
 }
 type graphSearchStep struct {
     asset Asset
