@@ -16,11 +16,11 @@ func TestHTTPClassifierUntrainedFallbackIndependentOfProvider(t *testing.T){
  var ready map[string]any
  if err:=json.NewDecoder(response.Body).Decode(&ready);err!=nil{t.Fatal(err)}
  _=response.Body.Close()
- if response.StatusCode!=200||ready["trained"]!=false||ready["mode"]!="untrained_fallback"{t.Fatalf("fallback status: %+v",ready)}
+ if response.StatusCode!=200||ready["trained"]!=false||ready["mode"]!="evidence_triage"{t.Fatalf("fallback status: %+v",ready)}
  client:=HTTPClient{Endpoint:server.URL}
  p,err:=client.Classify(context.Background(),Input{Task:"organization_relation",Features:map[string]float64{"distinct_sources":.5}})
  if err!=nil{t.Fatal(err)}
- if p.Decision!="escalate"||p.ScoreKind!="not_scored"||p.Score!=0{t.Fatalf("untrained fallback asserted confidence: %+v",p)}
+ if p.Decision!="escalate"||p.ScoreKind!="rules_no_probability"||p.Score!=0{t.Fatalf("untrained fallback asserted confidence: %+v",p)}
 }
 func TestHTTPClassifierTrainedRoundTrip(t *testing.T){
  model,err:=Load(strings.NewReader(fixture))
@@ -30,4 +30,18 @@ func TestHTTPClassifierTrainedRoundTrip(t *testing.T){
  pred,err:=(HTTPClient{Endpoint:server.URL}).Classify(context.Background(),Input{Task:"organization_relation",Features:map[string]float64{"legal_record_match":1}})
  if err!=nil{t.Fatal(err)}
  if pred.Decision!="review"||pred.ModelID!="synthetic-linear-v1"{t.Fatalf("trained response: %+v",pred)}
+}
+
+func TestHTTPClassifierUsesObservedProvenanceForReviewByDefault(t *testing.T){
+ server:=httptest.NewServer(HTTPService{}.Handler())
+ defer server.Close()
+ client:=HTTPClient{Endpoint:server.URL}
+ p,err:=client.Classify(context.Background(),Input{Task:"organization_relation",Features:map[string]float64{
+  "distinct_sources":1, "evidence_count":0.5,
+  "source_property_fraction":1,"unattributed_fraction":0,
+ }})
+ if err!=nil{t.Fatal(err)}
+ if p.Decision!="review"||p.Label!="unknown"||p.Score!=0||p.ScoreKind!="rules_no_probability"{
+  t.Fatalf("default provenance triage must route to review without asserting ownership: %+v",p)
+ }
 }
