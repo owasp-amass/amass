@@ -25,7 +25,15 @@ func post(t *testing.T,url,token,session,body string)(int,http.Header,map[string
  defer resp.Body.Close()
  raw,err:=io.ReadAll(resp.Body);if err!=nil{t.Fatal(err)}
  var result map[string]any
- if len(bytes.TrimSpace(raw))>0&&json.Unmarshal(raw,&result)!=nil{t.Fatalf("invalid JSON response: %s",raw)}
+ // Authentication/session errors may intentionally be plain text.
+ // Only successful JSON-RPC responses require a JSON envelope.
+ if resp.StatusCode>=200&&resp.StatusCode<300&&resp.StatusCode!=202&&
+  len(bytes.TrimSpace(raw))>0&&json.Unmarshal(raw,&result)!=nil{
+  t.Fatalf("invalid JSON success response: %s",raw)
+ }
+ if resp.StatusCode==200&&len(bytes.TrimSpace(raw))==0{
+  t.Fatal("successful JSON-RPC request returned an empty body")
+ }
  return resp.StatusCode,resp.Header,result
 }
 func TestHTTPMCPAuthenticatedSessionAndTools(t *testing.T){
