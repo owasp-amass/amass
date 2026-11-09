@@ -23,14 +23,87 @@ import (
 // JSON response mode. Sessions are in memory and never authorize writes.
 // Authentication is required even when Docker publishes only on loopback.
 type HTTPServer struct {
-	Runner   ai.ToolRunner
-	Token    string
-	mu       sync.Mutex
-	sessions map[string]bool
+	Runner ai.ToolRunner
+	Token  string
+	// SessionTTL is how long an idle session stays valid; MaxSessions caps
+	// concurrent sessions (the least recently used is evicted first).
+	SessionTTL  time.Duration
+	MaxSessions int
+	now         func() time.Time
+	mu          sync.Mutex
+	sessions    map[string]*mcpSession
 }
 
+type mcpSession struct {
+	initialized bool
+	lastSeen    time.Time
+}
+
+// Session defaults bound memory held for authenticated clients that never
+// send DELETE.
+const (
+	DefaultSessionTTL  = 30 * time.Minute
+	DefaultMaxSessions = 256
+)
+
 func NewHTTPServer(runner ai.ToolRunner, token string) *HTTPServer {
-	return &HTTPServer{Runner: runner, Token: token, sessions: map[string]bool{}}
+	return &HTTPServer{Runner: runner, Token: token, SessionTTL: DefaultSessionTTL,
+		MaxSessions: DefaultMaxSessions, now: time.Now, sessions: map[string]*mcpSession{}}
+}
+
+func (s *HTTPServer) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
+func (s *HTTPServer) ttl() time.Duration {
+	if s.SessionTTL > 0 {
+		return s.SessionTTL
+	}
+	return DefaultSessionTTL
+}
+
+// addSession registers id, first dropping expired sessions and, at the cap,
+// the least recently used one. The caller holds s.mu.
+func (s *HTTPServer) addSession(id string) {
+	now := s.clock()
+	for key, sess := range s.sessions {
+		if now.Sub(sess.lastSeen) > s.ttl() {
+			delete(s.sessions, key)
+		}
+	}
+	limit := s.MaxSessions
+	if limit < 1 {
+		limit = DefaultMaxSessions
+	}
+	for len(s.sessions) >= limit {
+		oldest := ""
+		for key, sess := range s.sessions {
+			if oldest == "" || sess.lastSeen.Before(s.sessions[oldest].lastSeen) {
+				oldest = key
+			}
+		}
+		delete(s.sessions, oldest)
+	}
+	s.sessions[id] = &mcpSession{lastSeen: now}
+}
+
+// touchSession returns the live session for id and refreshes its idle
+// timer, or nil when it is unknown or expired. The caller holds s.mu.
+func (s *HTTPServer) touchSession(id string) *mcpSession {
+	sess, ok := s.sessions[id]
+	if !ok {
+		return nil
+	}
+	now := s.clock()
+	if now.Sub(sess.lastSeen) > s.ttl() {
+		delete(s.sessions, id)
+		return nil
+	}
+	sess.lastSeen = now
+	return sess
 }
 func (s *HTTPServer) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -91,7 +164,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
 		session := r.Header.Get("Mcp-Session-Id")
 		s.mu.Lock()
-		_, exists := s.sessions[session]
+		exists := s.touchSession(session) != nil
 		if exists {
 			delete(s.sessions, session)
 		}
@@ -147,7 +220,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}
 		id := hex.EncodeToString(sessionBytes)
 		s.mu.Lock()
-		s.sessions[id] = false
+		s.addSession(id)
 		s.mu.Unlock()
 		w.Header().Set("Mcp-Session-Id", id)
 		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{
@@ -159,16 +232,19 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	session := r.Header.Get("Mcp-Session-Id")
 	s.mu.Lock()
-	initialized, exists := s.sessions[session]
+	sess := s.touchSession(session)
+	initialized := sess != nil && sess.initialized
 	s.mu.Unlock()
-	if !exists {
+	if sess == nil {
 		http.Error(w, "MCP session missing or expired", 404)
 		return
 	}
 	if len(req.ID) == 0 {
 		if req.Method == "notifications/initialized" {
 			s.mu.Lock()
-			s.sessions[session] = true
+			if live := s.touchSession(session); live != nil {
+				live.initialized = true
+			}
 			s.mu.Unlock()
 		}
 		w.WriteHeader(http.StatusAccepted)
