@@ -27,6 +27,10 @@ type AISettings struct {
 	MaxPathsPerAsset     int    `yaml:"max_paths_per_asset,omitempty" json:"max_paths_per_asset,omitempty"`
 	MaxExpansions        int    `yaml:"max_expansions,omitempty" json:"max_expansions,omitempty"`
 	GuidanceRounds       int    `yaml:"guidance_rounds,omitempty" json:"guidance_rounds,omitempty"`
+	// MaxTokens caps each model reply; 0 keeps the provider default.
+	MaxTokens int `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
+	// Temperature is a decimal 0..2; empty keeps the provider default.
+	Temperature string `yaml:"temperature,omitempty" json:"temperature,omitempty"`
 }
 
 // ResolveAISettings applies AMASS_AI_* environment overrides without
@@ -43,6 +47,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		{"AMASS_AI_API_KEY_ENV", &c.APIKeyEnv},
 		{"AMASS_AI_MODEL_TIMEOUT", &c.ModelTimeout},
 		{"AMASS_AI_INVESTIGATION_TIMEOUT", &c.InvestigationTimeout},
+		{"AMASS_AI_TEMPERATURE", &c.Temperature},
 		{"AMASS_AI_CLASSIFIER_MODEL", &c.ClassifierModel},
 		{"AMASS_AI_CLASSIFIER_ENDPOINT", &c.ClassifierEndpoint},
 	}
@@ -76,6 +81,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		{"AMASS_AI_MAX_PATHS_PER_ASSET", &c.MaxPathsPerAsset},
 		{"AMASS_AI_MAX_EXPANSIONS", &c.MaxExpansions},
 		{"AMASS_AI_GUIDANCE_ROUNDS", &c.GuidanceRounds},
+		{"AMASS_AI_MAX_TOKENS", &c.MaxTokens},
 	}
 	for _, pair := range ints {
 		if raw, ok := lookup(pair.key); ok {
@@ -104,5 +110,25 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 	if c.GuidanceRounds > 3 {
 		return c, fmt.Errorf("AI guidance_rounds must be 0..3")
 	}
+	if c.MaxTokens > 128000 {
+		return c, fmt.Errorf("AI max_tokens must be 0..128000")
+	}
+	if _, err := ParseAITemperature(c.Temperature); err != nil {
+		return c, err
+	}
 	return c, nil
+}
+
+// ParseAITemperature returns nil for an empty value (provider default) or the
+// parsed temperature, which must be between 0 and 2.
+func ParseAITemperature(raw string) (*float64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || v < 0 || v > 2 {
+		return nil, fmt.Errorf("AI temperature must be a number from 0 to 2")
+	}
+	return &v, nil
 }

@@ -41,6 +41,10 @@ type CompatibleModel struct {
 	ModelName string
 	APIKey    string
 	Client    *http.Client
+	// MaxTokens, when positive, is sent as max_tokens.
+	MaxTokens int
+	// Temperature, when set, is sent with every request.
+	Temperature *float64
 }
 
 func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs []ToolSpec) (Response, error) {
@@ -67,6 +71,12 @@ func (m CompatibleModel) Generate(ctx context.Context, history []Message, specs 
 		msgs = append(msgs, item)
 	}
 	request := map[string]any{"model": m.ModelName, "messages": msgs}
+	if m.MaxTokens > 0 {
+		request["max_tokens"] = m.MaxTokens
+	}
+	if m.Temperature != nil {
+		request["temperature"] = *m.Temperature
+	}
 	if len(specs) > 0 {
 		ts := make([]any, 0, len(specs))
 		for _, s := range specs {
