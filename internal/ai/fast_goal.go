@@ -10,7 +10,7 @@ import (
 // structured question. It is NOT a general natural-language parser; any
 // ambiguity falls through to the normal model planner.
 var explicitOrgQuestion=regexp.MustCompile(`(?i)^\s*(?:which|what)\s+organizations?\b`)
-var hostnameInQuestion=regexp.MustCompile(`(?i)(?:^|[^a-z0-9_.-])([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?){2,})(?:[^a-z0-9_.-]|$)`)
+var hostnameInQuestion=regexp.MustCompile(`(?i)(?:^|[^a-z0-9_.-])([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?){1,})(?:[^a-z0-9_.-]|$)`)
 var topParentTerms=regexp.MustCompile(`(?i)\b(?:highest|ultimate|topmost|top-level)\s+(?:documented\s+)?parent\b`)
 
 // deterministicExplicitOrganizationGoal resolves ONLY explicitly provided
