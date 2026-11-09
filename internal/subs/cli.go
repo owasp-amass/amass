@@ -320,11 +320,11 @@ func addAddresses(ctx context.Context, db repository.Repository, names []*amassn
 	}
 
 	if !asninfo || cache == nil {
-		var output []*amassnet.Output
-		for _, o := range lookup {
-			if len(o.Addresses) > 0 {
-				output = append(output, o)
-			}
+		// Enrichment is optional. Discovered FQDNs without an address must
+		// remain present so -summary counts the same names as -names.
+		output := make([]*amassnet.Output, 0, len(names))
+		for _, name := range names {
+			output = append(output, lookup[name.Name])
 		}
 		return output
 	}
@@ -370,9 +370,10 @@ func addInfrastructureInfo(lookup outLookup, cache *amassnet.ASNCache) []*amassn
 		}
 
 		o.Addresses = newaddrs
-		if len(o.Addresses) > 0 {
-			output = append(output, o)
-		}
+		// ASN resolution is used only for infrastructure reporting. Names
+		// with no IP, or an IP absent from the ASN cache, still count as
+		// discovered names and must not disappear from -summary/-show.
+		output = append(output, o)
 	}
 	return output
 }
