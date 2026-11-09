@@ -27,7 +27,6 @@ type Observation struct {
 }
 
 type Investigation struct {
-	Plan               *TypedPlan                `json:"plan,omitempty"`
 	Query              *Query                    `json:"query,omitempty"`
 	Usage              *ModelUsage               `json:"model_usage,omitempty"`
 	ThirdParties       []ThirdPartyConnection    `json:"third_parties,omitempty"`
@@ -45,7 +44,6 @@ type Investigation struct {
 	Observations       []Observation             `json:"observations"`
 	Trace              []InvestigationTraceEvent `json:"trace,omitempty"`
 	Incomplete         bool                      `json:"incomplete"`
-	PlanStoppedAtHop   int                       `json:"plan_stopped_at_hop,omitempty"`
 	ToolCalls          int                       `json:"tool_calls"`
 }
 
