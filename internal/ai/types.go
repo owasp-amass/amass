@@ -62,7 +62,7 @@ type OrganizationResolver interface {
 // EdgeEvidenceReader disambiguates relation tags from asset tags, even when
 // asset IDs and edge IDs happen to share the same string representation.
 type EdgeEvidenceReader interface {
- EdgeEvidence(context.Context,string,int)([]Evidence,error)
+	EdgeEvidence(context.Context, string, int) ([]Evidence, error)
 }
 
 type BoundedGraph interface {

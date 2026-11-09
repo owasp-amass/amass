@@ -23,23 +23,23 @@ type Observation struct {
 	Error  string `json:"error,omitempty"`
 }
 type Investigation struct {
-	Plan         *TypedPlan   `json:"plan,omitempty"`
-	Goal         *InvestigationGoal `json:"goal,omitempty"`
-	Search       *GraphSearchResult `json:"search,omitempty"`
-	EvidenceDossier *EvidenceDossier `json:"evidence_dossier,omitempty"`
-	EvidenceIncomplete bool `json:"evidence_incomplete,omitempty"`
-	Collection   *CollectionPlan `json:"collection,omitempty"`
-	Diagram      string `json:"diagram,omitempty"`
-	Matches      []PlanMatch `json:"matches,omitempty"`
-	AnswerGroups []AnswerGroup `json:"answer_groups,omitempty"`
-	Resolution *OrganizationResolution `json:"resolution,omitempty"`
-	AssetResolution *AssetResolution `json:"asset_resolution,omitempty"`
-	Answer       string        `json:"answer"`
-	Observations []Observation `json:"observations"`
-	Trace []InvestigationTraceEvent `json:"trace,omitempty"`
-	Incomplete   bool          `json:"incomplete"`
-	PlanStoppedAtHop int `json:"plan_stopped_at_hop,omitempty"`
-	ToolCalls    int           `json:"tool_calls"`
+	Plan               *TypedPlan                `json:"plan,omitempty"`
+	Goal               *InvestigationGoal        `json:"goal,omitempty"`
+	Search             *GraphSearchResult        `json:"search,omitempty"`
+	EvidenceDossier    *EvidenceDossier          `json:"evidence_dossier,omitempty"`
+	EvidenceIncomplete bool                      `json:"evidence_incomplete,omitempty"`
+	Collection         *CollectionPlan           `json:"collection,omitempty"`
+	Diagram            string                    `json:"diagram,omitempty"`
+	Matches            []PlanMatch               `json:"matches,omitempty"`
+	AnswerGroups       []AnswerGroup             `json:"answer_groups,omitempty"`
+	Resolution         *OrganizationResolution   `json:"resolution,omitempty"`
+	AssetResolution    *AssetResolution          `json:"asset_resolution,omitempty"`
+	Answer             string                    `json:"answer"`
+	Observations       []Observation             `json:"observations"`
+	Trace              []InvestigationTraceEvent `json:"trace,omitempty"`
+	Incomplete         bool                      `json:"incomplete"`
+	PlanStoppedAtHop   int                       `json:"plan_stopped_at_hop,omitempty"`
+	ToolCalls          int                       `json:"tool_calls"`
 }
 type Agent struct {
 	Model    Model

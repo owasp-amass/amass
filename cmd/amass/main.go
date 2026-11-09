@@ -32,8 +32,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v5/config"
-	aicli "github.com/owasp-amass/amass/v5/internal/ai/cli"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
+	aicli "github.com/owasp-amass/amass/v5/internal/ai/cli"
 	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
 	"github.com/owasp-amass/amass/v5/internal/assoc"
 	"github.com/owasp-amass/amass/v5/internal/enum"

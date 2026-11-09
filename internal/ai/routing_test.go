@@ -120,16 +120,20 @@ func TestWalkRequiresBoundedReader(t *testing.T) {
 	}
 }
 
-func TestDefaultEvidenceClassifierRoutesObservedOAMDataWithoutLLM(t *testing.T){
- model:=&routingGenerative{}
- c:=routedCandidate()
- result,err:=(Inferrer{Model:model,MinSources:2,Plugin:"test",ModelID:"test"}).AnalyzeRouted(
-  context.Background(),c,classify.EvidenceRuleClassifier{},RoutingPolicy{AllowLocalReview:true},
- )
- if err!=nil{t.Fatal(err)}
- if result.Decision!="review" || result.Prediction==nil || result.Prediction.ScoreKind!="rules_no_probability" ||
-  result.Proposal!=nil || model.calls!=0 || result.UsedGenerativeModel {
-  t.Fatalf("default classifier must route real source-tag observations to review, not LLM/OAM writes: %+v model_calls=%d",result,model.calls)
- }
- if len(result.Provenance.SourceIDs)!=2{t.Fatalf("lost stored evidence sources: %+v",result.Provenance)}
+func TestDefaultEvidenceClassifierRoutesObservedOAMDataWithoutLLM(t *testing.T) {
+	model := &routingGenerative{}
+	c := routedCandidate()
+	result, err := (Inferrer{Model: model, MinSources: 2, Plugin: "test", ModelID: "test"}).AnalyzeRouted(
+		context.Background(), c, classify.EvidenceRuleClassifier{}, RoutingPolicy{AllowLocalReview: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Decision != "review" || result.Prediction == nil || result.Prediction.ScoreKind != "rules_no_probability" ||
+		result.Proposal != nil || model.calls != 0 || result.UsedGenerativeModel {
+		t.Fatalf("default classifier must route real source-tag observations to review, not LLM/OAM writes: %+v model_calls=%d", result, model.calls)
+	}
+	if len(result.Provenance.SourceIDs) != 2 {
+		t.Fatalf("lost stored evidence sources: %+v", result.Provenance)
+	}
 }

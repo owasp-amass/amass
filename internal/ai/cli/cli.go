@@ -10,8 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -39,7 +39,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
 	var modelTimeout, investigationTimeout time.Duration
-	var classifierReview,allowHTTP bool
+	var classifierReview, allowHTTP bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&endpoint, "endpoint", "", "Provider endpoint (defaults depend on provider)")
@@ -87,58 +87,100 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	}
 	// Settings precedence: explicit flags > AMASS_AI_* environment >
 	// YAML ai: section > CLI defaults. No AI service starts implicitly.
-	explicitFlags:=map[string]bool{}
-	fs.Visit(func(f *flag.Flag){explicitFlags[f.Name]=true})
+	explicitFlags := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { explicitFlags[f.Name] = true })
 	var fileAI config.AISettings
-	if cfg.AI!=nil{fileAI=*cfg.AI}
-	effective,err:=config.ResolveAISettings(fileAI,os.LookupEnv)
-	if err!=nil{return fmt.Errorf("load AI settings: %w",err)}
-	if !explicitFlags["provider"] && effective.Provider!=""{providerName=effective.Provider}
-	if !explicitFlags["endpoint"] && effective.Endpoint!=""{endpoint=effective.Endpoint}
-	if !explicitFlags["model"] && effective.Model!=""{modelName=effective.Model}
-	if !explicitFlags["api-key-env"] && effective.APIKeyEnv!=""{keyEnv=effective.APIKeyEnv}
-	if !explicitFlags["allow-http"]{allowHTTP=effective.AllowHTTP}
-	if !explicitFlags["classifier-model"] && effective.ClassifierModel!=""{classifierPath=effective.ClassifierModel}
-	if !explicitFlags["classifier-endpoint"] && effective.ClassifierEndpoint!=""{classifierEndpoint=effective.ClassifierEndpoint}
-	if !explicitFlags["classifier-review"]{
-    // Keep default-on triage when a YAML ai: section omits this boolean.
-    // An explicit environment override or positive YAML value changes it;
-    // -classifier-review=false always disables review routing.
-    _,fromEnv:=os.LookupEnv("AMASS_AI_CLASSIFIER_REVIEW")
-    if fromEnv || effective.ClassifierReview{classifierReview=effective.ClassifierReview}
-   }
-	if !explicitFlags["depth"] && effective.MaxDepth!=0{graphDepth=effective.MaxDepth}
-	if !explicitFlags["max-matches"] && effective.MaxMatches!=0{graphMatches=effective.MaxMatches}
-	if !explicitFlags["max-paths-per-asset"] && effective.MaxPathsPerAsset!=0{graphAlternates=effective.MaxPathsPerAsset}
-	if !explicitFlags["max-expansions"] && effective.MaxExpansions!=0{graphExpansions=effective.MaxExpansions}
-	if !explicitFlags["guidance-rounds"]{
-		_,fromEnv:=os.LookupEnv("AMASS_AI_GUIDANCE_ROUNDS")
-		if cfg.AI!=nil || fromEnv{guidanceRounds=effective.GuidanceRounds}
+	if cfg.AI != nil {
+		fileAI = *cfg.AI
 	}
-	if !explicitFlags["model-timeout"] && effective.ModelTimeout!=""{
-		value,err:=time.ParseDuration(effective.ModelTimeout)
-		if err!=nil{return err}
-		modelTimeout=value
+	effective, err := config.ResolveAISettings(fileAI, os.LookupEnv)
+	if err != nil {
+		return fmt.Errorf("load AI settings: %w", err)
 	}
-	if !explicitFlags["investigation-timeout"] && effective.InvestigationTimeout!=""{
-		value,err:=time.ParseDuration(effective.InvestigationTimeout)
-		if err!=nil{return err}
-		investigationTimeout=value
+	if !explicitFlags["provider"] && effective.Provider != "" {
+		providerName = effective.Provider
 	}
-	if modelTimeout<5*time.Second||modelTimeout>15*time.Minute{return errors.New("model timeout must be between 5s and 15m")}
-	if investigationTimeout<modelTimeout||investigationTimeout>30*time.Minute{return errors.New("investigation timeout must be at least model timeout and at most 30m")}
+	if !explicitFlags["endpoint"] && effective.Endpoint != "" {
+		endpoint = effective.Endpoint
+	}
+	if !explicitFlags["model"] && effective.Model != "" {
+		modelName = effective.Model
+	}
+	if !explicitFlags["api-key-env"] && effective.APIKeyEnv != "" {
+		keyEnv = effective.APIKeyEnv
+	}
+	if !explicitFlags["allow-http"] {
+		allowHTTP = effective.AllowHTTP
+	}
+	if !explicitFlags["classifier-model"] && effective.ClassifierModel != "" {
+		classifierPath = effective.ClassifierModel
+	}
+	if !explicitFlags["classifier-endpoint"] && effective.ClassifierEndpoint != "" {
+		classifierEndpoint = effective.ClassifierEndpoint
+	}
+	if !explicitFlags["classifier-review"] {
+		// Keep default-on triage when a YAML ai: section omits this boolean.
+		// An explicit environment override or positive YAML value changes it;
+		// -classifier-review=false always disables review routing.
+		_, fromEnv := os.LookupEnv("AMASS_AI_CLASSIFIER_REVIEW")
+		if fromEnv || effective.ClassifierReview {
+			classifierReview = effective.ClassifierReview
+		}
+	}
+	if !explicitFlags["depth"] && effective.MaxDepth != 0 {
+		graphDepth = effective.MaxDepth
+	}
+	if !explicitFlags["max-matches"] && effective.MaxMatches != 0 {
+		graphMatches = effective.MaxMatches
+	}
+	if !explicitFlags["max-paths-per-asset"] && effective.MaxPathsPerAsset != 0 {
+		graphAlternates = effective.MaxPathsPerAsset
+	}
+	if !explicitFlags["max-expansions"] && effective.MaxExpansions != 0 {
+		graphExpansions = effective.MaxExpansions
+	}
+	if !explicitFlags["guidance-rounds"] {
+		_, fromEnv := os.LookupEnv("AMASS_AI_GUIDANCE_ROUNDS")
+		if cfg.AI != nil || fromEnv {
+			guidanceRounds = effective.GuidanceRounds
+		}
+	}
+	if !explicitFlags["model-timeout"] && effective.ModelTimeout != "" {
+		value, err := time.ParseDuration(effective.ModelTimeout)
+		if err != nil {
+			return err
+		}
+		modelTimeout = value
+	}
+	if !explicitFlags["investigation-timeout"] && effective.InvestigationTimeout != "" {
+		value, err := time.ParseDuration(effective.InvestigationTimeout)
+		if err != nil {
+			return err
+		}
+		investigationTimeout = value
+	}
+	if modelTimeout < 5*time.Second || modelTimeout > 15*time.Minute {
+		return errors.New("model timeout must be between 5s and 15m")
+	}
+	if investigationTimeout < modelTimeout || investigationTimeout > 30*time.Minute {
+		return errors.New("investigation timeout must be at least model timeout and at most 30m")
+	}
 	repo := tools.OpenGraphDatabase(cfg)
 	if repo == nil {
 		return errors.New("unable to open OAM database")
 	}
 	defer repo.Close()
 	var aliases []ai.OrganizationAlias
-	if aliasesPath!="" {
-		f,err:=os.Open(aliasesPath)
-		if err!=nil{return fmt.Errorf("open organization aliases: %w",err)}
-		aliases,err=ai.LoadOrganizationAliases(f)
+	if aliasesPath != "" {
+		f, err := os.Open(aliasesPath)
+		if err != nil {
+			return fmt.Errorf("open organization aliases: %w", err)
+		}
+		aliases, err = ai.LoadOrganizationAliases(f)
 		_ = f.Close()
-		if err!=nil{return fmt.Errorf("load organization aliases: %w",err)}
+		if err != nil {
+			return fmt.Errorf("load organization aliases: %w", err)
+		}
 	}
 	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases}
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
@@ -149,28 +191,32 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		cancel()
 		return (mcp.Server{Runner: runner}).Serve(context.Background(), in, out)
 	}
-	if operation=="search" {
-		return graphSearch(ctx,runner,graphSearchOptions{
-			SubjectType:subjectType,SubjectField:subjectField,SubjectValue:subjectValue,
-			SubjectID:subjectID,TargetTypes:targetTypes,Direction:graphDirection,
-			MaxDepth:graphDepth,MaxMatches:graphMatches,Since:graphSince,Format:outputFormat,
-		},out)
+	if operation == "search" {
+		return graphSearch(ctx, runner, graphSearchOptions{
+			SubjectType: subjectType, SubjectField: subjectField, SubjectValue: subjectValue,
+			SubjectID: subjectID, TargetTypes: targetTypes, Direction: graphDirection,
+			MaxDepth: graphDepth, MaxMatches: graphMatches, Since: graphSince, Format: outputFormat,
+		}, out)
 	}
-	if operation=="collect-plan" || operation=="collect" {
-		if subjectID!="" || subjectType=="" || subjectField=="" || subjectValue=="" {
+	if operation == "collect-plan" || operation == "collect" {
+		if subjectID != "" || subjectType == "" || subjectField == "" || subjectValue == "" {
 			return errors.New("collection requires exact -subject-type, -subject-field and -subject-value (not -subject-id)")
 		}
-		plan:=ai.PlanCollection(ai.AssetSelector{Type:subjectType,Field:subjectField,Value:subjectValue})
-		return collectTarget(ctx,cfg,plan,collectionApproval,operation=="collect",out)
+		plan := ai.PlanCollection(ai.AssetSelector{Type: subjectType, Field: subjectField, Value: subjectValue})
+		return collectTarget(ctx, cfg, plan, collectionApproval, operation == "collect", out)
 	}
-	
+
 	// Default to deterministic classification of observed OAM evidence; a trained
 	// local artifact or independent service can replace it without selecting an LLM.
 	var localClassifier classify.Classifier = classify.EvidenceRuleClassifier{}
-	if classifierEndpoint!="" && classifierPath!="" {return errors.New("choose either classifier service endpoint or local model file")}
-	if classifierEndpoint!="" {
-		if err:=validateClassifierEndpoint(classifierEndpoint);err!=nil{return err}
-		localClassifier=classify.HTTPClient{Endpoint:classifierEndpoint,Client:&http.Client{Timeout:10*time.Second}}
+	if classifierEndpoint != "" && classifierPath != "" {
+		return errors.New("choose either classifier service endpoint or local model file")
+	}
+	if classifierEndpoint != "" {
+		if err := validateClassifierEndpoint(classifierEndpoint); err != nil {
+			return err
+		}
+		localClassifier = classify.HTTPClient{Endpoint: classifierEndpoint, Client: &http.Client{Timeout: 10 * time.Second}}
 	}
 	if classifierPath != "" {
 		raw, err := os.ReadFile(classifierPath)
@@ -204,7 +250,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	default:
 		return fmt.Errorf("unknown model provider %q", providerName)
 	}
-	if err:=validateModelEndpoint(endpoint,allowHTTP);err!=nil{return err}
+	if err := validateModelEndpoint(endpoint, allowHTTP); err != nil {
+		return err
+	}
 	switch operation {
 	case "scan":
 		return scan(ctx, graph, provider, modelName, journalPath, scanLimit, localClassifier, classifierReview, out)
@@ -212,20 +260,24 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if question == "" {
 			return errors.New("-question required")
 		}
-		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth:graphDepth,MaxMatches:graphMatches,MaxPathsPerAsset:graphAlternates,MaxExpansions:graphExpansions,GuidanceRounds:guidanceRounds})
+		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth: graphDepth, MaxMatches: graphMatches, MaxPathsPerAsset: graphAlternates, MaxExpansions: graphExpansions, GuidanceRounds: guidanceRounds})
 		if err != nil {
 			return err
 		}
-		if outputFormat=="text" {
+		if outputFormat == "text" {
 			_, err = fmt.Fprintln(out, result.Answer)
 			return err
 		}
-		if outputFormat=="mermaid" {
-			if result.Diagram=="" {return fmt.Errorf("investigation did not produce a diagram: %s",result.Answer)}
-			_, err=fmt.Fprint(out,result.Diagram)
+		if outputFormat == "mermaid" {
+			if result.Diagram == "" {
+				return fmt.Errorf("investigation did not produce a diagram: %s", result.Answer)
+			}
+			_, err = fmt.Fprint(out, result.Diagram)
 			return err
 		}
-		if outputFormat!="json" {return errors.New("-format must be json, text, or mermaid")}
+		if outputFormat != "json" {
+			return errors.New("-format must be json, text, or mermaid")
+		}
 		pretty, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return err
@@ -315,29 +367,38 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	return nil
 }
 
-
 // validateModelEndpoint prevents accidental plaintext transmission of graph
 // evidence. In-container HTTP to Ollama requires explicit opt-in.
-func validateModelEndpoint(endpoint string,allowHTTP bool)error{
-	u,err:=url.Parse(endpoint)
-	if err!=nil{return fmt.Errorf("invalid inference endpoint: %w",err)}
-	if u.User!=nil || u.Host=="" || u.Hostname()=="" || u.Fragment!=""{
+func validateModelEndpoint(endpoint string, allowHTTP bool) error {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("invalid inference endpoint: %w", err)
+	}
+	if u.User != nil || u.Host == "" || u.Hostname() == "" || u.Fragment != "" {
 		return errors.New("inference endpoint must have a hostname and no URL credentials or fragment")
 	}
-	if u.Scheme=="https"{return nil}
-	if u.Scheme!="http"{return errors.New("inference endpoint must use HTTPS or explicitly permitted HTTP")}
-	if u.Hostname()=="localhost" || u.Hostname()=="127.0.0.1" || u.Hostname()=="::1"{return nil}
-	if !allowHTTP{return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_AI_ALLOW_HTTP=true for a trusted internal endpoint")}
+	if u.Scheme == "https" {
+		return nil
+	}
+	if u.Scheme != "http" {
+		return errors.New("inference endpoint must use HTTPS or explicitly permitted HTTP")
+	}
+	if u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1" {
+		return nil
+	}
+	if !allowHTTP {
+		return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_AI_ALLOW_HTTP=true for a trusted internal endpoint")
+	}
 	return nil
 }
 
-func validateClassifierEndpoint(endpoint string)error{
- u,err:=url.Parse(endpoint)
- if err!=nil||u.Hostname()==""||u.User!=nil||u.Fragment!=""{
-  return errors.New("invalid classifier endpoint")
- }
- if u.Scheme!="https" && !(u.Scheme=="http"&&(u.Hostname()=="classifier"||u.Hostname()=="localhost"||u.Hostname()=="127.0.0.1")){
-  return errors.New("classifier HTTP is permitted only on the trusted Compose service hostname or localhost; otherwise use HTTPS")
- }
- return nil
+func validateClassifierEndpoint(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		return errors.New("invalid classifier endpoint")
+	}
+	if u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "classifier" || u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1")) {
+		return errors.New("classifier HTTP is permitted only on the trusted Compose service hostname or localhost; otherwise use HTTPS")
+	}
+	return nil
 }
