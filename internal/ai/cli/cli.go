@@ -34,7 +34,7 @@ func CLIWorkflow(_ string, args []string) {
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs := flag.NewFlagSet("ai", flag.ContinueOnError)
 	fs.SetOutput(errout)
-	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, aliasesPath string
+	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
@@ -66,6 +66,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
 	fs.StringVar(&aliasesPath, "organization-aliases", "", "Optional JSON file with explicitly sourced organization alias mappings (read-only)")
 	fs.StringVar(&classifierPath, "classifier-model", "", "Optional local linear model JSON (untrained weights should not be used for production decisions)")
+	fs.StringVar(&classifierEndpoint, "classifier-endpoint", "", "Provider-neutral classifier service URL, e.g., http://classifier:8092")
 	fs.BoolVar(&classifierReview, "classifier-review", false, "Permit review-only triage without invoking a generative model; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute, "Maximum time per model request (e.g., 4m for local Ollama)")
@@ -98,6 +99,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if !explicitFlags["api-key-env"] && effective.APIKeyEnv!=""{keyEnv=effective.APIKeyEnv}
 	if !explicitFlags["allow-http"]{allowHTTP=effective.AllowHTTP}
 	if !explicitFlags["classifier-model"] && effective.ClassifierModel!=""{classifierPath=effective.ClassifierModel}
+	if !explicitFlags["classifier-endpoint"] && effective.ClassifierEndpoint!=""{classifierEndpoint=effective.ClassifierEndpoint}
 	if !explicitFlags["classifier-review"]{classifierReview=effective.ClassifierReview}
 	if !explicitFlags["depth"] && effective.MaxDepth!=0{graphDepth=effective.MaxDepth}
 	if !explicitFlags["max-matches"] && effective.MaxMatches!=0{graphMatches=effective.MaxMatches}
@@ -155,10 +157,15 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		plan:=ai.PlanCollection(ai.AssetSelector{Type:subjectType,Field:subjectField,Value:subjectValue})
 		return collectTarget(ctx,cfg,plan,collectionApproval,operation=="collect",out)
 	}
-	if classifierReview && classifierPath == "" {
+	if classifierReview && classifierPath == "" && classifierEndpoint == "" {
 		return errors.New("-classifier-review requires -classifier-model")
 	}
 	var localClassifier classify.Classifier
+	if classifierEndpoint!="" && classifierPath!="" {return errors.New("choose either classifier service endpoint or local model file")}
+	if classifierEndpoint!="" {
+		if err:=validateClassifierEndpoint(classifierEndpoint);err!=nil{return err}
+		localClassifier=classify.HTTPClient{Endpoint:classifierEndpoint,Client:&http.Client{Timeout:10*time.Second}}
+	}
 	if classifierPath != "" {
 		raw, err := os.ReadFile(classifierPath)
 		if err != nil {
@@ -316,4 +323,15 @@ func validateModelEndpoint(endpoint string,allowHTTP bool)error{
 	if u.Hostname()=="localhost" || u.Hostname()=="127.0.0.1" || u.Hostname()=="::1"{return nil}
 	if !allowHTTP{return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_AI_ALLOW_HTTP=true for a trusted internal endpoint")}
 	return nil
+}
+
+func validateClassifierEndpoint(endpoint string)error{
+ u,err:=url.Parse(endpoint)
+ if err!=nil||u.Hostname()==""||u.User!=nil||u.Fragment!=""{
+  return errors.New("invalid classifier endpoint")
+ }
+ if u.Scheme!="https" && !(u.Scheme=="http"&&(u.Hostname()=="classifier"||u.Hostname()=="localhost"||u.Hostname()=="127.0.0.1")){
+  return errors.New("classifier HTTP is permitted only on the trusted Compose service hostname or localhost; otherwise use HTTPS")
+ }
+ return nil
 }
