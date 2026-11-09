@@ -52,3 +52,22 @@ func TestDeterministicGoalFastPathFailsClosedForAmbiguity(t *testing.T){
   if ok{t.Errorf("ambiguous question incorrectly bypassed model: %s",question)}
  }
 }
+
+
+func TestDeterministicGoalAcceptsRealWorldTwoLabelFQDN(t *testing.T){
+ question:="Which organization is connected to owasp.org through domain and website relationships?"
+ goal,ok:=deterministicExplicitOrganizationGoal(question,testOAMCatalog)
+ if !ok||goal.Subject.Type!="FQDN"||goal.Subject.Value!="owasp.org"||
+  goal.Purpose!="connected"||len(goal.Relationships)!=2{
+  t.Fatalf("explicit two-label domain was not grounded: goal=%+v ok=%t",goal,ok)
+ }
+}
+
+func BenchmarkDeterministicExplicitOrganizationGoal(b *testing.B){
+ question:="Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
+ for i:=0;i<b.N;i++{
+  if _,ok:=deterministicExplicitOrganizationGoal(question,testOAMCatalog);!ok{
+   b.Fatal("explicit question unexpectedly fell back to the model")
+  }
+ }
+}
