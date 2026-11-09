@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
 )
@@ -105,5 +107,55 @@ func TestHTTPMCPRejectsUntrustedBrowserOrigin(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != 403 {
 		t.Fatalf("untrusted browser origin allowed: %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPMCPSessionsExpireAndAreCapped(t *testing.T) {
+	token := strings.Repeat("y", 40)
+	// The clock is read by server goroutines, so it is atomic for -race.
+	var clock atomic.Int64
+	clock.Store(time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC).UnixNano())
+	advance := func(d time.Duration) { clock.Add(int64(d)) }
+	svc := NewHTTPServer(ai.ToolRunner{Limits: ai.DefaultLimits()}, token)
+	svc.SessionTTL = time.Minute
+	svc.MaxSessions = 2
+	svc.now = func() time.Time { return time.Unix(0, clock.Load()) }
+	server := httptest.NewServer(svc.Handler())
+	defer server.Close()
+	init := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
+	ping := `{"jsonrpc":"2.0","id":2,"method":"ping"}`
+	open := func() string {
+		_, header, _ := post(t, server.URL, token, "", init)
+		return header.Get("Mcp-Session-Id")
+	}
+
+	first := open()
+	advance(30 * time.Second)
+	if code, _, _ := post(t, server.URL, token, first, ping); code != 200 {
+		t.Fatalf("live session rejected: %d", code)
+	}
+	advance(61 * time.Second)
+	if code, _, _ := post(t, server.URL, token, first, ping); code != 404 {
+		t.Fatalf("idle session must expire, got %d", code)
+	}
+
+	a := open()
+	advance(time.Second)
+	b := open()
+	advance(time.Second)
+	c := open()
+	svc.mu.Lock()
+	count := len(svc.sessions)
+	svc.mu.Unlock()
+	if count != 2 {
+		t.Fatalf("session cap not enforced: %d sessions", count)
+	}
+	if code, _, _ := post(t, server.URL, token, a, ping); code != 404 {
+		t.Fatalf("least recently used session must be evicted, got %d", code)
+	}
+	for _, id := range []string{b, c} {
+		if code, _, _ := post(t, server.URL, token, id, ping); code != 200 {
+			t.Fatalf("recent session %s rejected: %d", id, code)
+		}
 	}
 }
