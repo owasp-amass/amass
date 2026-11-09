@@ -74,3 +74,22 @@ func TestAISettingsDisabledByDefault(t *testing.T) {
 		t.Fatalf("AI is not an opt-in section: %+v", c.AI)
 	}
 }
+
+func TestResolveAISettingsTokensAndTemperature(t *testing.T) {
+	env := map[string]string{"AMASS_AI_MAX_TOKENS": "2048", "AMASS_AI_TEMPERATURE": "0"}
+	got, err := ResolveAISettings(AISettings{}, func(k string) (string, bool) { v, ok := env[k]; return v, ok })
+	if err != nil || got.MaxTokens != 2048 || got.Temperature != "0" {
+		t.Fatalf("got %+v err=%v", got, err)
+	}
+	if v, err := ParseAITemperature(got.Temperature); err != nil || v == nil || *v != 0 {
+		t.Fatalf("temperature 0 must be explicit, got %v err=%v", v, err)
+	}
+	if v, err := ParseAITemperature(""); err != nil || v != nil {
+		t.Fatalf("empty temperature must mean provider default, got %v err=%v", v, err)
+	}
+	for _, bad := range []AISettings{{Temperature: "2.5"}, {Temperature: "warm"}, {MaxTokens: 200000}} {
+		if _, err := ResolveAISettings(bad, func(string) (string, bool) { return "", false }); err == nil {
+			t.Errorf("expected rejection of %+v", bad)
+		}
+	}
+}

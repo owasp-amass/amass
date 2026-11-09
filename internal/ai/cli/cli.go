@@ -39,6 +39,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
 	var modelTimeout, investigationTimeout time.Duration
+	var maxTokens int
+	var temperatureFlag string
 	var classifierReview, allowHTTP bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
@@ -69,6 +71,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&classifierEndpoint, "classifier-endpoint", "", "Provider-neutral classifier service URL, e.g., http://classifier:8092")
 	fs.BoolVar(&classifierReview, "classifier-review", true, "Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
+	fs.IntVar(&maxTokens, "max-tokens", 0, "Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
+	fs.StringVar(&temperatureFlag, "temperature", "", "Model temperature 0..2 (empty = provider default; 0 is most reproducible)")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute, "Maximum time per model request (e.g., 4m for local Ollama)")
 	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute, "Maximum total time for a single investigation")
 	if err := fs.Parse(args); err != nil {
@@ -126,6 +130,19 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if fromEnv || effective.ClassifierReview {
 			classifierReview = effective.ClassifierReview
 		}
+	}
+	if !explicitFlags["max-tokens"] && effective.MaxTokens != 0 {
+		maxTokens = effective.MaxTokens
+	}
+	if !explicitFlags["temperature"] && effective.Temperature != "" {
+		temperatureFlag = effective.Temperature
+	}
+	if maxTokens < 0 || maxTokens > 128000 {
+		return errors.New("max tokens must be 0..128000")
+	}
+	temperature, err := config.ParseAITemperature(temperatureFlag)
+	if err != nil {
+		return err
 	}
 	if !explicitFlags["depth"] && effective.MaxDepth != 0 {
 		graphDepth = effective.MaxDepth
@@ -241,12 +258,12 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if endpoint == "" {
 			endpoint = "http://127.0.0.1:11434/v1/chat/completions"
 		}
-		provider = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}}
+		provider = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}, MaxTokens: maxTokens, Temperature: temperature}
 	case "anthropic":
 		if endpoint == "" {
 			endpoint = "https://api.anthropic.com/v1/messages"
 		}
-		provider = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}}
+		provider = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: os.Getenv(keyEnv), Client: &http.Client{Timeout: modelTimeout}, MaxTokens: maxTokens, Temperature: temperature}
 	default:
 		return fmt.Errorf("unknown model provider %q", providerName)
 	}

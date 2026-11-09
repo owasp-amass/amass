@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -18,7 +19,19 @@ type AnthropicModel struct {
 	ModelName string
 	APIKey    string
 	Client    *http.Client
+	// MaxTokens caps each reply; 0 selects DefaultAnthropicMaxTokens.
+	MaxTokens int
+	// Temperature, when set, is sent with every request. Planning and
+	// path selection are most reproducible at 0.
+	Temperature *float64
+	// DisablePromptCache turns off cache_control on the system prompt.
+	// Investigations resend a large, fixed OAM catalog prompt, so caching
+	// is on by default; prompts below the provider minimum are not cached.
+	DisablePromptCache bool
 }
+
+// DefaultAnthropicMaxTokens is the reply budget when MaxTokens is unset.
+const DefaultAnthropicMaxTokens = 4096
 
 func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs []ToolSpec) (Response, error) {
 	var out Response
@@ -56,7 +69,24 @@ func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs [
 		}
 		messages = append(messages, map[string]any{"role": msg.Role, "content": msg.Text})
 	}
-	payload := map[string]any{"model": m.ModelName, "system": system, "max_tokens": 2048, "messages": messages}
+	maxTokens := m.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = DefaultAnthropicMaxTokens
+	}
+	if maxTokens < 1 {
+		return out, errors.New("Anthropic max tokens must be positive")
+	}
+	payload := map[string]any{"model": m.ModelName, "max_tokens": maxTokens, "messages": messages}
+	if system = strings.TrimSpace(system); system != "" {
+		block := map[string]any{"type": "text", "text": system}
+		if !m.DisablePromptCache {
+			block["cache_control"] = map[string]any{"type": "ephemeral"}
+		}
+		payload["system"] = []any{block}
+	}
+	if m.Temperature != nil {
+		payload["temperature"] = *m.Temperature
+	}
 	if len(specs) > 0 {
 		tools := []any{}
 		for _, s := range specs {
