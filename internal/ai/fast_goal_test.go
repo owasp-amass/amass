@@ -107,7 +107,10 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
   },
  }
  model:=&plannerModel{replies:[]string{}}
- a:=Agent{Model:model,Runner:ToolRunner{Graph:g,Catalog:testOAMCatalog,Limits:DefaultLimits()}}
+ // Use the same test resolver as the other end-to-end adaptive tests.
+ // fakeGraph alone supports traversal but not indexed ResolveAsset.
+ resolved:=plannedGraph{fakeGraph:g}
+ a:=Agent{Model:model,Runner:ToolRunner{Graph:resolved,Catalog:testOAMCatalog,Limits:DefaultLimits()}}
  question:="Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
  out,err:=a.AskAdaptive(context.Background(),question,AdaptiveOptions{MaxDepth:8,MaxPathsPerAsset:3,GuidanceRounds:0})
  if err!=nil{t.Fatal(err)}
