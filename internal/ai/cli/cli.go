@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
