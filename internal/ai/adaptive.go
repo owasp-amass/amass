@@ -125,62 +125,13 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		return zero, errors.New("OAM indexed selector catalog is required")
 	}
 	selectors := sc.SearchFields()
-	types := map[string]bool{}
-	for _, selector := range selectors {
-		types[selector.Type] = true
-	}
-	for _, relation := range a.Runner.Catalog.Relations() {
-		types[relation.SourceType] = true
-		types[relation.DestinationType] = true
-	}
-	allTypes := make([]string, 0, len(types))
-	for typ := range types {
-		allTypes = append(allTypes, typ)
-	}
-	sort.Strings(allTypes)
-
 	relations := a.Runner.Catalog.Relations()
-	explicitHint, explicit := explicitRelationLabels(question, relations)
-	// When the user explicitly names relationship types, only those
-	// transitions need to be presented to the model. Full schema validation
-	// and execution still use the entire OAM catalog. This reduces the
-	// prompt size for smaller local models without changing permissions.
-	promptRelations := relations
-	if explicit {
-		selected := map[string]bool{}
-		for _, label := range explicitHint.Labels {
-			selected[label] = true
-		}
-		promptRelations = make([]RelationshipSchema, 0)
-		for _, rel := range relations {
-			if selected[strings.ToLower(rel.Label)] {
-				promptRelations = append(promptRelations, rel)
-			}
-		}
-	}
-	prompt := `You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
-Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}.
-The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
-When the user requests particular relationship semantics, select the actual relevant relationship types, including all intermediate asset types. "path_rule" may be "" (no constraints), "any" (at least one listed relationship in the witnessed path), "all" (every listed relationship appears in the path), or "ordered" (listed relationships in traversal order starting at the user's subject; intermediate hops allowed, including when traversing stored edges backwards).
-Use relationships:[] and path_rule:"" for broad exploration. Do not require specific labels for queries that only request connectivity.
-Example: for a parent organization question, choose purpose "ultimate_parent", targets ["Organization"], and relationships:[] unless the question explicitly specifies additional relationship conditions.
-Use purpose "ultimate_parent" ONLY when the question asks for the highest or ultimate parent organization. For this purpose, target_types MUST be ["Organization"] and direction MUST be "both".
-Otherwise use purpose "connected". The user's starting asset may have ANY registered OAM type. Use type/field/value from the SELECTOR CATALOG, or type/entity_id if that identifier was supplied by the user. Organization can use its own name, legal_name, unique_id or jurisdiction-qualified registration_id fields. Copy identifiers exactly from the user, do NOT fabricate names, corporate suffixes, identifiers or jurisdictions.
-For a non-Organization, use {"type":"FQDN","field":"name","value":"example.org"} (with the actual indexed type/field), NEVER subject.name. Do not output a "fields" array or echo the selector catalog.
-Choose target_types from the catalog based on the answer requested. Map ordinary language to registered OAM types: companies/businesses/legal entities to Organization; hostnames/subdomains to FQDN; IP addresses to IPAddress; physical/postal addresses to Location. Bare "addresses" is ambiguous between IPAddress and Location: resolve only when the question provides enough context, not by guessing. "Subdomains" additionally requests the FQDN node hierarchy rather than arbitrary FQDN associations. Do not invent types. Set [] if the question is broad and exploratory.
-All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
-SELECTOR CATALOG:
-` + compactSelectorCatalog(selectors) + "\nUSER LANGUAGE ALIASES FOR OAM TYPES (not new OAM types):\n" + compactIntentVocabulary(selectors, relations) + "\nALL AVAILABLE OAM TARGET TYPES: " + strings.Join(allTypes, ",") + "\nUSER QUESTION OPERATION PARAPHRASES (do not invent OAM edge labels):\n" + compactOperationVocabulary() + "\nOAM RELATIONSHIP LABEL LANGUAGE ALIASES (labels must exist in catalog):\n" + compactRelationshipVocabulary(promptRelations) + "\nOAM INDEXED SEARCH FIELD LANGUAGE ALIASES (selectors must exist in catalog):\n" + compactSearchVocabulary(selectors) + "\nOAM RELATIONSHIP CATALOG:\n" + compactRelationshipCatalog(promptRelations)
-	if explicit {
-		// Promote user-named OAM labels above model-assumed WHOIS/DNS hops.
-		// Exact transition types are still grounded only after a typed root and
-		// target have been provided and independently validated.
-		prompt += "\nExplicit relationship labels in the user question: " + strings.Join(explicitHint.Labels, ", ") +
-			". Avoid unrelated registration and WHOIS hops. If multiple relations are requested, " +
-			"retain each named label. The application will verify and resolve any ambiguity against OAM schema.\n"
-	}
-	history := []Message{{Role: "system", Text: prompt}, {Role: "user", Text: question}}
-	schema := goalJSONSchema(relations, selectors)
+	// The first attempts show only the catalog slice the question mentions;
+	// the last attempt shows the whole catalog in case the slice was too
+	// narrow. Validation always uses the whole catalog.
+	prompt := goalPlannerPrompt(question, relations, selectors, true)
+	explicit, explicitHint, schema := prompt.Explicit, prompt.Hint, prompt.Schema
+	history := []Message{{Role: "system", Text: prompt.Text}, {Role: "user", Text: question}}
 	for attempt := 0; attempt < 3; attempt++ {
 		response, err := generateJSON(ctx, a.Model, history, schema)
 		if err != nil {
@@ -214,6 +165,10 @@ SELECTOR CATALOG:
 			return zero, fmt.Errorf("invalid investigation goal after 3 attempts: %w", err)
 		}
 		history = append(history, Message{Role: "assistant", Text: response.Text}, Message{Role: "user", Text: "Goal rejected: " + err.Error() + ". Re-read the user's actual question; honor explicitly named relationship labels rather than unrelated registration/WHOIS edges. Correct subject and target types from the catalog. Return only the full JSON object (subject, target_types, direction, purpose, relationships, path_rule)."})
+		if attempt == 1 && prompt.Sliced {
+			full := goalPlannerPrompt(question, relations, selectors, false)
+			history[0].Text, schema = full.Text, full.Schema
+		}
 	}
 	return zero, errors.New("goal planner exhausted attempts")
 }

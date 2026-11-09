@@ -12,12 +12,21 @@ import "sort"
 // names. Pairings (which label joins which types) are still checked by
 // validateGoal; the schema only narrows the vocabulary.
 func goalJSONSchema(relations []RelationshipSchema, selectors []AssetSearchSchema) JSONSchema {
+	return goalJSONSchemaFor(relations, selectors, relations)
+}
+
+// goalJSONSchemaFor enumerates every OAM asset type but only the labels and
+// relation types of promptRelations, the relationships the planner was
+// shown. With none, the relationships list must be empty.
+func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSchema, promptRelations []RelationshipSchema) JSONSchema {
 	types, labels, relTypes := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, s := range selectors {
 		types[s.Type] = true
 	}
 	for _, r := range relations {
 		types[r.SourceType], types[r.DestinationType] = true, true
+	}
+	for _, r := range promptRelations {
 		labels[r.Label], relTypes[r.RelationType] = true, true
 	}
 	str := func() map[string]any { return map[string]any{"type": "string"} }
@@ -59,11 +68,18 @@ func goalJSONSchema(relations []RelationshipSchema, selectors []AssetSearchSchem
 				"target_types":  map[string]any{"type": "array", "items": assetType},
 				"direction":     map[string]any{"type": "string", "enum": []string{"both", "in", "out"}},
 				"purpose":       map[string]any{"type": "string", "enum": []string{"connected", "ultimate_parent"}},
-				"relationships": map[string]any{"type": "array", "items": relation},
+				"relationships": relationshipsSchema(relation, len(labels) > 0),
 				"path_rule":     map[string]any{"type": "string", "enum": []string{"", "any", "all", "ordered"}},
 			},
 			"required":             []string{"subject", "target_types", "direction", "purpose", "relationships", "path_rule"},
 			"additionalProperties": false,
 		},
 	}
+}
+
+func relationshipsSchema(item map[string]any, allowed bool) map[string]any {
+	if !allowed {
+		return map[string]any{"type": "array", "maxItems": 0}
+	}
+	return map[string]any{"type": "array", "items": item}
 }
