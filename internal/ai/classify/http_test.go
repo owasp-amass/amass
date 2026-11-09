@@ -18,7 +18,7 @@ func TestHTTPClassifierUntrainedFallbackIndependentOfProvider(t *testing.T){
  _=response.Body.Close()
  if response.StatusCode!=200||ready["trained"]!=false||ready["mode"]!="evidence_triage"{t.Fatalf("fallback status: %+v",ready)}
  client:=HTTPClient{Endpoint:server.URL}
- p,err:=client.Classify(context.Background(),Input{Task:"organization_relation",Features:map[string]float64{"distinct_sources":.5}})
+ p,err:=client.Classify(context.Background(),Input{Task:"organization_relation",Features:map[string]float64{"distinct_sources":.5,"evidence_count":.25,"source_property_fraction":.5,"unattributed_fraction":0}})
  if err!=nil{t.Fatal(err)}
  if p.Decision!="escalate"||p.ScoreKind!="rules_no_probability"||p.Score!=0{t.Fatalf("untrained fallback asserted confidence: %+v",p)}
 }
