@@ -15,24 +15,7 @@ import (
 // "Associated" in this narrow mode means descending stored OAM "node"
 // edges, not DNS-record association, organization attribution or validation.
 // Ambiguous questions still fall through to the model planner.
-var fqdnInventoryQuestion=regexp.MustCompile(`(?i)^\s*(?:(?:which|what|list|show)(?:\s+(?:all|the))?\s+(?:fqdn|fqdns|fully qualified domain name|fully qualified domain names|hostname|hostnames|dns names?|subdomain|subdomains|subdomain names?)(?:\s+assets)?(?:\s+(?:are|were))?(?:\s+(?:associated|connected|related)\s+with|\s+(?:under|beneath|within|for|of))|(?:list|show)\s+(?:all\s+)?(?:subdomains|subdomain names|hostnames)\s+(?:of|under|for))\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?:\s*\?)?\s*// SPDX-License-Identifier: Apache-2.0
-package ai
-
-import (
- "context"
- "errors"
- "fmt"
- "regexp"
- "sort"
- "strings"
- "time"
-)
-
-// Only unambiguous FQDN inventory questions qualify for this fast path.
-// "Associated" in this narrow mode means descending stored OAM "node"
-// edges, not DNS-record association, organization attribution or validation.
-// Ambiguous questions still fall through to the model planner.
-)
+var fqdnInventoryQuestion=regexp.MustCompile(`(?i)^\s*(?:(?:which|what|list|show)(?:\s+(?:all|the))?\s+(?:fqdn|fqdns|fully qualified domain name|fully qualified domain names|hostname|hostnames|dns names?|subdomain|subdomains|subdomain names?)(?:\s+assets)?(?:\s+(?:are|were))?(?:\s+(?:associated|connected|related)\s+with|\s+(?:under|beneath|within|for|of))|(?:list|show)\s+(?:all\s+)?(?:subdomains|subdomain names|hostnames)\s+(?:of|under|for))\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?:\s*\?)?\s*$`)
 
 func deterministicFQDNInventoryGoal(question string,catalog SchemaCatalog)(InvestigationGoal,bool){
  var zero InvestigationGoal
