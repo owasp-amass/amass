@@ -38,7 +38,7 @@ jobs:
       - name: FQDN inventory and subdomain summary regressions
         run: go test ./internal/subs ./internal/ai -run "TestAddInfrastructureInfoPreservesDiscoveredNamesWithoutASNs|TestFQDNInventory" -count=1
       - name: Schema-grounded typed intent and language-alias regressions
-        run: go test ./internal/ai -run "TestTypedRelationIntent|TestOAMIntent|TestSubdomainIntent" -count=1
+        run: go test ./internal/ai -run "TestTypedRelationIntent|TestOAMIntent|TestSubdomainIntent|TestRelationAlias|TestRelationshipAndFieldVocabulary" -count=1
       - name: Build all Amass executables
         # Amass uses libpostal behind CGO; production Docker builds disable CGO.
         # Race-enabled AI tests above intentionally continue to use CGO.
