@@ -72,6 +72,7 @@ func TrainLinearModel(rows []LabeledExample,modelID string)(*LinearModel,Trainin
  training:=make([]LabeledExample,0)
  holdout:=make([]LabeledExample,0)
  counts:=map[string]int{}
+ holdoutCounts:=map[string]int{}
  groups:=map[string]string{}
  for _,r:=range rows{
   if prior,ok:=groups[r.GroupID];ok&&prior!=r.Label{
@@ -79,10 +80,11 @@ func TrainLinearModel(rows []LabeledExample,modelID string)(*LinearModel,Trainin
   }
   groups[r.GroupID]=r.Label
   sum:=sha256.Sum256([]byte(r.GroupID))
-  if int(sum[0])%5==0{holdout=append(holdout,r)}else{training=append(training,r);counts[r.Label]++}
+  if int(sum[0])%5==0{holdout=append(holdout,r);holdoutCounts[r.Label]++}else{training=append(training,r);counts[r.Label]++}
  }
- if len(groups)<20||len(holdout)<8||counts["unrelated"]<10||counts["potential_relation"]<10{
-  return nil,metrics,errors.New("need at least 20 independent groups, >=8 group-held-out examples, and 10 training examples of each class")
+ if len(groups)<20||len(holdout)<8||counts["unrelated"]<10||counts["potential_relation"]<10||
+  holdoutCounts["unrelated"]<2||holdoutCounts["potential_relation"]<2{
+  return nil,metrics,errors.New("need 20 independent groups, 8 holdout examples, 10 training examples and 2 holdout examples of each class")
  }
  sort.Slice(training,func(i,j int)bool{
   if training[i].GroupID==training[j].GroupID{return training[i].Label<training[j].Label}
