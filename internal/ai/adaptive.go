@@ -180,13 +180,11 @@ SELECTOR CATALOG:
 			"retain each named label. The application will verify and resolve any ambiguity against OAM schema.\n"
 	}
 	history := []Message{{Role: "system", Text: prompt}, {Role: "user", Text: question}}
+	schema := goalJSONSchema(relations, selectors)
 	for attempt := 0; attempt < 3; attempt++ {
-		response, err := a.Model.Generate(ctx, history, nil)
+		response, err := generateJSON(ctx, a.Model, history, schema)
 		if err != nil {
 			return zero, err
-		}
-		if len(response.Calls) != 0 {
-			return zero, errors.New("goal planner requested a tool call")
 		}
 		goal, err := parseGoal(response.Text, selectors)
 		if err == nil && explicit {
@@ -426,8 +424,13 @@ func adaptiveDiagram(paths []PlanMatch) string {
 // AskAdaptive is read-only. It compiles the question into a Query (using a
 // deterministic compiler when the wording is narrow and explicit, otherwise
 // the model goal planner) and executes it with AskQuery.
-func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOptions) (Investigation, error) {
-	var out Investigation
+func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOptions) (out Investigation, err error) {
+	a, meter := a.metered()
+	defer func() {
+		if meter != nil {
+			out.Usage = meter.snapshot()
+		}
+	}()
 	if a.Model == nil || a.Runner.Graph == nil || a.Runner.Catalog == nil {
 		return out, errors.New("model, graph, and OAM catalog required")
 	}
@@ -438,7 +441,8 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 		return out, err
 	}
 	planStarted := time.Now()
-	q, err := a.CompileQuestion(ctx, question)
+	var q Query
+	q, err = a.CompileQuestion(ctx, question)
 	if err != nil {
 		out.Incomplete = true
 		out.recordTrace(planStarted, InvestigationTraceEvent{Stage: "goal_planning", Incomplete: true, Detail: err.Error()})
@@ -455,8 +459,13 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 // AskQuery validates and executes a structured Query, such as one supplied
 // by a CLI or MCP caller. Route and hierarchy queries need no model; explore
 // queries use the model to guide search and choose among witnessed paths.
-func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (Investigation, error) {
-	var out Investigation
+func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (out Investigation, err error) {
+	a, meter := a.metered()
+	defer func() {
+		if meter != nil {
+			out.Usage = meter.snapshot()
+		}
+	}()
 	if a.Runner.Graph == nil || a.Runner.Catalog == nil {
 		return out, errors.New("graph and OAM catalog required")
 	}

@@ -20,10 +20,32 @@ import (
 // maxQueryFileBytes bounds a -query file; real queries are a few KB.
 const maxQueryFileBytes = 1 << 20
 
+// providerSettings configures one model client.
+type providerSettings struct {
+	Provider, Endpoint, Model, APIKey string
+	AllowHTTP                         bool
+	Timeout                           time.Duration
+	MaxTokens, ContextTokens          int
+	Temperature                       *float64
+	Think                             bool
+}
+
 // newProvider builds the configured model client and checks its endpoint.
-func newProvider(providerName, endpoint, modelName, apiKey string, allowHTTP bool, timeout time.Duration, maxTokens int, temperature *float64) (ai.Model, error) {
+func newProvider(s providerSettings) (ai.Model, error) {
+	providerName, endpoint, modelName, apiKey := s.Provider, s.Endpoint, s.Model, s.APIKey
+	timeout, maxTokens, temperature, allowHTTP := s.Timeout, s.MaxTokens, s.Temperature, s.AllowHTTP
 	var provider ai.Model
 	switch providerName {
+	case "ollama":
+		if endpoint == "" {
+			endpoint = "http://127.0.0.1:11434"
+		}
+		if _, err := ai.OllamaChatURL(endpoint); err != nil {
+			return nil, err
+		}
+		m := ai.NewOllamaModel(endpoint, modelName, &http.Client{Timeout: timeout})
+		m.Think, m.ContextTokens, m.MaxTokens, m.Temperature = s.Think, s.ContextTokens, maxTokens, temperature
+		provider = m
 	case "compatible":
 		if endpoint == "" {
 			endpoint = "http://127.0.0.1:11434/v1/chat/completions"
@@ -99,5 +121,21 @@ func writeInvestigation(out io.Writer, format string, result ai.Investigation) e
 		return writeJSON(out, result)
 	default:
 		return errors.New("-format must be json, text, or mermaid")
+	}
+}
+
+// writeTrace prints one line per investigation stage and the model usage,
+// so slow model calls are visible without reading the JSON.
+func writeTrace(w io.Writer, result ai.Investigation) {
+	for _, ev := range result.Trace {
+		status := ""
+		if ev.Incomplete {
+			status = " (incomplete)"
+		}
+		_, _ = fmt.Fprintf(w, "trace: %-20s %8.1fs%s %s\n", ev.Stage, float64(ev.DurationMS)/1000, status, ev.Detail)
+	}
+	if u := result.Usage; u != nil {
+		_, _ = fmt.Fprintf(w, "trace: model calls=%d input_tokens=%d output_tokens=%d model_time=%.1fs\n",
+			u.Calls, u.InputTokens, u.OutputTokens, float64(u.ModelMS)/1000)
 	}
 }

@@ -43,14 +43,15 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds int
 	var modelTimeout, investigationTimeout time.Duration
-	var maxTokens int
+	var maxTokens, contextTokens int
 	var temperatureFlag string
+	var think, showTrace bool
 	var classifierReview, allowHTTP bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&endpoint, "endpoint", "", "Provider endpoint (defaults depend on provider)")
 	fs.BoolVar(&allowHTTP, "allow-http", false, "Explicitly allow plaintext HTTP inference for a trusted internal endpoint")
-	fs.StringVar(&providerName, "provider", "compatible", "Model provider: compatible or anthropic")
+	fs.StringVar(&providerName, "provider", "compatible", "Model provider: ollama (native API), compatible (OpenAI-style) or anthropic")
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
@@ -78,6 +79,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
 	fs.IntVar(&maxTokens, "max-tokens", 0, "Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
 	fs.StringVar(&temperatureFlag, "temperature", "", "Model temperature 0..2 (empty = provider default; 0 is most reproducible)")
+	fs.IntVar(&contextTokens, "context-tokens", 0, "Ollama context window in tokens (0 = 8192)")
+	fs.BoolVar(&think, "think", false, "Let an Ollama reasoning model think before answering (slower; off by default)")
+	fs.BoolVar(&showTrace, "trace", false, "Print stage timings and model usage to stderr after ask")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute, "Maximum time per model request (e.g., 4m for local Ollama)")
 	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute, "Maximum total time for a single investigation")
 	if err := fs.Parse(args); err != nil {
@@ -142,6 +146,15 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	if !explicitFlags["temperature"] && effective.Temperature != "" {
 		temperatureFlag = effective.Temperature
 	}
+	if !explicitFlags["context-tokens"] && effective.ContextTokens != 0 {
+		contextTokens = effective.ContextTokens
+	}
+	if !explicitFlags["think"] {
+		think = effective.Think
+	}
+	if contextTokens != 0 && (contextTokens < 2048 || contextTokens > 262144) {
+		return errors.New("context tokens must be 0 or 2048..262144")
+	}
 	if maxTokens < 0 || maxTokens > 128000 {
 		return errors.New("max tokens must be 0..128000")
 	}
@@ -194,7 +207,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var provider ai.Model
 	if usesModel && modelName != "" {
 		var err error
-		provider, err = newProvider(providerName, endpoint, modelName, os.Getenv(keyEnv), allowHTTP, modelTimeout, maxTokens, temperature)
+		provider, err = newProvider(providerSettings{Provider: providerName, Endpoint: endpoint, Model: modelName,
+			APIKey: os.Getenv(keyEnv), AllowHTTP: allowHTTP, Timeout: modelTimeout, MaxTokens: maxTokens,
+			ContextTokens: contextTokens, Temperature: temperature, Think: think})
 		if err != nil {
 			return err
 		}
@@ -290,6 +305,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 			return err
 		}
 		result, err := (ai.Agent{Model: provider, Runner: runner}).AskQuery(ctx, q, ai.AdaptiveOptions{MaxDepth: graphDepth, MaxMatches: graphMatches, MaxPathsPerAsset: graphAlternates, MaxExpansions: graphExpansions, GuidanceRounds: guidanceRounds})
+		if showTrace {
+			writeTrace(errout, result)
+		}
 		if err != nil {
 			return err
 		}
@@ -306,6 +324,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 			return errors.New("-question required")
 		}
 		result, err := (ai.Agent{Model: provider, Runner: runner}).AskAdaptive(ctx, question, ai.AdaptiveOptions{MaxDepth: graphDepth, MaxMatches: graphMatches, MaxPathsPerAsset: graphAlternates, MaxExpansions: graphExpansions, GuidanceRounds: guidanceRounds})
+		if showTrace {
+			writeTrace(errout, result)
+		}
 		if err != nil {
 			return err
 		}

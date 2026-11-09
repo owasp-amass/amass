@@ -96,3 +96,16 @@ func TestResolveAISettingsTokensAndTemperature(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveAISettingsOllamaOptions(t *testing.T) {
+	env := map[string]string{"AMASS_AI_CONTEXT_TOKENS": "16384", "AMASS_AI_THINK": "true"}
+	got, err := ResolveAISettings(AISettings{}, func(k string) (string, bool) { v, ok := env[k]; return v, ok })
+	if err != nil || got.ContextTokens != 16384 || !got.Think {
+		t.Fatalf("got %+v err=%v", got, err)
+	}
+	for _, bad := range []AISettings{{ContextTokens: 512}, {ContextTokens: 1 << 20}} {
+		if _, err := ResolveAISettings(bad, func(string) (string, bool) { return "", false }); err == nil {
+			t.Errorf("expected rejection of %+v", bad)
+		}
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -64,6 +65,20 @@ func run() error {
 	client := &http.Client{Timeout: timeout}
 	var model ai.Model
 	switch provider {
+	case "ollama":
+		if _, err := ai.OllamaChatURL(endpoint); err != nil {
+			return err
+		}
+		m := ai.NewOllamaModel(endpoint, modelName, client)
+		m.Think = os.Getenv("AMASS_AI_THINK") == "true"
+		if raw := os.Getenv("AMASS_AI_CONTEXT_TOKENS"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 2048 || n > 262144 {
+				return errors.New("AMASS_AI_CONTEXT_TOKENS must be 2048..262144")
+			}
+			m.ContextTokens = n
+		}
+		model = m
 	case "compatible":
 		model = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
 	case "anthropic":
