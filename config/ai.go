@@ -20,6 +20,7 @@ type AISettings struct {
  ModelTimeout string `yaml:"model_timeout,omitempty" json:"model_timeout,omitempty"`
  InvestigationTimeout string `yaml:"investigation_timeout,omitempty" json:"investigation_timeout,omitempty"`
  ClassifierModel string `yaml:"classifier_model,omitempty" json:"classifier_model,omitempty"`
+ ClassifierEndpoint string `yaml:"classifier_endpoint,omitempty" json:"classifier_endpoint,omitempty"`
  ClassifierReview bool `yaml:"classifier_review,omitempty" json:"classifier_review,omitempty"`
  MaxDepth int `yaml:"depth,omitempty" json:"depth,omitempty"`
  MaxMatches int `yaml:"max_matches,omitempty" json:"max_matches,omitempty"`
@@ -40,6 +41,7 @@ func ResolveAISettings(base AISettings, lookup func(string)(string,bool))(AISett
   {"AMASS_AI_MODEL_TIMEOUT",&c.ModelTimeout},
   {"AMASS_AI_INVESTIGATION_TIMEOUT",&c.InvestigationTimeout},
   {"AMASS_AI_CLASSIFIER_MODEL",&c.ClassifierModel},
+  {"AMASS_AI_CLASSIFIER_ENDPOINT",&c.ClassifierEndpoint},
  }
  for _,pair:=range stringsEnv{
   if value,ok:=lookup(pair.key);ok{*pair.target=value}
