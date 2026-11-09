@@ -110,6 +110,11 @@ func relationLabelAliases(label string)[]string{
   words:=strings.Fields(normalizeSchemaAlias(raw))
   if len(words)==0{continue}
   last:=words[len(words)-1]
+  // A trailing preposition is not a noun to pluralize.
+  switch last{
+  case "to","of","by","for","with","in","on","under","over","from","at":
+   continue
+  }
   // Only a transparent English plural inflection is generated. Do not
   // stem or fuzzy-match unfamiliar words into unrelated OAM labels.
   switch {
