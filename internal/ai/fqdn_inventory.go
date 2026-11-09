@@ -144,8 +144,16 @@ func searchFQDNInventory(ctx context.Context,graph Graph,limits Limits,root Asse
  return out,nil
 }
 
+// The apex is an FQDN asset, but is not itself a subdomain of the apex.
+// Keep the older generic FQDN-inventory contract and specialize only when
+// the question explicitly requests subdomains.
 func fqdnInventoryAnswer(root Asset,paths []PlanMatch,truncated bool,reason string)string{
- names:=[]string{root.Key}
+ return fqdnInventoryAnswerScoped(root,paths,truncated,reason,false)
+}
+
+func fqdnInventoryAnswerScoped(root Asset,paths []PlanMatch,truncated bool,reason string,subdomainsOnly bool)string{
+ names:=make([]string,0,len(paths)+1)
+ if !subdomainsOnly{names=append(names,root.Key)}
  seen:=map[string]bool{root.ID:true}
  for _,path:=range paths{
   if len(path.Nodes)==0{continue}
@@ -155,8 +163,16 @@ func fqdnInventoryAnswer(root Asset,paths []PlanMatch,truncated bool,reason stri
   names=append(names,last.Key)
  }
  sort.Strings(names)
- answer:=fmt.Sprintf("Found %d FQDN asset(s) in the stored OAM node hierarchy for %s:\n%s",len(names),root.Key,strings.Join(names,"\n"))
+ description:="FQDN asset(s)"
+ if subdomainsOnly{description="subdomain FQDN asset(s)"}
+ answer:=fmt.Sprintf("Found %d %s in the stored OAM node hierarchy for %s:\n%s",len(names),description,root.Key,strings.Join(names,"\n"))
  answer+="\nThese are stored FQDN asset associations, not proof of current DNS resolution or ownership."
  if truncated{answer+=" Results are partial (search truncated: "+reason+"); additional names may exist."}
  return answer
+}
+
+var subdomainInventoryLanguage=regexp.MustCompile(`(?i)\bsubdomains?\b`)
+
+func isSubdomainInventoryQuestion(question string)bool{
+ return subdomainInventoryLanguage.MatchString(question)
 }
