@@ -49,11 +49,7 @@ type adaptiveCandidate struct {
 func parseGoal(raw string, selectors []AssetSearchSchema) (InvestigationGoal, error) {
 	var goal InvestigationGoal
 	value := strings.TrimSpace(raw)
-	if strings.HasPrefix(value, "```") {
-		value = strings.TrimPrefix(value, "```json")
-		value = strings.TrimPrefix(value, "```")
-		value = strings.TrimSuffix(strings.TrimSpace(value), "```")
-	}
+	value = ModelJSON(value)
 	data, err := canonicalizeSelectorFields([]byte(strings.TrimSpace(value)), selectors)
 	if err != nil {
 		return goal, err
@@ -341,11 +337,7 @@ Paths can have different lengths and different paths can reach the SAME asset. E
 			return nil, errors.New("evidence evaluator requested a tool call")
 		}
 		raw := strings.TrimSpace(response.Text)
-		if strings.HasPrefix(raw, "```") {
-			raw = strings.TrimPrefix(raw, "```json")
-			raw = strings.TrimPrefix(raw, "```")
-			raw = strings.TrimSuffix(strings.TrimSpace(raw), "```")
-		}
+		raw = ModelJSON(raw)
 		var selection adaptiveSelection
 		err = decodeStrict([]byte(strings.TrimSpace(raw)), &selection)
 		ids := selection.SelectedPathIDs
