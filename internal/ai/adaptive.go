@@ -315,9 +315,15 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  if strings.TrimSpace(question)==""{return out,errors.New("question required")}
  if err:=a.Runner.Limits.Validate();err!=nil{return out,err}
  planStarted:=time.Now()
- goal,err:=a.planGoal(ctx,question)
+ // Narrow, taxonomy-validated explicit questions do not need to pay for
+ // an LLM schema transcription. Ambiguous questions still use planGoal.
+ goal,grounded:=deterministicExplicitOrganizationGoal(question,a.Runner.Catalog)
+ var err error
+ if !grounded{goal,err=a.planGoal(ctx,question)}
  if err!=nil{out.Incomplete=true;out.recordTrace(planStarted,InvestigationTraceEvent{Stage:"goal_planning",Incomplete:true,Detail:err.Error()});return out,err}
- out.recordTrace(planStarted,InvestigationTraceEvent{Stage:"goal_planning"})
+ planningMode:="model_interpretation"
+ if grounded{planningMode="deterministic_schema_grounding"}
+ out.recordTrace(planStarted,InvestigationTraceEvent{Stage:"goal_planning",Detail:planningMode})
  out.Goal=&goal
  resolveStarted:=time.Now()
  var root Asset
