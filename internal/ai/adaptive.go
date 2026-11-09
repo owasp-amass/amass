@@ -318,7 +318,12 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  // Narrow, taxonomy-validated explicit questions do not need to pay for
  // an LLM schema transcription. Ambiguous questions still use planGoal.
  goal,fqdnInventory:=deterministicFQDNInventoryGoal(question,a.Runner.Catalog)
+ typedIntent,typedRelation:=TypedRelationIntent{},false
  grounded:=fqdnInventory
+ if !grounded {
+  typedIntent,typedRelation=deterministicTypedRelationIntent(question,a.Runner.Catalog)
+  if typedRelation{goal=typedIntent.Goal;grounded=true}
+ }
  if !grounded {goal,grounded=deterministicExplicitOrganizationGoal(question,a.Runner.Catalog)}
  var err error
  if !grounded{goal,err=a.planGoal(ctx,question)}
@@ -367,6 +372,8 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  var search GraphSearchResult
  if fqdnInventory {
   search,err=searchFQDNInventory(ctx,a.Runner.Graph,a.Runner.Limits,root,opts)
+ }else if typedRelation{
+  search,err=searchTypedRelationIntent(ctx,a.Runner.Graph,a.Runner.Limits,root,typedIntent,opts)
  }else{
   search,err=a.guidedInvestigation(ctx,question,goal,root,opts,&out)
  }
@@ -401,9 +408,9 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  var selected []PlanMatch
  var groups []AnswerGroup
  var deterministic bool
- if fqdnInventory {
-  // Every validated node descendant directly answers this inventory
-  // question. Do not ask an LLM to arbitrarily pick five FQDNs.
+ if fqdnInventory||typedRelation {
+  // Every exactly witnessed typed inventory destination directly answers
+  // the explicitly scoped question. Do not ask the LLM to discard results.
   deterministic=true
   selected=append([]PlanMatch(nil),candidates...)
   groups=make([]AnswerGroup,0,len(selected))
@@ -431,9 +438,13 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
   ev,ok:=assessed[id]
   if !ok||ev.Status!="multiple_source_tags_on_each_edge"{out.EvidenceIncomplete=true}
  }
- out.Incomplete=search.Truncated || (!fqdnInventory&&len(selected)==0)
- if fqdnInventory {
-  out.Answer=fqdnInventoryAnswer(root,selected,search.Truncated,search.Reason)
+ out.Incomplete=search.Truncated || (!(fqdnInventory||typedRelation)&&len(selected)==0)
+ if fqdnInventory||typedRelation {
+  if fqdnInventory{
+   out.Answer=fqdnInventoryAnswer(root,selected,search.Truncated,search.Reason)
+  }else{
+   out.Answer=typedRelationAnswer(root,typedIntent,selected,search.Truncated,search.Reason)
+  }
   out.Diagram=adaptiveDiagram(selected)
   return out,nil
  }
