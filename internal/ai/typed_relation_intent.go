@@ -188,14 +188,23 @@ func searchTypedRelationIntent(ctx context.Context,graph Graph,limits Limits,roo
  seenEdges:=map[string]bool{}
  seenMatches:=map[string]bool{}
  for index,hop:=range intent.Hops{
+  previousType:=root.Type
+  if index>0{previousType=intent.Hops[index-1].DestinationType}
+  diagnostic:=GraphHopDiagnostic{
+   Hop:index+1,SourceType:previousType,TargetType:hop.DestinationType,
+   Direction:hop.Direction,Label:hop.Label,RelationType:hop.RelationType,
+   InputPaths:len(paths),
+  }
   nextPaths:=make([]PlanMatch,0)
   for _,path:=range paths{
    if err:=ctx.Err();err!=nil{return out,err}
    if out.ExpandedPaths>=maxExpansions{out.Truncated=true;out.Reason="path expansion limit";break}
    out.ExpandedPaths++
+   diagnostic.QueriedPaths++
    last:=path.Nodes[len(path.Nodes)-1]
    edges,more,err:=bounded.EdgesLimited(ctx,last.ID,hop.Direction,hop.Label,time.Time{},limits.MaxPerNode)
    if err!=nil{return out,err}
+   diagnostic.ReturnedEdges+=len(edges)
    if len(edges)>limits.MaxPerNode{return out,errors.New("bounded graph exceeded per-node edge policy")}
    if more{out.Truncated=true;if out.Reason==""{out.Reason="per-node edge limit"}}
    sort.Slice(edges,func(i,j int)bool{return edges[i].ID<edges[j].ID})
@@ -218,6 +227,7 @@ func searchTypedRelationIntent(ctx context.Context,graph Graph,limits Limits,roo
     if err!=nil{return out,err}
     if asset.Type!=hop.DestinationType{out.SchemaRejected++;continue}
     seenNodes[dest]=true
+    diagnostic.AcceptedEdges++
     witness:=PlanMatch{
      Nodes:append(append([]Asset(nil),path.Nodes...),asset),
      Edges:append(append([]Relation(nil),path.Edges...),edge),
@@ -240,7 +250,17 @@ func searchTypedRelationIntent(ctx context.Context,graph Graph,limits Limits,roo
    }
    if out.Reason=="match limit"||out.Reason=="edge limit"||out.Reason=="node limit"||out.Reason=="intermediate path limit"{break}
   }
+  diagnostic.Truncated=out.Truncated
+  if index==len(intent.Hops)-1{
+   diagnostic.OutputPaths=len(out.Matches)
+  }else{
+   diagnostic.OutputPaths=len(nextPaths)
+  }
+  out.HopDiagnostics=append(out.HopDiagnostics,diagnostic)
   if out.Reason=="match limit"||out.Reason=="edge limit"||out.Reason=="node limit"||out.Reason=="intermediate path limit"||out.Reason=="path expansion limit"{break}
+  // Do not issue empty subsequent hops. Preserve the first failing hop
+  // and keep the query complete when no limit or repository error occurred.
+  if len(nextPaths)==0&&index<len(intent.Hops)-1{break}
   paths=nextPaths
  }
  out.VisitedNodes=len(seenNodes)
