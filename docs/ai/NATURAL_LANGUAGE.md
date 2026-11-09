@@ -185,6 +185,18 @@ trace: model calls=2 input_tokens=7410 output_tokens=388 model_time=34.9s
 
 The JSON output carries the same totals in `model_usage`.
 
+### Catalog slicing
+
+The full planner prompt for the OAM catalog is about 17,000 characters.
+The planner now shows only what the question mentions: relationships whose
+labels it names, aliases for the asset types it names or implies (a URL,
+IP address, CIDR, ASN or hostname implies its type), and their selectors.
+For typical questions this is about a third of the full prompt, which
+matters on CPU-only hosts where reading the prompt dominates latency. The
+reply schema allows only the relationship labels that were shown. If the
+first two attempts fail validation, the last attempt shows the full
+catalog. Validation always uses the full catalog.
+
 ## Relationship direction in answers
 
 Answer paths render arrows using the stored edge endpoints, not the query
