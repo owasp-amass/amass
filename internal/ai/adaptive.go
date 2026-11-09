@@ -427,7 +427,11 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
  if err!=nil{out.Incomplete=true;out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),Incomplete:true,Detail:err.Error()});return out,err}
  selectionDetail:="model_evaluation"
  if deterministic{selectionDetail="deterministic_destination_grouping"}
- out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),OutputPaths:len(selected),Incomplete:len(selected)==0,Detail:selectionDetail})
+ selectionIncomplete:=len(selected)==0
+ // No matches is a complete *typed inventory* result when all applicable
+ // hops were evaluated within bounds. It is not a failed path selection.
+ if fqdnInventory||typedRelation{selectionIncomplete=search.Truncated}
+ out.recordTrace(selectionStarted,InvestigationTraceEvent{Stage:"path_selection",InputPaths:len(candidates),OutputPaths:len(selected),Incomplete:selectionIncomplete,Detail:selectionDetail})
  out.Matches=selected
  out.EvidenceIncomplete=dossier.Truncated
  assessed:=map[string]PathEvidence{}
@@ -444,6 +448,9 @@ func(a Agent) AskAdaptive(ctx context.Context,question string,opts AdaptiveOptio
    out.Answer=fqdnInventoryAnswer(root,selected,search.Truncated,search.Reason)
   }else{
    out.Answer=typedRelationAnswer(root,typedIntent,selected,search.Truncated,search.Reason)
+   if len(selected)==0{
+    out.Answer+=typedRelationEmptyExplanation(search,typedIntent)
+   }
   }
   out.Diagram=adaptiveDiagram(selected)
   return out,nil
