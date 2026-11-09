@@ -97,3 +97,20 @@ func TestRegisteredRelationLabelsGeneratePluralNouns(t *testing.T){
   }
  }
 }
+
+func TestEveryIndexedFieldHasDynamicNaturalSpelling(t *testing.T){
+ selectors:=[]AssetSearchSchema{{Type:"Location",Fields:[]string{
+  "building_number","street_name","province","custom_filter_key",
+ }}}
+ vocabulary:=compactSearchVocabulary(selectors)
+ for _,line:=range []string{
+  "building_number: building number",
+  "street_name: street name",
+  "province: province",
+  "custom_filter_key: custom filter key",
+ }{
+  if !strings.Contains(vocabulary,line){
+   t.Errorf("field vocabulary missing %q in %q",line,vocabulary)
+  }
+ }
+}
