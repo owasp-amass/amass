@@ -36,7 +36,7 @@ const DefaultAnthropicMaxTokens = 4096
 func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs []ToolSpec) (Response, error) {
 	var out Response
 	if m.ModelName == "" || m.APIKey == "" {
-		return out, errors.New("Anthropic model and API key required")
+		return out, errors.New("the Anthropic provider requires a model and API key")
 	}
 	endpoint := m.Endpoint
 	if endpoint == "" {
@@ -74,7 +74,7 @@ func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs [
 		maxTokens = DefaultAnthropicMaxTokens
 	}
 	if maxTokens < 1 {
-		return out, errors.New("Anthropic max tokens must be positive")
+		return out, errors.New("max tokens for the Anthropic provider must be positive")
 	}
 	payload := map[string]any{"model": m.ModelName, "max_tokens": maxTokens, "messages": messages}
 	if system = strings.TrimSpace(system); system != "" {
@@ -119,7 +119,7 @@ func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs [
 		return out, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return out, fmt.Errorf("Anthropic HTTP status %d", resp.StatusCode)
+		return out, fmt.Errorf("anthropic: HTTP status %d", resp.StatusCode)
 	}
 	var decoded struct {
 		Content []struct {
@@ -154,7 +154,7 @@ func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs [
 	out.InputTokens = decoded.Usage.Input
 	out.OutputTokens = decoded.Usage.Output
 	if out.Text == "" && len(out.Calls) == 0 {
-		return out, errors.New("Anthropic returned no content")
+		return out, errors.New("anthropic: model returned no content")
 	}
 	return out, nil
 }

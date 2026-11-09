@@ -21,7 +21,7 @@ type TypedRelationIntent struct {
 	Hops []PlanHop
 }
 
-var typedRelationQuestion = regexp.MustCompile("(?i)^\\s*(?:which|what|list|show)(?:\\s+(?:all|the))?\\s+(.+?)\\s+(?:are\\s+)?(?:associated|connected|related|linked)\\s+(?:with|to)\\s+(.+?)\\s+(?:through|via|using)\\s+(.+?)\\s+(?:relationships|relations|edges)\\s*\\??\\s*$")
+var typedRelationQuestion = regexp.MustCompile(`(?i)^\s*(?:which|what|list|show)(?:\s+(?:all|the))?\s+(.+?)\s+(?:are\s+)?(?:associated|connected|related|linked)\s+(?:with|to)\s+(.+?)\s+(?:through|via|using)\s+(.+?)\s+(?:relationships|relations|edges)\s*\??\s*$`)
 var typedSubject = regexp.MustCompile("^([A-Za-z][A-Za-z0-9]*):([a-zA-Z][a-zA-Z0-9_]+)=(.+)$")
 var camelBoundary1 = regexp.MustCompile("([a-z0-9])([A-Z])")
 var camelBoundary2 = regexp.MustCompile("([A-Z])([A-Z][a-z])")
@@ -107,13 +107,6 @@ func intentSubject(raw string, selectors []AssetSearchSchema) (PlanSubject, bool
 		return subject, true
 	}
 	return PlanSubject{}, false
-}
-
-// compileCatalogHops finds exactly one directed traversal route for the
-// explicit labels and source/target types. Unordered labels may be permuted,
-// but no intermediate relation is inferred, and competing paths fail closed.
-func compileCatalogHops(root, target string, hint explicitRelationHint, relations []RelationshipSchema) ([]PlanHop, bool) {
-	return compileCatalogHopsDirected(root, target, hint, relations, "")
 }
 
 // Only an explicitly requested hierarchy is allowed to constrain edge
@@ -251,7 +244,7 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 			}
 			if (h.Direction == "out" && r.SourceType == current && r.DestinationType == h.DestinationType) ||
 				(h.Direction == "in" && r.DestinationType == current && r.SourceType == h.DestinationType) {
-				required = append(required, GoalRelation{SourceType: r.SourceType, Label: r.Label, RelationType: r.RelationType, DestinationType: r.DestinationType})
+				required = append(required, GoalRelation(r))
 				break
 			}
 		}

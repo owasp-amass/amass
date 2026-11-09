@@ -51,7 +51,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	if err := tmp.Chmod(0600); err != nil {
 		_ = tmp.Close()
 		return err

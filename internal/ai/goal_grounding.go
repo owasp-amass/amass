@@ -2,7 +2,6 @@
 package ai
 
 import (
-	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -184,7 +183,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 				default:
 					continue
 				}
-				step := GoalRelation{SourceType: r.SourceType, Label: r.Label, RelationType: r.RelationType, DestinationType: r.DestinationType}
+				step := GoalRelation(r)
 				nextSteps := append(append([]GoalRelation(nil), st.steps...), step)
 				walk(pathState{kind: next, steps: nextSteps, seen: st.seen | (1 << uint(i))})
 			}
@@ -212,21 +211,4 @@ func applyExplicitRelationGrounding(goal InvestigationGoal, hint explicitRelatio
 	goal.Relationships = rels
 	goal.PathRule = hint.Rule
 	return goal, true
-}
-
-// compactGroundingHint presents a tiny verified schema route near the start
-// of the LLM prompt, rather than expecting a small local model to recover
-// exact transitions from a very long complete OAM catalog.
-func compactGroundingHint(hint explicitRelationHint, rels []GoalRelation) string {
-	if len(rels) == 0 {
-		return ""
-	}
-	var lines []string
-	for i, r := range rels {
-		lines = append(lines, fmt.Sprintf("%d. %s --%s (%s)--> %s", i+1, r.SourceType, r.Label, r.RelationType, r.DestinationType))
-	}
-	return "The user EXPLICITLY named OAM relationship labels: " + strings.Join(hint.Labels, ", ") +
-		". Use these labels as relationship constraints, NOT guessed WHOIS/registration edges. " +
-		"For this root and requested destination, the taxonomy supports these exact stored-direction transitions (the query may traverse them backwards):\n" +
-		strings.Join(lines, "\n") + "\nUse path_rule " + hint.Rule + ".\n"
 }

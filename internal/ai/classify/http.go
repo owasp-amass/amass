@@ -41,7 +41,7 @@ func (s HTTPService) Handler() http.Handler {
 			respondJSON(w, http.StatusUnsupportedMediaType, map[string]any{"error": "application/json required"})
 			return
 		}
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 		d.DisallowUnknownFields()
 		var input Input
@@ -112,7 +112,7 @@ func (c HTTPClient) Classify(ctx context.Context, in Input) (Prediction, error) 
 	if err != nil {
 		return output, fmt.Errorf("classifier request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return output, fmt.Errorf("classifier unavailable or refused features: HTTP %d", resp.StatusCode)
 	}

@@ -41,7 +41,7 @@ func run() error {
 	if repo == nil {
 		return errors.New("unable to open OAM database")
 	}
-	defer repo.Close()
+	defer func() { _ = repo.Close() }()
 	server := mcp.NewHTTPServer(ai.ToolRunner{Graph: oamrepo.Adapter{Repo: repo, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}, Catalog: oamrepo.Catalog{}, Limits: ai.DefaultLimits()}, token)
 	httpServer := &http.Server{Addr: *addr, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, MaxHeaderBytes: 16 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
