@@ -288,7 +288,9 @@ func (a Agent) planQuestion(ctx context.Context, question string) (TypedPlan, er
 		"Use legal_name only for explicitly stated legal names, unique_id only for explicitly stated OAM IDs, and registration_id only when both registration number and jurisdiction are given. " +
 		"Preserve the user-supplied organization string without inventing suffixes, aliases or jurisdictions. " +
 		"Do not invent labels or add confidence claims. If you cannot construct a valid plan, return empty hops. " +
-		"OAM RELATIONSHIP CATALOG (compact):\n"+compactRelations +
+		"Map companies and businesses to Organization, hostnames and subdomains to FQDN, IP addresses to IPAddress, and physical addresses to Location. Bare addresses can mean IPAddress or Location; do not guess. Subdomains imply the FQDN node hierarchy, not arbitrary edges. " +
+		"OAM ASSET LANGUAGE ALIASES (interpretation only):\n"+compactIntentVocabulary(selectors,catalog) +
+		"\nOAM RELATIONSHIP CATALOG (compact):\n"+compactRelations +
 		" OAM SELECTOR CATALOG (compact):\n"+compactSelectors
 	conversation := []Message{{Role:"system",Text:system},{Role:"user",Text:question}}
 	const maxPlanAttempts=3
