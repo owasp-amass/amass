@@ -24,14 +24,14 @@ func (s HTTPService) Handler() http.Handler {
  })
  mux.HandleFunc("GET /readyz",func(w http.ResponseWriter,_ *http.Request){
   if s.Model==nil {
-   respondJSON(w,200,map[string]any{"status":"ready","mode":"untrained_fallback","trained":false,"routing":"escalate","reason":"no trained model artifact loaded"})
+   respondJSON(w,200,map[string]any{"status":"ready","mode":"evidence_triage","trained":false,"routing":"review_or_escalate","reason":"deterministic OAM evidence triage; no trained classifier weights"})
    return
   }
   respondJSON(w,200,map[string]any{"status":"ready","mode":"trained_model_loaded","trained":true,"model_id":s.Model.ModelID,"task":s.Model.Task,"feature_version":s.Model.FeatureVersion})
  })
  mux.HandleFunc("GET /v1/model",func(w http.ResponseWriter,_ *http.Request){
   if s.Model==nil{
-   respondJSON(w,200,map[string]any{"status":"untrained","decision":"escalate","trained":false})
+   respondJSON(w,200,map[string]any{"status":"evidence_triage","decision":"review_or_escalate","trained":false,"score_kind":"rules_no_probability"})
    return
   }
   respondJSON(w,200,map[string]any{"status":"ready","trained":true,"model_id":s.Model.ModelID,"task":s.Model.Task,"feature_version":s.Model.FeatureVersion,"features":s.Model.Features(),"score_kind":"uncalibrated_softmax"})
@@ -48,7 +48,9 @@ func (s HTTPService) Handler() http.Handler {
   var trailing any
   if err:=d.Decode(&trailing);err!=io.EOF{respondJSON(w,400,map[string]any{"error":"unexpected trailing input"});return}
   if s.Model==nil{
-   respondJSON(w,200,Prediction{Label:"unknown",Score:0,ScoreKind:"not_scored",ModelID:"untrained_fallback",FeatureVersion:"oam-provenance-v1",Decision:"escalate"})
+   prediction,err:=EvidenceTriage(input)
+   if err!=nil{respondJSON(w,422,map[string]any{"error":err.Error()});return}
+   respondJSON(w,200,prediction)
    return
   }
   ctx,cancel:=context.WithTimeout(r.Context(),5*time.Second)
