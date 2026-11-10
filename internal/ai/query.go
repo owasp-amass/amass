@@ -69,8 +69,9 @@ type Query struct {
 	ExcludeRoot bool `json:"exclude_root,omitempty"`
 	// Lens, when set, answers a fixed question about the subject from the
 	// relationship attribution table instead of a traversal: third_party
-	// lists the outside vendors its controlled assets use. It is used with
-	// the explore traversal and needs no model.
+	// lists the outside vendors its controlled assets use, and controlled
+	// lists the assets (of TargetTypes, when set) attributed to it. Lenses
+	// use the explore traversal and need no model.
 	Lens string `json:"lens,omitempty"`
 	// Source names the compiler that produced the Query.
 	Source string `json:"source"`
@@ -103,8 +104,11 @@ func (q Query) Describe() string {
 	if len(q.TargetTypes) > 0 {
 		targets = strings.Join(q.TargetTypes, ", ")
 	}
-	if q.Lens == LensThirdParty {
+	switch q.Lens {
+	case LensThirdParty:
 		return fmt.Sprintf("List the third-party vendors used by the assets %s controls.", subject)
+	case LensControlled:
+		return fmt.Sprintf("List the %s assets controlled by %s.", targets, subject)
 	}
 
 	switch q.Traversal {
@@ -217,12 +221,12 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	}
 	switch q.Lens {
 	case "":
-	case LensThirdParty:
+	case LensThirdParty, LensControlled:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}
 		if q.Subject.Type != "Organization" && q.Subject.Type != "FQDN" {
-			return errors.New("the third_party lens starts from an Organization or FQDN")
+			return fmt.Errorf("the %s lens starts from an Organization or FQDN", q.Lens)
 		}
 	default:
 		return fmt.Errorf("unknown lens %q", q.Lens)

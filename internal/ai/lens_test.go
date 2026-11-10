@@ -121,6 +121,17 @@ func (vendorCatalog) Attribution(src, label, rt, dst string) (string, bool) {
 	return oamAttribution.Attribution(src, label, rt, dst)
 }
 
+// Relations returns every transition in the attribution table.
+func (vendorCatalog) Relations() []RelationshipSchema {
+	out := make([]RelationshipSchema, 0, len(oamAttribution))
+	for k := range oamAttribution {
+		p := strings.Split(k, "|")
+		out = append(out, RelationshipSchema{SourceType: p[0], Label: p[1], RelationType: p[2], DestinationType: p[3]})
+	}
+
+	return out
+}
+
 // vendorGraph resolves Colgate University and colgate.edu.
 type vendorGraph struct{ plannedGraph }
 
@@ -174,6 +185,8 @@ func vendorFixture() vendorGraph {
 	add("autnum-cdn", "AutnumRecord", "AS54113", map[string]any{"handle": "AS54113", "name": "FASTLY"})
 	add("ip-cdn", "IPAddress", "151.101.1.1", map[string]any{"address": "151.101.1.1"})
 	add("cert", "TLSCertificate", "1234", map[string]any{"serial_number": "1234"})
+	add("as-own", "AutonomousSystem", "1289", map[string]any{"number": 1289})
+	add("autnum-own", "AutnumRecord", "AS1289", map[string]any{"handle": "AS1289", "name": "COLGATE-UNIVERSITY"})
 
 	link("cr-colgate", "organization", "colgate", "SimpleRelation")
 	link("cr-colgate", "person", "person", "SimpleRelation")
@@ -192,6 +205,9 @@ func vendorFixture() vendorGraph {
 	link("ipnet-own", "registrant", "cr-colgate", "SimpleRelation")
 	link("nb-own", "contains", "ip-own", "SimpleRelation")
 	link("nb-cdn", "contains", "ip-cdn", "SimpleRelation")
+	link("as-own", "announces", "nb-own", "SimpleRelation")
+	link("as-own", "registration", "autnum-own", "SimpleRelation")
+	link("autnum-own", "registrant", "cr-colgate", "SimpleRelation")
 	link("as-cdn", "announces", "nb-cdn", "SimpleRelation")
 	link("as-cdn", "registration", "autnum-cdn", "SimpleRelation")
 	link("cert", "san_dns_name", "www.colgate.edu", "SimpleRelation")
@@ -336,5 +352,80 @@ func TestOrganizationSelectorUsesOrganizationResolution(t *testing.T) {
 	got := organizationSubject(PlanSubject{Type: "Organization", Field: "name", Value: "Colgate University"})
 	if !got.UsesOrganizationResolution() || got.Name != "Colgate University" {
 		t.Fatalf("organizationSubject = %+v", got)
+	}
+}
+
+func TestModelASNGoalIsPromotedToControlledLens(t *testing.T) {
+	model := &plannerModel{replies: []string{
+		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+			`"target_types":["AutonomousSystem"],"direction":"both","purpose":"connected"}`,
+	}}
+
+	result, err := vendorAgent(model).AskAdaptive(context.Background(),
+		"Which ASN is associated to the Colgate University organization?", AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.calls != 1 || result.Query == nil || result.Query.Lens != LensControlled {
+		t.Fatalf("calls=%d query=%+v, want one planning call and the controlled lens", model.calls, result.Query)
+	}
+
+	r := result.ControlledReport
+	if r == nil || len(r.Matches) != 1 {
+		t.Fatalf("want exactly AS1289, got %+v", r)
+	}
+
+	last := r.Matches[0].Nodes[len(r.Matches[0].Nodes)-1]
+	if last.ID != "as-own" || len(r.Matches[0].Edges) != 3 {
+		t.Errorf("wrong ASN or path: %s", witnessChain(r.Matches[0]))
+	}
+	if r.FootprintTypes["FQDN"] != 0 || r.FootprintTypes["URL"] != 0 {
+		t.Errorf("walk read assets that cannot lead to an ASN: %v", r.FootprintTypes)
+	}
+	if !strings.Contains(result.Answer, "Found 1 AutonomousSystem asset(s) controlled by Colgate University") ||
+		!strings.Contains(result.Answer, "<--registration-- AutonomousSystem 1289") {
+		t.Errorf("answer does not cite the witnessed path:\n%s", result.Answer)
+	}
+	if result.Diagram == "" {
+		t.Error("controlled lens did not render a diagram")
+	}
+}
+
+func TestControlledLensExcludesThirdPartyNetworks(t *testing.T) {
+	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
+		Traversal: TraversalExplore, TargetTypes: []string{"Netblock", "AutonomousSystem"}, Direction: "both",
+		Purpose: "connected", Lens: LensControlled, Source: SourceCaller}
+
+	result, err := vendorAgent(nil).AskQuery(context.Background(), q, AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]bool{}
+	for _, m := range result.ControlledReport.Matches {
+		got[m.Nodes[len(m.Nodes)-1].ID] = true
+	}
+	if len(got) != 2 || !got["nb-own"] || !got["as-own"] {
+		t.Fatalf("controlled networks = %v, want only nb-own and as-own (not the CDN)", got)
+	}
+}
+
+func TestControlledPromotionRequiresAttributableTypes(t *testing.T) {
+	cat := vendorCatalog{testOAMCatalog}
+	for _, tc := range []struct {
+		targets []string
+		want    bool
+	}{
+		{[]string{"AutonomousSystem"}, true},
+		{[]string{"Netblock", "FQDN"}, true},
+		{[]string{"Organization"}, false},
+		{[]string{"Phone"}, false},
+		{nil, false},
+	} {
+		q := Query{Question: "Which assets does Colgate University have?", Purpose: "connected",
+			Subject: PlanSubject{Type: "Organization", Name: "Colgate University"}, TargetTypes: tc.targets}
+		if got := promoteControlledGoal(&q, cat, cat); got != tc.want {
+			t.Errorf("targets %v: promoted=%v, want %v", tc.targets, got, tc.want)
+		}
 	}
 }

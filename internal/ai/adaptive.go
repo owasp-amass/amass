@@ -649,8 +649,11 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	}
 
 	out.recordTrace(resolveStarted, InvestigationTraceEvent{Stage: "resolve_asset", Detail: root.Type})
-	if q.Lens == LensThirdParty {
+	switch q.Lens {
+	case LensThirdParty:
 		return a.thirdPartyLens(ctx, root, out)
+	case LensControlled:
+		return a.controlledLens(ctx, root, q.TargetTypes, opts, out)
 	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {
