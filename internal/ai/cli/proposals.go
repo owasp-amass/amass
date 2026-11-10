@@ -267,3 +267,21 @@ func reviewProposals(ctx context.Context, agent ai.Agent, model, journalPath, id
 		"-proposal ID -reviewer NAME.\n", reviewed)
 	return err
 }
+
+// listSignals prints the ownership signal catalog: each signal with what it
+// finds, why it counts, its guards and when it can mislead. Text is the
+// default; markdown is docs/ai/SIGNALS.md.
+func listSignals(format string, explicit bool, out io.Writer) error {
+	switch {
+	case !explicit || format == "text":
+		_, err := fmt.Fprint(out, ai.SignalsText())
+		return err
+	case format == "markdown":
+		_, err := fmt.Fprint(out, ai.SignalsMarkdown())
+		return err
+	case format == "json":
+		return writeJSON(out, ai.OwnershipSignals())
+	}
+
+	return fmt.Errorf("signals format %q: use text, json or markdown", format)
+}

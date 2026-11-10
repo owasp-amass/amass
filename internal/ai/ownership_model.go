@@ -30,8 +30,9 @@ const (
 // value is in 0..1. Besides the totals per signal kind, each signal adds
 // "kind:route", where route is the last word of how the signal was found
 // (the shared value's type for identity, the controlled asset's type for
-// hosting, the listing relationship for co-listing). New signal kinds and
-// routes become features without code changes.
+// hosting, the listing relationship for co-listing), and "signal:id" for
+// its catalog entry. New signals and routes become features without code
+// changes.
 func OwnershipFeatures(p OwnershipProposal) map[string]float64 {
 	f := map[string]float64{}
 	count := map[string]int{}
@@ -44,6 +45,10 @@ func OwnershipFeatures(p OwnershipProposal) map[string]float64 {
 	}
 	for kind, n := range count {
 		f[kind] = math.Min(float64(n), 2) / 2
+	}
+
+	for _, id := range p.SignalIDs {
+		f["signal:"+id] = 1
 	}
 
 	f["kinds"] = math.Min(float64(len(count)), 3) / 3

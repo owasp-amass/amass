@@ -4,32 +4,37 @@ Phase 2 starts with assets whose owner is not documented. The
 `ownership_gaps` answer kind (planner answer `ownership_gaps`, Query lens
 `ownership_gaps`, MCP `investigate` answer `ownership_gaps`) starts from an
 Organization's controlled assets, or an FQDN's documented owner, and looks
-outward for unattributed assets linked by three kinds of signal. Each kind
-is the attribution of the bridging edge in the semantics table:
+outward for unattributed assets linked to that footprint by ownership
+signals: shared registrant details, shared DNS verification tokens,
+certificate key reuse, a private CA's issuing key, self-hosted name and
+mail servers, SPF and DMARC delegation, hosting and certificate
+co-listing.
 
-| Signal | Bridging edge | Example |
-| --- | --- | --- |
-| identity | `attribute` from a controlled asset to a value another asset also has | another registrant contact with the same phone and address |
-| hosting | `infrastructure` into a controlled asset | a name outside the namespace resolving into an owned netblock |
-| co-listing | `shared` asset listing a controlled asset and the candidate (at most 10 listed) | a certificate naming both |
+Every signal, with what it finds, why it counts, the guards that stop it
+misfiring and when it can still mislead, is defined in
+`internal/ai/semantics/ownership_signals.json` and documented in
+[Ownership signals](SIGNALS.md), which is generated from that file. `amass
+ai signals` prints the same text, and `amass ai proposals` shows the
+rationale of each signal behind a proposal. Signals that compare values
+(verification tokens, SPF and DMARC references, certificate key
+identifiers) use asset-db's value search (`repository.ValueFinder`) and are
+skipped on an asset-db without it.
 
 Assets documented as controlled by any organization are excluded; those are
-partner signals, not gaps. An identity signal never passes through a value
-that identifies no one: a redaction or privacy-service placeholder (phrases
-in `internal/ai/semantics/placeholder_values.json`) or a value more than 50
-assets carry.
+partner signals, not gaps.
 
 ## Scoring
 
-The score ranks candidates and is not a probability. Identity counts most;
-hosting and co-listing are suggestive, because a customer can be hosted by
-another party or share its certificate.
+The score ranks candidates and is not a probability. Each signal is
+strong or supporting, with a weight, in the catalog:
 
-- **propose:** two identity signals, or identity plus another kind, and
-  exactly one relationship can record the owner;
-- **review:** any identity signal, two kinds of signal, or more than one
-  possible relationship;
-- **weak:** a single non-identity signal.
+- **propose:** two strong signals, or a strong signal and a different
+  second signal, and exactly one relationship can record the owner;
+- **review:** any strong signal, two signals of any strength, or more
+  than one possible relationship;
+- **weak:** a single supporting signal.
+
+A trained ownership model replaces these rules (see Learning from reviews).
 
 ## Attachment
 

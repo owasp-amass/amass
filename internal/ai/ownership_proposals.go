@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -48,8 +49,11 @@ type OwnershipProposal struct {
 	Score     float64      `json:"score"`
 	Decision  string       `json:"decision"`
 	Signals   []string     `json:"signals"`
-	Gains     []string     `json:"gains,omitempty"`
-	Evidence  []string     `json:"evidence"`
+	// SignalIDs are the catalog signals behind Signals, each once; `amass ai
+	// signals` explains them.
+	SignalIDs []string `json:"signal_ids,omitempty"`
+	Gains     []string `json:"gains,omitempty"`
+	Evidence  []string `json:"evidence"`
 	// Witness holds the evidence as stored relationships.
 	Witness []WitnessEdge `json:"witness,omitempty"`
 	// ModelID and ModelScore record the ownership model's view, when one
@@ -92,6 +96,9 @@ func OwnershipProposals(r OwnershipGapReport) []OwnershipProposal {
 		seen := map[string]bool{}
 		for _, s := range c.Signals {
 			p.Signals = append(p.Signals, s.Kind+" via "+s.Via)
+			if s.Signal != "" && !slices.Contains(p.SignalIDs, s.Signal) {
+				p.SignalIDs = append(p.SignalIDs, s.Signal)
+			}
 			for _, w := range s.Witness {
 				line := (EvidenceItem{WitnessEdge: w}).Line()
 				line = strings.TrimPrefix(line, ": ")
@@ -253,6 +260,11 @@ func FormatOwnershipEntries(entries []OwnershipEntry) string {
 		}
 
 		fmt.Fprintf(&b, "  signals: %s\n", strings.Join(p.Signals, "; "))
+		for _, id := range p.SignalIDs {
+			if def, ok := ownershipSignal(id); ok {
+				fmt.Fprintf(&b, "  why: %s (%s): %s\n", def.Title, def.Strength, def.Rationale)
+			}
+		}
 		if p.ModelID != "" {
 			fmt.Fprintf(&b, "  model %s: %.2f\n", p.ModelID, p.ModelScore)
 		}

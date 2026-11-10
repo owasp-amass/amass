@@ -1,0 +1,180 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Ownership signals: the evidence the ownership-gap lens and automatic attribution use to propose that an organization owns an unattributed asset, with the rationale for each. docs/ai/SIGNALS.md and `amass ai signals` are generated from this file; edit the rationale here. Strength decides the rules (two strong signals, or one strong signal and another signal, propose an attachable candidate; one strong signal or two signals of any strength need review). Weight ranks candidates; a trained ownership model replaces both with weights learned from review decisions.",
+  "signals": [
+    {
+      "id": "shared_registrant_details",
+      "title": "Shared registrant details",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.45,
+      "matcher": "shared_attribute",
+      "finds": "A registration contact the organization does not yet own that carries the same phone, postal address, email address or other identifier as a contact the organization controls.",
+      "rationale": "Registrant details are entered by whoever registers the asset. Two registrations with the same phone and address were almost always made by the same party, and registries verify some of these details. One shared value can be a coincidence or a typo; two different shared values rarely are, which is why one shared value needs review and two may propose.",
+      "guards": [
+        "Redaction and privacy-service placeholders never count (phrases in semantics/placeholder_values.json).",
+        "A value carried by more than 50 assets never counts: it belongs to a registrar, provider or privacy service, not an owner.",
+        "Assets another organization is documented as controlling are never candidates."
+      ],
+      "counter_indications": [
+        "Resellers and agencies sometimes register assets for clients with their own details.",
+        "A university or holding company address can be shared by legally separate tenants or affiliates."
+      ]
+    },
+    {
+      "id": "txt_verification_token",
+      "title": "Shared DNS verification token",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.45,
+      "matcher": "txt_token",
+      "params": {
+        "txt_prefixes": [
+          "google-site-verification=",
+          "ms=",
+          "facebook-domain-verification=",
+          "atlassian-domain-verification=",
+          "apple-domain-verification=",
+          "adobe-idp-site-verification=",
+          "docusign=",
+          "zoom-domain-verification=",
+          "slack-domain-verification=",
+          "dropbox-domain-verification=",
+          "stripe-verification=",
+          "hubspot-developer-verification=",
+          "onetrust-domain-verification=",
+          "cisco-ci-domain-verification=",
+          "globalsign-domain-verification=",
+          "_globalsign-domain-verification="
+        ]
+      },
+      "finds": "A domain the organization does not yet own whose DNS TXT records carry the same service verification token as a domain the organization controls.",
+      "rationale": "SaaS providers ask a customer to publish a token in DNS to prove control of a domain, and the token is issued to one customer account. The same token on two domains means one account verified both, so the same administrators control them.",
+      "guards": [
+        "Only TXT records that start with a known verification prefix count.",
+        "A token on more than 50 domains never counts."
+      ],
+      "counter_indications": [
+        "A managed-service provider or agency may verify client domains under its own account.",
+        "Tokens copied from documentation or templates appear on unrelated domains (the 50-domain limit catches the common ones)."
+      ]
+    },
+    {
+      "id": "certificate_key_reuse",
+      "title": "Certificate key reuse",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.45,
+      "matcher": "shared_certificate_field",
+      "params": {
+        "attribute": "subject_key_id"
+      },
+      "finds": "A certificate whose subject key identifier matches a certificate the organization controls; the candidate is the name that certificate was issued to.",
+      "rationale": "The subject key identifier is derived from the certificate's public key. Two certificates with the same identifier were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.",
+      "guards": [
+        "A key identifier shared by more than 50 certificates never counts."
+      ],
+      "counter_indications": [
+        "A hosting or CDN provider that reuses one key across its customers' certificates (the 50-certificate limit catches large providers)."
+      ]
+    },
+    {
+      "id": "private_ca_issuance",
+      "title": "Issued by the organization's private CA",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.45,
+      "matcher": "shared_certificate_field",
+      "params": {
+        "attribute": "authority_key_id",
+        "public_issuers": [
+          "let's encrypt", "isrg", "digicert", "sectigo", "comodo", "globalsign", "godaddy", "go daddy",
+          "starfield", "entrust", "amazon", "google trust", "gts ", "microsoft", "cloudflare", "zerossl",
+          "identrust", "buypass", "ssl.com", "certum", "thawte", "geotrust", "rapidssl", "baltimore",
+          "quovadis", "harica", "actalis", "trustasia", "geant", "internet2", "incommon", "usertrust",
+          "verisign", "symantec", "network solutions", "e5", "e6", "e7", "e8", "r3", "r10", "r11", "r12", "r13", "r14"
+        ]
+      },
+      "finds": "A certificate signed by the same issuing key as a certificate the organization controls, when that issuer is not a public certificate authority; the candidate is the name that certificate was issued to.",
+      "rationale": "Organizations run private certificate authorities for internal and partner-facing services, and only they can sign with that CA's key. A certificate from the same private issuing key was issued by the same organization.",
+      "guards": [
+        "Issuers that name a public certificate authority never count (list in this signal's public_issuers).",
+        "An issuing key shared by more than 50 certificates never counts."
+      ],
+      "counter_indications": [
+        "A managed PKI provider can operate one private CA for several customers.",
+        "A public CA missing from public_issuers would wrongly count until it is added (the 50-certificate limit catches large ones)."
+      ]
+    },
+    {
+      "id": "self_hosted_dns",
+      "title": "Name or mail servers run by the organization",
+      "kind": "operation",
+      "strength": "strong",
+      "weight": 0.35,
+      "matcher": "dns_into_footprint",
+      "params": {
+        "rr_types": [2, 15],
+        "labels": ["name_server"]
+      },
+      "finds": "A name or domain registration the organization does not yet own whose NS or MX records, or whose registered name servers, are names the organization controls.",
+      "rationale": "Pointing a domain's name servers or mail exchangers at another party's hosts hands that party the domain's DNS or email. Organizations do that for their own domains; DNS and email providers do it for customers, but those providers' names are third parties in the semantics table, not part of the organization's footprint.",
+      "guards": [
+        "Only name servers and mail exchangers in the organization's controlled footprint count; provider hosts never do."
+      ],
+      "counter_indications": [
+        "Universities, ISPs and holding companies sometimes host DNS or mail for affiliates and customers."
+      ]
+    },
+    {
+      "id": "email_auth_reference",
+      "title": "Email authentication delegated to the organization",
+      "kind": "operation",
+      "strength": "strong",
+      "weight": 0.35,
+      "matcher": "txt_reference",
+      "finds": "A domain the organization does not yet own whose SPF record includes or redirects to a domain the organization controls, or whose DMARC record sends aggregate or forensic reports to an address at such a domain.",
+      "rationale": "SPF authorizes the referenced domain's mail servers to send as this domain, and DMARC sends this domain's authentication reports to the referenced mailbox. Both hand email control to the referenced party, which is normally the domain's own owner.",
+      "guards": [
+        "The referenced host must be one of the organization's apex domains or a name below one, parsed from the SPF include:/redirect= terms or the DMARC rua=/ruf= addresses; a name that merely contains it never counts."
+      ],
+      "counter_indications": [
+        "An email service provider's customers include the provider's SPF domain, but a provider is not the organization being investigated.",
+        "Report-processing services receive DMARC reports for their customers."
+      ]
+    },
+    {
+      "id": "hosting_in_footprint",
+      "title": "Hosted on the organization's infrastructure",
+      "kind": "hosting",
+      "strength": "supporting",
+      "weight": 0.2,
+      "matcher": "infrastructure_into_footprint",
+      "finds": "An asset the organization does not yet own that depends on infrastructure the organization controls, such as a name resolving into its network.",
+      "rationale": "Organizations host their own assets, so dependence on their infrastructure is consistent with ownership. It is only supporting evidence: customers, tenants and vendors are hosted on other parties' networks every day.",
+      "guards": [
+        "Never proposes on its own; it needs a strong signal."
+      ],
+      "counter_indications": [
+        "Shared hosting, colocation and customers of a network operator."
+      ]
+    },
+    {
+      "id": "certificate_colisting",
+      "title": "Listed on the organization's certificate",
+      "kind": "colisting",
+      "strength": "supporting",
+      "weight": 0.15,
+      "matcher": "colisting",
+      "finds": "A name the organization does not yet own that appears as a subject alternative name on a certificate that also lists a name the organization controls.",
+      "rationale": "One certificate covering several names was usually requested by one party for its own services. Certificates listing many names are often a provider's shared certificate, so this counts only for certificates with few names and only as supporting evidence.",
+      "guards": [
+        "Certificates listing more than 10 names never count.",
+        "Never proposes on its own; it needs a strong signal."
+      ],
+      "counter_indications": [
+        "CDN and hosting certificates that cover several customers."
+      ]
+    }
+  ]
+}
