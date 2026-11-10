@@ -177,7 +177,8 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 	}
 
 	out.Text = `You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
-Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}.
+Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"paths"}.
+"answer" is the kind of answer the question asks for, chosen from ANSWER KINDS below by meaning, not by wording; use "paths" when no other kind fits.
 The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
 When the user requests particular relationship semantics, select the actual relevant relationship types, including all intermediate asset types. "path_rule" may be "" (no constraints), "any" (at least one listed relationship in the witnessed path), "all" (every listed relationship appears in the path), or "ordered" (listed relationships in traversal order starting at the user's subject; intermediate hops allowed, including when traversing stored edges backwards).
 Use relationships:[] and path_rule:"" for broad exploration. Do not require specific labels for queries that only request connectivity.
@@ -185,9 +186,10 @@ Example: for a parent organization question, choose purpose "ultimate_parent", t
 Use purpose "ultimate_parent" ONLY when the question asks for the highest or ultimate parent organization. For this purpose, target_types MUST be ["Organization"] and direction MUST be "both".
 Otherwise use purpose "connected". The user's starting asset may have ANY registered OAM type. Use type/field/value from the SELECTOR CATALOG, or type/entity_id if that identifier was supplied by the user. Organization can use its own name, legal_name, unique_id or jurisdiction-qualified registration_id fields. Copy identifiers exactly from the user, do NOT fabricate names, corporate suffixes, identifiers or jurisdictions.
 For a non-Organization, use {"type":"FQDN","field":"name","value":"example.org"} (with the actual indexed type/field), NEVER subject.name. Do not output a "fields" array or echo the selector catalog.
-Choose target_types from the catalog based on the answer requested. Map ordinary language to registered OAM types: companies/businesses/legal entities to Organization; hostnames/subdomains to FQDN; IP addresses to IPAddress; ASNs/autonomous systems to AutonomousSystem; network blocks/IP ranges/CIDRs to Netblock; physical/postal addresses to Location. Bare "addresses" is ambiguous between IPAddress and Location: resolve only when the question provides enough context, not by guessing. "Subdomains" additionally requests the FQDN node hierarchy rather than arbitrary FQDN associations. Do not invent types. Set [] if the question is broad and exploratory.
+Choose target_types from the catalog based on the answer requested. Map ordinary language to registered OAM types: companies/businesses/legal entities to Organization; hostnames/subdomains to FQDN; IP addresses to IPAddress; ASNs/autonomous systems to AutonomousSystem; network blocks/IP ranges/CIDRs to Netblock; physical/postal addresses to Location. Bare "addresses" is ambiguous between IPAddress and Location: resolve only when the question provides enough context, not by guessing. Do not invent types. Set [] if the question is broad and exploratory.
 All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
-SELECTOR CATALOG` + selectorNote + `:
+ANSWER KINDS:
+` + answerKindCatalog() + `SELECTOR CATALOG` + selectorNote + `:
 ` + compactSelectorCatalog(promptSelectors) +
 		"\nUSER LANGUAGE ALIASES FOR OAM TYPES (not new OAM types):\n" + compactIntentVocabularyFor(typeAliasTypes) +
 		"\nALL AVAILABLE OAM TARGET TYPES: " + strings.Join(allTypes, ",") +

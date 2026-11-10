@@ -222,10 +222,10 @@ func TestLargeSubdomainInventoryIsCompleteAndSkipsModel(t *testing.T) {
 	}
 }
 
-func TestModelSubdomainGoalIsPromotedToHierarchy(t *testing.T) {
+func TestModelHierarchyAnswerRunsInventory(t *testing.T) {
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":["FQDN"],` +
-			`"direction":"both","purpose":"connected"}`,
+			`"direction":"both","purpose":"connected","answer":"hierarchy"}`,
 	}}
 	agent := Agent{Model: model, Runner: ToolRunner{
 		Graph: largeFQDNInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
@@ -237,7 +237,7 @@ func TestModelSubdomainGoalIsPromotedToHierarchy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if q.Traversal != TraversalHierarchy || !q.ExcludeRoot || q.Source != SourceModelGoal {
-		t.Fatalf("model subdomain goal was not promoted to a hierarchy inventory: %+v", q)
+		t.Fatalf("hierarchy answer did not compile to a hierarchy inventory: %+v", q)
 	}
 
 	result, err := agent.AskQuery(context.Background(), q, AdaptiveOptions{GuidanceRounds: 2})

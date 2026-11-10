@@ -22,6 +22,9 @@ type InvestigationGoal struct {
 	Purpose       string         `json:"purpose"` // connected or ultimate_parent
 	Relationships []GoalRelation `json:"relationships,omitempty"`
 	PathRule      string         `json:"path_rule,omitempty"`
+	// Answer is the kind of answer the planner chose (see answerKinds);
+	// empty means paths.
+	Answer string `json:"answer,omitempty"`
 }
 
 type AdaptiveOptions struct {
@@ -174,6 +177,9 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 			err = validateGoal(goal, relations, selectors)
 		}
 		if err == nil {
+			err = validateAnswer(goal, a.Runner.Catalog)
+		}
+		if err == nil {
 			return goal, nil
 		}
 		if attempt == 2 {
@@ -207,7 +213,7 @@ func goalCorrection(err error, subject PlanSubject, selectors []AssetSearchSchem
 	}
 
 	return msg + " Return only the full JSON object (subject, target_types, direction, purpose, " +
-		"relationships, path_rule)."
+		"relationships, path_rule, answer)."
 }
 
 // After finding the nearest Organization, an ancestral subsidiary traversal

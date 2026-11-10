@@ -79,6 +79,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 				"purpose":       map[string]any{"type": "string", "enum": []string{"connected", "ultimate_parent"}},
 				"relationships": relationshipsSchema(relation, len(transitions) > 0),
 				"path_rule":     map[string]any{"type": "string", "enum": []string{"", "any", "all", "ordered"}},
+				"answer":        map[string]any{"type": "string", "enum": answerKindNames()},
 			},
 			"required": []string{
 				"subject",
@@ -87,6 +88,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 				"purpose",
 				"relationships",
 				"path_rule",
+				"answer",
 			},
 			"additionalProperties": false,
 		},

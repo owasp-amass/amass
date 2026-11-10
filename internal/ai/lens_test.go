@@ -339,10 +339,10 @@ func TestThirdPartyLensExplainsEmptyFootprint(t *testing.T) {
 	}
 }
 
-func TestModelVendorGoalIsPromotedToLens(t *testing.T) {
+func TestModelThirdPartyAnswerCompilesToLens(t *testing.T) {
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
-			`"target_types":["Organization"],"direction":"both","purpose":"connected"}`,
+			`"target_types":[],"direction":"both","purpose":"connected","answer":"third_party"}`,
 	}}
 
 	q, err := vendorAgent(model).CompileQuestion(context.Background(),
@@ -351,7 +351,7 @@ func TestModelVendorGoalIsPromotedToLens(t *testing.T) {
 		t.Fatal(err)
 	}
 	if q.Lens != LensThirdParty || q.Subject.Name != "Colgate University" || q.Subject.Field != "" {
-		t.Fatalf("model vendor goal was not promoted with organization resolution: %+v", q)
+		t.Fatalf("third_party answer did not compile with organization resolution: %+v", q)
 	}
 }
 
@@ -362,10 +362,10 @@ func TestOrganizationSelectorUsesOrganizationResolution(t *testing.T) {
 	}
 }
 
-func TestModelASNGoalIsPromotedToControlledLens(t *testing.T) {
+func TestModelControlledAnswerFindsASN(t *testing.T) {
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
-			`"target_types":["AutonomousSystem"],"direction":"both","purpose":"connected"}`,
+			`"target_types":["AutonomousSystem"],"direction":"both","purpose":"connected","answer":"controlled"}`,
 	}}
 
 	result, err := vendorAgent(model).AskAdaptive(context.Background(),
@@ -417,22 +417,60 @@ func TestControlledLensExcludesThirdPartyNetworks(t *testing.T) {
 	}
 }
 
-func TestControlledPromotionRequiresAttributableTypes(t *testing.T) {
+func TestControlledAnswerRequiresAttributableTypes(t *testing.T) {
 	cat := vendorCatalog{testOAMCatalog}
 	for _, tc := range []struct {
 		targets []string
-		want    bool
+		ok      bool
 	}{
 		{[]string{"AutonomousSystem"}, true},
 		{[]string{"Netblock", "FQDN"}, true},
+		{nil, true},
 		{[]string{"Organization"}, false},
 		{[]string{"Phone"}, false},
-		{nil, false},
 	} {
-		q := Query{Question: "Which assets does Colgate University have?", Purpose: "connected",
-			Subject: PlanSubject{Type: "Organization", Name: "Colgate University"}, TargetTypes: tc.targets}
-		if got := promoteControlledGoal(&q, cat); got != tc.want {
-			t.Errorf("targets %v: promoted=%v, want %v", tc.targets, got, tc.want)
+		goal := InvestigationGoal{Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
+			TargetTypes: tc.targets, Purpose: "connected", Answer: LensControlled}
+		if err := validateAnswer(goal, cat); (err == nil) != tc.ok {
+			t.Errorf("targets %v: err=%v, want ok=%v", tc.targets, err, tc.ok)
+		}
+	}
+}
+
+func TestPlannerCorrectsUnusableAnswerKind(t *testing.T) {
+	model := &inspectingPlannerModel{replies: []string{
+		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+			`"target_types":["Phone"],"direction":"both","purpose":"connected","answer":"controlled"}`,
+		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+			`"target_types":["Phone"],"direction":"both","purpose":"connected","answer":"paths"}`,
+	}}
+
+	q, err := vendorAgent(model).CompileQuestion(context.Background(), "What phone numbers does Colgate list?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Lens != "" || model.calls != 2 {
+		t.Fatalf("calls=%d lens=%q, want a corrected paths answer", model.calls, q.Lens)
+	}
+
+	last := model.requests[1][len(model.requests[1])-1].Text
+	if !strings.Contains(last, `answer "controlled" lists asset types that can be attributed`) {
+		t.Errorf("correction does not explain the answer kind: %s", last)
+	}
+}
+
+func TestGoalSchemaEnumeratesAnswerKinds(t *testing.T) {
+	s := goalJSONSchema(testOAMCatalog, testOAMCatalog.SearchFields())
+	props := s.Schema["properties"].(map[string]any)
+	enum := props["answer"].(map[string]any)["enum"].([]string)
+	if strings.Join(enum, ",") != strings.Join(answerKindNames(), ",") || len(enum) != len(answerKinds) {
+		t.Fatalf("answer enum %v does not match the registry", enum)
+	}
+
+	prompt := goalPlannerPrompt("anything", testOAMCatalog, testOAMCatalog.SearchFields(), false).Text
+	for _, k := range answerKinds {
+		if !strings.Contains(prompt, "- "+k.Name+" (") {
+			t.Errorf("planner prompt does not describe answer kind %s", k.Name)
 		}
 	}
 }
