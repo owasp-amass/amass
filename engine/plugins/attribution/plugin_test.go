@@ -7,6 +7,7 @@ package attribution
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -231,5 +232,27 @@ func TestAttributionCanBeTurnedOff(t *testing.T) {
 		stats: &et.SessionStats{}}
 	if p.tracker(sess) != nil {
 		t.Error("attribution ran with AMASS_AI_ATTRIBUTION=off")
+	}
+}
+
+func TestAttributionLoadsTheTrainedModel(t *testing.T) {
+	dir := t.TempDir()
+	model := `{"model_id":"ownership-test","task":"ownership_attribution","feature_version":"ownership-signals-v1",` +
+		`"classes":[{"label":"unrelated","bias":0,"weights":{"identity":-1}},` +
+		`{"label":"potential_relation","bias":0,"weights":{"identity":1}}],"skip_threshold":0.98,"review_threshold":0.8}`
+	if err := os.WriteFile(filepath.Join(dir, ai.AttributionModelFile), []byte(model), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewAttribution().(*plugin)
+	env := map[string]string{"AMASS_AI_JOURNAL": filepath.Join(dir, "review.jsonl")}
+	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sess := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), scope: &fakeScope{org: "X"},
+		stats: &et.SessionStats{}}
+	if tr := p.tracker(sess); tr == nil || tr.model == nil || tr.model.ModelID != "ownership-test" {
+		t.Fatalf("tracker = %+v", tr)
 	}
 }

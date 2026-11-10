@@ -23,9 +23,15 @@ func (w *recordingWriter) ApplyOwnership(_ context.Context, e ProposedEdge, _ in
 func attribute(t *testing.T, w OwnershipWriter, j *Journal, mode string) AttributionResult {
 	t.Helper()
 
+	return attributeWith(t, w, j, AttributionPolicy{Mode: mode})
+}
+
+func attributeWith(t *testing.T, w OwnershipWriter, j *Journal, policy AttributionPolicy) AttributionResult {
+	t.Helper()
+
 	g := campusGapsFixture()
 	res, err := AttributeOwnership(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"], w, j,
-		mode)
+		policy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +102,7 @@ func TestAttributeOwnershipWritesPendingProposalsInAutoMode(t *testing.T) {
 func TestAttributeOwnershipNeedsAJournal(t *testing.T) {
 	g := campusGapsFixture()
 	if _, err := AttributeOwnership(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"],
-		&recordingWriter{}, nil, "auto"); err == nil {
+		&recordingWriter{}, nil, AttributionPolicy{Mode: "auto"}); err == nil {
 		t.Error("attribution ran without a journal")
 	}
 }

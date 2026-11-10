@@ -93,13 +93,51 @@ func ReadLabeledJSONL(r io.Reader) ([]LabeledExample, error) {
 	return out, nil
 }
 
+// LinearSpec names what a linear model is trained for: its task, feature
+// version and the features it weighs. Rows may omit a feature (read as 0)
+// but may not carry one the spec does not name.
+type LinearSpec struct {
+	Task           string
+	FeatureVersion string
+	Features       []string
+}
+
+// ProvenanceSpec is the organization_relation task over OAM provenance
+// features.
+var ProvenanceSpec = LinearSpec{Task: "organization_relation", FeatureVersion: "oam-provenance-v1",
+	Features: TrainingFeatureNames}
+
 // TrainLinearModel implements a small, reproducible L2-regularized logistic
 // classifier. A group-held-out split prevents case leakage. The output is
 // explicitly uncalibrated and cannot authorize negative skips or OAM writes.
 func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, TrainingMetrics, error) {
+	return TrainLinear(rows, modelID, ProvenanceSpec)
+}
+
+// TrainLinear trains a two-class logistic model for spec. Labels are
+// "potential_relation" (positive) and "unrelated" (negative).
+func TrainLinear(rows []LabeledExample, modelID string, spec LinearSpec) (*LinearModel, TrainingMetrics, error) {
 	var metrics TrainingMetrics
 	if modelID == "" || len(modelID) > 80 {
 		return nil, metrics, errors.New("model_id required (max 80 characters)")
+	}
+	if spec.Task == "" || spec.FeatureVersion == "" || len(spec.Features) == 0 || len(spec.Features) > 64 {
+		return nil, metrics, errors.New("a task, feature version and 1..64 features are required")
+	}
+
+	known := map[string]bool{}
+	for _, name := range spec.Features {
+		known[name] = true
+	}
+	for _, r := range rows {
+		if r.Label != "unrelated" && r.Label != "potential_relation" {
+			return nil, metrics, fmt.Errorf("unknown label %q", r.Label)
+		}
+		for name, v := range r.Features {
+			if !known[name] || !finite(v) || v < 0 || v > 1 {
+				return nil, metrics, fmt.Errorf("invalid or unknown feature %s", name)
+			}
+		}
 	}
 	if len(rows) < 40 {
 		return nil, metrics, errors.New("need at least 40 independently labeled examples")
@@ -140,14 +178,14 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 	const learningRate = .28
 	const regularization = .015
 	const iterations = 1500
-	var weights [4]float64
+	weights := make([]float64, len(spec.Features))
 	bias := 0.0
 	for iter := 0; iter < iterations; iter++ {
-		var grad [4]float64
+		grad := make([]float64, len(spec.Features))
 		var gradBias float64
 		for _, sample := range training {
 			score := bias
-			for i, name := range TrainingFeatureNames {
+			for i, name := range spec.Features {
 				score += weights[i] * sample.Features[name]
 			}
 
@@ -159,7 +197,7 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 
 			difference := probability - label
 			gradBias += difference
-			for i, name := range TrainingFeatureNames {
+			for i, name := range spec.Features {
 				grad[i] += difference * sample.Features[name]
 			}
 		}
@@ -173,15 +211,15 @@ func TrainLinearModel(rows []LabeledExample, modelID string) (*LinearModel, Trai
 
 	positiveWeights := map[string]float64{}
 	negativeWeights := map[string]float64{}
-	for i, name := range TrainingFeatureNames {
+	for i, name := range spec.Features {
 		positiveWeights[name] = weights[i] / 2
 		negativeWeights[name] = -weights[i] / 2
 	}
 
 	model := &LinearModel{
 		ModelID:        modelID,
-		Task:           "organization_relation",
-		FeatureVersion: "oam-provenance-v1",
+		Task:           spec.Task,
+		FeatureVersion: spec.FeatureVersion,
 		Classes: []LinearClass{
 			{Label: "unrelated", Bias: -bias / 2, Weights: negativeWeights},
 			{Label: "potential_relation", Bias: bias / 2, Weights: positiveWeights},

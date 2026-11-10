@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 )
 
 // OwnershipWriter writes an approved ownership proposal to the Asset
@@ -17,10 +19,27 @@ type OwnershipWriter interface {
 	ApplyOwnership(ctx context.Context, e ProposedEdge, confidence int) (string, bool, error)
 }
 
-// ProposalConfidence is the source confidence written for a proposal: its
-// score as a percentage.
+// ProposalConfidence is the source confidence written for a proposal: the
+// ownership model's probability when a model decided it, otherwise the rule
+// score, as a percentage.
 func ProposalConfidence(p OwnershipProposal) int {
-	return int(math.Round(math.Max(0, math.Min(1, p.Score)) * 100))
+	score := p.Score
+	if p.ModelID != "" {
+		score = p.ModelScore
+	}
+
+	return int(math.Round(math.Max(0, math.Min(1, score)) * 100))
+}
+
+// AttributionPolicy is how automatic attribution decides.
+type AttributionPolicy struct {
+	// Mode is "auto" (write what qualifies) or "journal" (write nothing).
+	Mode string
+	// Model, when set, decides in place of the rules: a proposal qualifies
+	// when its probability of ownership reaches the model's review
+	// threshold. Without one, a proposal qualifies when the rules decide
+	// propose.
+	Model *classify.LinearModel
 }
 
 // AttributionResult is one automatic attribution pass for an organization.
@@ -43,14 +62,15 @@ type AppliedOwnership struct {
 }
 
 // AttributeOwnership finds the ownership gaps of org and acts on them without
-// a person's review: in auto mode, proposals decided propose are written with
-// w; everything else attachable, and everything in journal mode, is left in
-// the journal for review. A proposal with a recorded decision is never
+// a person's review: in auto mode, proposals that qualify under policy are
+// written with w; everything else attachable, and everything in journal
+// mode, is left in the journal for review. A proposal with a recorded decision is never
 // acted on again, so a rejected or retracted proposal is not rewritten; one
 // still pending is written once its evidence reaches propose.
 // Every write is recorded in the journal with AutomaticReviewer.
 func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, org Asset, w OwnershipWriter,
-	j *Journal, mode string) (AttributionResult, error) {
+	j *Journal, policy AttributionPolicy) (AttributionResult, error) {
+	mode := policy.Mode
 	var res AttributionResult
 	if j == nil || j.Path == "" {
 		// Without a journal, rejections and retractions could not be honored.
@@ -92,12 +112,23 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 			// Applied, rejected or retracted: a decision was made.
 			continue
 		}
+
+		qualifies := p.Decision == GapPropose
+		if policy.Model != nil {
+			prob, err := ownershipProbability(policy.Model, p)
+			if err != nil {
+				return res, err
+			}
+
+			p.ModelID, p.ModelScore = policy.Model.ModelID, prob
+			qualifies = prob >= policy.Model.ReviewThreshold
+		}
 		if !known {
 			if _, err := j.SubmitOwnership([]OwnershipProposal{p}); err != nil {
 				return res, err
 			}
 		}
-		if mode != "auto" || p.Decision != GapPropose {
+		if mode != "auto" || !qualifies {
 			if !known {
 				res.Queued = append(res.Queued, p)
 			}
