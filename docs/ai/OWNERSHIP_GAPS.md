@@ -40,23 +40,56 @@ assets that relationship would bring under the subject. A candidate with no
 such asset is reported without a proposal: recording its owner would need
 new records.
 
-The lens only proposes. Writing approved proposals is a separate, reviewed
-step.
+The lens only proposes. What gets written is decided by the attribution
+mode, during enumeration or by a reviewer.
+
+## During enumeration (automatic)
+
+Most users never ask these questions, so the engine's `AI-Attribution`
+plugin answers them while an enumeration runs. It needs no model. Its
+handlers note each arriving Organization, ContactRecord, DomainRecord,
+IPNetRecord, AutnumRecord, FQDN, IPAddress and TLSCertificate. Once an
+in-scope organization has been seen and the signals settle (5 seconds of
+quiet, or at least once a minute while the enumeration is busy), a pass
+runs the ownership-gap lens for each in-scope organization and then:
+
+- writes each `propose` proposal as described under Review and write, with
+  the reviewer recorded as `amass-ai (automatic)`;
+- widens the session scope with the assets the relationship brings under
+  the organization, and queues them for another look when the
+  configuration's confidence for their type allows it, exactly as the
+  Horizontals plugin does (nothing is widened when the config is `rigid`);
+- leaves `review` proposals in the journal for a person.
+
+A pending pass counts as session work, so `amass enum` does not finish
+before it runs, and anything it adds is enumerated in the same session.
+
+| Setting | YAML (`ai:` section) | Environment | Default |
+| --- | --- | --- | --- |
+| Mode: `auto`, `journal` (write nothing automatically) or `off` | `attribution` | `AMASS_AI_ATTRIBUTION` | `auto` |
+| Review journal | `journal` | `AMASS_AI_JOURNAL` | `ai-review.jsonl` in the output directory |
+
+The environment variables apply to the engine process. The journal is
+always kept, because it is what makes a person's decision stick: a
+proposal that was rejected or retracted is never written again, and one
+still pending is written once its evidence reaches `propose`.
 
 ## Review and write
 
-Nothing reaches the Asset Database without a named reviewer approving one
-proposal. With `-journal`, `ask` records the gap answer's proposals (propose
-and review decisions with exactly one attachment) in the review journal,
-with their signals and evidence lines. Asking again does not duplicate a
+Advanced users can review the journal. `amass ai` uses the same journal by
+default (`-journal` overrides it), and nothing is written by these commands
+without a named reviewer. `ask` records the gap answer's proposals (propose
+and review decisions with exactly one attachment) in the journal, with
+their signals and evidence lines. Asking again does not duplicate a
 proposal; its ID is a hash of the relationship it would write.
 
 ```bash
-amass ai -model qwen3:8b -journal review.jsonl \
+amass ai -model qwen3:8b \
   -question "Which assets probably belong to Colgate University but are not attributed to it?" ask
-amass ai -journal review.jsonl proposals
-amass ai -journal review.jsonl -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff approve
-amass ai -journal review.jsonl -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff reject
+amass ai proposals
+amass ai -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff approve
+amass ai -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff reject
+amass ai -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff retract
 ```
 
 `approve` re-reads both entities, checks that their types still match the
@@ -67,8 +100,10 @@ This is how Amass plugins record relationships, so the written edge looks
 like collected data except for its source, and every later answer that
 cites it shows `amass-ai`. When the relationship is already stored, nothing
 is written and the existing edge is recorded. `reject` records the decision
-and writes nothing. The journal keeps every proposal, decision, reviewer and
-edge ID.
+and writes nothing. `retract` undoes an applied proposal, automatic or not:
+it deletes the edge, or only its `amass-ai` source when another source also
+recorded the relationship. The journal keeps every proposal, decision,
+reviewer and edge ID.
 
 No OAM relationship types are added: a proposal uses only relationships OAM
 already defines.

@@ -10,6 +10,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
+	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
 	"github.com/owasp-amass/amass/v5/engine/plugins/brute"
 	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
@@ -38,6 +39,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewVirusTotal,
 	api.NewZetalytics,
 	archive.NewWayback,
+	attribution.NewAttribution,
 	aviato.NewAviato,
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,

@@ -88,6 +88,8 @@ type GapCandidate struct {
 	Alternatives []ProposedEdge `json:"alternatives,omitempty"`
 	// Gains are the assets the attachment would bring under the subject.
 	Gains []string `json:"gains,omitempty"`
+	// GainAssets are the assets behind Gains, in the same order.
+	GainAssets []Asset `json:"-"`
 }
 
 // OwnershipGapReport is the result of the ownership-gap lens.
@@ -329,7 +331,11 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 		c.Attachment, c.Alternatives = &edges[0], edges[1:]
 	}
 
-	c.Gains = gains
+	c.GainAssets = gains
+	for _, v := range gains {
+		c.Gains = append(c.Gains, v.Type+" "+assetLabel(v))
+	}
+
 	// Only one unambiguous relationship can be proposed outright.
 	c.Score, c.Decision = scoreGap(c.Signals, len(edges) == 1)
 	return nil
@@ -368,7 +374,7 @@ func scoreGap(signals []GapSignal, attachable bool) (float64, string) {
 // contact record's organization, an organization's website) and that has
 // no such relationship yet, and the assets that edge would bring under the
 // subject.
-func (g *gapSearch) attachment(a Asset, ctl controller) ([]ProposedEdge, []string, error) {
+func (g *gapSearch) attachment(a Asset, ctl controller) ([]ProposedEdge, []Asset, error) {
 	for _, v := range ctl.visited {
 		edges := g.attachEdges(v)
 		if len(edges) == 0 {
@@ -408,10 +414,10 @@ func (g *gapSearch) attachEdges(v Asset) []ProposedEdge {
 }
 
 // gains lists the assets that attributing v would bring under the subject.
-func (g *gapSearch) gains(v Asset) ([]string, error) {
+func (g *gapSearch) gains(v Asset) ([]Asset, error) {
 	seen := map[string]bool{v.ID: true}
 	queue := []Asset{v}
-	var out []string
+	var out []Asset
 	for len(queue) > 0 && len(out) < gapMaxGains {
 		cur := queue[0]
 		queue = queue[1:]
@@ -425,12 +431,14 @@ func (g *gapSearch) gains(v Asset) ([]string, error) {
 			}
 
 			seen[s.other.ID] = true
-			out = append(out, s.other.Type+" "+assetLabel(s.other))
+			out = append(out, s.other)
 			queue = append(queue, s.other)
 		}
 	}
 
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Type+" "+assetLabel(out[i]) < out[j].Type+" "+assetLabel(out[j])
+	})
 	return out, nil
 }
 

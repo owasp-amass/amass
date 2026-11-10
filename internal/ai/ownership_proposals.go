@@ -26,7 +26,14 @@ const (
 	ProposalPending  = "proposed"
 	ProposalRejected = "rejected"
 	ProposalApplied  = "applied"
+	// ProposalRetracted marks an applied proposal whose relationship was
+	// removed. Automatic attribution never writes it again.
+	ProposalRetracted = "retracted"
 )
+
+// AutomaticReviewer is the reviewer recorded for proposals written during
+// an enumeration without a person's review.
+const AutomaticReviewer = "amass-ai (automatic)"
 
 // OwnershipProposal is a reviewed-before-written proposal to record an
 // organization as an asset's owner with one OAM relationship.
@@ -126,7 +133,7 @@ func (j *Journal) RecordOwnership(o OwnershipOutcome) error {
 	if o.ProposalID == "" || o.Reviewer == "" {
 		return errors.New("proposal ID and reviewer required")
 	}
-	if o.Status != ProposalRejected && o.Status != ProposalApplied {
+	if o.Status != ProposalRejected && o.Status != ProposalApplied && o.Status != ProposalRetracted {
 		return fmt.Errorf("invalid ownership status %q", o.Status)
 	}
 	if o.Status == ProposalApplied && o.EdgeID == "" {
@@ -245,4 +252,9 @@ func FormatOwnershipEntries(entries []OwnershipEntry) string {
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// AssetLabel is the name an answer uses for a.
+func AssetLabel(a Asset) string {
+	return assetLabel(a)
 }
