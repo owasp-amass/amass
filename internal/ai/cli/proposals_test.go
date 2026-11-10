@@ -80,3 +80,35 @@ func TestRejectWritesNothing(t *testing.T) {
 		t.Error("a rejected proposal was approved")
 	}
 }
+
+type fakeRetractor struct {
+	edges []string
+}
+
+func (f *fakeRetractor) RetractOwnership(_ context.Context, edgeID string) (bool, error) {
+	f.edges = append(f.edges, edgeID)
+	return true, nil
+}
+
+func TestRetractRemovesAppliedEdgeAndBlocksRewrites(t *testing.T) {
+	path, p := journalWithProposal(t)
+	var out bytes.Buffer
+	r := &fakeRetractor{}
+	if err := retractProposal(context.Background(), r, path, p.ID, "jeff", &out); err == nil {
+		t.Error("a pending proposal was retracted")
+	}
+	if err := approveProposal(context.Background(), &fakeOwnershipWriter{}, path, p.ID, "jeff", &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := retractProposal(context.Background(), r, path, p.ID, "jeff", &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.edges) != 1 || r.edges[0] != "77" {
+		t.Errorf("retracted edges = %v", r.edges)
+	}
+
+	state, err := (&ai.Journal{Path: path}).OwnershipState()
+	if err != nil || state[p.ID].Status != ai.ProposalRetracted {
+		t.Errorf("status = %+v, %v", state[p.ID], err)
+	}
+}

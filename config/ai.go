@@ -38,7 +38,21 @@ type AISettings struct {
 	ContextTokens int `yaml:"context_tokens,omitempty" json:"context_tokens,omitempty"`
 	// Think enables an Ollama reasoning model's thinking phase (off by default).
 	Think bool `yaml:"think,omitempty" json:"think,omitempty"`
+	// Attribution controls ownership attribution during enumeration: "auto"
+	// (the default) writes strong proposals and journals the rest, "journal"
+	// only journals them, and "off" turns it off. It needs no model.
+	Attribution string `yaml:"attribution,omitempty" json:"attribution,omitempty"`
+	// Journal is the review journal path; empty uses ai-review.jsonl in the
+	// Amass output directory.
+	Journal string `yaml:"journal,omitempty" json:"journal,omitempty"`
 }
+
+// Attribution modes.
+const (
+	AttributionAuto    = "auto"
+	AttributionJournal = "journal"
+	AttributionOff     = "off"
+)
 
 // ResolveAISettings applies AMASS_AI_* environment overrides without
 // mutating the global Amass config. Empty env strings are intentional values.
@@ -57,6 +71,8 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		{"AMASS_AI_TEMPERATURE", &c.Temperature},
 		{"AMASS_AI_CLASSIFIER_MODEL", &c.ClassifierModel},
 		{"AMASS_AI_CLASSIFIER_ENDPOINT", &c.ClassifierEndpoint},
+		{"AMASS_AI_ATTRIBUTION", &c.Attribution},
+		{"AMASS_AI_JOURNAL", &c.Journal},
 	}
 	for _, pair := range stringsEnv {
 		if value, ok := lookup(pair.key); ok {
@@ -104,6 +120,11 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 
 			*pair.target = value
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Attribution)) {
+	case "", AttributionAuto, AttributionJournal, AttributionOff:
+	default:
+		return c, fmt.Errorf("attribution must be auto, journal or off")
 	}
 	if c.ModelTimeout != "" {
 		v, err := time.ParseDuration(c.ModelTimeout)

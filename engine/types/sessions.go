@@ -142,6 +142,27 @@ type SessionStats struct {
 	sync.RWMutex
 	WorkItemsCompleted int `json:"workItemsCompleted"`
 	WorkItemsTotal     int `json:"workItemsTotal"`
+	// background counts work running outside the backlog, such as an
+	// attribution pass, so the session is not reported finished while a
+	// plugin still has work that can produce new assets.
+	background int
+}
+
+// AddBackground adds n (which may be negative) to the session's background
+// work. Each pending unit counts as an incomplete work item.
+func (ss *SessionStats) AddBackground(n int) {
+	ss.Lock()
+	defer ss.Unlock()
+
+	ss.background = max(0, ss.background+n)
+}
+
+// Background returns the session's pending background work.
+func (ss *SessionStats) Background() int {
+	ss.RLock()
+	defer ss.RUnlock()
+
+	return ss.background
 }
 
 type SessionManager interface {

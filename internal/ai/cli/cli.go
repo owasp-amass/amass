@@ -30,10 +30,11 @@ import (
 
 const Description = "AI investigation, MCP tools, and reviewed inference proposals"
 
-// operations are the amass ai subcommands. Only approve writes to the Asset
-// Database, and only a proposal a reviewer names.
+// operations are the amass ai subcommands. Only approve and retract change
+// the Asset Database, and only for a proposal a reviewer names. Automatic
+// attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject"}
+	"proposals", "approve", "reject", "retract"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -89,9 +90,10 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&outputFormat, "format", "json", "Search format: json, text, or mermaid")
 	fs.StringVar(&collectionApproval, "approve-collection", "",
 		"Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
-	fs.StringVar(&journalPath, "journal", "", "Inference proposal journal path")
-	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID for approve or reject")
-	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve or reject decision")
+	fs.StringVar(&journalPath, "journal", "",
+		"Review journal path (default: the attribution journal, ai-review.jsonl in the output directory)")
+	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID for approve, reject or retract")
+	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve, reject or retract decision")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
 	fs.StringVar(&aliasesPath, "organization-aliases", "",
 		"Optional JSON file with explicitly sourced organization alias mappings (read-only)")
@@ -254,6 +256,16 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 			return err
 		}
 	}
+	// The review journal defaults to the one automatic attribution uses.
+	if journalPath == "" {
+		_, path, err := cfg.AIAttribution(os.LookupEnv)
+		if err != nil {
+			return err
+		}
+
+		journalPath = path
+	}
+
 	// Listing and rejecting proposals read and append to the journal only.
 	switch operation {
 	case "proposals":
@@ -306,8 +318,11 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
-	if operation == "approve" {
+	switch operation {
+	case "approve":
 		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
+	case "retract":
+		return retractProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.

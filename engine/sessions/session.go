@@ -323,8 +323,9 @@ func (s *Session) calculateStats() {
 	}
 
 	ss := s.stats
+	background := ss.Background()
 	ss.Lock()
-	ss.WorkItemsTotal = total
+	ss.WorkItemsTotal = total + background
 	ss.WorkItemsCompleted = completed
 	ss.Unlock()
 }
