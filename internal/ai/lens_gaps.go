@@ -38,7 +38,10 @@ const (
 const (
 	gapMaxCandidates = 200
 	gapMaxColisted   = 10
-	gapMaxGains      = 10
+	// gapMaxShared skips an attribute value that more assets carry: a
+	// provider's or privacy service's phone or address, not an owner's.
+	gapMaxShared = 50
+	gapMaxGains  = 10
 )
 
 // Gap decisions.
@@ -236,16 +239,32 @@ func (g *gapSearch) signalsFrom(cur Asset) error {
 
 // identity follows an attribute value (a phone, address or identifier) of a
 // controlled asset to other assets that carry the same value.
+//
+// A value that identifies no one gives no signal: a redaction or privacy
+// placeholder, or a value carried by more than gapMaxShared assets.
 func (g *gapSearch) identity(cur Asset, s step, hop WitnessEdge) error {
 	value := s.other
+	if isPlaceholder(value) {
+		return nil
+	}
+
 	steps, err := g.w.steps(value)
 	if err != nil {
 		return err
 	}
+
+	var holders []step
 	for _, t := range steps {
+		if !t.forward && t.attr == "attribute" {
+			holders = append(holders, t)
+		}
+	}
+	if len(holders) > gapMaxShared {
+		return nil
+	}
+	for _, t := range holders {
 		other := t.other
-		if _, mine := g.owned[other.ID]; mine || t.forward || t.attr != "attribute" || other.Type == "Organization" ||
-			other.Type == "Person" {
+		if _, mine := g.owned[other.ID]; mine || other.Type == "Organization" || other.Type == "Person" {
 			continue
 		}
 
