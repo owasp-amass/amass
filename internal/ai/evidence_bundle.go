@@ -23,8 +23,11 @@ type EvidenceItem struct {
 
 // EvidenceBundle is the numbered evidence behind an investigation's answer.
 type EvidenceBundle struct {
-	Items     []EvidenceItem `json:"items"`
-	Truncated bool           `json:"truncated,omitempty"`
+	Items []EvidenceItem `json:"items"`
+	// Subjects are the question's subject and its documented owners. Every
+	// item is about them, so prose may name them in any cited sentence.
+	Subjects  []string `json:"subjects,omitempty"`
+	Truncated bool     `json:"truncated,omitempty"`
 }
 
 // BuildEvidenceBundle numbers the stored edges behind inv's answer, in
@@ -32,15 +35,24 @@ type EvidenceBundle struct {
 // table row witnesses. At most max items are kept.
 func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 	var edges []WitnessEdge
+	var subjects []string
 	for _, m := range inv.Matches {
 		edges = append(edges, pathWitness(m)...)
+		if len(m.Nodes) > 0 {
+			subjects = append(subjects, assetLabel(m.Nodes[0]))
+		}
 	}
 	if r := inv.ThirdPartyReport; r != nil {
+		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
 		for _, v := range r.Vendors {
 			edges = append(edges, v.Witness...)
 		}
 	}
+	if r := inv.ControlledReport; r != nil {
+		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
+	}
 	if r := inv.TableReport; r != nil {
+		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
 		for _, w := range r.Witness {
 			edges = append(edges, w...)
 		}
@@ -56,6 +68,14 @@ func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 	}
 
 	var b EvidenceBundle
+	seenSubject := map[string]bool{}
+	for _, s := range subjects {
+		if s != "" && !seenSubject[strings.ToLower(s)] {
+			seenSubject[strings.ToLower(s)] = true
+			b.Subjects = append(b.Subjects, s)
+		}
+	}
+
 	seen := map[string]bool{}
 	for _, e := range edges {
 		key := e.EdgeID
@@ -131,13 +151,22 @@ func sentences(text string) []string {
 // VerifyCitations checks prose against bundle and returns every problem:
 // a sentence without a citation, a citation of an unknown item, an asset of
 // the bundle named in a sentence whose citations do not include it, or a
-// hostname or IP address that appears nowhere in the evidence.
+// hostname or IP address that appears nowhere in the evidence. The
+// question's subjects may be named in any cited sentence.
 // Names are matched longest first, so "www.example.com" does not also count
 // as "example.com".
 func VerifyCitations(text string, bundle EvidenceBundle) []string {
 	byID := map[string]EvidenceItem{}
 	var labels []string
 	seenLabel := map[string]bool{}
+	subject := map[string]bool{}
+	for _, l := range bundle.Subjects {
+		subject[strings.ToLower(l)] = true
+		if len(l) >= 4 && !seenLabel[strings.ToLower(l)] {
+			seenLabel[strings.ToLower(l)] = true
+			labels = append(labels, l)
+		}
+	}
 	for _, i := range bundle.Items {
 		byID[i.ID] = i
 		for _, l := range []string{i.From, i.To} {
@@ -187,6 +216,10 @@ func VerifyCitations(text string, bundle EvidenceBundle) []string {
 			}
 
 			plain = strings.ReplaceAll(plain, ll, strings.Repeat("#", len(ll)))
+			if subject[ll] {
+				continue
+			}
+
 			supported := false
 			for id := range cited {
 				i := byID[id]

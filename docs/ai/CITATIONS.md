@@ -31,7 +31,8 @@ the paragraph when:
 - a citation names an item that is not in the bundle;
 - a sentence names an asset of the bundle that none of its citations
   mention (names are matched longest first, so `www.example.com` is not
-  also `example.com`);
+  also `example.com`); the question's subject and its documented owners
+  are exempt, since every item is about them;
 - a hostname or IP address appears that is nowhere in the evidence.
 
 A rejected paragraph is retried once with the problems listed; if it is
