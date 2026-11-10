@@ -91,7 +91,9 @@ var answerKinds = []AnswerKind{
 			"Netblock for networks), never the subject's own type or a column's type",
 		OwnedTargets: true,
 		Examples: []string{
-			"Table of each website of <organization> with its IP address and hosting provider",
+			"Table of each website of <organization> with its IP address and hosting provider -> target_types " +
+				"[\"URL\"], columns [{\"type\":\"IPAddress\",\"role\":\"\"},{\"type\":\"Organization\"," +
+				"\"role\":\"controller\"}]",
 			"For each domain <organization> owns, show its IP addresses",
 		},
 	},

@@ -613,6 +613,10 @@ func TestTableColumnsAreValidated(t *testing.T) {
 		{[]TableColumn{{Type: "Website"}}, false},
 		{[]TableColumn{{Type: "IPAddress", Role: ColumnController}}, false},
 		{[]TableColumn{{Type: "IPAddress", Role: "owner"}}, false},
+		{[]TableColumn{{Type: "Organization", Role: ColumnController}, {Type: "Organization", Role: ColumnController}},
+			false},
+		{[]TableColumn{{Type: "IPAddress"}, {Type: "IPAddress"}}, false},
+		{[]TableColumn{{Type: "Organization", Role: ColumnController}}, true},
 	} {
 		if err := validateColumns(tc.cols, types); (err == nil) != tc.ok {
 			t.Errorf("columns %+v: err=%v, want ok=%v", tc.cols, err, tc.ok)
@@ -668,5 +672,32 @@ func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
 		if !strings.Contains(correction, want) {
 			t.Errorf("correction lacks %q: %s", want, correction)
 		}
+	}
+}
+
+// Live eval: Qwen returned three controller columns and no IP address
+// column; the chain is rejected and the correction shows a valid chain.
+func TestRepeatedControllerColumnsAreCorrected(t *testing.T) {
+	ctl := `{"type":"Organization","role":"controller"}`
+	bad := `{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+		`"target_types":["URL"],"direction":"both","purpose":"connected","answer":"table",` +
+		`"columns":[` + ctl + `,` + ctl + `,` + ctl + `]}`
+	good := strings.Replace(bad, `[`+ctl+`,`+ctl+`,`+ctl+`]`, `[{"type":"IPAddress","role":""},`+ctl+`]`, 1)
+	model := &inspectingPlannerModel{replies: []string{bad, good}}
+
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
+		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
+		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Columns) != 2 || q.Columns[0].Type != "IPAddress" {
+		t.Fatalf("corrected columns not used: %+v", q.Columns)
+	}
+
+	correction := model.requests[1][len(model.requests[1])-1].Text
+	if !strings.Contains(correction, "two in a row repeat the same organization") ||
+		!strings.Contains(correction, `{"type":"IPAddress","role":""}`) {
+		t.Errorf("correction does not explain the column chain: %s", correction)
 	}
 }
