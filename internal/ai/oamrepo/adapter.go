@@ -96,23 +96,19 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 		return nil, err
 	}
 
-	var labels []string
-	if label != "" {
-		labels = []string{label}
-	}
-
+	labels := storedLabels(label)
 	var found []ai.Relation
 	convertEdges := func(edges []*dbt.Edge, dir string) error {
 		for _, edge := range edges {
 			if edge == nil || edge.Relation == nil || edge.FromEntity == nil || edge.ToEntity == nil {
 				return errors.New("invalid edge")
 			}
-			if label != "" && edge.Relation.Label() != label {
+			if label != "" && schemaLabel(edge.Relation) != label {
 				continue
 			}
 
 			found = append(found, ai.Relation{ID: edge.ID, FromID: edge.FromEntity.ID, ToID: edge.ToEntity.ID,
-				Label: edge.Relation.Label(), Type: string(edge.Relation.RelationType()), Direction: dir,
+				Label: schemaLabel(edge.Relation), Type: string(edge.Relation.RelationType()), Direction: dir,
 				Content: edge.Relation, CreatedAt: edge.CreatedAt, LastSeen: edge.LastSeen})
 		}
 
@@ -268,6 +264,28 @@ func source(p oam.Property) string {
 
 var _ ai.Graph = Adapter{}
 
+// schemaLabel is the OAM schema label of a stored relation. A port
+// relation is stored under its own name (tcp_port_443) but is the "port"
+// relationship in OAM, as asset-db treats it when validating an edge.
+func schemaLabel(rel oam.Relation) string {
+	if rel.RelationType() == oam.PortRelation {
+		return "port"
+	}
+
+	return rel.Label()
+}
+
+// storedLabels returns the stored labels to filter an edge read by, for an
+// OAM schema label. Port relations are stored under their own names, so a
+// "port" read is filtered after reading.
+func storedLabels(label string) []string {
+	if label == "" || label == "port" {
+		return nil
+	}
+
+	return []string{label}
+}
+
 // AllowedRelation ensures that an inferred edge conforms to the existing OAM taxonomy.
 func AllowedRelation(subject, label, object string) bool {
 	// AI proposes SimpleRelation only in this initial implementation.
@@ -296,11 +314,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 		return nil, false, err
 	}
 
-	var labels []string
-	if label != "" {
-		labels = []string{label}
-	}
-
+	labels := storedLabels(label)
 	var edges []*dbt.Edge
 	var more bool
 	if ok {
@@ -321,6 +335,10 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 			return nil, false, errors.New("malformed bounded edge")
 		}
 
+		if label != "" && schemaLabel(e.Relation) != label {
+			continue
+		}
+
 		dir := "out"
 		if e.ToEntity.ID == id {
 			dir = "in"
@@ -331,7 +349,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 				ID:        e.ID,
 				FromID:    e.FromEntity.ID,
 				ToID:      e.ToEntity.ID,
-				Label:     e.Relation.Label(),
+				Label:     schemaLabel(e.Relation),
 				Type:      string(e.Relation.RelationType()),
 				Direction: dir,
 				Content:   e.Relation,
