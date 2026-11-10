@@ -2,9 +2,9 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package fingerprint extracts the web fingerprints Amass records for
+// Package fingerprint extracts the fingerprints Amass records for
 // correlating assets: page titles, analytics and tag identifiers, page
-// content hashes and favicon hashes. Every collector (the HTTP probes, a web
+// content hashes, favicon hashes, and names the SSH host key property. Every collector (the HTTP probes, a web
 // scraper) calls this package and stores each fingerprint as an OAM
 // SimpleProperty named Name with the value Value, so the stored data is the
 // same whichever component collected it.
@@ -30,6 +30,9 @@ const (
 	// FaviconMMH3 is a favicon's MurmurHash3 in Shodan's convention, as a
 	// signed decimal.
 	FaviconMMH3 = "favicon_mmh3"
+	// SSHHostKey is an SSH server's host key as "<key type>
+	// SHA256:<base64 fingerprint>", as OpenSSH prints it.
+	SSHHostKey = "ssh_host_key"
 )
 
 // Bounds.
