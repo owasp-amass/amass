@@ -99,6 +99,14 @@
       "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 2},
       "offline": {"fixture": "campus", "planner_replies": ["colgate.edu receives mail through mx1.pphosted.com and uses pdns1.ultradns.net as a name server [E1, E2]. www.colgate.edu resolves to 151.101.1.1, which AutonomousSystem 54113 announces and whose registration names FASTLY [E6, E7, E8, E9]. Its certificate was issued by DigiCert Inc [E3, E4, E5]. The domain's registrar contact belongs to EDUCAUSE [E10, E11]."], "checks": {"narrative_verified": true}},
       "live": {"narrative_verified": true}
+    },
+    {
+      "id": "sunyit-names-services-table",
+      "question": "Create a table with domain names within the sunyit.edu dns namespace and the services they map to",
+      "note": "Reported 2026-11-10: Qwen planned the services column as a Service with role controller three times and validation failed the question. Column shapes are now schema-constrained and a controller naming another type is read as that type.",
+      "expect": {"answer": "table", "subject_type": "FQDN", "max_model_calls": 2},
+      "offline": {"fixture": "sunyit-services", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"sunyit.edu\"},\"target_types\":[\"FQDN\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"table\",\"columns\":[{\"type\":\"FQDN\",\"role\":\"\"},{\"type\":\"Service\",\"role\":\"controller\"}]}"], "checks": {"answer_contains": ["| FQDNs | Services |", "| www.sunyit.edu | https (443/tcp) |", "| mail.sunyit.edu | smtp (25/tcp) |", "| vpn.sunyit.edu | - |"], "complete": true}},
+      "live": {"answer_contains": ["| FQDNs |", "Services"], "results_include": ["sunyit.edu"]}
     }
   ]
 }

@@ -53,12 +53,49 @@ func owaspCerts() (Graph, SchemaCatalog) {
 	return owaspCertificateFixture(), vendorCatalog{testOAMCatalog}
 }
 
+// sunyitServicesFixture is a namespace whose names reach services directly
+// (www over a port relation), through an IP address (mail), or not at all
+// (vpn). It has no documented owner.
+func sunyitServicesFixture() vendorGraph {
+	g := fakeGraph{assets: map[string]Asset{}}
+	named := func(id, typ, name string) {
+		g.assets[id] = Asset{ID: id, Type: typ, Key: name, Content: map[string]any{"name": name}}
+	}
+
+	named("sunyit.edu", "FQDN", "sunyit.edu")
+	for _, n := range []string{"www", "mail", "vpn"} {
+		named(n+".sunyit.edu", "FQDN", n+".sunyit.edu")
+		g.links = append(g.links, Relation{ID: "node-" + n, FromID: "sunyit.edu", ToID: n + ".sunyit.edu",
+			Label: "node", Type: "SimpleRelation"})
+	}
+
+	g.assets["ip-mail"] = Asset{ID: "ip-mail", Type: "IPAddress", Key: "192.0.2.25",
+		Content: map[string]any{"address": "192.0.2.25"}}
+	g.assets["svc-https"] = Asset{ID: "svc-https", Type: "Service", Key: "a1b2",
+		Content: map[string]any{"unique_id": "a1b2", "service_type": "https"}}
+	g.assets["svc-smtp"] = Asset{ID: "svc-smtp", Type: "Service", Key: "c3d4",
+		Content: map[string]any{"unique_id": "c3d4", "service_type": "smtp"}}
+	g.links = append(g.links,
+		Relation{ID: "p-www", FromID: "www.sunyit.edu", ToID: "svc-https", Label: "port", Type: "PortRelation",
+			Content: map[string]any{"label": "port", "port_number": 443, "protocol": "tcp"}},
+		Relation{ID: "a-mail", FromID: "mail.sunyit.edu", ToID: "ip-mail", Label: "dns_record",
+			Type: "BasicDNSRelation"},
+		Relation{ID: "p-mail", FromID: "ip-mail", ToID: "svc-smtp", Label: "port", Type: "PortRelation",
+			Content: map[string]any{"label": "port", "port_number": 25, "protocol": "tcp"}})
+	return vendorGraph{plannedGraph{fakeGraph: g}}
+}
+
+func sunyitServices() (Graph, SchemaCatalog) {
+	return sunyitServicesFixture(), vendorCatalog{testOAMCatalog}
+}
+
 // evalFixtures are the graphs offline evaluation cases name.
 var evalFixtures = map[string]func() (Graph, SchemaCatalog){
 	"campus":            campus,
 	"campus-web":        campusWeb,
 	"campus-dns":        campusDNS,
 	"owasp-certificate": owaspCerts,
+	"sunyit-services":   sunyitServices,
 }
 
 // Every reported question runs here on each CI build.

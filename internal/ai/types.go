@@ -23,12 +23,15 @@ type Asset struct {
 }
 
 type Relation struct {
-	ID        string    `json:"id"`
-	FromID    string    `json:"from_id"`
-	ToID      string    `json:"to_id"`
-	Label     string    `json:"label"`
-	Type      string    `json:"type"`
-	Direction string    `json:"direction,omitempty"`
+	ID        string `json:"id"`
+	FromID    string `json:"from_id"`
+	ToID      string `json:"to_id"`
+	Label     string `json:"label"`
+	Type      string `json:"type"`
+	Direction string `json:"direction,omitempty"`
+	// Content holds the stored relation's own fields, such as a port
+	// relation's port number and protocol.
+	Content   any       `json:"content,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	LastSeen  time.Time `json:"last_seen"`
 }

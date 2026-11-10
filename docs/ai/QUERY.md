@@ -142,6 +142,14 @@ column (the first from the row):
 provider within the Colgate University organization" plans to rows `URL`
 with columns `IPAddress` then the controlling `Organization`.
 
+The planner's schema allows exactly these two column shapes. Planned chains
+are repaired before validation rather than rejected: a controller column
+naming another type is read as a column of that type, repeated columns
+collapse, a leading column that repeats the row is dropped, and columns for
+asset types the question names are added before the first controller.
+Cells show the fields a stored relation carries, so a service reached over
+a port relation reads `https (443/tcp)`.
+
 Organization names are resolved by exact match, also trying lower, upper and title
 case and a final period, never by similarity.
 

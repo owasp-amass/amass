@@ -113,7 +113,7 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 
 			found = append(found, ai.Relation{ID: edge.ID, FromID: edge.FromEntity.ID, ToID: edge.ToEntity.ID,
 				Label: edge.Relation.Label(), Type: string(edge.Relation.RelationType()), Direction: dir,
-				CreatedAt: edge.CreatedAt, LastSeen: edge.LastSeen})
+				Content: edge.Relation, CreatedAt: edge.CreatedAt, LastSeen: edge.LastSeen})
 		}
 
 		return nil
@@ -334,6 +334,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 				Label:     e.Relation.Label(),
 				Type:      string(e.Relation.RelationType()),
 				Direction: dir,
+				Content:   e.Relation,
 				CreatedAt: e.CreatedAt,
 				LastSeen:  e.LastSeen,
 			})

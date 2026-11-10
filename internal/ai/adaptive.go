@@ -182,7 +182,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 
 		narrow := false
 		if err == nil {
-			goal.Columns = collapseRepeatedColumns(goal.Columns)
+			goal.Columns = repairColumns(goal.Columns)
 			err = validateAnswer(goal, a.Runner.Catalog)
 			narrow = err != nil
 		}
