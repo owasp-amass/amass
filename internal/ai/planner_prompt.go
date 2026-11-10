@@ -116,7 +116,7 @@ type plannerPrompt struct {
 // shown, which cuts the prompt from about 3,500 tokens to well under half
 // for most questions; CPU-only local models spend most of their time
 // reading the prompt. Without slicing, the whole catalog is shown.
-func goalPlannerPrompt(question string, relations []RelationshipSchema, selectors []AssetSearchSchema, sliced bool) plannerPrompt {
+func goalPlannerPrompt(question string, relations []RelationshipSchema, selectors []AssetSearchSchema, sliced bool, owned []string) plannerPrompt {
 	out := plannerPrompt{}
 	types := map[string]bool{}
 	for _, s := range selectors {
@@ -190,7 +190,7 @@ For a non-Organization, use {"type":"FQDN","field":"name","value":"example.org"}
 Choose target_types from the catalog based on the answer requested. Map ordinary language to registered OAM types: companies/businesses/legal entities to Organization; hostnames/subdomains to FQDN; IP addresses to IPAddress; ASNs/autonomous systems to AutonomousSystem; network blocks/IP ranges/CIDRs to Netblock; physical/postal addresses to Location. Bare "addresses" is ambiguous between IPAddress and Location: resolve only when the question provides enough context, not by guessing. Do not invent types. Set [] if the question is broad and exploratory.
 All intermediate asset types may be visited regardless of target_types. No fixed hop list, no relation label prediction, and no "hops" field. Prefer direction "both" unless the user explicitly requests a traversal direction.
 ANSWER KINDS:
-` + answerKindCatalog() + `SELECTOR CATALOG` + selectorNote + `:
+` + answerKindCatalog(owned) + `SELECTOR CATALOG` + selectorNote + `:
 ` + compactSelectorCatalog(promptSelectors) +
 		"\nUSER LANGUAGE ALIASES FOR OAM TYPES (not new OAM types):\n" + compactIntentVocabularyFor(typeAliasTypes) +
 		"\nALL AVAILABLE OAM TARGET TYPES: " + strings.Join(allTypes, ",") +
