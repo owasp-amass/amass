@@ -274,7 +274,12 @@ func (d dependencyScan) tableRow(row Asset, columns []TableColumn) ([]string, []
 				if !seen[f.ID] && len(next) < tableMaxCell {
 					seen[f.ID] = true
 					next = append(next, f)
-					labels = append(labels, assetLabel(f))
+					label := assetLabel(f)
+					if chain := chains[f.ID]; len(chain) > 0 && chain[len(chain)-1].Detail != "" {
+						label += " (" + chain[len(chain)-1].Detail + ")"
+					}
+
+					labels = append(labels, label)
 					witness = append(witness, chains[f.ID]...)
 				}
 			}
@@ -364,4 +369,22 @@ func collapseRepeatedColumns(columns []TableColumn) []TableColumn {
 	}
 
 	return out
+}
+
+// repairColumns normalizes a planned column chain before validation. A
+// controller column naming a type other than Organization is read as a
+// column of that type, because the type is what the question named ("the
+// services they map to" planned as a Service controller); then repeated
+// columns collapse.
+func repairColumns(columns []TableColumn) []TableColumn {
+	out := make([]TableColumn, 0, len(columns))
+	for _, c := range columns {
+		if c.Role == ColumnController && c.Type != "Organization" {
+			c.Role = ColumnReached
+		}
+
+		out = append(out, c)
+	}
+
+	return collapseRepeatedColumns(out)
 }

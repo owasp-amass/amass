@@ -834,3 +834,43 @@ func TestControlledRetryKeepsTheFullSchema(t *testing.T) {
 		t.Errorf("controlled retry narrowed the answer kinds: %v", enum)
 	}
 }
+
+func TestRepairColumnsReadsMisplacedControllersAsTypes(t *testing.T) {
+	got := repairColumns([]TableColumn{{Type: "Service", Role: ColumnController},
+		{Type: "Organization", Role: ColumnController}, {Type: "Organization", Role: ColumnController}})
+	want := []TableColumn{{Type: "Service"}, {Type: "Organization", Role: ColumnController}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("repaired = %+v, want %+v", got, want)
+	}
+}
+
+// The schema allows exactly two column shapes, so a schema-enforcing
+// provider cannot pair the controller role with a non-organization type.
+func TestColumnSchemaAllowsTwoShapes(t *testing.T) {
+	props := goalJSONSchema(testOAMCatalog, testOAMCatalog.SearchFields()).Schema["properties"].(map[string]any)
+	shapes := props["columns"].(map[string]any)["items"].(map[string]any)["anyOf"].([]any)
+	if len(shapes) != 2 {
+		t.Fatalf("column shapes = %d, want 2", len(shapes))
+	}
+
+	controller := shapes[1].(map[string]any)["properties"].(map[string]any)
+	if fmt.Sprint(controller["type"].(map[string]any)["enum"]) != "[Organization]" ||
+		fmt.Sprint(controller["role"].(map[string]any)["enum"]) != "[controller]" {
+		t.Errorf("controller shape = %v", controller)
+	}
+}
+
+func TestRelationDetailShowsPorts(t *testing.T) {
+	e := Relation{Label: "port", Content: map[string]any{"port_number": 443, "protocol": "tcp"}}
+	if got := relationDetail(e); got != "443/tcp" {
+		t.Errorf("detail = %q, want 443/tcp", got)
+	}
+	if got := relationDetail(Relation{Label: "node"}); got != "" {
+		t.Errorf("detail = %q for a relation without fields", got)
+	}
+
+	w := witnessOf(e, Asset{ID: "a", Type: "FQDN", Key: "www.example.com"}, Asset{ID: "b", Type: "Service", Key: "x"})
+	if line := (EvidenceItem{ID: "E1", WitnessEdge: w}).Line(); !strings.Contains(line, "--port 443/tcp-->") {
+		t.Errorf("evidence line lacks the port: %s", line)
+	}
+}

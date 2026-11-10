@@ -413,7 +413,7 @@ func thirdPartyAnswer(r ThirdPartyReport) string {
 // assetLabel is the human name of an asset without its ID.
 func assetLabel(a Asset) string {
 	if v := contentString(a, "name", "legal_name", "url", "subject_common_name", "cidr", "address", "number",
-		"handle"); v != "" {
+		"handle", "service_type"); v != "" {
 		return v
 	}
 

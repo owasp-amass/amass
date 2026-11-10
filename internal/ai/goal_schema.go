@@ -83,15 +83,28 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 				"columns": map[string]any{
 					"type":     "array",
 					"maxItems": tableMaxColumns,
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"type": assetType,
-							"role": map[string]any{"type": "string", "enum": []string{ColumnReached, ColumnController}},
+					// Exactly two column shapes: any asset type reached from the
+					// previous cell, or the Organization that controls it.
+					"items": map[string]any{"anyOf": []any{
+						map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"type": assetType,
+								"role": map[string]any{"type": "string", "enum": []string{ColumnReached}},
+							},
+							"required":             []string{"type", "role"},
+							"additionalProperties": false,
 						},
-						"required":             []string{"type", "role"},
-						"additionalProperties": false,
-					},
+						map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"type": map[string]any{"type": "string", "enum": []string{"Organization"}},
+								"role": map[string]any{"type": "string", "enum": []string{ColumnController}},
+							},
+							"required":             []string{"type", "role"},
+							"additionalProperties": false,
+						},
+					}},
 				},
 			},
 			"required": []string{

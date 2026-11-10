@@ -81,7 +81,12 @@ func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 // Line renders an item as "E1: FQDN www.example.com --dns_record--> IPAddress
 // 192.0.2.1 (sources: dns)".
 func (i EvidenceItem) Line() string {
-	line := fmt.Sprintf("%s: %s %s --%s--> %s %s", i.ID, i.FromType, i.From, i.Label, i.ToType, i.To)
+	label := i.Label
+	if i.Detail != "" {
+		label += " " + i.Detail
+	}
+
+	line := fmt.Sprintf("%s: %s %s --%s--> %s %s", i.ID, i.FromType, i.From, label, i.ToType, i.To)
 	if len(i.Sources) > 0 {
 		line += " (sources: " + strings.Join(i.Sources, ", ") + ")"
 	}

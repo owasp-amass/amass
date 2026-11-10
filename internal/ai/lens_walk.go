@@ -6,6 +6,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -359,6 +360,9 @@ type WitnessEdge struct {
 	ToID         string `json:"to_id"`
 	ToType       string `json:"to_type"`
 	To           string `json:"to"`
+	// Detail summarizes the stored relation's own fields, such as
+	// "443/tcp" for a port relation.
+	Detail string `json:"detail,omitempty"`
 }
 
 // witnessOf orients a stored edge between a and b as it is stored.
@@ -369,7 +373,33 @@ func witnessOf(e Relation, a, b Asset) WitnessEdge {
 	}
 
 	return WitnessEdge{EdgeID: e.ID, Label: e.Label, RelationType: e.Type, FromID: from.ID, FromType: from.Type,
-		From: assetLabel(from), ToID: to.ID, ToType: to.Type, To: assetLabel(to)}
+		From: assetLabel(from), ToID: to.ID, ToType: to.Type, To: assetLabel(to), Detail: relationDetail(e)}
+}
+
+// relationDetail summarizes the fields a stored relation carries beyond
+// its label, such as a port number and protocol ("443/tcp").
+func relationDetail(e Relation) string {
+	data, err := json.Marshal(e.Content)
+	if err != nil {
+		return ""
+	}
+
+	var f struct {
+		Port     int    `json:"port_number"`
+		Protocol string `json:"protocol"`
+	}
+	if json.Unmarshal(data, &f) != nil {
+		return ""
+	}
+	if f.Port > 0 {
+		if f.Protocol != "" {
+			return fmt.Sprintf("%d/%s", f.Port, f.Protocol)
+		}
+
+		return fmt.Sprint(f.Port)
+	}
+
+	return ""
 }
 
 // pathWitness returns the edges of a witnessed path.
