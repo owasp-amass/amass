@@ -6,6 +6,7 @@ package ai
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -31,6 +32,9 @@ type AnswerKind struct {
 	// Examples are question shapes that call for the kind, shown to the
 	// planner as guidance on meaning, never matched against questions.
 	Examples []string
+	// OwnedTargets marks kinds whose target_types must be types an owner can
+	// control; the prompt lists them from the semantics table.
+	OwnedTargets bool
 }
 
 var answerKinds = []AnswerKind{
@@ -60,8 +64,9 @@ var answerKinds = []AnswerKind{
 		Description: "List the assets the subject owns or controls (networks, autonomous systems, domains, " +
 			"certificates, accounts), attributed through registration, contact, website and subsidiary " +
 			"relationships.",
-		Subjects: []string{"Organization", "FQDN"},
-		Targets:  "the asset types to list, or [] for all controlled assets",
+		Subjects:     []string{"Organization", "FQDN"},
+		Targets:      "the asset types to list, or [] for all controlled assets",
+		OwnedTargets: true,
 		Examples: []string{"Which ASN is associated with <organization>?", "What netblocks does <organization> have?",
 			"Which domains belong to <organization>?"},
 	},
@@ -82,7 +87,9 @@ var answerKinds = []AnswerKind{
 			"is the organization that controls or operates the previous column's asset (for example the hosting " +
 			"provider of an IP address).",
 		Subjects: []string{"Organization", "FQDN"},
-		Targets:  "exactly one row type",
+		Targets: "exactly one row type: the kind of asset each row is (URL for websites, FQDN for host names, " +
+			"Netblock for networks), never the subject's own type or a column's type",
+		OwnedTargets: true,
 		Examples: []string{
 			"Table of each website of <organization> with its IP address and hosting provider",
 			"For each domain <organization> owns, show its IP addresses",
@@ -113,7 +120,7 @@ func answerKindNames() []string {
 }
 
 // answerKindCatalog renders the answer kinds for the planner prompt.
-func answerKindCatalog() string {
+func answerKindCatalog(owned []string) string {
 	var b strings.Builder
 	for _, k := range answerKinds {
 		subjects := "any subject type"
@@ -122,6 +129,9 @@ func answerKindCatalog() string {
 		}
 
 		fmt.Fprintf(&b, "- %s (%s; target_types %s): %s", k.Name, subjects, k.Targets, k.Description)
+		if k.OwnedTargets && len(owned) > 0 {
+			fmt.Fprintf(&b, " Types an owner can control: %s.", strings.Join(owned, ", "))
+		}
 		if len(k.Examples) > 0 {
 			fmt.Fprintf(&b, " Examples: %s", strings.Join(k.Examples, " | "))
 		}
@@ -160,7 +170,8 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 		}
 		if len(goal.TargetTypes) > 0 && !controlledReachable(schema, goal.TargetTypes) {
 			return fmt.Errorf("answer %q lists asset types that can be attributed to an owner; %v cannot be. "+
-				"Use answer %q", k.Name, goal.TargetTypes, AnswerPaths)
+				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
+				strings.Join(ownedTypes(schema), ", "), AnswerPaths)
 		}
 	case LensThirdParty:
 		if meaningsOf(schema) == nil {
@@ -171,8 +182,10 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 			return fmt.Errorf("answer %q needs exactly one row type in target_types", k.Name)
 		}
 		if !controlledReachable(schema, goal.TargetTypes) {
-			return fmt.Errorf("answer %q rows must be a type that can be attributed to an owner; %s cannot be",
-				k.Name, goal.TargetTypes[0])
+			return fmt.Errorf("answer %q: target_types holds the row type, the kind of asset each row is "+
+				"(URL for websites, FQDN for host names, Netblock for networks); %s cannot be a row. Row types an "+
+				"owner can control: %s. Keep the organization in subject and put providers or owners in columns "+
+				"with role controller", k.Name, goal.TargetTypes[0], strings.Join(ownedTypes(schema), ", "))
 		}
 		if err := validateColumns(goal.Columns, catalogTypes(schema.Relations(), nil)); err != nil {
 			return fmt.Errorf("answer %q: %w", k.Name, err)
@@ -227,4 +240,22 @@ func contains(list []string, v string) bool {
 	}
 
 	return false
+}
+
+// ownedTypes lists, from the semantics table, the asset types an owner can
+// control: the valid targets of the controlled and table answers.
+func ownedTypes(schema SchemaCatalog) []string {
+	if schema == nil || meaningsOf(schema) == nil {
+		return nil
+	}
+
+	var out []string
+	for t := range catalogTypes(schema.Relations(), nil) {
+		if controlledReachable(schema, []string{t}) {
+			out = append(out, t)
+		}
+	}
+
+	sort.Strings(out)
+	return out
 }

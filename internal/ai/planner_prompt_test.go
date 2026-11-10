@@ -107,8 +107,8 @@ func TestSlicedPlannerPromptIsMuchSmaller(t *testing.T) {
 		"Which IP addresses does www.owasp.org resolve to?",
 		"Tell me about 192.0.2.1",
 	} {
-		full := goalPlannerPrompt(q, rels, sel, false)
-		sliced := goalPlannerPrompt(q, rels, sel, true)
+		full := goalPlannerPrompt(q, rels, sel, false, nil)
+		sliced := goalPlannerPrompt(q, rels, sel, true, nil)
 		t.Logf("%-66q full=%5d sliced=%5d chars (%.0f%%)", q, len(full.Text), len(sliced.Text),
 			100*float64(len(sliced.Text))/float64(len(full.Text)))
 		if !sliced.Sliced || len(sliced.Text) > len(full.Text)*55/100 {
@@ -117,14 +117,15 @@ func TestSlicedPlannerPromptIsMuchSmaller(t *testing.T) {
 	}
 
 	// A question that names no relationship gets an empty-relationships schema.
-	p := goalPlannerPrompt("Tell me about 192.0.2.1", rels, sel, true)
+	p := goalPlannerPrompt("Tell me about 192.0.2.1", rels, sel, true, nil)
 	relSchema := p.Schema.Schema["properties"].(map[string]any)["relationships"].(map[string]any)
 	if relSchema["maxItems"] != 0 || !strings.Contains(p.Text, "names no OAM relationship") {
 		t.Fatalf("expected an empty relationship slice: %v", relSchema)
 	}
 
 	// An explicitly named relationship stays in the slice.
-	p = goalPlannerPrompt("Which organizations are connected to owasp.org via website relationships?", rels, sel, true)
+	p = goalPlannerPrompt("Which organizations are connected to owasp.org via website relationships?", rels,
+		sel, true, nil)
 	if !p.Explicit || !strings.Contains(p.Text, "|website|") {
 		t.Fatal("explicit website relationship missing from the sliced catalog")
 	}
@@ -160,7 +161,7 @@ func TestPlannerDropsRelationshipsTheQuestionDidNotRequest(t *testing.T) {
 
 	// "organization" names an asset type here, not the organization relationship.
 	p := goalPlannerPrompt("What is the highest parent organization connected to owasp.org?",
-		oamCatalog{}.Relations(), oamCatalog{}.SearchFields(), true)
+		oamCatalog{}.Relations(), oamCatalog{}.SearchFields(), true, nil)
 	if p.NamesRelationship || !strings.Contains(p.Text, "names no OAM relationship") {
 		t.Fatal("a type word must not pull its same-named relationship into the slice")
 	}

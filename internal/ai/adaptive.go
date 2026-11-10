@@ -141,7 +141,8 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 	// The first attempts show only the catalog slice the question mentions;
 	// the last attempt shows the whole catalog in case the slice was too
 	// narrow. Validation always uses the whole catalog.
-	prompt := goalPlannerPrompt(question, relations, selectors, true)
+	owned := ownedTypes(a.Runner.Catalog)
+	prompt := goalPlannerPrompt(question, relations, selectors, true, owned)
 	explicit, explicitHint, schema := prompt.Explicit, prompt.Hint, prompt.Schema
 	history := []Message{{Role: "system", Text: prompt.Text}, {Role: "user", Text: question}}
 	for attempt := 0; attempt < 3; attempt++ {
@@ -191,7 +192,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		history = append(history, Message{Role: "assistant", Text: response.Text},
 			Message{Role: "user", Text: goalCorrection(err, goal.Subject, selectors)})
 		if attempt == 1 && prompt.Sliced {
-			full := goalPlannerPrompt(question, relations, selectors, false)
+			full := goalPlannerPrompt(question, relations, selectors, false, owned)
 			history[0].Text, schema = full.Text, full.Schema
 		}
 	}

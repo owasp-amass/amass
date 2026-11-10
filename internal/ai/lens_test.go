@@ -468,7 +468,7 @@ func TestGoalSchemaEnumeratesAnswerKinds(t *testing.T) {
 		t.Fatalf("answer enum %v does not match the registry", enum)
 	}
 
-	prompt := goalPlannerPrompt("anything", testOAMCatalog, testOAMCatalog.SearchFields(), false).Text
+	prompt := goalPlannerPrompt("anything", testOAMCatalog, testOAMCatalog.SearchFields(), false, nil).Text
 	for _, k := range answerKinds {
 		if !strings.Contains(prompt, "- "+k.Name+" (") {
 			t.Errorf("planner prompt does not describe answer kind %s", k.Name)
@@ -631,5 +631,42 @@ func TestTableAnswerNeedsAttributableRows(t *testing.T) {
 	goal.TargetTypes = []string{"URL"}
 	if err := validateAnswer(goal, vendorCatalog{testOAMCatalog}); err != nil {
 		t.Fatalf("valid table rejected: %v", err)
+	}
+}
+
+// Qwen put the subject's type in the row slot of a table three times; the
+// prompt and the correction now list the row types an owner can control.
+func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
+	bad := `{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+		`"target_types":["Organization"],"direction":"both","purpose":"connected","answer":"table",` +
+		`"columns":[{"type":"IPAddress","role":""},{"type":"Organization","role":"controller"}]}`
+	good := strings.Replace(bad, `"target_types":["Organization"]`, `"target_types":["URL"]`, 1)
+	model := &inspectingPlannerModel{replies: []string{bad, good}}
+
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
+		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
+		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Lens != LensTable || q.TargetTypes[0] != "URL" {
+		t.Fatalf("corrected table not compiled: %+v", q)
+	}
+
+	prompt := model.requests[0][0].Text
+	if !strings.Contains(prompt, "Types an owner can control:") || !strings.Contains(prompt, "URL") {
+		t.Error("planner prompt does not list controllable row types")
+	}
+
+	correction := model.requests[1][len(model.requests[1])-1].Text
+	for _, want := range []string{
+		"URL for websites",
+		"Row types an owner can control:",
+		"Netblock",
+		"role controller",
+	} {
+		if !strings.Contains(correction, want) {
+			t.Errorf("correction lacks %q: %s", want, correction)
+		}
 	}
 }
