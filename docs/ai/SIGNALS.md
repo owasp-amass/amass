@@ -29,6 +29,10 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | [Same TLS server fingerprint](#tls_fingerprint_match) | supporting (tiebreaker) | fingerprint | 0.10 |
 | [Organization name in the asset's name](#name_token) | supporting (tiebreaker) | lexical | 0.10 |
 | [Parked or for sale](#parked_for_sale) | negative | negative | 0.30 |
+| [Same analytics or tag identifier](#shared_analytics_id) | supporting | fingerprint | 0.30 |
+| [Same favicon](#same_favicon) | supporting | fingerprint | 0.15 |
+| [Same page content](#same_page_content) | supporting | fingerprint | 0.20 |
+| [Same page title](#same_page_title) | supporting (tiebreaker) | fingerprint | 0.10 |
 
 <a id="shared_registrant_details"></a>
 ## Shared registrant details
@@ -289,3 +293,82 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 - Organizations sometimes park defensive registrations with a registrar's default page.
 
 **Page phrases:** `this domain is for sale`, `this domain may be for sale`, `buy this domain`, `domain is parked`, `parked free`, `parkingcrew`, `sedoparking`, `bodis.com`, `dan.com`, `afternic`, `hugedomains`, `undeveloped.com`
+
+<a id="shared_analytics_id"></a>
+## Same analytics or tag identifier
+
+`shared_analytics_id`: supporting fingerprint signal, weight 0.30.
+
+**Finds:** A name, address or URL the organization does not yet own whose pages carry an analytics or tag-manager identifier (Google Analytics, Google Tag Manager, Google Ads, AdSense, Meta pixel, Hotjar, Clarity) that a page of the organization also carries.
+
+**Why it counts:** Analytics and tag-manager identifiers are issued to one account, and the account's owner adds them to the sites it runs, so two sites reporting to the same account are usually run by the same team. They are copied along with a page, though, so they only support other evidence.
+
+**Guards:**
+
+- Identifiers are recognized by provider-specific patterns (internal/fingerprint), not any string that looks like one.
+- An identifier on more than 50 services or URLs never counts.
+- Supporting only: without a strong signal it can at most send a candidate to review.
+
+**Can still mislead when:**
+
+- A cloned or phishing copy of the organization's site carries the same identifiers; this is why it is never strong evidence.
+- Agencies sometimes run one tag-manager container across several clients.
+
+<a id="same_favicon"></a>
+## Same favicon
+
+`same_favicon`: supporting fingerprint signal, weight 0.15.
+
+**Finds:** A name, address or URL the organization does not yet own whose site has the same favicon (by its MurmurHash3, as Shodan computes it) as a site of the organization.
+
+**Why it counts:** A custom favicon is a brand asset an organization reuses across its own sites, so the same icon suggests the same owner. Default icons of web servers, frameworks and hosting panels are shared by countless unrelated sites, which the 50-asset limit excludes.
+
+**Guards:**
+
+- A favicon on more than 50 services or URLs never counts (default and framework icons).
+- Supporting only: without a strong signal it can at most send a candidate to review.
+
+**Can still mislead when:**
+
+- A cloned or phishing copy of the organization's site carries the same favicon; this is why it is never strong evidence.
+- Resellers and partners display the organization's logo as their icon.
+
+<a id="same_page_content"></a>
+## Same page content
+
+`same_page_content`: supporting fingerprint signal, weight 0.20.
+
+**Finds:** A name, address or URL the organization does not yet own that serves exactly the same page (by the SHA-256 of its normalized body) as a site of the organization.
+
+**Why it counts:** Serving byte-for-byte the same page usually means the same deployment behind several names, such as mirrors, aliases and old domains. Pages under 512 bytes are never hashed, because redirects, error stubs and default pages are identical everywhere.
+
+**Guards:**
+
+- Bodies shorter than 512 bytes are not hashed (internal/fingerprint).
+- A hash on more than 50 services or URLs never counts.
+- Supporting only: without a strong signal it can at most send a candidate to review.
+
+**Can still mislead when:**
+
+- A cloned or phishing copy of the organization's site carries the same page; this is why it is never strong evidence.
+- Parking, maintenance and hosting-provider pages are identical across their customers.
+
+<a id="same_page_title"></a>
+## Same page title
+
+`same_page_title`: supporting fingerprint signal, weight 0.10. Tiebreaker.
+
+**Finds:** A name, address or URL the organization does not yet own whose page has the same title as a page of the organization.
+
+**Why it counts:** A distinctive title, such as one naming the organization or a product of it, is often reused across its sites. Titles are short, chosen freely and copied, so a title only breaks ties between candidates other evidence found.
+
+**Guards:**
+
+- Titles shorter than 8 characters and generic titles (this signal's ignore_values) never count.
+- A title on more than 50 services or URLs never counts.
+- A tiebreaker: it never counts as the second signal that lets a strong signal propose.
+
+**Can still mislead when:**
+
+- A cloned or phishing copy of the organization's site carries the same title; this is why it is never strong evidence.
+- Products and templates give unrelated sites the same title.

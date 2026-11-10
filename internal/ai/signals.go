@@ -62,6 +62,8 @@ type SignalParams struct {
 	MinLength     int      `json:"min_length,omitempty"`
 	StopWords     []string `json:"stop_words,omitempty"`
 	Phrases       []string `json:"phrases,omitempty"`
+	AssetTypes    []string `json:"asset_types,omitempty"`
+	IgnoreValues  []string `json:"ignore_values,omitempty"`
 }
 
 // OwnershipSignal is one kind of ownership evidence and why it counts.

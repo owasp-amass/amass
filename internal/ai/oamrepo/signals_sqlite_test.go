@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/fingerprint"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
@@ -88,6 +89,18 @@ func checkServiceSignals(t *testing.T, db repository.Repository) {
 	link("twin", port(443), "svc-twin")
 	jarm("svc-twin", "2ad2ad0002ad2ad0042d42d000000ad")
 
+	analytics := func(name string) {
+		if _, err := db.CreateEntityProperty(ctx, ents[name], &general.SimpleProperty{
+			PropertyName: fingerprint.AnalyticsID, PropertyValue: "GTM-K9X2ZQ"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	analytics("svc-www")
+	create("tagged", &oamdns.FQDN{Name: "colgate-tags.example"})
+	create("svc-tagged", &platform.Service{ID: "svc-tagged", Type: "web-service"})
+	link("tagged", port(443), "svc-tagged")
+	analytics("svc-tagged")
+
 	create("redirect", &oamdns.FQDN{Name: "redirect.example"})
 	create("svc-redirect", &platform.Service{ID: "svc-redirect", Type: "web-service",
 		Attributes: map[string][]string{"Location": {"https://www.colgate.edu/welcome"}}})
@@ -117,10 +130,11 @@ func checkServiceSignals(t *testing.T, db repository.Repository) {
 		}
 	}
 	for asset, want := range map[string]string{
-		"jarm-twin.example": "tls_fingerprint_match",
-		"redirect.example":  "web_redirect_to_organization",
-		"203.0.113.5":       "reverse_dns_in_namespace",
-		"alumni-mail.net":   "reverse_dns_in_namespace",
+		"jarm-twin.example":    "tls_fingerprint_match",
+		"redirect.example":     "web_redirect_to_organization",
+		"203.0.113.5":          "reverse_dns_in_namespace",
+		"colgate-tags.example": "shared_analytics_id",
+		"alumni-mail.net":      "reverse_dns_in_namespace",
 	} {
 		if !slices.Contains(got[asset], want) {
 			t.Errorf("%s signals = %v, want %s (all: %v)", asset, got[asset], want, got)
