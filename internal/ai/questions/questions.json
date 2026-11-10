@@ -94,10 +94,10 @@
     {
       "id": "colgate-vendors-cited-summary",
       "question": "Which third-party vendors are used by colgate.edu?",
-      "note": "Roadmap 1c: the model's summary must cite the stored relationships it uses, verified in Go.",
+      "note": "Roadmap 1c: the model's summary must cite the stored relationships it uses, verified in Go. On 2026-11-10 Qwen's summaries named the subject (colgate.edu) in sentences citing www.colgate.edu items; naming the question's subject is now allowed in any cited sentence.",
       "narrate": true,
       "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 2},
-      "offline": {"fixture": "campus", "planner_replies": ["colgate.edu receives mail through mx1.pphosted.com and uses pdns1.ultradns.net as a name server [E1, E2]. www.colgate.edu resolves to 151.101.1.1, which AutonomousSystem 54113 announces and whose registration names FASTLY [E6, E7, E8, E9]. Its certificate was issued by DigiCert Inc [E3, E4, E5]. The domain's registrar contact belongs to EDUCAUSE [E10, E11]."], "checks": {"narrative_verified": true}},
+      "offline": {"fixture": "campus", "planner_replies": ["colgate.edu receives mail through mx1.pphosted.com and uses pdns1.ultradns.net as a name server [E1, E2]. colgate.edu relies on FASTLY: www.colgate.edu resolves to 151.101.1.1, which AutonomousSystem 54113 announces and whose registration names FASTLY [E6, E7, E8, E9]. Its certificate was issued by DigiCert Inc [E3, E4, E5]. The domain's registrar contact belongs to EDUCAUSE [E10, E11]."], "checks": {"narrative_verified": true}},
       "live": {"narrative_verified": true}
     },
     {

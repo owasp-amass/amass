@@ -143,3 +143,26 @@ func TestTableRowsCarryWitnessEdges(t *testing.T) {
 		}
 	}
 }
+
+// Live eval: Qwen wrote "colgate.edu relies on ..." citing items about
+// www.colgate.edu. The subject comes from the question, so naming it is
+// grounded; other assets still need a citation that mentions them.
+func TestVerifyCitationsAllowsNamingTheSubject(t *testing.T) {
+	_, b := vendorBundle(t)
+	if len(b.Subjects) == 0 || b.Subjects[0] != "colgate.edu" {
+		t.Fatalf("subjects = %v, want colgate.edu first", b.Subjects)
+	}
+
+	text := "colgate.edu depends on FASTLY, which announces the network behind www.colgate.edu [E6, E7, E8, E9]."
+	if problems := VerifyCitations(text, b); len(problems) != 0 {
+		t.Fatalf("naming the subject was rejected: %v", problems)
+	}
+
+	text = "colgate.edu depends on FASTLY [E1]."
+	if problems := strings.Join(VerifyCitations(text, b), "; "); !strings.Contains(problems, "names FASTLY") {
+		t.Errorf("a vendor without a supporting citation passed: %q", problems)
+	}
+	if problems := VerifyCitations("colgate.edu uses several providers.", b); len(problems) == 0 {
+		t.Error("an uncited sentence about the subject passed")
+	}
+}
