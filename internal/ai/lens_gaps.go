@@ -51,8 +51,18 @@ const (
 	GapWeak    = "weak"
 )
 
-// GapSignal is one signal linking a candidate to the subject.
+// Signal IDs from the signal catalog (semantics/ownership_signals.json).
+const (
+	sigSharedRegistrant = "shared_registrant_details"
+	sigHosting          = "hosting_in_footprint"
+	sigColisting        = "certificate_colisting"
+	sigSelfHostedDNS    = "self_hosted_dns"
+)
+
+// GapSignal is one signal linking a candidate to the subject. Signal is its
+// ID in the signal catalog, where its rationale is documented.
 type GapSignal struct {
+	Signal  string        `json:"signal"`
 	Kind    string        `json:"kind"`
 	Via     string        `json:"via"`
 	Witness []WitnessEdge `json:"witness"`
@@ -114,6 +124,10 @@ type gapSearch struct {
 	ownable map[string]bool
 	found   map[string]*GapCandidate
 	report  *OwnershipGapReport
+	// values searches by value for the signals that need it; valueReads
+	// counts its searches and tag reads.
+	values     ValueSearcher
+	valueReads int
 }
 
 // searchOwnershipGaps runs the ownership-gap lens from root, an
@@ -173,6 +187,9 @@ func searchOwnershipGaps(ctx context.Context, graph Graph, schema SchemaCatalog,
 			return report, err
 		}
 	}
+	if err := g.valueSignals(order); err != nil {
+		return report, err
+	}
 	for _, c := range g.found {
 		if err := g.finish(c); err != nil {
 			return report, err
@@ -219,10 +236,18 @@ func (g *gapSearch) signalsFrom(cur Asset) error {
 		}
 
 		hop := witnessOf(s.edge, cur, s.other)
+		via := s.other.Type + " " + s.edge.Label + " " + cur.Type
 		switch {
+		case !s.forward && g.selfHostedDNS(s):
+			// Its name or mail servers are the subject's own hosts.
+			if rr := rrTypeName(relationRRType(s.edge)); rr != "" {
+				via = s.other.Type + " " + rr + " " + cur.Type
+			}
+
+			g.add(s.other, sigSelfHostedDNS, via, append(g.pathTo(cur.ID), hop))
 		case s.attr == attrInfrastructure && !s.forward:
 			// Something outside the footprint depends on a controlled asset.
-			g.add(s.other, SignalHosting, s.other.Type+" "+s.edge.Label+" "+cur.Type, append(g.pathTo(cur.ID), hop))
+			g.add(s.other, sigHosting, via, append(g.pathTo(cur.ID), hop))
 		case s.attr == "attribute" && s.forward && cur.Type != "Organization":
 			if err := g.identity(cur, s, hop); err != nil {
 				return err
@@ -269,7 +294,7 @@ func (g *gapSearch) identity(cur Asset, s step, hop WitnessEdge) error {
 		}
 
 		witness := append(append(g.pathTo(cur.ID), hop), witnessOf(t.edge, value, other))
-		g.add(other, SignalIdentity, cur.Type+" "+s.edge.Label+" "+value.Type, witness)
+		g.add(other, sigSharedRegistrant, cur.Type+" "+s.edge.Label+" "+value.Type, witness)
 	}
 
 	return nil
@@ -299,14 +324,23 @@ func (g *gapSearch) colisting(cur, shared Asset, hop WitnessEdge) error {
 		}
 
 		witness := append(append(g.pathTo(cur.ID), hop), witnessOf(t.edge, shared, t.other))
-		g.add(t.other, SignalColisting, shared.Type+" "+t.edge.Label, witness)
+		g.add(t.other, sigColisting, shared.Type+" "+t.edge.Label, witness)
 	}
 
 	return nil
 }
 
-func (g *gapSearch) add(a Asset, kind, via string, witness []WitnessEdge) {
+// add records signal id, found via a route, for candidate a.
+func (g *gapSearch) add(a Asset, id, via string, witness []WitnessEdge) {
 	if !g.ownable[a.Type] {
+		return
+	}
+	if _, mine := g.owned[a.ID]; mine {
+		return
+	}
+
+	def, ok := ownershipSignal(id)
+	if !ok {
 		return
 	}
 
@@ -316,16 +350,17 @@ func (g *gapSearch) add(a Asset, kind, via string, witness []WitnessEdge) {
 			return
 		}
 
+		g.w.assets[a.ID] = a
 		c = &GapCandidate{AssetID: a.ID, Type: a.Type, Asset: assetLabel(a)}
 		g.found[a.ID] = c
 	}
 	for _, s := range c.Signals {
-		if s.Kind == kind && s.Via == via {
+		if s.Signal == id && s.Via == via {
 			return
 		}
 	}
 
-	c.Signals = append(c.Signals, GapSignal{Kind: kind, Via: via, Witness: witness})
+	c.Signals = append(c.Signals, GapSignal{Signal: id, Kind: def.Kind, Via: via, Witness: witness})
 }
 
 // finish drops candidates another organization controls, then scores the
@@ -360,18 +395,27 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 	return nil
 }
 
-// scoreGap rates a candidate's signals. Identity is strong evidence of a
-// shared owner; hosting and co-listing are suggestive (a customer can be
-// hosted by, or share a certificate with, another party). The score is a
-// ranking aid, not a probability.
+// scoreGap rates a candidate's signals by their catalog strength and
+// weight. A strong signal (shared registrant details, a shared verification
+// token) points to one owner; a supporting one (hosting, co-listing) is
+// consistent with many. Each signal counts at most twice toward the score,
+// which ranks candidates and is not a probability.
 func scoreGap(signals []GapSignal, attachable bool) (float64, string) {
-	weight := map[string]float64{SignalIdentity: 0.45, SignalHosting: 0.2, SignalColisting: 0.15}
-	kinds := map[string]int{}
+	count := map[string]int{}
+	strong := 0
 	score := 0.0
 	for _, s := range signals {
-		kinds[s.Kind]++
-		if kinds[s.Kind] <= 2 {
-			score += weight[s.Kind]
+		def, ok := ownershipSignal(s.Signal)
+		if !ok {
+			continue
+		}
+
+		count[s.Signal]++
+		if def.Strength == StrengthStrong {
+			strong++
+		}
+		if count[s.Signal] <= 2 {
+			score += def.Weight
 		}
 	}
 	if score > 1 {
@@ -379,9 +423,9 @@ func scoreGap(signals []GapSignal, attachable bool) (float64, string) {
 	}
 
 	switch {
-	case attachable && (kinds[SignalIdentity] >= 2 || (kinds[SignalIdentity] >= 1 && len(kinds) >= 2)):
+	case attachable && (strong >= 2 || (strong >= 1 && len(count) >= 2)):
 		return score, GapPropose
-	case kinds[SignalIdentity] >= 1 || len(kinds) >= 2:
+	case strong >= 1 || len(count) >= 2:
 		return score, GapReview
 	default:
 		return score, GapWeak

@@ -192,3 +192,23 @@ func TestTrainAttributionNeedsEnoughReviews(t *testing.T) {
 		t.Error("a model was trained from one pending proposal")
 	}
 }
+
+func TestSignalsExplainEachRule(t *testing.T) {
+	var out bytes.Buffer
+	if err := listSignals("json", false, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range ai.OwnershipSignals() {
+		if !strings.Contains(out.String(), s.Title+" ("+s.ID+")") || !strings.Contains(out.String(), s.Rationale) {
+			t.Errorf("text listing lacks %s or its rationale", s.ID)
+		}
+	}
+
+	out.Reset()
+	if err := listSignals("markdown", true, &out); err != nil || out.String() != ai.SignalsMarkdown() {
+		t.Errorf("markdown listing differs from SIGNALS.md source: %v", err)
+	}
+	if err := listSignals("mermaid", true, &out); err == nil {
+		t.Error("an unsupported format was accepted")
+	}
+}

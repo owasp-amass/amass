@@ -34,7 +34,7 @@ const Description = "AI investigation, MCP tools, and reviewed inference proposa
 // the Asset Database, and only for a proposal a reviewer names. Automatic
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject", "retract", "train-attribution", "review"}
+	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -87,7 +87,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.IntVar(&guidanceRounds, "guidance-rounds", 2,
 		"Maximum intermediate model navigation rounds (0 disables; default 2; max 3)")
 	fs.StringVar(&graphSince, "since", "", "Only graph edges last seen since this RFC3339 timestamp")
-	fs.StringVar(&outputFormat, "format", "json", "Search format: json, text, or mermaid")
+	fs.StringVar(&outputFormat, "format", "json",
+		"Output format: json, text or mermaid (search); text, json or markdown (signals)")
 	fs.StringVar(&collectionApproval, "approve-collection", "",
 		"Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
 	fs.StringVar(&journalPath, "journal", "",
@@ -271,6 +272,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 
 	// Listing and rejecting proposals read and append to the journal only.
 	switch operation {
+	case "signals":
+		return listSignals(outputFormat, explicitFlags["format"], out)
 	case "proposals":
 		return listProposals(journalPath, outputFormat, out)
 	case "reject":
