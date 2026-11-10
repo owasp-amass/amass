@@ -24,3 +24,19 @@ func TestCuratedRelationLabelsExistInOAM(t *testing.T) {
 		}
 	}
 }
+
+// Curated type aliases must name registered OAM asset types.
+func TestCuratedAssetTypesExistInOAM(t *testing.T) {
+	registered := map[string]bool{}
+	for _, s := range (Catalog{}).SearchFields() {
+		registered[s.Type] = true
+	}
+	for _, rel := range (Catalog{}).Relations() {
+		registered[rel.SourceType], registered[rel.DestinationType] = true, true
+	}
+	for _, kind := range ai.CuratedAssetTypes() {
+		if !registered[kind] {
+			t.Errorf("curated alias type %q is not a registered OAM asset type", kind)
+		}
+	}
+}
