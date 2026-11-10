@@ -12,12 +12,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
 )
 
-type Server struct{ Runner ai.ToolRunner }
+// Server serves MCP over stdio. Model is optional: without it the
+// investigate tool answers every kind except paths. Evidence keeps recent
+// investigations for verify_citations; a nil store is created on Serve.
+type Server struct {
+	Runner   ai.ToolRunner
+	Model    ai.Model
+	Evidence *ai.EvidenceStore
+}
 
 type incoming struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -35,6 +41,10 @@ func rpcError(id json.RawMessage, code int, reason string) any {
 }
 
 func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	if s.Evidence == nil {
+		s.Evidence = ai.NewEvidenceStore()
+	}
+
 	reader := bufio.NewScanner(in)
 	reader.Buffer(make([]byte, 4096), 2<<20)
 	writer := bufio.NewWriter(out)
@@ -95,7 +105,7 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			reply = rpcResult(request.ID, map[string]any{})
 		case "tools/list":
 			tools := []any{}
-			for _, t := range ai.Specs() {
+			for _, t := range toolSpecs(s.Runner) {
 				tools = append(tools,
 					map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
 			}
@@ -111,8 +121,8 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 				break
 			}
 
-			toolCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
-			result, err := s.Runner.Run(toolCtx, p.Name, p.Arguments)
+			toolCtx, cancel := context.WithTimeout(ctx, ai.ToolTimeout(p.Name))
+			result, err := runTool(toolCtx, s.Runner, s.Model, s.Evidence, p.Name, p.Arguments)
 			cancel()
 			if err != nil {
 				reply = rpcResult(request.ID,
@@ -145,4 +155,18 @@ func write(w *bufio.Writer, response any) error {
 	}
 
 	return w.Flush()
+}
+
+// toolSpecs lists the graph tools and the investigation tools.
+func toolSpecs(runner ai.ToolRunner) []ai.ToolSpec {
+	return append(ai.Specs(), ai.InvestigationSpecs(runner.Catalog)...)
+}
+
+// runTool dispatches a tool call to the investigation tools or the runner.
+func runTool(ctx context.Context, runner ai.ToolRunner, model ai.Model, store *ai.EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
+	if ai.IsInvestigationTool(name) {
+		return ai.RunInvestigationTool(ctx, runner, model, store, name, args)
+	}
+
+	return runner.Run(ctx, name, args)
 }

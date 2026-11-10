@@ -24,3 +24,28 @@ func TestMCPList(t *testing.T) {
 		t.Fatalf("tools not listed: %s", output.String())
 	}
 }
+
+type nodeCatalog struct{}
+
+func (nodeCatalog) Relations() []ai.RelationshipSchema {
+	return []ai.RelationshipSchema{
+		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
+	}
+}
+
+// With a catalog, the investigation tools are listed with the graph tools.
+func TestMCPListsInvestigationTools(t *testing.T) {
+	input := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n" +
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n" +
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n")
+	var output bytes.Buffer
+	server := Server{Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: nodeCatalog{}}}
+	if err := server.Serve(context.Background(), input, &output); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{`"name":"investigate"`, `"name":"verify_citations"`, `"name":"walk_relations"`} {
+		if !strings.Contains(output.String(), name) {
+			t.Errorf("tools/list lacks %s", name)
+		}
+	}
+}
