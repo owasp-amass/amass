@@ -85,6 +85,8 @@ func sunyitServicesFixture() vendorGraph {
 	return vendorGraph{plannedGraph{fakeGraph: g}}
 }
 
+func campusGaps() (Graph, SchemaCatalog) { return campusGapsFixture(), vendorCatalog{testOAMCatalog} }
+
 func sunyitServices() (Graph, SchemaCatalog) {
 	return sunyitServicesFixture(), vendorCatalog{testOAMCatalog}
 }
@@ -96,6 +98,7 @@ var evalFixtures = map[string]func() (Graph, SchemaCatalog){
 	"campus-dns":        campusDNS,
 	"owasp-certificate": owaspCerts,
 	"sunyit-services":   sunyitServices,
+	"campus-gaps":       campusGaps,
 }
 
 // Every reported question runs here on each CI build.

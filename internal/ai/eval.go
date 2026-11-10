@@ -156,6 +156,11 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, strings.Join(row, " | "))
 		}
 	}
+	if r := inv.GapReport; r != nil {
+		for _, c := range r.Candidates {
+			out = append(out, c.Decision+" "+c.Type+" "+c.Asset)
+		}
+	}
 
 	return out
 }

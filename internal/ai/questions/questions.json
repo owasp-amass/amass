@@ -107,6 +107,14 @@
       "expect": {"answer": "table", "subject_type": "FQDN", "max_model_calls": 2},
       "offline": {"fixture": "sunyit-services", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"sunyit.edu\"},\"target_types\":[\"FQDN\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"table\",\"columns\":[{\"type\":\"FQDN\",\"role\":\"\"},{\"type\":\"Service\",\"role\":\"controller\"}]}"], "checks": {"answer_contains": ["| FQDNs | Services |", "| www.sunyit.edu | https (443/tcp) |", "| mail.sunyit.edu | smtp (25/tcp) |", "| vpn.sunyit.edu | - |"], "complete": true}},
       "live": {"answer_contains": ["| FQDNs |", "Services"], "results_include": ["sunyit.edu"]}
+    },
+    {
+      "id": "colgate-ownership-gaps",
+      "question": "What assets might Colgate University own that are not attributed to it?",
+      "note": "Phase 2: ownership gaps. The fixture has a registrant contact sharing Colgate's phone and address (propose), a name on Colgate's certificate that resolves into its network (review), a name only resolving there (weak) and a Hamilton College name resolving there (controlled elsewhere, excluded).",
+      "expect": {"answer": "ownership_gaps", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "campus-gaps", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Colgate University\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"ownership_gaps\",\"columns\":[]}"], "checks": {"results_include": ["propose ContactRecord https://rdap.example/alumni", "review FQDN colgate-events.com", "weak FQDN raiders.example.net"], "results_exclude": ["hamilton"], "answer_contains": ["--organization--> Organization Colgate University", "Nothing has been written."], "complete": true}},
+      "live": {"answer_excludes": ["No documented owner"]}
     }
   ]
 }
