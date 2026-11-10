@@ -468,9 +468,6 @@ func registeredDomain(name string) string {
 // captured name.
 var vendorQuestion = regexp.MustCompile(`(?i)^\s*(?:(?:which|what|who)(?:\s+(?:are|is))?|list|show|name)\s+(?:all\s+)?(?:of\s+)?(?:the\s+)?(?:third[- ]party\s+|external\s+|outside\s+)?(?:vendors|suppliers|providers|service providers|services|third[- ]parties)\s+(?:(?:(?:are|is)\s+)?(?:being\s+|currently\s+)?(?:used|relied (?:on|upon)|depended (?:on|upon)|engaged)\s+by|(?:of|for))\s+(?:the\s+)?(.+?)\s*\??\s*$`)
 
-// vendorLanguage marks a question as being about outside parties.
-var vendorLanguage = regexp.MustCompile(`(?i)\b(?:third[- ]part(?:y|ies)|vendors?|suppliers?|service providers?)\b`)
-
 var domainName = regexp.MustCompile(`(?i)^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$`)
 
 // deterministicThirdPartyQuery compiles an explicit vendor question about
@@ -511,16 +508,4 @@ func thirdPartyQuery(question string, subject PlanSubject, source string) Query 
 		Lens:      LensThirdParty,
 		Source:    source,
 	}
-}
-
-// promoteThirdPartyGoal turns a model goal for a vendor question about an
-// Organization or FQDN into the third-party lens.
-func promoteThirdPartyGoal(q *Query) bool {
-	if !vendorLanguage.MatchString(q.Question) || len(q.Hops) != 0 ||
-		(q.Subject.Type != "Organization" && q.Subject.Type != "FQDN") {
-		return false
-	}
-
-	*q = thirdPartyQuery(q.Question, q.Subject, q.Source)
-	return true
 }

@@ -33,11 +33,8 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 			return zero, err
 		}
 
-		q = QueryFromGoal(goal, question, SourceModelGoal)
-		q.Subject = organizationSubject(q.Subject)
-		if !promoteThirdPartyGoal(&q) && !promoteControlledGoal(&q, a.Runner.Catalog) {
-			promoteHierarchyGoal(&q)
-		}
+		goal.Subject = organizationSubject(goal.Subject)
+		q = queryFromPlannedGoal(goal, question)
 	}
 
 	var selectors []AssetSearchSchema

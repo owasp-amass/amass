@@ -309,42 +309,38 @@ func inventoryLimit(opts AdaptiveOptions) int {
 	return DefaultInventoryNames
 }
 
-// promoteHierarchyGoal turns a model goal that lists the names under an
-// FQDN into the hierarchy traversal, so it is answered by the bounded
-// inventory walk instead of model path selection. It applies when the goal
-// starts at an FQDN, asks for FQDN targets (or any target for a subdomain
-// question) and either uses only the FQDN node relationship or comes from a
-// subdomain or DNS namespace question.
+// promoteHierarchyGoal turns a goal that starts at an FQDN, asks for FQDNs
+// and follows only the FQDN node relationship into the hierarchy
+// traversal, so it is answered by the bounded inventory walk instead of
+// model path selection. It looks only at the goal's structure.
 func promoteHierarchyGoal(q *Query) bool {
 	node := GoalRelation{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"}
-	if q.Subject.Type != "FQDN" || q.Subject.UsesOrganizationResolution() || len(q.Hops) != 0 {
+	if q.Subject.Type != "FQDN" || q.Subject.UsesOrganizationResolution() || len(q.Hops) != 0 ||
+		len(q.TargetTypes) != 1 || q.TargetTypes[0] != "FQDN" || len(q.Relationships) == 0 {
 		return false
 	}
-
-	subdomains := isSubdomainInventoryQuestion(q.Question)
-	targets := len(q.TargetTypes) == 1 && q.TargetTypes[0] == "FQDN"
-	if !targets && !(subdomains && len(q.TargetTypes) == 0) {
-		return false
-	}
-
-	nodeOnly := len(q.Relationships) > 0
 	for _, rel := range q.Relationships {
 		if rel != node {
-			nodeOnly = false
+			return false
 		}
 	}
-	if !nodeOnly && !subdomains {
-		return false
-	}
 
+	hierarchyQuery(q)
+	return true
+}
+
+// hierarchyQuery converts q, which starts at an FQDN, into the hierarchy
+// traversal. A question that says "subdomains" omits the root itself.
+func hierarchyQuery(q *Query) {
 	q.Traversal = TraversalHierarchy
 	q.TargetTypes = []string{"FQDN"}
 	q.Direction = "out"
 	q.Purpose = "connected"
-	q.Relationships = []GoalRelation{node}
+	q.Relationships = []GoalRelation{
+		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
+	}
 	q.PathRule = "all"
-	q.ExcludeRoot = subdomains
-	return true
+	q.ExcludeRoot = isSubdomainInventoryQuestion(q.Question)
 }
 
 func isSubdomainInventoryQuestion(question string) bool {

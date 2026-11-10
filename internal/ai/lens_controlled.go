@@ -243,26 +243,3 @@ func (a Agent) controlledLens(ctx context.Context, root Asset, targets []string,
 
 	return out, nil
 }
-
-// promoteControlledGoal turns a model goal that asks which assets of
-// particular types an Organization has into the controlled lens, when the
-// attribution table can attribute every requested type to an Organization.
-func promoteControlledGoal(q *Query, schema SchemaCatalog) bool {
-	if q.Subject.Type != "Organization" || len(q.Hops) != 0 || q.Purpose != "connected" ||
-		vendorLanguage.MatchString(q.Question) || !controlledReachable(schema, q.TargetTypes) {
-		return false
-	}
-
-	*q = Query{
-		Version:     QueryVersion,
-		Question:    q.Question,
-		Subject:     q.Subject,
-		Traversal:   TraversalExplore,
-		TargetTypes: append([]string(nil), q.TargetTypes...),
-		Direction:   "both",
-		Purpose:     "connected",
-		Lens:        LensControlled,
-		Source:      q.Source,
-	}
-	return true
-}

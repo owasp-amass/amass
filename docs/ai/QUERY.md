@@ -40,10 +40,30 @@ question ──► CompileQuestion ──► Query ──► ValidateQuery ─�
 A hierarchy inventory is listed by Go and never sent to the model, so it is
 bounded by `-max-names` (default 1000, at most 10000) rather than the smaller
 model-context limits. Subdomain wordings such as "What are all the subdomains
-within example.com?" compile directly. When the model planner produces a goal
-that starts at an FQDN, asks for FQDNs and either uses only `node` edges or
-comes from a subdomain or DNS namespace question, it is promoted to the
-hierarchy traversal, so the listing is the same as `amass subs -names`.
+within example.com?" compile directly; otherwise the planner chooses the
+`hierarchy` answer kind (below). A goal that starts at an FQDN, asks for
+FQDNs and follows only `node` edges is also run as a hierarchy listing, so
+the listing is the same as `amass subs -names`.
+
+## Answer kinds
+
+The goal planner returns an `answer` field naming the kind of answer the
+question asks for. The schema enum and the prompt text are generated from
+the `answerKinds` registry in `answer_kinds.go`, and the model chooses by
+meaning rather than by wording rules:
+
+| Answer | Subject | Runs |
+| --- | --- | --- |
+| `paths` (default) | any | explore traversal and model path selection |
+| `hierarchy` | FQDN | hierarchy traversal |
+| `controlled` | Organization or FQDN | controlled lens |
+| `third_party` | Organization or FQDN | third-party lens |
+
+`validateAnswer` rejects a kind that does not fit the subject, targets or
+purpose (for example `controlled` with a type that the semantics table
+cannot attribute to an owner), and the planner retries with the reason.
+Registering a new kind makes it available to the model with no other
+change.
 
 ## Lenses
 
@@ -88,8 +108,8 @@ annotated (a test adds a hypothetical CloudResource and CloudAccount this
 way).
 
 Questions such as "Which third-party vendors are used by Colgate
-University?" compile to this lens directly; model goals for vendor questions
-about an Organization or FQDN are promoted to it. When nothing is documented
+University?" compile to this lens directly; other wordings reach it through
+the planner's `third_party` answer kind. When nothing is documented
 as controlled by the subject, the answer says so rather than listing
 unrelated connections.
 
@@ -99,9 +119,8 @@ of `target_types`, each with the witnessed path that attributes it (for
 example Organization <- ContactRecord <- registrant AutnumRecord <-
 registration AutonomousSystem). With target types set, the walk only expands
 asset types that can still lead to one, so an ASN question does not read the
-organization's URLs and hostnames. A model goal that asks which assets of
-attributable types an Organization has (not other Organizations or People,
-and not a vendor question) is promoted to this lens.
+organization's URLs and hostnames. The planner reaches it through the
+`controlled` answer kind.
 
 Organization names are resolved by exact match, also trying lower, upper and title
 case and a final period, never by similarity.
