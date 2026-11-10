@@ -50,6 +50,8 @@ jobs:
         run: go test ./internal/ai ./internal/ai/classify ./internal/ai/cli -run "TestDefaultEvidenceClassifier|TestHTTPClassifier|TestClassifierServiceEndpointGuard|TestTrainer" -count=1
       - name: FQDN inventory and subdomain summary regressions
         run: go test ./internal/subs ./internal/ai -run "TestAddInfrastructureInfoPreservesDiscoveredNamesWithoutASNs|TestFQDNInventory" -count=1
+      - name: Question evaluation set (every reported question)
+        run: go test ./internal/ai -run "TestQuestionEvaluationSet|TestNewOAMRelationshipsJoinLensesWithoutCode" -count=1 -v
       - name: Schema-grounded typed intent and language-alias regressions
         run: go test ./internal/ai -run "TestTypedRelationIntent|TestOAMIntent|TestSubdomainIntent|TestRelationAlias|TestRelationshipAndFieldVocabulary" -count=1
       - name: Build all Amass executables
