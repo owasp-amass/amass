@@ -22,3 +22,6 @@ Dockerfile
 *.gz
 *.bz2
 *.xz
+# Embedded AI data (vocabulary and question evaluation set)
+!internal/ai/semantics/*.json
+!internal/ai/questions/*.json

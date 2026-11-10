@@ -1,0 +1,87 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Question evaluation set. Each case runs offline in CI against a fixture graph (planner_replies stand in for the model) and live with `amass ai eval` against a real model and Asset Database. Add a case for every question a user reports; a fix counts when the new case and every earlier one pass.",
+  "cases": [
+    {
+      "id": "colgate-subdomains",
+      "question": "What are all the subdomains within colgate.edu?",
+      "note": "Reported 2026-11-09: failed with a per-node edge limit and model path selection.",
+      "expect": {"answer": "hierarchy", "subject_type": "FQDN", "max_model_calls": 0},
+      "offline": {
+        "fixture": "campus-dns",
+        "checks": {"answer_contains": ["Found 200 subdomain FQDN asset(s)"], "results_include": ["lab49.cslab.colgate.edu"],
+                   "min_results": 200, "complete": true}
+      },
+      "live": {"results_include": ["www.colgate.edu", "cs.colgate.edu"], "results_exclude": ["hamilton.edu"],
+               "min_results": 150, "complete": true}
+    },
+    {
+      "id": "colgate-namespace",
+      "question": "What are all the subdomains within Colgate University's DNS namespace?",
+      "note": "Reported 2026-11-09: the model planned an explore search instead of a listing.",
+      "expect": {"answer": "hierarchy", "subject_type": "FQDN", "max_model_calls": 1},
+      "offline": {
+        "fixture": "campus-dns",
+        "planner_replies": [
+          "{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"colgate.edu\"},\"target_types\":[\"FQDN\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"hierarchy\"}"
+        ],
+        "checks": {"answer_contains": ["Found 200 subdomain FQDN asset(s)"], "min_results": 200, "complete": true}
+      },
+      "live": {"results_include": ["www.colgate.edu"], "min_results": 150, "complete": true}
+    },
+    {
+      "id": "colgate-vendors-org",
+      "question": "Which third-party vendors are being used by the Colgate University organization?",
+      "note": "Reported 2026-11-09: the organization name did not resolve and no vendor answer existed.",
+      "expect": {"answer": "third_party", "subject_type": "Organization", "max_model_calls": 0},
+      "offline": {
+        "fixture": "campus",
+        "checks": {"results_include": ["FASTLY", "pphosted.com", "EDUCAUSE", "DigiCert"],
+                   "results_exclude": ["Colgate University", "Hamilton College", "cloudflare"], "complete": true}
+      },
+      "live": {"results_include": ["pphosted.com", "cloudfront.net"], "results_exclude": ["colgate"],
+               "answer_excludes": ["No assets are documented as controlled"]}
+    },
+    {
+      "id": "colgate-vendors-domain",
+      "question": "Which third-party vendors are used by colgate.edu?",
+      "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 0},
+      "offline": {
+        "fixture": "campus",
+        "checks": {"answer_contains": ["including those of its registrant Colgate University"],
+                   "results_include": ["FASTLY", "DigiCert"], "results_exclude": ["colgate.edu"]}
+      },
+      "live": {"answer_contains": ["including those of its registrant"], "results_include": ["pphosted.com"],
+               "results_exclude": ["colgate"]}
+    },
+    {
+      "id": "colgate-asn",
+      "question": "Which ASN is associated to the Colgate University organization?",
+      "note": "Reported 2026-11-09: the organization name did not resolve; the question needs the controlled answer.",
+      "expect": {"answer": "controlled", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {
+        "fixture": "campus",
+        "planner_replies": [
+          "{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Colgate University\"},\"target_types\":[\"AutonomousSystem\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"controlled\"}"
+        ],
+        "checks": {"results_include": ["1289"], "results_exclude": ["54113"], "complete": true}
+      },
+      "live": {"results_include": ["1289"], "results_exclude": ["54113", "14061", "16509"]}
+    },
+    {
+      "id": "owasp-parent",
+      "question": "What is the highest parent organization of owasp.org?",
+      "note": "Reported 2026-11-09: Let's Encrypt was named as the parent through a certificate SAN and issuer.",
+      "expect": {"answer": "paths", "subject_type": "FQDN", "purpose": "ultimate_parent", "max_model_calls": 2},
+      "offline": {
+        "fixture": "owasp-certificate",
+        "planner_replies": [
+          "{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"owasp.org\"},\"target_types\":[\"Organization\"],\"direction\":\"both\",\"purpose\":\"ultimate_parent\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"paths\"}"
+        ],
+        "checks": {"answer_contains": ["No organization is documented as the owner", "only as third parties", "let's encrypt"],
+                   "results_exclude": ["let's encrypt"]}
+      },
+      "live": {"results_exclude": ["let's encrypt"], "answer_excludes": ["parent organization candidate(s) from stored OAM paths (not independently verified ultimate legal ownership): let's encrypt"]}
+    }
+  ]
+}
