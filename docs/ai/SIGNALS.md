@@ -33,6 +33,7 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | [Same favicon](#same_favicon) | supporting | fingerprint | 0.15 |
 | [Same page content](#same_page_content) | supporting | fingerprint | 0.20 |
 | [Same page title](#same_page_title) | supporting (tiebreaker) | fingerprint | 0.10 |
+| [SSH host key reuse](#ssh_host_key_reuse) | strong | identity | 0.40 |
 
 <a id="shared_registrant_details"></a>
 ## Shared registrant details
@@ -372,3 +373,22 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A cloned or phishing copy of the organization's site carries the same title; this is why it is never strong evidence.
 - Products and templates give unrelated sites the same title.
+
+<a id="ssh_host_key_reuse"></a>
+## SSH host key reuse
+
+`ssh_host_key_reuse`: strong identity signal, weight 0.40.
+
+**Finds:** An address or name the organization does not yet own whose SSH server presents a host key that an SSH server on an address the organization controls also presents.
+
+**Why it counts:** An SSH host key is a private key generated on the server. The same key on two servers means they are the same machine reachable at two addresses, or were built from the same image by whoever holds the key, so the same party operates both.
+
+**Guards:**
+
+- Only addresses inside the organization's controlled footprint (its netblocks) are compared, never hosting it merely resolves to.
+- A host key on more than 50 services never counts: vendor appliances and cloud images that ship with a baked-in key.
+- Collected only in active enumeration, by completing the SSH key exchange; no user name or credential is ever sent.
+
+**Can still mislead when:**
+
+- Vendor appliances and published VM images that share one default key across customers (the 50-service limit catches widely deployed ones).

@@ -20,6 +20,7 @@ func TestWebSignalsUseTheFingerprintContract(t *testing.T) {
 		"same_favicon":        fingerprint.FaviconMMH3,
 		"same_page_content":   fingerprint.BodySHA256,
 		"same_page_title":     fingerprint.Title,
+		"ssh_host_key_reuse":  fingerprint.SSHHostKey,
 	}
 	for id, prop := range want {
 		def, ok := ownershipSignal(id)
@@ -102,5 +103,33 @@ func TestClonedSitesAreNeverProposed(t *testing.T) {
 		{Signal: "same_page_title"}}
 	if _, d := scoreGap(clone, true); d != GapReview {
 		t.Errorf("a cloned site = %s, want review", d)
+	}
+}
+
+func TestSSHHostKeyReuse(t *testing.T) {
+	g := webSignalsFixture()
+	key := simpleProperty(fingerprint.SSHHostKey, "ssh-ed25519 SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
+	service := func(host, svc string) {
+		g.assets[svc] = Asset{ID: svc, Type: "Service", Key: svc, Content: map[string]any{"unique_id": svc,
+			"service_type": "ssh"}}
+		g.links = append(g.links, Relation{ID: host + "-port-" + svc, FromID: host, ToID: svc, Label: "port",
+			Type: "PortRelation"})
+		g.evidence[svc] = []Evidence{key}
+	}
+
+	// The same key on an address in Colgate's netblock and on another.
+	service("ip-own", "svc-ssh-own")
+	g.assets["ip-twin"] = Asset{ID: "ip-twin", Type: "IPAddress", Key: "198.51.100.7",
+		Content: map[string]any{"address": "198.51.100.7"}}
+	service("ip-twin", "svc-ssh-twin")
+
+	c := candidateByID(signalsReport(t, g), "ip-twin")
+	if c == nil || !slices.Equal(signalIDs(c), []string{"ssh_host_key_reuse"}) {
+		t.Fatalf("ip-twin = %+v", c)
+	}
+
+	def, _ := ownershipSignal("ssh_host_key_reuse")
+	if def.Strength != StrengthStrong {
+		t.Errorf("ssh_host_key_reuse is %s, want strong", def.Strength)
 	}
 }

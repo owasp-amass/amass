@@ -529,6 +529,31 @@
         "A cloned or phishing copy of the organization's site carries the same title; this is why it is never strong evidence.",
         "Products and templates give unrelated sites the same title."
       ]
+    },
+    {
+      "id": "ssh_host_key_reuse",
+      "title": "SSH host key reuse",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.4,
+      "matcher": "service_fingerprint",
+      "params": {
+        "property": "ssh_host_key",
+        "asset_types": [
+          "Service"
+        ],
+        "min_length": 16
+      },
+      "finds": "An address or name the organization does not yet own whose SSH server presents a host key that an SSH server on an address the organization controls also presents.",
+      "rationale": "An SSH host key is a private key generated on the server. The same key on two servers means they are the same machine reachable at two addresses, or were built from the same image by whoever holds the key, so the same party operates both.",
+      "guards": [
+        "Only addresses inside the organization's controlled footprint (its netblocks) are compared, never hosting it merely resolves to.",
+        "A host key on more than 50 services never counts: vendor appliances and cloud images that ship with a baked-in key.",
+        "Collected only in active enumeration, by completing the SSH key exchange; no user name or credential is ever sent."
+      ],
+      "counter_indications": [
+        "Vendor appliances and published VM images that share one default key across customers (the 50-service limit catches widely deployed ones)."
+      ]
     }
   ]
 }
