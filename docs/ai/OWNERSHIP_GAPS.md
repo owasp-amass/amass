@@ -7,8 +7,11 @@ Organization's controlled assets, or an FQDN's documented owner, and looks
 outward for unattributed assets linked to that footprint by ownership
 signals: shared registrant details, shared DNS verification tokens,
 certificate key reuse, a private CA's issuing key, self-hosted name and
-mail servers, SPF and DMARC delegation, hosting and certificate
-co-listing.
+mail servers, SPF and DMARC delegation, web redirects into the
+organization's names, reverse DNS in its namespace, the same DNS provider
+account, hosting and certificate co-listing, with a matching TLS (JARM)
+fingerprint and the organization's name as tiebreakers, and a parked or
+for-sale page counting against ownership.
 
 Every signal, with what it finds, why it counts, the guards that stop it
 misfiring and when it can still mislead, is defined in
@@ -17,7 +20,7 @@ misfiring and when it can still mislead, is defined in
 ai signals` prints the same text, and `amass ai proposals` shows the
 rationale of each signal behind a proposal. Signals that compare values
 (verification tokens, SPF and DMARC references, certificate key
-identifiers) use asset-db's value search (`repository.ValueFinder`) and are
+identifiers, redirects, TLS fingerprints) use asset-db's value search (`repository.ValueFinder`) and are
 skipped on an asset-db without it.
 
 Assets documented as controlled by any organization are excluded; those are
@@ -33,6 +36,9 @@ strong or supporting, with a weight, in the catalog:
 - **review:** any strong signal, two signals of any strength, or more
   than one possible relationship;
 - **weak:** a single supporting signal.
+
+A tiebreaker never counts as the second signal, and a negative signal
+keeps a candidate at review at most.
 
 A trained ownership model replaces these rules (see Learning from reviews).
 

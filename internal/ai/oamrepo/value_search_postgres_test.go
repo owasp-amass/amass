@@ -49,3 +49,20 @@ func TestTokenAndSPFAttributeOwnershipOnPostgres(t *testing.T) {
 		t.Fatalf("applied = %+v; candidates = %+v", res.Applied, res.Report.Candidates)
 	}
 }
+
+// TestServiceAndReverseDNSSignalsOnPostgres runs checkServiceSignals against
+// the empty PostgreSQL database named by AMASS_AI_POSTGRES_SIGNALS_DSN.
+func TestServiceAndReverseDNSSignalsOnPostgres(t *testing.T) {
+	dsn := os.Getenv("AMASS_AI_POSTGRES_SIGNALS_DSN")
+	if dsn == "" {
+		t.Skip("AMASS_AI_POSTGRES_SIGNALS_DSN is not set")
+	}
+
+	db, err := assetdb.New(postgres.Postgres, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = db.Close() }()
+	checkServiceSignals(t, db)
+}

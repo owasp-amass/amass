@@ -17,7 +17,7 @@ import (
 // asset-db without it still builds; the signals that need it are skipped.
 type valueFinder interface {
 	FindEntitiesByTagValue(ctx context.Context, atype oam.AssetType, name, value string, contains bool, since time.Time, limit int) ([]*dbt.Entity, bool, error)
-	FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, since time.Time, limit int) ([]*dbt.Entity, bool, error)
+	FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*dbt.Entity, bool, error)
 }
 
 var _ ai.ValueSearcher = Adapter{}
@@ -38,13 +38,13 @@ func (a Adapter) FindByTagValue(ctx context.Context, assetType, name, value stri
 }
 
 // FindByAttribute implements ai.ValueSearcher.
-func (a Adapter) FindByAttribute(ctx context.Context, assetType, key, value string, limit int) ([]ai.Asset, bool, error) {
+func (a Adapter) FindByAttribute(ctx context.Context, assetType, key, value string, contains bool, limit int) ([]ai.Asset, bool, error) {
 	vf, ok := a.Repo.(valueFinder)
 	if !ok {
 		return nil, false, ai.ErrValueSearchUnsupported
 	}
 
-	ents, more, err := vf.FindEntitiesByAttribute(ctx, oam.AssetType(assetType), key, value, time.Time{}, limit)
+	ents, more, err := vf.FindEntitiesByAttribute(ctx, oam.AssetType(assetType), key, value, contains, time.Time{}, limit)
 	if err != nil {
 		return nil, false, err
 	}

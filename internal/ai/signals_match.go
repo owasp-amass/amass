@@ -21,8 +21,9 @@ type ValueSearcher interface {
 	// contains is set.
 	FindByTagValue(ctx context.Context, assetType, name, value string, contains bool, limit int) ([]Asset, bool, error)
 	// FindByAttribute finds assets of assetType whose stored attribute key
-	// equals value.
-	FindByAttribute(ctx context.Context, assetType, key, value string, limit int) ([]Asset, bool, error)
+	// equals value, or whose text contains it (case-insensitive) when
+	// contains is set.
+	FindByAttribute(ctx context.Context, assetType, key, value string, contains bool, limit int) ([]Asset, bool, error)
 }
 
 // ErrValueSearchUnsupported reports a repository without value searches;
@@ -99,30 +100,56 @@ func (g *gapSearch) valueSignals(order []string) error {
 	}
 
 	g.values = vs
-	for _, id := range order {
-		if err := g.w.ctx.Err(); err != nil {
-			return err
+	// The strong and DNS signals run first, so the tiebreaker cannot use up
+	// the value-search budget they need.
+	for pass := 0; pass < 2; pass++ {
+		for _, id := range order {
+			if err := g.w.ctx.Err(); err != nil {
+				return err
+			}
+			if g.valueReads >= gapMaxValueReads || g.w.report.Reads >= lensMaxReads {
+				g.w.truncate("value search limit")
+				return nil
+			}
+
+			err := g.valueSignalsOf(g.owned[id], pass)
+			if errors.Is(err, ErrValueSearchUnsupported) {
+				return nil
+			} else if err != nil {
+				return err
+			}
 		}
-		if g.valueReads >= gapMaxValueReads || g.w.report.Reads >= lensMaxReads {
-			g.w.truncate("value search limit")
-			return nil
+	}
+
+	return nil
+}
+
+// valueSignalsOf runs the value signals one controlled asset gives in a
+// pass: verification tokens, email authentication and redirects for apex
+// domains, key matches for certificates and provider accounts for domain
+// registrations first, TLS fingerprints of named services second.
+func (g *gapSearch) valueSignalsOf(a Asset, pass int) error {
+	if pass == 1 {
+		if a.Type == "FQDN" {
+			return g.fingerprintSignals(a)
 		}
 
-		var err error
-		a := g.owned[id]
-		switch a.Type {
-		case "FQDN":
-			if g.isApex(a) {
-				err = g.txtSignals(a)
+		return nil
+	}
+
+	switch a.Type {
+	case "FQDN":
+		if g.isApex(a) {
+			if err := g.txtSignals(a); err != nil {
+				return err
 			}
-		case "TLSCertificate":
-			err = g.certificateSignals(a)
+
+			return g.redirectSignals(a)
 		}
-		if errors.Is(err, ErrValueSearchUnsupported) {
-			return nil
-		} else if err != nil {
-			return err
-		}
+	case "TLSCertificate":
+		return g.certificateSignals(a)
+	case "DomainRecord":
+		return g.nameserverSignals(a)
 	}
 
 	return nil
@@ -284,10 +311,7 @@ func (g *gapSearch) referenceSignals(apex Asset) error {
 // or a name below it ("include:_spf.example.com", "rua:example.com"), or "".
 func delegatesTo(txt, domain string) string {
 	lower := strings.ToLower(strings.TrimSpace(txt))
-	within := func(host string) bool {
-		host = strings.TrimSuffix(strings.TrimSpace(host), ".")
-		return host == domain || strings.HasSuffix(host, "."+domain)
-	}
+	within := func(host string) bool { return hostWithin(host, domain) }
 
 	switch {
 	case strings.HasPrefix(lower, "v=spf1"):
@@ -350,7 +374,7 @@ func (g *gapSearch) certificateSignals(cert Asset) error {
 			continue
 		}
 
-		others, more, err := g.values.FindByAttribute(g.w.ctx, "TLSCertificate", def.Params.Attribute, value,
+		others, more, err := g.values.FindByAttribute(g.w.ctx, "TLSCertificate", def.Params.Attribute, value, false,
 			gapMaxShared+1)
 		if err != nil {
 			return err
@@ -406,4 +430,11 @@ func publicIssuer(issuer string, public []string) bool {
 	}
 
 	return false
+}
+
+// hostWithin reports whether host is domain or a name below it.
+func hostWithin(host, domain string) bool {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	domain = strings.ToLower(domain)
+	return host != "" && (host == domain || strings.HasSuffix(host, "."+domain))
 }
