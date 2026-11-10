@@ -707,12 +707,55 @@ func TestRepeatedControllerColumnsAreCorrected(t *testing.T) {
 func TestTableDropsColumnsRepeatingTheRow(t *testing.T) {
 	goal := InvestigationGoal{TargetTypes: []string{"URL"}, Columns: []TableColumn{{Type: "URL"}, {Type: "IPAddress"},
 		{Type: "Organization", Role: ColumnController}}}
-	if cols := tableColumns(goal); len(cols) != 2 || cols[0].Type != "IPAddress" {
+	if cols := tableColumns(goal, nil); len(cols) != 2 || cols[0].Type != "IPAddress" {
 		t.Fatalf("columns = %+v, want IPAddress then controller", cols)
 	}
 
 	goal.Columns = []TableColumn{{Type: "URL"}}
-	if cols := tableColumns(goal); len(cols) != 1 {
+	if cols := tableColumns(goal, nil); len(cols) != 1 {
 		t.Fatalf("the only column was dropped: %+v", cols)
+	}
+}
+
+// Live eval plan: "with controlling Organization" only, for a question that
+// names IP addresses. The IP address column is added before the
+// controller, so the controller is the IP address's hosting provider.
+func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
+	model := &plannerModel{replies: []string{
+		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+			`"target_types":["URL"],"direction":"both","purpose":"connected","answer":"table",` +
+			`"columns":[{"type":"Organization","role":"controller"}]}`,
+	}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
+		Limits: DefaultLimits()}}
+
+	result, err := agent.AskAdaptive(context.Background(),
+		"Please create a table with each website, it's IP address, and hosting provider that's within the Colgate "+
+			"University organization?", AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cols := result.Query.Columns
+	if len(cols) != 2 || cols[0].Type != "IPAddress" || cols[1].Role != ColumnController {
+		t.Fatalf("columns = %+v, want IPAddress then controller", cols)
+	}
+	if !strings.Contains(result.Answer, "| https://www.colgate.edu | 151.101.1.1 | FASTLY |") {
+		t.Errorf("table does not show the hosting provider of the IP address:\n%s", result.Answer)
+	}
+	if model.calls != 1 {
+		t.Errorf("repairing the chain used %d model calls, want 1", model.calls)
+	}
+}
+
+func TestMentionedTypesPreferLongestPhrase(t *testing.T) {
+	cat := vendorCatalog{testOAMCatalog}
+	got := strings.Join(mentionedTypes("each website, it's IP address, and hosting provider", cat), ",")
+	if got != "IPAddress" {
+		t.Errorf("mentioned = %q, want only IPAddress (not Location for \"address\")", got)
+	}
+	if got := strings.Join(mentionedTypes("list the netblocks and ASNs",
+		cat), ","); got != "AutonomousSystem,Netblock" {
+		t.Errorf("mentioned = %q", got)
 	}
 }
