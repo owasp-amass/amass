@@ -37,6 +37,27 @@ func (s PlanSubject) AssetSelector() AssetSelector {
 	return AssetSelector{Type: s.Type, Field: s.Field, Value: s.Value, EntityID: s.EntityID}
 }
 
+// organizationSubject moves an Organization name or legal_name selector
+// into the organization resolution fields, so it gets the exact name
+// variants and alias handling of resolve_organization rather than a single
+// indexed lookup.
+func organizationSubject(s PlanSubject) PlanSubject {
+	if s.Type != "Organization" || s.EntityID != "" || s.Value == "" {
+		return s
+	}
+	switch s.Field {
+	case "name":
+		s.Name = s.Value
+	case "legal_name":
+		s.LegalName = s.Value
+	default:
+		return s
+	}
+
+	s.Field, s.Value = "", ""
+	return s
+}
+
 func (s PlanSubject) UsesOrganizationResolution() bool {
 	return s.Type == "Organization" && s.Field == "" && s.Value == "" && s.EntityID == ""
 }

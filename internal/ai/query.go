@@ -32,6 +32,7 @@ const (
 	SourceOrganizationRelation = "organization_relation"
 	SourceModelGoal            = "model_goal"
 	SourceCaller               = "caller"
+	SourceThirdPartyLens       = "third_party_lens"
 )
 
 // Query is the single, model-independent intermediate representation of a
@@ -66,6 +67,11 @@ type Query struct {
 	// ExcludeRoot omits the root asset from a hierarchy inventory, as when a
 	// user asks for subdomains rather than FQDNs.
 	ExcludeRoot bool `json:"exclude_root,omitempty"`
+	// Lens, when set, answers a fixed question about the subject from the
+	// relationship attribution table instead of a traversal: third_party
+	// lists the outside vendors its controlled assets use. It is used with
+	// the explore traversal and needs no model.
+	Lens string `json:"lens,omitempty"`
 	// Source names the compiler that produced the Query.
 	Source string `json:"source"`
 }
@@ -86,7 +92,7 @@ func (q Query) Goal() InvestigationGoal {
 // Deterministic reports whether q can be executed and answered without a
 // model: route and hierarchy answers list every witnessed destination.
 func (q Query) Deterministic() bool {
-	return q.Traversal == TraversalRoute || q.Traversal == TraversalHierarchy
+	return q.Traversal == TraversalRoute || q.Traversal == TraversalHierarchy || q.Lens != ""
 }
 
 // Describe renders q as one line of plain English for traces, prompts and
@@ -97,6 +103,10 @@ func (q Query) Describe() string {
 	if len(q.TargetTypes) > 0 {
 		targets = strings.Join(q.TargetTypes, ", ")
 	}
+	if q.Lens == LensThirdParty {
+		return fmt.Sprintf("List the third-party vendors used by the assets %s controls.", subject)
+	}
+
 	switch q.Traversal {
 	case TraversalHierarchy:
 		what := "FQDNs"
@@ -205,8 +215,21 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	default:
 		return fmt.Errorf("traversal must be %s, %s or %s", TraversalExplore, TraversalRoute, TraversalHierarchy)
 	}
+	switch q.Lens {
+	case "":
+	case LensThirdParty:
+		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
+			return errors.New("lens queries use the explore traversal without hops")
+		}
+		if q.Subject.Type != "Organization" && q.Subject.Type != "FQDN" {
+			return errors.New("the third_party lens starts from an Organization or FQDN")
+		}
+	default:
+		return fmt.Errorf("unknown lens %q", q.Lens)
+	}
 	switch q.Source {
-	case SourceFQDNHierarchy, SourceTypedRelation, SourceOrganizationRelation, SourceModelGoal, SourceCaller:
+	case SourceThirdPartyLens, SourceFQDNHierarchy, SourceTypedRelation, SourceOrganizationRelation,
+		SourceModelGoal, SourceCaller:
 	default:
 		return fmt.Errorf("unknown query source %q", q.Source)
 	}

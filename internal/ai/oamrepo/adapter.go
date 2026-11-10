@@ -358,16 +358,11 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	}
 
 	// Models sometimes remove a final period from a company name (e.g.,
-	// "Inc." -> "Inc"). Try both exact forms using indexed content queries.
-	// This is intentionally not fuzzy matching: other punctuation and
-	// arbitrary string similarity are not accepted as an entity identity.
-	variants := []string{name}
-	if strings.HasSuffix(name, ".") {
-		variants = append(variants, strings.TrimSuffix(name, "."))
-	} else {
-		variants = append(variants, name+".")
-	}
-
+	// "Inc." -> "Inc") or change its case. Try those exact forms using
+	// indexed content queries. This is intentionally not fuzzy matching:
+	// other punctuation and arbitrary string similarity are not accepted as
+	// an entity identity.
+	variants := organizationNameVariants(name)
 	out := make([]ai.Asset, 0, limit)
 	seen := make(map[string]bool, limit)
 	for _, candidate := range variants {
@@ -405,6 +400,40 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	return out, nil
 }
 
+// organizationNameVariants returns the exact name forms tried for an
+// organization lookup: the name as given, upper case and title case (as
+// registries and GLEIF often store names), each with and without a final
+// period. No other normalization or similarity is applied.
+func organizationNameVariants(name string) []string {
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		return nil
+	}
+
+	words := strings.Fields(strings.ToLower(name))
+	for i, w := range words {
+		r := []rune(w)
+		words[i] = strings.ToUpper(string(r[0])) + string(r[1:])
+	}
+
+	seen := map[string]bool{}
+	var out []string
+	for _, form := range []string{name, strings.ToUpper(name), strings.Join(words, " ")} {
+		alt := form + "."
+		if strings.HasSuffix(form, ".") {
+			alt = strings.TrimSuffix(form, ".")
+		}
+		for _, v := range []string{form, alt} {
+			if v != "" && !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
+		}
+	}
+
+	return out
+}
+
 // ResolveOrganizations generates field-specific candidate matches using only
 // bounded repository content filters. Alias metadata must be explicitly supplied
 // from a curated source; neither aliases nor names imply legal ownership.
@@ -423,14 +452,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 	// Exact database lookup only. A second bounded query permits a
 	// terminal-period variant, which models frequently omit. Fuzzy
 	// similarity, suffix removal and unrestricted table scans are prohibited.
-	variants := func(s string) []string {
-		s = strings.Join(strings.Fields(s), " ")
-		if strings.HasSuffix(s, ".") {
-			return []string{s, strings.TrimSuffix(s, ".")}
-		}
-
-		return []string{s, s + "."}
-	}
+	variants := organizationNameVariants
 	matches := map[string]*ai.OrganizationCandidate{}
 	tooMany := false
 	add := func(ent *dbt.Entity, field, value, source string) error {
