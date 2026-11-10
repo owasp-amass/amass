@@ -42,3 +42,33 @@ new records.
 
 The lens only proposes. Writing approved proposals is a separate, reviewed
 step.
+
+## Review and write
+
+Nothing reaches the Asset Database without a named reviewer approving one
+proposal. With `-journal`, `ask` records the gap answer's proposals (propose
+and review decisions with exactly one attachment) in the review journal,
+with their signals and evidence lines. Asking again does not duplicate a
+proposal; its ID is a hash of the relationship it would write.
+
+```bash
+amass ai -model qwen3:8b -journal review.jsonl \
+  -question "Which assets probably belong to Colgate University but are not attributed to it?" ask
+amass ai -journal review.jsonl proposals
+amass ai -journal review.jsonl -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff approve
+amass ai -journal review.jsonl -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff reject
+```
+
+`approve` re-reads both entities, checks that their types still match the
+proposal and that OAM defines the relationship (`oam.ValidRelationship`,
+SimpleRelation only), and writes it with asset-db's `CreateEdge` and a
+`SourceProperty` named `amass-ai` whose confidence is the score times 100.
+This is how Amass plugins record relationships, so the written edge looks
+like collected data except for its source, and every later answer that
+cites it shows `amass-ai`. When the relationship is already stored, nothing
+is written and the existing edge is recorded. `reject` records the decision
+and writes nothing. The journal keeps every proposal, decision, reviewer and
+edge ID.
+
+No OAM relationship types are added: a proposal uses only relationships OAM
+already defines.

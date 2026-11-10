@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
@@ -26,7 +28,12 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
-const Description = "Read-only AI investigation, MCP tools, and inference proposals"
+const Description = "AI investigation, MCP tools, and reviewed inference proposals"
+
+// operations are the amass ai subcommands. Only approve writes to the Asset
+// Database, and only a proposal a reviewer names.
+var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
+	"proposals", "approve", "reject"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -40,7 +47,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
-	var queryPath, evalPath string
+	var queryPath, evalPath, proposalID, reviewer string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
 	var modelTimeout, investigationTimeout time.Duration
@@ -83,6 +90,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&collectionApproval, "approve-collection", "",
 		"Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
 	fs.StringVar(&journalPath, "journal", "", "Inference proposal journal path")
+	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID for approve or reject")
+	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve or reject decision")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
 	fs.StringVar(&aliasesPath, "organization-aliases", "",
 		"Optional JSON file with explicitly sourced organization alias mappings (read-only)")
@@ -110,12 +119,11 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: amass ai [flags] ask|plan|eval|mcp|infer|scan|search|collect-plan|collect")
+		return errors.New("usage: amass ai [flags] " + strings.Join(operations, "|"))
 	}
 
 	operation := fs.Arg(0)
-	if operation != "ask" && operation != "plan" && operation != "eval" && operation != "mcp" && operation != "infer" &&
-		operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
+	if !slices.Contains(operations, operation) {
 		return fmt.Errorf("unknown operation %q", operation)
 	}
 
@@ -246,6 +254,13 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 			return err
 		}
 	}
+	// Listing and rejecting proposals read and append to the journal only.
+	switch operation {
+	case "proposals":
+		return listProposals(journalPath, outputFormat, out)
+	case "reject":
+		return rejectProposal(journalPath, proposalID, reviewer, out)
+	}
 	if operation == "plan" {
 		// Compiling a question reads only the static OAM catalog, never the
 		// Asset Database, so no database is opened.
@@ -291,6 +306,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
+	if operation == "approve" {
+		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
+	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
 		cancel()
@@ -410,6 +428,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := recordGapProposals(journalPath, result, errout); err != nil {
+			return err
+		}
 
 		return writeInvestigation(out, outputFormat, result)
 	}
@@ -440,6 +461,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 			writeTrace(errout, result)
 		}
 		if err != nil {
+			return err
+		}
+		if err := recordGapProposals(journalPath, result, errout); err != nil {
 			return err
 		}
 
