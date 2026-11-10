@@ -87,7 +87,7 @@ func newProvider(s providerSettings) (ai.Model, error) {
 // fields are rejected so a mistyped key cannot silently widen a query.
 func readQuery(path string, stdin io.Reader) (ai.Query, error) {
 	var q ai.Query
-	var r io.Reader = stdin
+	r := stdin
 	if path != "-" {
 		f, err := os.Open(path)
 		if err != nil {
