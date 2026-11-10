@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
@@ -108,6 +109,10 @@ type fingerprint struct {
 	hash  string
 }
 
+// maxJARMTargets bounds the hosts probed for one service; each target
+// costs ten TLS connections.
+const maxJARMTargets = 4
+
 func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	var targets []*fingerprint
 
@@ -116,30 +121,20 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, e.Entity, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			portrel, ok := edge.Relation.(*oamgen.PortRelation)
-			if !ok {
-				continue
-			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				switch a.Asset.(type) {
-				case *oamdns.FQDN:
-					if portrel.Protocol == "TCP" {
-						t := &fingerprint{
-							asset: e.Entity,
-							port:  edge,
-						}
+				if t := jarmTarget(a, edge); t != nil {
+					if _, isName := a.Asset.(*oamdns.FQDN); isName {
+						// Names first: the probes then carry the server name.
 						targets = append([]*fingerprint{t}, targets...)
-					}
-				case *oamnet.IPAddress:
-					if portrel.Protocol == "TCP" {
-						targets = append(targets, &fingerprint{
-							asset: e.Entity,
-							port:  edge,
-						})
+					} else {
+						targets = append(targets, t)
 					}
 				}
 			}
 		}
+	}
+	if len(targets) > maxJARMTargets {
+		targets = targets[:maxJARMTargets]
 	}
 
 	var results []*fingerprint
@@ -157,6 +152,23 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	if len(results) > 0 {
 		j.store(e, results)
 	}
+}
+
+// jarmTarget returns the host behind a TCP port relation to a service as a
+// fingerprint target, or nil. The target is the host (an FQDN or IP
+// address), which is what the probes connect to, not the service.
+func jarmTarget(host *dbt.Entity, edge *dbt.Edge) *fingerprint {
+	portrel, ok := edge.Relation.(*oamgen.PortRelation)
+	if !ok || !strings.EqualFold(portrel.Protocol, "tcp") || host == nil || host.Asset == nil {
+		return nil
+	}
+
+	switch host.Asset.(type) {
+	case *oamdns.FQDN, *oamnet.IPAddress:
+		return &fingerprint{asset: host, port: edge}
+	}
+
+	return nil
 }
 
 func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
