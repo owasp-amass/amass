@@ -6,6 +6,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -676,14 +677,14 @@ func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
 }
 
 // Live eval: Qwen returned three controller columns and no IP address
-// column; the chain is rejected and the correction shows a valid chain.
-func TestRepeatedControllerColumnsAreCorrected(t *testing.T) {
+// column. The repeats collapse and the IP address column the question
+// names is added, so no correction call is needed.
+func TestRepeatedControllerColumnsAreRepaired(t *testing.T) {
 	ctl := `{"type":"Organization","role":"controller"}`
 	bad := `{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
 		`"target_types":["URL"],"direction":"both","purpose":"connected","answer":"table",` +
 		`"columns":[` + ctl + `,` + ctl + `,` + ctl + `]}`
-	good := strings.Replace(bad, `[`+ctl+`,`+ctl+`,`+ctl+`]`, `[{"type":"IPAddress","role":""},`+ctl+`]`, 1)
-	model := &inspectingPlannerModel{replies: []string{bad, good}}
+	model := &plannerModel{replies: []string{bad}}
 
 	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
 		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
@@ -691,14 +692,9 @@ func TestRepeatedControllerColumnsAreCorrected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(q.Columns) != 2 || q.Columns[0].Type != "IPAddress" {
-		t.Fatalf("corrected columns not used: %+v", q.Columns)
-	}
-
-	correction := model.requests[1][len(model.requests[1])-1].Text
-	if !strings.Contains(correction, "two in a row repeat the same organization") ||
-		!strings.Contains(correction, `{"type":"IPAddress","role":""}`) {
-		t.Errorf("correction does not explain the column chain: %s", correction)
+	if model.calls != 1 || len(q.Columns) != 2 || q.Columns[0].Type != "IPAddress" ||
+		q.Columns[1].Role != ColumnController {
+		t.Fatalf("calls=%d columns=%+v, want IPAddress then controller after one call", model.calls, q.Columns)
 	}
 }
 
@@ -757,5 +753,84 @@ func TestMentionedTypesPreferLongestPhrase(t *testing.T) {
 	if got := strings.Join(mentionedTypes("list the netblocks and ASNs",
 		cat), ","); got != "AutonomousSystem,Netblock" {
 		t.Errorf("mentioned = %q", got)
+	}
+}
+
+// structuredPlanner returns replies in order through GenerateStructured
+// and records the schema of each call.
+type structuredPlanner struct {
+	replies []string
+	schemas []JSONSchema
+}
+
+func (m *structuredPlanner) Generate(context.Context, []Message, []ToolSpec) (Response, error) {
+	return Response{}, errors.New("structured generation expected")
+}
+
+func (m *structuredPlanner) GenerateStructured(_ context.Context, _ []Message, s JSONSchema) (Response, error) {
+	i := len(m.schemas)
+	m.schemas = append(m.schemas, s)
+	if i >= len(m.replies) {
+		i = len(m.replies) - 1
+	}
+
+	return Response{Text: m.replies[i]}, nil
+}
+
+// After a table with an invalid row type, the retry's schema allows only
+// the table answer and controllable row types, so a schema-enforcing
+// provider cannot repeat Qwen's mistake.
+func TestTableRetryNarrowsTheSchema(t *testing.T) {
+	bad := `{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+		`"target_types":["Organization"],"direction":"both","purpose":"connected","relationships":[],` +
+		`"path_rule":"","answer":"table","columns":[{"type":"IPAddress","role":""},` +
+		`{"type":"Organization","role":"controller"}]}`
+	good := strings.Replace(bad, `"target_types":["Organization"]`, `"target_types":["URL"]`, 1)
+	model := &structuredPlanner{replies: []string{bad, good}}
+
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
+		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
+		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
+	if err != nil || q.Lens != LensTable || len(model.schemas) != 2 {
+		t.Fatalf("q=%+v err=%v calls=%d", q, err, len(model.schemas))
+	}
+
+	props := model.schemas[1].Schema["properties"].(map[string]any)
+	if enum := props["answer"].(map[string]any)["enum"].([]string); len(enum) != 1 || enum[0] != LensTable {
+		t.Errorf("retry answer enum = %v, want [table]", enum)
+	}
+
+	rows := props["target_types"].(map[string]any)["items"].(map[string]any)["enum"].([]string)
+	if contains(rows, "Organization") || !contains(rows, "URL") || !contains(rows, "Netblock") {
+		t.Errorf("retry row types = %v, want controllable types without Organization", rows)
+	}
+	if props["target_types"].(map[string]any)["maxItems"] != 1 {
+		t.Error("retry allows more than one row type")
+	}
+
+	first := model.schemas[0].Schema["properties"].(map[string]any)["answer"].(map[string]any)["enum"].([]string)
+	if len(first) != len(answerKinds) {
+		t.Errorf("first attempt was narrowed: %v", first)
+	}
+}
+
+// A rejected controlled answer may need another kind, so its retry keeps
+// the full schema.
+func TestControlledRetryKeepsTheFullSchema(t *testing.T) {
+	bad := `{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+		`"target_types":["Phone"],"direction":"both","purpose":"connected","relationships":[],"path_rule":"",` +
+		`"answer":"controlled","columns":[]}`
+	good := strings.Replace(bad, `"answer":"controlled"`, `"answer":"paths"`, 1)
+	model := &structuredPlanner{replies: []string{bad, good}}
+
+	if _, err := (Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(),
+		Catalog: vendorCatalog{testOAMCatalog}, Limits: DefaultLimits()}}).CompileQuestion(context.Background(),
+		"What phone numbers does Colgate list?"); err != nil {
+		t.Fatal(err)
+	}
+
+	enum := model.schemas[1].Schema["properties"].(map[string]any)["answer"].(map[string]any)["enum"].([]string)
+	if len(enum) != len(answerKinds) {
+		t.Errorf("controlled retry narrowed the answer kinds: %v", enum)
 	}
 }

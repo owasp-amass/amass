@@ -357,3 +357,84 @@ func mentionedTypes(question string, schema SchemaCatalog) []string {
 	sort.Strings(out)
 	return out
 }
+
+// narrowGoalSchema returns base restricted to one answer kind, for the retry
+// after the planner chose that kind but filled it in wrongly: the answer is
+// fixed, the subject types are the kind's, target_types allow only what the
+// kind can list (for controlled and table, the types an owner can control,
+// from the semantics table), and fields the kind does not use must be
+// empty. A provider that enforces schemas then cannot repeat the mistake.
+func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JSONSchema {
+	props := map[string]any{}
+	for k, v := range base.Schema["properties"].(map[string]any) {
+		props[k] = v
+	}
+
+	none := map[string]any{"type": "array", "maxItems": 0}
+	enumArray := func(values []string, min, max int) map[string]any {
+		a := map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": values}}
+		if min > 0 {
+			a["minItems"] = min
+		}
+		if max > 0 {
+			a["maxItems"] = max
+		}
+
+		return a
+	}
+
+	props["answer"] = map[string]any{"type": "string", "enum": []string{kind.Name}}
+	if len(kind.Subjects) > 0 {
+		subject := map[string]any{}
+		for k, v := range props["subject"].(map[string]any) {
+			subject[k] = v
+		}
+
+		fields := map[string]any{}
+		for k, v := range subject["properties"].(map[string]any) {
+			fields[k] = v
+		}
+
+		fields["type"] = map[string]any{"type": "string", "enum": kind.Subjects}
+		subject["properties"] = fields
+		props["subject"] = subject
+	}
+	if kind.Name != AnswerPaths {
+		props["purpose"] = map[string]any{"type": "string", "enum": []string{"connected"}}
+		props["relationships"] = none
+		props["path_rule"] = map[string]any{"type": "string", "enum": []string{""}}
+	}
+
+	owned := ownedTypes(schema)
+	switch kind.Name {
+	case AnswerHierarchy:
+		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
+	case LensControlled:
+		props["target_types"] = enumArray(owned, 0, 0)
+	case LensThirdParty:
+		props["target_types"] = none
+	case LensTable:
+		props["target_types"] = enumArray(owned, 1, 1)
+		if cols, ok := props["columns"].(map[string]any); ok {
+			narrowed := map[string]any{}
+			for k, v := range cols {
+				narrowed[k] = v
+			}
+
+			narrowed["minItems"] = 1
+			props["columns"] = narrowed
+		}
+	}
+	if kind.Name != LensTable {
+		props["columns"] = none
+	}
+
+	out := map[string]any{}
+	for k, v := range base.Schema {
+		out[k] = v
+	}
+
+	out["properties"] = props
+	return JSONSchema{Name: base.Name, Description: base.Description + " Answer kind: " + kind.Name + ".",
+		Schema: out}
+}
