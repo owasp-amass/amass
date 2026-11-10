@@ -9,6 +9,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 - A candidate with two strong signals, or one strong signal and a different second signal, is **proposed** when exactly one OAM relationship can record the owner. During enumeration a proposed candidate is written automatically (with the `amass-ai` source) unless attribution is set to `journal` or `off`.
 - One strong signal, or two signals of any strength, **needs review**: it waits in the review journal for a person.
 - Anything less is **weak** and only reported.
+- A **tiebreaker** (marked below) ranks candidates and can send one to review, but never counts as the second signal that lets a strong signal propose.
+- A **negative** signal lowers the score and keeps a candidate from being proposed: at most it needs review.
 - Weights rank candidates; they are not probabilities. Once enough proposals have been reviewed, `amass ai train-attribution` learns the weights from those decisions and the trained model decides instead.
 
 | Signal | Strength | Kind | Weight |
@@ -21,6 +23,12 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | [Email authentication delegated to the organization](#email_auth_reference) | strong | operation | 0.35 |
 | [Hosted on the organization's infrastructure](#hosting_in_footprint) | supporting | hosting | 0.20 |
 | [Listed on the organization's certificate](#certificate_colisting) | supporting | colisting | 0.15 |
+| [Web redirect to the organization](#web_redirect_to_organization) | supporting | operation | 0.30 |
+| [Reverse DNS in the organization's namespace](#reverse_dns_in_namespace) | supporting | operation | 0.25 |
+| [Same DNS provider account](#shared_nameserver_set) | supporting | operation | 0.25 |
+| [Same TLS server fingerprint](#tls_fingerprint_match) | supporting (tiebreaker) | fingerprint | 0.10 |
+| [Organization name in the asset's name](#name_token) | supporting (tiebreaker) | lexical | 0.10 |
+| [Parked or for sale](#parked_for_sale) | negative | negative | 0.30 |
 
 <a id="shared_registrant_details"></a>
 ## Shared registrant details
@@ -168,3 +176,116 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 **Can still mislead when:**
 
 - CDN and hosting certificates that cover several customers.
+
+<a id="web_redirect_to_organization"></a>
+## Web redirect to the organization
+
+`web_redirect_to_organization`: supporting operation signal, weight 0.30.
+
+**Finds:** A name or address the organization does not yet own whose web service redirects to a name in the organization's namespace (its Location, Content-Location or Refresh response header).
+
+**Why it counts:** Organizations point the domains they hold, such as typo, campaign and legacy domains, at their main site. A redirect into the organization's namespace is set by whoever operates the redirecting service, which is usually the domain's owner.
+
+**Guards:**
+
+- The redirect target must be one of the organization's apex domains or a name below one; a name that merely contains it never counts.
+- Never proposes on its own; it needs a strong signal.
+
+**Can still mislead when:**
+
+- Link shorteners, affiliates, news sites and partners also redirect to an organization's pages.
+- A squatter can redirect a look-alike domain to the real site.
+
+<a id="reverse_dns_in_namespace"></a>
+## Reverse DNS in the organization's namespace
+
+`reverse_dns_in_namespace`: supporting operation signal, weight 0.25.
+
+**Finds:** An IP address the organization does not yet own whose reverse DNS (PTR) name is a name the organization controls, and the names that resolve to that address.
+
+**Why it counts:** Reverse DNS is set by whoever controls the address space, so an address that names itself inside the organization's namespace is usually run for the organization. A provider can set PTR names on a customer's request, which is why it only supports other evidence.
+
+**Guards:**
+
+- Addresses that more than 50 names resolve to never pass the signal on to those names.
+- Never proposes on its own; it needs a strong signal.
+
+**Can still mislead when:**
+
+- Hosting providers set PTR names a customer asks for on addresses the provider still controls.
+- Stale PTR records outlive a move to new infrastructure.
+
+<a id="shared_nameserver_set"></a>
+## Same DNS provider account
+
+`shared_nameserver_set`: supporting operation signal, weight 0.25.
+
+**Finds:** A domain registration the organization does not yet own that lists every name server of one of the organization's domain registrations.
+
+**Why it counts:** Several DNS providers assign each customer account its own pair or set of name servers. A domain served by exactly the same set as the organization's domain was likely set up in the same provider account.
+
+**Guards:**
+
+- Only sets of at least two name servers count, and none may be the organization's own servers (that is the self-hosted DNS signal).
+- A set shared by more than 50 registrations never counts.
+- Never proposes on its own; it needs a strong signal.
+
+**Can still mislead when:**
+
+- Providers that give every customer the same name servers make unrelated domains share a set; the 50-registration limit catches large ones.
+
+<a id="tls_fingerprint_match"></a>
+## Same TLS server fingerprint
+
+`tls_fingerprint_match`: supporting fingerprint signal, weight 0.10. Tiebreaker.
+
+**Finds:** A name or address the organization does not yet own whose service has the same JARM TLS fingerprint as a service on a name the organization controls.
+
+**Why it counts:** A JARM fingerprint summarizes how a TLS server answers ten crafted handshakes, which reflects its software and configuration. A matching fingerprint is consistent with the same team deploying both servers, but many unrelated servers share common configurations, so it is only a tiebreaker.
+
+**Guards:**
+
+- A fingerprint shared by more than 50 services never counts.
+- A tiebreaker: it never counts as the second signal that lets a strong signal propose, so it can only rank candidates or send one to review.
+
+**Can still mislead when:**
+
+- Default configurations of popular servers, load balancers and CDNs produce the same fingerprint for unrelated sites.
+
+<a id="name_token"></a>
+## Organization name in the asset's name
+
+`name_token`: supporting lexical signal, weight 0.10. Tiebreaker.
+
+**Finds:** A candidate that other signals already link to the organization and whose name contains a distinctive word of the organization's name, such as colgate in colgate-events.com.
+
+**Why it counts:** Organizations name their assets after themselves. The word must be distinctive, so generic words like university or group never count, and it is only ever added to a candidate other evidence already found.
+
+**Guards:**
+
+- Only words of at least five letters that are not in this signal's stop_words count.
+- A tiebreaker: it never counts as the second signal that lets a strong signal propose, so it can only rank candidates or send one to review.
+- Never finds candidates by itself.
+
+**Can still mislead when:**
+
+- Fans, critics, resellers, squatters and unrelated organizations with similar names use the same words.
+
+<a id="parked_for_sale"></a>
+## Parked or for sale
+
+`parked_for_sale`: negative negative signal, weight 0.30.
+
+**Finds:** A candidate name whose web page is a parking or domain-for-sale page.
+
+**Why it counts:** A parked or for-sale page means a domainer or registrar, not the organization, controls the name today, whatever its other links. It counts against ownership.
+
+**Guards:**
+
+- A candidate with this signal is never proposed for an automatic write; at most it waits for review.
+
+**Can still mislead when:**
+
+- Organizations sometimes park defensive registrations with a registrar's default page.
+
+**Page phrases:** `this domain is for sale`, `this domain may be for sale`, `buy this domain`, `domain is parked`, `parked free`, `parkingcrew`, `sedoparking`, `bodis.com`, `dan.com`, `afternic`, `hugedomains`, `undeveloped.com`

@@ -6,6 +6,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,9 @@ func (g valueGraph) FindByTagValue(_ context.Context, assetType, name, value str
 		for _, e := range evs {
 			p, _ := e.Property.(map[string]any)
 			data, _ := p["data"].(string)
+			if data == "" {
+				data, _ = p["property_value"].(string)
+			}
 			if p["property_name"] != name {
 				continue
 			}
@@ -48,12 +52,22 @@ func (g valueGraph) FindByTagValue(_ context.Context, assetType, name, value str
 	return out, false, nil
 }
 
-func (g valueGraph) FindByAttribute(_ context.Context, assetType, key, value string, limit int) ([]Asset, bool,
-	error) {
+func (g valueGraph) FindByAttribute(_ context.Context, assetType, key, value string, contains bool,
+	limit int) ([]Asset, bool, error) {
 	var out []Asset
 	for _, a := range g.assets {
-		if a.Type == assetType && contentString(a, key) == value {
+		if a.Type != assetType {
+			continue
+		}
+
+		text := contentString(a, key)
+		if !contains && text == value {
 			out = append(out, a)
+		} else if contains {
+			data, _ := json.Marshal(contentValue(a, key))
+			if strings.Contains(strings.ToLower(string(data)), strings.ToLower(value)) {
+				out = append(out, a)
+			}
 		}
 	}
 
@@ -171,7 +185,8 @@ func TestVerificationTokenAndSPFPropose(t *testing.T) {
 	if c == nil {
 		t.Fatalf("colgate-arts.org is not a candidate: %+v", r.Candidates)
 	}
-	if got := signalIDs(c); !slices.Equal(got, []string{"email_auth_reference", "txt_verification_token"}) {
+	if got := signalIDs(c); !slices.Equal(got, []string{"email_auth_reference", "name_token",
+		"txt_verification_token"}) {
 		t.Errorf("signals = %v", got)
 	}
 	if c.Decision != GapPropose || c.Attachment == nil ||
@@ -199,8 +214,11 @@ func TestDMARCReportsNameTheDomainNotTheRecord(t *testing.T) {
 		t.Errorf("the DMARC record name became a candidate: %+v", c)
 	}
 
+	// One strong signal and a name token: the token is a tiebreaker, so it
+	// does not corroborate the strong signal into a proposal.
 	c := candidateByID(r, "colgate-news.org")
-	if c == nil || !slices.Equal(signalIDs(c), []string{"email_auth_reference"}) || c.Decision != GapReview {
+	if c == nil || !slices.Equal(signalIDs(c), []string{"email_auth_reference", "name_token"}) ||
+		c.Decision != GapReview {
 		t.Errorf("colgate-news.org = %+v", c)
 	}
 }
@@ -218,7 +236,8 @@ func TestCertificateKeyAndPrivateIssuer(t *testing.T) {
 	if c == nil {
 		t.Fatalf("colgate-portal.net is not a candidate: %+v", r.Candidates)
 	}
-	if got := signalIDs(c); !slices.Equal(got, []string{"certificate_key_reuse", "private_ca_issuance"}) {
+	if got := signalIDs(c); !slices.Equal(got, []string{"certificate_key_reuse", "name_token",
+		"private_ca_issuance"}) {
 		t.Errorf("signals = %v", got)
 	}
 	if c.Decision != GapPropose {

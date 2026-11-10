@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -238,6 +239,11 @@ func (g *gapSearch) signalsFrom(cur Asset) error {
 		hop := witnessOf(s.edge, cur, s.other)
 		via := s.other.Type + " " + s.edge.Label + " " + cur.Type
 		switch {
+		case !s.forward && g.reverseDNS(s):
+			// Its reverse DNS names one of the subject's hosts.
+			if err := g.reverseDNSSignals(cur, s, hop); err != nil {
+				return err
+			}
 		case !s.forward && g.selfHostedDNS(s):
 			// Its name or mail servers are the subject's own hosts.
 			if rr := rrTypeName(relationRRType(s.edge)); rr != "" {
@@ -390,6 +396,10 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 		c.Gains = append(c.Gains, v.Type+" "+assetLabel(v))
 	}
 
+	if err := g.contextSignals(a, c); err != nil {
+		return err
+	}
+
 	// Only one unambiguous relationship can be proposed outright.
 	c.Score, c.Decision = scoreGap(c.Signals, len(edges) == 1)
 	return nil
@@ -398,19 +408,33 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 // scoreGap rates a candidate's signals by their catalog strength and
 // weight. A strong signal (shared registrant details, a shared verification
 // token) points to one owner; a supporting one (hosting, co-listing) is
-// consistent with many. Each signal counts at most twice toward the score,
-// which ranks candidates and is not a probability.
+// consistent with many; a tiebreaker (a name token, a TLS fingerprint)
+// only ranks and never corroborates a proposal; a negative one (a parked
+// page) counts against
+// ownership and keeps the candidate from being proposed. Each signal counts
+// at most twice toward the score, which ranks candidates and is not a
+// probability.
 func scoreGap(signals []GapSignal, attachable bool) (float64, string) {
 	count := map[string]int{}
+	corroborating := map[string]bool{}
 	strong := 0
+	negative := false
 	score := 0.0
 	for _, s := range signals {
 		def, ok := ownershipSignal(s.Signal)
 		if !ok {
 			continue
 		}
+		if def.Strength == StrengthNegative {
+			negative = true
+			score -= def.Weight
+			continue
+		}
 
 		count[s.Signal]++
+		if !def.Tiebreaker {
+			corroborating[s.Signal] = true
+		}
 		if def.Strength == StrengthStrong {
 			strong++
 		}
@@ -418,12 +442,12 @@ func scoreGap(signals []GapSignal, attachable bool) (float64, string) {
 			score += def.Weight
 		}
 	}
-	if score > 1 {
-		score = 1
-	}
 
+	// A strong signal is corroborated by a different signal that is not a
+	// tiebreaker.
+	score = math.Max(0, math.Min(1, score))
 	switch {
-	case attachable && (strong >= 2 || (strong >= 1 && len(count) >= 2)):
+	case attachable && !negative && (strong >= 2 || (strong >= 1 && len(corroborating) >= 2)):
 		return score, GapPropose
 	case strong >= 1 || len(count) >= 2:
 		return score, GapReview
