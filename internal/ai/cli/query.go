@@ -132,6 +132,12 @@ func writeJSON(out io.Writer, v any) error {
 func writeInvestigation(out io.Writer, format string, result ai.Investigation) error {
 	switch format {
 	case "text":
+		if result.Narrative != nil && result.Narrative.Verified {
+			if _, err := fmt.Fprintln(out, ai.NarrativeText(*result.Narrative)+"\n"); err != nil {
+				return err
+			}
+		}
+
 		_, err := fmt.Fprintln(out, result.Answer)
 		return err
 	case "mermaid":
