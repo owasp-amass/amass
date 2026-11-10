@@ -78,6 +78,9 @@ type Query struct {
 	Columns []TableColumn `json:"columns,omitempty"`
 	// Source names the compiler that produced the Query.
 	Source string `json:"source"`
+	// PlanCorrections are the reasons the model planner's earlier plans
+	// were rejected, in order, when it needed retries.
+	PlanCorrections []string `json:"plan_corrections,omitempty"`
 }
 
 // Goal returns the InvestigationGoal view of q used by explore search and

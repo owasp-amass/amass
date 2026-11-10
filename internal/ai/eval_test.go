@@ -171,3 +171,69 @@ func TestEvalFailuresAreReported(t *testing.T) {
 		t.Errorf("failed case does not show its plan:\n%s", text)
 	}
 }
+
+func TestEvalResultsShowRejectedPlans(t *testing.T) {
+	cases, err := DefaultEvalCases()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var c EvalCase
+	for _, ec := range cases {
+		if ec.ID == "colgate-website-hosting-table" {
+			c = ec
+		}
+	}
+	if c.Offline == nil {
+		t.Fatal("colgate-website-hosting-table has no offline fixture")
+	}
+
+	// Two unparseable plans are rejected and the recorded reply is accepted:
+	// three calls, over the case's budget of two.
+	bad := "a table of websites"
+	graph, catalog := evalFixtures[c.Offline.Fixture]()
+	agent := Agent{Model: &plannerModel{replies: []string{bad, bad, c.Offline.PlannerReplies[0]}},
+		Runner: ToolRunner{Graph: graph, Catalog: catalog, Limits: DefaultLimits()}}
+	res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks, AdaptiveOptions{MaxInventory: DefaultInventoryNames})
+	if res.Pass || len(res.Corrections) != 2 || res.ModelCalls != 3 {
+		t.Fatalf("result = %+v", res)
+	}
+
+	text := FormatEvalResults([]EvalResult{res})
+	if !strings.Contains(text, "rejected plan 1: ") || !strings.Contains(text, "rejected plan 2: ") {
+		t.Errorf("output lacks the rejected plan:\n%s", text)
+	}
+}
+
+func TestTableRowTypeRepairedWithoutACall(t *testing.T) {
+	cases, err := DefaultEvalCases()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var c EvalCase
+	for _, ec := range cases {
+		if ec.ID == "colgate-website-hosting-table" {
+			c = ec
+		}
+	}
+
+	// The controller as the row type, as Qwen chose live: the rows become the
+	// first ownable type the question names (website: URL), with no retry.
+	bad := strings.Replace(c.Offline.PlannerReplies[0], `"target_types":["URL"]`, `"target_types":["Organization"]`, 1)
+	graph, catalog := evalFixtures[c.Offline.Fixture]()
+	agent := Agent{Model: &plannerModel{replies: []string{bad}},
+		Runner: ToolRunner{Graph: graph, Catalog: catalog, Limits: DefaultLimits()}}
+	res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks, AdaptiveOptions{MaxInventory: DefaultInventoryNames})
+	if !res.Pass || res.ModelCalls != 1 || len(res.Corrections) != 0 {
+		t.Fatalf("result = %+v", res)
+	}
+}
+
+func TestMentionedTypesInOrder(t *testing.T) {
+	_, catalog := evalFixtures["campus-web"]()
+	got := mentionedTypesInOrder("a table with each website, its IP address and hosting provider", catalog)
+	if len(got) < 2 || got[0] != "URL" || got[1] != "IPAddress" {
+		t.Errorf("types = %v", got)
+	}
+}

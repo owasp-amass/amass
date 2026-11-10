@@ -28,13 +28,14 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 			return zero, errors.New("question needs the model planner, but no model is configured")
 		}
 
-		goal, err := a.planGoal(ctx, question)
+		goal, corrections, err := a.planGoalCorrected(ctx, question)
 		if err != nil {
 			return zero, err
 		}
 
 		goal.Subject = organizationSubject(goal.Subject)
 		q = queryFromPlannedGoal(goal, question, a.Runner.Catalog)
+		q.PlanCorrections = corrections
 	}
 
 	var selectors []AssetSearchSchema

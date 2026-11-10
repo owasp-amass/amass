@@ -23,7 +23,7 @@
     "ProductRelease": ["product release", "product releases", "software release", "software releases", "software version", "software versions"],
     "Service": ["service", "services", "network service", "network services", "internet service", "internet services", "exposed service", "exposed services", "listening service", "listening services"],
     "TLSCertificate": ["tls certificate", "tls certificates", "ssl certificate", "ssl certificates", "x509 certificate", "x509 certificates"],
-    "URL": ["url", "urls", "web url", "web urls"]
+    "URL": ["url", "urls", "web url", "web urls", "website", "websites", "web site", "web sites", "web page", "web pages", "web address", "web addresses"]
   },
   "_relations": "OAM relationship label -> words users use for it. Labels OAM does not register are rejected by tests.",
   "relations": {

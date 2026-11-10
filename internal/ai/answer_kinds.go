@@ -331,8 +331,42 @@ func tableColumns(goal InvestigationGoal, mentioned []string) []TableColumn {
 // through the vocabulary. Longer phrases claim their words first, so "IP
 // address" names IPAddress and not also Location ("address").
 func mentionedTypes(question string, schema SchemaCatalog) []string {
+	pos := mentionedTypePositions(question, schema)
+	out := make([]string, 0, len(pos))
+	for t := range pos {
+		out = append(out, t)
+	}
+
+	sort.Strings(out)
+	return out
+}
+
+// mentionedTypesInOrder returns the asset types a question mentions in the
+// order it mentions them.
+func mentionedTypesInOrder(question string, schema SchemaCatalog) []string {
+	pos := mentionedTypePositions(question, schema)
+	out := make([]string, 0, len(pos))
+	for t := range pos {
+		out = append(out, t)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if pos[out[i]] != pos[out[j]] {
+			return pos[out[i]] < pos[out[j]]
+		}
+
+		return out[i] < out[j]
+	})
+	return out
+}
+
+// mentionedTypePositions finds the asset types a question names through
+// their vocabulary aliases, longest alias first, with where each is first
+// named.
+func mentionedTypePositions(question string, schema SchemaCatalog) map[string]int {
+	found := map[string]int{}
 	if schema == nil {
-		return nil
+		return found
 	}
 
 	type alias struct{ words, kind string }
@@ -354,23 +388,40 @@ func mentionedTypes(question string, schema SchemaCatalog) []string {
 	})
 
 	text := " " + normalizeSchemaAlias(question) + " "
-	found := map[string]bool{}
 	for _, a := range aliases {
 		needle := " " + a.words + " "
 		if i := strings.Index(text, needle); i >= 0 {
-			found[a.kind] = true
+			if prev, ok := found[a.kind]; !ok || i < prev {
+				found[a.kind] = i
+			}
 			// Blank the phrase so shorter aliases inside it cannot match.
 			text = text[:i+1] + strings.Repeat("#", len(a.words)) + text[i+1+len(a.words):]
 		}
 	}
 
-	out := make([]string, 0, len(found))
-	for t := range found {
-		out = append(out, t)
+	return found
+}
+
+// repairRowType fixes a table whose row type an owner cannot control (the
+// controller itself, typically) without another model call: the rows become
+// the first type the question mentions that an owner can control, as in
+// "a table with each website, its IP address and hosting provider".
+func repairRowType(goal InvestigationGoal, question string, schema SchemaCatalog) InvestigationGoal {
+	k, ok := answerKind(goal.Answer)
+	if !ok || k.Name != LensTable || schema == nil {
+		return goal
+	}
+	if len(goal.TargetTypes) == 1 && controlledReachable(schema, goal.TargetTypes) {
+		return goal
+	}
+	for _, t := range mentionedTypesInOrder(question, schema) {
+		if t != "Organization" && controlledReachable(schema, []string{t}) {
+			goal.TargetTypes = []string{t}
+			return goal
+		}
 	}
 
-	sort.Strings(out)
-	return out
+	return goal
 }
 
 // narrowGoalSchema returns base restricted to one answer kind, for the retry

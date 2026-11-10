@@ -77,11 +77,13 @@ type EvalResult struct {
 	Answer   string   `json:"answer_kind"`
 	// Plan describes the Query the question compiled to, so a live failure
 	// shows what the model chose.
-	Plan       string        `json:"plan,omitempty"`
-	ModelCalls int           `json:"model_calls"`
-	Results    int           `json:"results"`
-	Duration   time.Duration `json:"duration"`
-	Text       string        `json:"answer"`
+	Plan string `json:"plan,omitempty"`
+	// Corrections are why the planner's rejected plans were rejected.
+	Corrections []string      `json:"corrections,omitempty"`
+	ModelCalls  int           `json:"model_calls"`
+	Results     int           `json:"results"`
+	Duration    time.Duration `json:"duration"`
+	Text        string        `json:"answer"`
 }
 
 type evalSet struct {
@@ -179,6 +181,7 @@ func (a Agent) RunEvalCase(ctx context.Context, c EvalCase, checks EvalChecks, o
 	res.Answer, res.Text = answerKindOf(inv.Query), inv.Answer
 	if inv.Query != nil {
 		res.Plan = inv.Query.Describe()
+		res.Corrections = inv.Query.PlanCorrections
 	}
 	if inv.Usage != nil {
 		res.ModelCalls = inv.Usage.Calls
@@ -288,6 +291,11 @@ func FormatEvalResults(results []EvalResult) string {
 		}
 		if !r.Pass && r.Plan != "" {
 			fmt.Fprintf(&b, "       plan: %s\n", r.Plan)
+		}
+		if !r.Pass {
+			for i, c := range r.Corrections {
+				fmt.Fprintf(&b, "       rejected plan %d: %s\n", i+1, c)
+			}
 		}
 	}
 
