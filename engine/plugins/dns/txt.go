@@ -106,7 +106,7 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) {
 			continue
 		}
 
-		txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
+		txtValue := txtData(record.(*dns.TXT))
 		_, err := e.Session.DB().CreateEntityProperty(ctx, fqdn, &oamdns.DNSRecordProperty{
 			PropertyName: "dns_record",
 			Header: oamdns.RRHeader{
@@ -127,10 +127,18 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) {
 func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []dns.RR, props []*oamdns.DNSRecordProperty) {
 	for _, record := range txtRecords {
 		e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name,
-			"txt", strings.Join((record.(*dns.TXT)).Txt, " "), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			"txt", txtData(record.(*dns.TXT)), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 	for _, prop := range props {
 		e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name,
 			"txt", prop.Data, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
+}
+
+// txtData returns a TXT record's value: its character strings concatenated
+// with no separator, as RFC 7208 requires for SPF and as long DKIM keys and
+// verification tokens split across strings are meant to be read. Joining
+// them with spaces corrupts any value split mid-token.
+func txtData(rr *dns.TXT) string {
+	return strings.Join(rr.Txt, "")
 }
