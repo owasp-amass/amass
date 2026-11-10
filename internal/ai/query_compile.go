@@ -34,7 +34,7 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 		}
 
 		goal.Subject = organizationSubject(goal.Subject)
-		q = queryFromPlannedGoal(goal, question)
+		q = queryFromPlannedGoal(goal, question, a.Runner.Catalog)
 	}
 
 	var selectors []AssetSearchSchema

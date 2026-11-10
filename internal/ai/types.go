@@ -70,6 +70,12 @@ type EdgeEvidenceReader interface {
 	EdgeEvidence(context.Context, string, int) ([]Evidence, error)
 }
 
+// MaxEdgeRead is the largest limit a BoundedGraph accepts in one read; the
+// SQL and Neo4j repositories reject larger limits.
+const MaxEdgeRead = 500
+
+// BoundedGraph reads at most limit (1..MaxEdgeRead) edges of an asset and
+// reports whether more exist.
 type BoundedGraph interface {
 	EdgesLimited(context.Context, string, string, string, time.Time, int) ([]Relation, bool, error)
 }

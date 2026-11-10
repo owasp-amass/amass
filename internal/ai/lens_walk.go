@@ -15,11 +15,13 @@ import (
 // database-cost limits rather than context limits.
 const (
 	lensMaxFootprint = 2000
-	lensMaxPerAsset  = 500
+	lensMaxPerAsset  = MaxEdgeRead
 	lensMaxReads     = 20000
 	lensMaxExamples  = 3
 	// lensMaxOwnerPops bounds the controller search from one asset.
 	lensMaxOwnerPops = 40
+	// lensMaxOwnerDepth bounds the search for the subject's own owner.
+	lensMaxOwnerDepth = 5
 )
 
 // purposeHierarchy marks same_subject edges that link a parent to a child
@@ -358,6 +360,13 @@ type controller struct {
 // thousands of addresses. It stops at the closest Organizations, or when
 // it reaches an asset in owned (then own is set).
 func (w *lensWalker) controllerOf(a Asset, owned map[string]Asset) (controller, error) {
+	return w.controllerSearch(a, owned, lensMaxOwnerPops)
+}
+
+// controllerSearch is controllerOf with a pop budget. Ties on depth plus
+// distance go to the asset closest to an Organization, so the search
+// follows one registration chain to its end before widening.
+func (w *lensWalker) controllerSearch(a Asset, owned map[string]Asset, maxPops int) (controller, error) {
 	if c, ok := w.controllers[a.ID]; ok {
 		return c, nil
 	}
@@ -371,19 +380,19 @@ func (w *lensWalker) controllerOf(a Asset, owned map[string]Asset) (controller, 
 	seen := map[string]bool{a.ID: true}
 	frontier := []item{{asset: a}}
 	best := -1
-	for pops := 0; len(frontier) > 0 && pops < lensMaxOwnerPops; pops++ {
+	for pops := 0; len(frontier) > 0 && pops < maxPops; pops++ {
 		if err := w.ctx.Err(); err != nil {
 			return c, err
 		}
 
-		next, score := 0, -1
+		next, score, dist := 0, -1, -1
 		for i, it := range frontier {
 			d, ok := w.ownerDist[it.asset.Type]
 			if !ok {
 				d = len(w.ownerDist)
 			}
-			if s := it.depth + d; score < 0 || s < score {
-				next, score = i, s
+			if s := it.depth + d; score < 0 || s < score || (s == score && d < dist) {
+				next, score, dist = i, s, d
 			}
 		}
 		if best >= 0 && score > best {
@@ -425,13 +434,49 @@ func (w *lensWalker) controllerOf(a Asset, owned map[string]Asset) (controller, 
 	return c, nil
 }
 
-// owningOrganizations returns the Organizations documented as controlling
-// root, so that a domain question also covers its registrant's assets.
+// owningOrganizations returns the closest Organizations documented as
+// controlling root, so that a domain question also covers its registrant's
+// assets. It searches breadth first along ownerPass, a level at a time up
+// to lensMaxOwnerDepth, so the nearest owner is found however many
+// certificates and URLs share the subject's name.
 func (w *lensWalker) owningOrganizations(root Asset) ([]Asset, error) {
 	if root.Type == "Organization" {
 		return nil, nil
 	}
 
-	c, err := w.controllerOf(root, nil)
-	return c.orgs, err
+	var orgs []Asset
+	seen := map[string]bool{root.ID: true}
+	frontier := []Asset{root}
+	for depth := 0; depth < lensMaxOwnerDepth && len(frontier) > 0 && len(orgs) == 0; depth++ {
+		var next []Asset
+		for _, cur := range frontier {
+			if err := w.ctx.Err(); err != nil {
+				return nil, err
+			}
+
+			steps, err := w.steps(cur)
+			if err != nil {
+				return nil, err
+			}
+			for _, s := range steps {
+				if seen[s.other.ID] || s.other.Type == "Person" || !ownerPass(s) {
+					continue
+				}
+
+				seen[s.other.ID] = true
+				if s.other.Type == "Organization" {
+					orgs = append(orgs, s.other)
+					continue
+				}
+				if _, ok := w.ownerDist[s.other.Type]; ok {
+					next = append(next, s.other)
+				}
+			}
+		}
+
+		frontier = next
+	}
+
+	sort.Slice(orgs, func(i, j int) bool { return assetLabel(orgs[i]) < assetLabel(orgs[j]) })
+	return orgs, nil
 }

@@ -71,8 +71,8 @@
     {
       "id": "owasp-parent",
       "question": "What is the highest parent organization of owasp.org?",
-      "note": "Reported 2026-11-09: Let's Encrypt was named as the parent through a certificate SAN and issuer.",
-      "expect": {"answer": "paths", "subject_type": "FQDN", "purpose": "ultimate_parent", "max_model_calls": 2},
+      "note": "Reported 2026-11-09: Let's Encrypt was named as the parent through a certificate SAN and issuer. Three calls: planning plus up to two navigation rounds.",
+      "expect": {"answer": "paths", "subject_type": "FQDN", "purpose": "ultimate_parent", "max_model_calls": 3},
       "offline": {
         "fixture": "owasp-certificate",
         "planner_replies": [

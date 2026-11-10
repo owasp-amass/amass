@@ -95,7 +95,9 @@ parties that the subject's controlled assets depend on:
    Organization, the operator of a network carrying the asset (an incoming
    `infrastructure` edge with purpose `network`, such as an announcing AS)
    is tried, then the most registration-like asset reached. A dependency
-   that leads back into the footprint is the subject's own.
+   that leads back into the footprint is the subject's own. The subject's
+   own owner (for an FQDN subject) is found breadth first, a level at a
+   time, because many URLs or certificates can share its name.
 4. **Groups.** Vendors are grouped by the purpose of the dependency edge and
    the type depended on, for example "DNS: IP addresses" (hosting networks),
    "DNS: FQDNs" (CNAME, NS and MX targets), "Registration: contact records"

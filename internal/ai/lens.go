@@ -366,6 +366,8 @@ func thirdPartyAnswer(r ThirdPartyReport) string {
 		strings.Join(types, ", "))
 	if len(r.Owners) > 0 {
 		fmt.Fprintf(&b, " including those of its registrant %s", strings.Join(r.Owners, ", "))
+	} else if r.Root.Type != "Organization" {
+		b.WriteString(" (no owning organization is documented for it, so only its own records are included)")
 	}
 
 	b.WriteString(":\n")
