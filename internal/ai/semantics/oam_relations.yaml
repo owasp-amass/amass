@@ -26,6 +26,11 @@
 #                  or operator
 #   attribute      descriptive data (identifiers, addresses, phones)
 #
+# vendor - optional, third_party only. false marks a destination that is
+#   registry or protocol infrastructure (abuse desks, RDAP, WHOIS and OCSP
+#   endpoints, issuing CA certificates), not a party the source chose to
+#   depend on. The third-party lens skips these edges.
+#
 # purpose - the kind of question the edge helps answer:
 #   registration certificate corporate contact network dns web identity
 #   financial product hierarchy
@@ -46,13 +51,13 @@ relations:
      attribution: controller, purpose: identity, reviewed: true,
      note: "The Person or Organization that uses the account; usually its controller, but a shared or delegated account can have other users."}
   - {source: AutnumRecord, label: abuse_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "Abuse handling contact; frequently a provider or registry service desk."}
   - {source: AutnumRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: controller, purpose: registration, reviewed: true,
      note: "Administrative contact for the AS number; usually the registrant organization, sometimes an agent."}
   - {source: AutnumRecord, label: rdap_url, relation_type: SimpleRelation, destination: URL,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "RDAP service of the registry."}
   - {source: AutnumRecord, label: registrant, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: controller, purpose: registration,
@@ -61,7 +66,7 @@ relations:
      attribution: third_party, purpose: registration, reviewed: true,
      note: "Technical contact for the AS number; often a network operator or provider rather than the registrant."}
   - {source: AutnumRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "WHOIS service of the registry."}
   - {source: AutonomousSystem, label: announces, relation_type: SimpleRelation, destination: Netblock,
      attribution: infrastructure, purpose: network,
@@ -109,7 +114,7 @@ relations:
      attribution: third_party, purpose: registration, reviewed: true,
      note: "Technical contact; often the hosting provider or DNS operator."}
   - {source: DomainRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "WHOIS service of the registrar or registry."}
   - {source: FQDN, label: dns_record, relation_type: BasicDNSRelation, destination: FQDN,
      attribution: infrastructure, purpose: dns,
@@ -166,13 +171,13 @@ relations:
      attribution: infrastructure, purpose: dns,
      note: "Reverse DNS name; set by whoever controls the address space, often a provider."}
   - {source: IPNetRecord, label: abuse_contact, relation_type: SimpleRelation, destination: ContactRecord,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "Abuse handling contact; frequently a provider or registry service desk."}
   - {source: IPNetRecord, label: admin_contact, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: controller, purpose: registration, reviewed: true,
      note: "Administrative contact for the address block; usually the registrant organization, sometimes an agent."}
   - {source: IPNetRecord, label: rdap_url, relation_type: SimpleRelation, destination: URL,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "RDAP service of the registry."}
   - {source: IPNetRecord, label: registrant, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: controller, purpose: registration,
@@ -181,7 +186,7 @@ relations:
      attribution: third_party, purpose: registration, reviewed: true,
      note: "Technical contact for the address block; often a network operator or provider rather than the registrant."}
   - {source: IPNetRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
-     attribution: third_party, purpose: registration,
+     attribution: third_party, purpose: registration, vendor: false,
      note: "WHOIS service of the registry."}
   - {source: Identifier, label: issuing_agent, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: third_party, purpose: identity,
@@ -298,13 +303,13 @@ relations:
      attribution: third_party, purpose: certificate,
      note: "The certificate authority that issued the certificate."}
   - {source: TLSCertificate, label: issuing_certificate_url, relation_type: SimpleRelation, destination: URL,
-     attribution: third_party, purpose: certificate,
+     attribution: third_party, purpose: certificate, vendor: false,
      note: "Where the issuing CA certificate is published."}
   - {source: TLSCertificate, label: issuing_certificate, relation_type: SimpleRelation, destination: TLSCertificate,
-     attribution: third_party, purpose: certificate,
+     attribution: third_party, purpose: certificate, vendor: false,
      note: "The issuing CA certificate."}
   - {source: TLSCertificate, label: ocsp_server, relation_type: SimpleRelation, destination: URL,
-     attribution: third_party, purpose: certificate,
+     attribution: third_party, purpose: certificate, vendor: false,
      note: "The CA's revocation service."}
   - {source: TLSCertificate, label: san_dns_name, relation_type: SimpleRelation, destination: FQDN,
      attribution: shared, purpose: certificate,

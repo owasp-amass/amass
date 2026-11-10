@@ -12,60 +12,20 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
-// LensThirdParty asks for the outside organizations and services that the
-// subject's controlled assets depend on: registrars, DNS hosts, certificate
-// authorities, hosting networks, CNAME targets, service providers and
-// software. The answer is built in Go from the reviewed relationship
-// attribution table and never reaches the model.
+// LensThirdParty asks for the outside parties that the subject's controlled
+// assets depend on (registrars, DNS and hosting networks, certificate
+// authorities, service providers, software). Which relationships are
+// dependencies, and who controls the assets they reach, both come from the
+// relationship semantics table, so new OAM types and relationships take
+// part once they are annotated. The answer is built in Go and never
+// reaches the model.
 const LensThirdParty = "third_party"
 
-// Third-party lens bounds. The walk never sends assets to a model, so these
-// are database-cost limits rather than context limits.
-const (
-	lensMaxFootprint = 2000
-	lensMaxPerAsset  = 500
-	lensMaxReads     = 20000
-	lensMaxExamples  = 3
-)
-
-// Vendor kinds, in the order the answer lists them.
-var vendorKindOrder = []string{
-	"Hosting and network providers",
-	"DNS hosting",
-	"DNS record targets (CNAME, NS, MX)",
-	"Domain registrars",
-	"Certificate authorities",
-	"Service providers",
-	"Software and products",
-	"Domain verification",
-	"Technical contacts",
-	"Identity issuers",
-	"Financial",
-}
-
-// vendorKinds maps a third_party relationship label to the kind of vendor
-// it names. Labels missing here (abuse contacts, RDAP, WHOIS and OCSP
-// endpoints, issuing certificates) name registry or protocol
-// infrastructure rather than a vendor the subject chose, so they are not
-// reported.
-var vendorKinds = map[string]string{
-	"registrar_contact":   "Domain registrars",
-	"name_server":         "DNS hosting",
-	"issuer_contact":      "Certificate authorities",
-	"provider":            "Service providers",
-	"product_used":        "Software and products",
-	"verified_for":        "Domain verification",
-	"technical_contact":   "Technical contacts",
-	"issuing_agent":       "Identity issuers",
-	"issuing_authority":   "Identity issuers",
-	"registration_agency": "Identity issuers",
-	"third_party":         "Financial",
-}
-
-// VendorUse is one outside party and the controlled assets that use it.
+// VendorUse is one outside party and the controlled assets that depend on
+// it. Kind is "<Purpose>: <types>" from the semantics table: the purpose of
+// the dependency relationship and the type of asset depended on.
 type VendorUse struct {
 	Vendor   string   `json:"vendor"`
 	VendorID string   `json:"vendor_id,omitempty"`
@@ -85,370 +45,6 @@ type ThirdPartyReport struct {
 	Reads          int            `json:"reads"`
 	Truncated      bool           `json:"truncated"`
 	Reason         string         `json:"reason,omitempty"`
-}
-
-// lensWalker reads the graph for one lens run, caching assets and edges and
-// enforcing the read bounds.
-type lensWalker struct {
-	ctx     context.Context
-	graph   Graph
-	bounded BoundedGraph
-	cat     AttributionCatalog
-	assets  map[string]Asset
-	edges   map[string][]Relation
-	report  *ThirdPartyReport
-	// expand, when set, limits which controlled asset types are expanded
-	// further; other controlled assets are recorded but not read.
-	expand map[string]bool
-	// parent and via record how each controlled asset was reached, so a
-	// witnessed path can be rebuilt from the root.
-	parent map[string]string
-	via    map[string]Relation
-}
-
-func (w *lensWalker) truncate(reason string) {
-	if !w.report.Truncated {
-		w.report.Truncated = true
-		w.report.Reason = reason
-	}
-}
-
-func (w *lensWalker) asset(id string) (Asset, error) {
-	if a, ok := w.assets[id]; ok {
-		return a, nil
-	}
-
-	a, err := w.graph.GetAsset(w.ctx, id)
-	if err != nil {
-		return Asset{}, err
-	}
-
-	w.assets[id] = a
-	return a, nil
-}
-
-// neighbors returns the stored edges in both directions for id, read once.
-func (w *lensWalker) neighbors(id string) ([]Relation, error) {
-	if e, ok := w.edges[id]; ok {
-		return e, nil
-	}
-
-	var all []Relation
-	for _, dir := range []string{"out", "in"} {
-		if w.report.Reads >= lensMaxReads {
-			w.truncate("database read limit")
-			break
-		}
-
-		w.report.Reads++
-		edges, more, err := w.bounded.EdgesLimited(w.ctx, id, dir, "", time.Time{}, lensMaxPerAsset)
-		if err != nil {
-			return nil, err
-		}
-		if more {
-			a := w.assets[id]
-			w.truncate(fmt.Sprintf("more than %d %s edges on %s %s", lensMaxPerAsset, dir, a.Type, assetLabel(a)))
-		}
-
-		all = append(all, edges...)
-	}
-
-	w.edges[id] = all
-	return all, nil
-}
-
-// step is one stored edge seen from the asset being expanded.
-type step struct {
-	edge    Relation
-	other   Asset
-	forward bool
-	attr    string
-}
-
-func (w *lensWalker) steps(cur Asset) ([]step, error) {
-	edges, err := w.neighbors(cur.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]step, 0, len(edges))
-	for _, e := range edges {
-		forward := e.FromID == cur.ID
-		otherID := e.ToID
-		if !forward {
-			otherID = e.FromID
-		}
-		if otherID == "" || otherID == cur.ID {
-			continue
-		}
-
-		other, err := w.asset(otherID)
-		if err != nil {
-			return nil, err
-		}
-
-		src, dst := cur.Type, other.Type
-		if !forward {
-			src, dst = other.Type, cur.Type
-		}
-
-		attr, ok := w.cat.Attribution(src, e.Label, e.Type, dst)
-		if !ok {
-			continue
-		}
-
-		out = append(out, step{edge: e, other: other, forward: forward, attr: attr})
-	}
-
-	return out, nil
-}
-
-// controlledFootprint collects the assets controlled by the roots: it
-// follows same_subject edges (FQDN node edges only downward), controls
-// edges forward and controller edges backward. It never enters another
-// Organization except through controls (subsidiary, org_unit), and never
-// expands a Person, so a shared contact cannot merge two footprints.
-func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []string, error) {
-	owned := map[string]Asset{}
-	var order, queue []string
-	for _, r := range roots {
-		if _, ok := owned[r.ID]; !ok {
-			owned[r.ID] = r
-			order = append(order, r.ID)
-			queue = append(queue, r.ID)
-		}
-	}
-
-	for len(queue) > 0 {
-		if err := w.ctx.Err(); err != nil {
-			return nil, nil, err
-		}
-		if w.report.Reads >= lensMaxReads {
-			w.truncate("database read limit")
-			break
-		}
-
-		cur := owned[queue[0]]
-		queue = queue[1:]
-		if cur.Type == "Person" {
-			continue
-		}
-
-		steps, err := w.steps(cur)
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, s := range steps {
-			if _, seen := owned[s.other.ID]; seen || s.other.Type == "Person" {
-				continue
-			}
-
-			include := false
-			switch s.attr {
-			case attrSameSubject:
-				include = s.other.Type != "Organization" && (s.edge.Label != "node" || s.forward)
-			case attrControls:
-				include = s.forward
-			case attrController:
-				include = !s.forward
-			}
-			if !include {
-				continue
-			}
-			if len(owned) >= lensMaxFootprint {
-				w.truncate("controlled asset limit")
-				break
-			}
-
-			owned[s.other.ID] = s.other
-			order = append(order, s.other.ID)
-			if w.parent != nil {
-				w.parent[s.other.ID] = cur.ID
-				w.via[s.other.ID] = s.edge
-			}
-			if w.expand == nil || w.expand[s.other.Type] {
-				queue = append(queue, s.other.ID)
-			}
-		}
-	}
-
-	return owned, order, nil
-}
-
-// owningOrganizations returns the Organizations documented as controlling
-// an FQDN root through its domain registration, so that a domain question
-// also covers the registrant's netblocks and certificates.
-func (w *lensWalker) owningOrganizations(root Asset) ([]Asset, error) {
-	if root.Type != "FQDN" {
-		return nil, nil
-	}
-
-	var orgs []Asset
-	seen := map[string]bool{}
-	frontier := []Asset{root}
-	for depth := 0; depth < 4 && len(frontier) > 0; depth++ {
-		var next []Asset
-		for _, cur := range frontier {
-			steps, err := w.steps(cur)
-			if err != nil {
-				return nil, err
-			}
-			for _, s := range steps {
-				if seen[s.other.ID] {
-					continue
-				}
-
-				pass := (s.attr == attrSameSubject && s.edge.Label != "node") ||
-					(s.attr == attrController && s.forward) || (s.attr == attrControls && !s.forward)
-				if !pass {
-					continue
-				}
-
-				seen[s.other.ID] = true
-				if s.other.Type == "Organization" {
-					orgs = append(orgs, s.other)
-					continue
-				}
-
-				next = append(next, s.other)
-			}
-		}
-
-		frontier = next
-	}
-
-	return orgs, nil
-}
-
-// party names the outside party behind a third_party target: an
-// Organization, the Organization of a ContactRecord, the registered domain
-// of an FQDN, a Product's manufacturer, or a Service.
-func (w *lensWalker) party(target Asset) (string, string, error) {
-	switch target.Type {
-	case "Organization":
-		return assetLabel(target), target.ID, nil
-	case "ContactRecord", "Product", "ProductRelease":
-		steps, err := w.steps(target)
-		if err != nil {
-			return "", "", err
-		}
-		for _, s := range steps {
-			if s.forward && s.other.Type == "Organization" &&
-				(s.edge.Label == "organization" || s.edge.Label == "manufacturer") {
-				return assetLabel(s.other), s.other.ID, nil
-			}
-		}
-		if target.Type != "ContactRecord" {
-			return assetLabel(target), target.ID, nil
-		}
-	case "FQDN":
-		return registeredDomain(fqdnName(target)), "", nil
-	case "Service":
-		return assetLabel(target), target.ID, nil
-	}
-
-	return "", "", nil
-}
-
-// network names the operator of the network holding an IP address: the
-// registrant Organization of its netblock, or the name of the autonomous
-// system announcing it. Owned netblocks return nothing.
-func (w *lensWalker) network(ip Asset, owned map[string]Asset, cache map[string][2]string) (string, string, error) {
-	steps, err := w.steps(ip)
-	if err != nil {
-		return "", "", err
-	}
-	for _, s := range steps {
-		if s.forward || s.other.Type != "Netblock" || s.edge.Label != "contains" {
-			continue
-		}
-
-		nb := s.other
-		if _, ok := owned[nb.ID]; ok {
-			return "", "", nil
-		}
-		if v, ok := cache[nb.ID]; ok {
-			return v[0], v[1], nil
-		}
-
-		name, id, err := w.netblockOperator(nb, owned)
-		if err != nil {
-			return "", "", err
-		}
-
-		cache[nb.ID] = [2]string{name, id}
-		return name, id, nil
-	}
-
-	return "", "", nil
-}
-
-func (w *lensWalker) netblockOperator(nb Asset, owned map[string]Asset) (string, string, error) {
-	steps, err := w.steps(nb)
-	if err != nil {
-		return "", "", err
-	}
-
-	var asName, asID string
-	for _, s := range steps {
-		switch {
-		case s.forward && s.edge.Label == "registration" && s.other.Type == "IPNetRecord":
-			org, id, err := w.registrant(s.other)
-			if err != nil {
-				return "", "", err
-			}
-			if _, mine := owned[id]; mine && id != "" {
-				return "", "", nil
-			}
-			if org != "" {
-				return org, id, nil
-			}
-		case !s.forward && s.edge.Label == "announces" && s.other.Type == "AutonomousSystem":
-			asName, asID, err = w.autonomousSystem(s.other)
-			if err != nil {
-				return "", "", err
-			}
-		}
-	}
-
-	return asName, asID, nil
-}
-
-// registrant returns the Organization behind a registration record's
-// registrant contact.
-func (w *lensWalker) registrant(record Asset) (string, string, error) {
-	steps, err := w.steps(record)
-	if err != nil {
-		return "", "", err
-	}
-	for _, s := range steps {
-		if s.forward && (s.edge.Label == "registrant" || s.edge.Label == "registrant_contact") &&
-			s.other.Type == "ContactRecord" {
-			return w.party(s.other)
-		}
-	}
-
-	return "", "", nil
-}
-
-func (w *lensWalker) autonomousSystem(as Asset) (string, string, error) {
-	label := "AS" + strings.TrimPrefix(assetLabel(as), "AS")
-	steps, err := w.steps(as)
-	if err != nil {
-		return "", "", err
-	}
-	for _, s := range steps {
-		if s.forward && s.edge.Label == "registration" && s.other.Type == "AutnumRecord" {
-			if org, id, err := w.registrant(s.other); err != nil || org != "" {
-				return org, id, err
-			}
-			if name := contentString(s.other, "name", "handle"); name != "" {
-				return label + " " + name, as.ID, nil
-			}
-		}
-	}
-
-	return label, as.ID, nil
 }
 
 // vendorSet accumulates vendor uses keyed by vendor and kind.
@@ -480,10 +76,11 @@ func (v vendorSet) add(name, id, kind, via string, user Asset) {
 }
 
 // searchThirdParties runs the third-party lens from root.
-func searchThirdParties(ctx context.Context, graph Graph, cat AttributionCatalog, root Asset) (ThirdPartyReport, error) {
+func searchThirdParties(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset) (ThirdPartyReport, error) {
 	report := ThirdPartyReport{Root: root, FootprintTypes: map[string]int{}, Vendors: []VendorUse{}}
-	if cat == nil {
-		return report, errors.New("the third-party lens requires relationship attribution semantics")
+	meaning := meaningsOf(schema)
+	if schema == nil || meaning == nil {
+		return report, errors.New("the third-party lens requires relationship semantics")
 	}
 
 	bounded, ok := graph.(BoundedGraph)
@@ -491,8 +88,7 @@ func searchThirdParties(ctx context.Context, graph Graph, cat AttributionCatalog
 		return report, errors.New("bounded graph reader required")
 	}
 
-	w := &lensWalker{ctx: ctx, graph: graph, bounded: bounded, cat: cat,
-		assets: map[string]Asset{root.ID: root}, edges: map[string][]Relation{}, report: &report}
+	w := newLensWalker(ctx, graph, bounded, meaning, schema.Relations(), root, &report)
 	roots := []Asset{root}
 	owners, err := w.owningOrganizations(root)
 	if err != nil {
@@ -503,6 +99,7 @@ func searchThirdParties(ctx context.Context, graph Graph, cat AttributionCatalog
 		roots = append(roots, o)
 	}
 
+	w.controllers = map[string]controller{}
 	owned, order, err := w.controlledFootprint(roots)
 	if err != nil {
 		return report, err
@@ -518,7 +115,7 @@ func searchThirdParties(ctx context.Context, graph Graph, cat AttributionCatalog
 	}
 
 	vendors := vendorSet{}
-	netCache := map[string][2]string{}
+	d := dependencyScan{w: w, owned: owned, ownDomains: ownDomains, vendors: vendors}
 	for _, id := range order {
 		if err := ctx.Err(); err != nil {
 			return report, err
@@ -527,38 +124,25 @@ func searchThirdParties(ctx context.Context, graph Graph, cat AttributionCatalog
 			w.truncate("database read limit")
 			break
 		}
-
-		cur := owned[id]
-		steps, err := w.steps(cur)
-		if err != nil {
+		if err := d.scan(owned[id]); err != nil {
 			return report, err
 		}
-		for _, s := range steps {
-			if _, mine := owned[s.other.ID]; mine {
-				continue
-			}
-			if err := w.vendorsFrom(cur, s, owned, ownDomains, netCache, vendors); err != nil {
-				return report, err
-			}
-		}
 	}
+
+	totals := map[string]int{}
 	for _, use := range vendors {
-		if _, mine := owned[use.VendorID]; mine && use.VendorID != "" {
-			continue
-		}
-
 		report.Vendors = append(report.Vendors, *use)
-	}
-
-	rank := map[string]int{}
-	for i, k := range vendorKindOrder {
-		rank[k] = i
+		totals[use.Kind] += use.Assets
 	}
 
 	sort.Slice(report.Vendors, func(i, j int) bool {
 		a, b := report.Vendors[i], report.Vendors[j]
 		if a.Kind != b.Kind {
-			return rank[a.Kind] < rank[b.Kind]
+			if totals[a.Kind] != totals[b.Kind] {
+				return totals[a.Kind] > totals[b.Kind]
+			}
+
+			return a.Kind < b.Kind
 		}
 		if a.Assets != b.Assets {
 			return a.Assets > b.Assets
@@ -569,73 +153,195 @@ func searchThirdParties(ctx context.Context, graph Graph, cat AttributionCatalog
 	return report, nil
 }
 
-// vendorsFrom records the vendors that one step out of a controlled asset
-// names.
-func (w *lensWalker) vendorsFrom(cur Asset, s step, owned map[string]Asset, ownDomains map[string]bool, netCache map[string][2]string, vendors vendorSet) error {
-	via := cur.Type + " " + s.edge.Label
-	switch {
-	case s.attr == attrThirdParty && s.forward:
-		kind, ok := vendorKinds[s.edge.Label]
-		if !ok {
-			return nil
+// dependencyScan finds the outside parties that controlled assets depend
+// on. Every rule comes from the semantics table:
+//   - a third_party edge marked as a vendor names a dependency directly;
+//   - an infrastructure edge names a dependency on the asset it reaches,
+//     whose own vendor third_party edges are dependencies too (a service's
+//     provider and software);
+//   - a shared edge into a controlled asset (a certificate listing a
+//     controlled name) is not a dependency itself, but its vendor
+//     third_party edges are (the certificate's issuer).
+//
+// The party behind a dependency is whoever controls it (see party).
+type dependencyScan struct {
+	w          *lensWalker
+	owned      map[string]Asset
+	ownDomains map[string]bool
+	vendors    vendorSet
+}
+
+func (d dependencyScan) scan(cur Asset) error {
+	steps, err := d.w.steps(cur)
+	if err != nil {
+		return err
+	}
+	for _, s := range steps {
+		if _, mine := d.owned[s.other.ID]; mine {
+			continue
 		}
 
-		name, id, err := w.party(s.other)
-		if err != nil || name == "" || (s.other.Type == "FQDN" && ownDomains[name]) {
-			return err
-		}
-
-		vendors.add(name, id, kind, via, cur)
-	case s.attr == "infrastructure" && s.forward && s.other.Type == "IPAddress":
-		name, id, err := w.network(s.other, owned, netCache)
-		if err != nil {
-			return err
-		}
-
-		vendors.add(name, id, "Hosting and network providers", via+" IPAddress", cur)
-	case s.attr == "infrastructure" && s.forward && cur.Type == "FQDN" && s.other.Type == "FQDN":
-		domain := registeredDomain(fqdnName(s.other))
-		if !ownDomains[domain] {
-			vendors.add(domain, "", "DNS record targets (CNAME, NS, MX)", via, cur)
-		}
-	case s.attr == "infrastructure" && s.forward && s.other.Type == "Service":
-		steps, err := w.steps(s.other)
-		if err != nil {
-			return err
-		}
-		for _, svc := range steps {
-			kind, ok := vendorKinds[svc.edge.Label]
-			if !ok || svc.attr != attrThirdParty || !svc.forward {
-				continue
-			}
-
-			name, id, err := w.party(svc.other)
-			if err != nil {
+		via := cur.Type + " " + s.edge.Label
+		switch {
+		case s.attr == attrThirdParty && s.forward && s.vendor:
+			if err := d.depend(cur, s, via); err != nil {
 				return err
 			}
-
-			vendors.add(name, id, kind, via+" Service "+svc.edge.Label, cur)
-		}
-	case s.attr == "shared" && !s.forward && s.other.Type == "TLSCertificate":
-		// A certificate that lists a controlled name was issued for it, so
-		// its issuing authority is a vendor even if the certificate is shared.
-		steps, err := w.steps(s.other)
-		if err != nil {
-			return err
-		}
-		for _, c := range steps {
-			if c.forward && c.edge.Label == "issuer_contact" {
-				name, id, err := w.party(c.other)
-				if err != nil {
-					return err
-				}
-
-				vendors.add(name, id, "Certificate authorities", "TLSCertificate issuer_contact", cur)
+		case s.attr == attrInfrastructure && s.forward:
+			if err := d.depend(cur, s, via); err != nil {
+				return err
+			}
+			if err := d.through(cur, s.other, via); err != nil {
+				return err
+			}
+		case s.attr == attrShared && !s.forward:
+			if err := d.through(cur, s.other, s.other.Type); err != nil {
+				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+// through records the vendor dependencies of an intermediate asset on
+// behalf of the controlled asset cur.
+func (d dependencyScan) through(cur, mid Asset, via string) error {
+	steps, err := d.w.steps(mid)
+	if err != nil {
+		return err
+	}
+	for _, s := range steps {
+		if _, mine := d.owned[s.other.ID]; mine || s.attr != attrThirdParty || !s.forward || !s.vendor {
+			continue
+		}
+		if err := d.depend(cur, s, via+" "+mid.Type+" "+s.edge.Label); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// depend records the party controlling s.other as a vendor of cur.
+func (d dependencyScan) depend(cur Asset, s step, via string) error {
+	name, id, own, err := d.party(s.other)
+	if err != nil || own || name == "" {
+		return err
+	}
+
+	d.vendors.add(name, id, dependencyKind(s.purpose, s.other.Type), via, cur)
+	return nil
+}
+
+// party names whoever controls a: the closest Organization along
+// ownerPass; otherwise the operator of a network carrying it (an incoming
+// infrastructure edge with purpose network, such as an autonomous system
+// announcing its netblock); otherwise the most registration-like asset
+// reached. own is set when control leads back to the footprint.
+func (d dependencyScan) party(a Asset) (string, string, bool, error) {
+	c, err := d.w.controllerOf(a, d.owned)
+	if err != nil || c.own {
+		return "", "", c.own, err
+	}
+	if len(c.orgs) > 0 {
+		org := c.orgs[0]
+		_, own := d.owned[org.ID]
+		return assetLabel(org), org.ID, own, nil
+	}
+	for _, v := range c.visited {
+		steps, err := d.w.steps(v)
+		if err != nil {
+			return "", "", false, err
+		}
+		for _, s := range steps {
+			if s.forward || s.attr != attrInfrastructure || s.purpose != "network" {
+				continue
+			}
+			if _, mine := d.owned[s.other.ID]; mine {
+				return "", "", true, nil
+			}
+
+			oc, err := d.w.controllerOf(s.other, d.owned)
+			if err != nil || oc.own {
+				return "", "", oc.own, err
+			}
+			if len(oc.orgs) > 0 {
+				return assetLabel(oc.orgs[0]), oc.orgs[0].ID, false, nil
+			}
+
+			return d.fallbackName(oc.visited)
+		}
+	}
+
+	return d.fallbackName(c.visited)
+}
+
+// fallbackName names a party with no documented Organization by the
+// visited asset closest to one (a registration record before the address
+// it registers). FQDNs are named by their registrable domain, and a domain
+// of the footprint counts as controlled.
+func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, error) {
+	if len(visited) == 0 {
+		return "", "", false, nil
+	}
+
+	best := visited[0]
+	for _, v := range visited[1:] {
+		dv, okv := d.w.ownerDist[v.Type]
+		db, okb := d.w.ownerDist[best.Type]
+		if okv && (!okb || dv < db || (dv == db && len(assetLabel(v)) < len(assetLabel(best)))) {
+			best = v
+		}
+	}
+	if best.Type == "FQDN" {
+		domain := registeredDomain(fqdnName(best))
+		return domain, "", d.ownDomains[domain], nil
+	}
+
+	return assetLabel(best), best.ID, false, nil
+}
+
+// dependencyKind names a vendor group from the semantics table: the purpose
+// of the dependency relationship and the type of asset depended on, such as
+// "DNS: IP addresses" or "Certificate: contact records".
+func dependencyKind(purpose, kind string) string {
+	title := "Other"
+	switch {
+	case purpose == "":
+	case len(purpose) <= 3:
+		title = strings.ToUpper(purpose)
+	default:
+		title = strings.ToUpper(purpose[:1]) + purpose[1:]
+	}
+
+	return title + ": " + typePlural(kind)
+}
+
+// typePlural renders an OAM type name as plural words, keeping acronyms
+// ("IPAddress" to "IP addresses", "FQDN" to "FQDNs").
+func typePlural(kind string) string {
+	words := strings.Fields(camelBoundary1.ReplaceAllString(camelBoundary2.ReplaceAllString(kind, "$1 $2"), "$1 $2"))
+	for i, w := range words {
+		if strings.ToUpper(w) != w {
+			words[i] = strings.ToLower(w)
+		}
+	}
+	if n := len(words); n > 0 {
+		last := words[n-1]
+		switch {
+		case strings.ToUpper(last) == last:
+			words[n-1] = last + "s"
+		case strings.HasSuffix(last, "y"):
+			words[n-1] = strings.TrimSuffix(last, "y") + "ies"
+		case strings.HasSuffix(last, "s"):
+			words[n-1] = last + "es"
+		default:
+			words[n-1] = last + "s"
+		}
+	}
+
+	return strings.Join(words, " ")
 }
 
 // thirdPartyAnswer renders a ThirdPartyReport as plain text.

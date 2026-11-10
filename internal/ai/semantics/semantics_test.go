@@ -81,3 +81,29 @@ func TestNoUndecidedRelationships(t *testing.T) {
 		}
 	}
 }
+
+// Registry and protocol endpoints are third parties but never vendors.
+func TestRegistryEndpointsAreNotVendors(t *testing.T) {
+	table, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, ok := table.Lookup("IPNetRecord", "rdap_url", "SimpleRelation", "URL"); !ok || !r.NotVendor {
+		t.Fatalf("rdap_url must be marked vendor: false: %+v", r)
+	}
+	if r, ok := table.Lookup("DomainRecord", "registrar_contact", "SimpleRelation", "ContactRecord"); !ok ||
+		r.NotVendor {
+		t.Fatalf("registrar_contact must remain a vendor: %+v", r)
+	}
+}
+
+func TestParseRejectsVendorFlagOutsideThirdParty(t *testing.T) {
+	_, err := parse([]byte(`version: 1
+relations:
+  - {source: FQDN, label: node, relation_type: SimpleRelation, destination: FQDN,
+     attribution: same_subject, purpose: hierarchy, vendor: false, note: "x"}
+`))
+	if err == nil {
+		t.Fatal("vendor flag on a same_subject relationship was accepted")
+	}
+}

@@ -513,8 +513,7 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 // thirdPartyLens answers a third_party lens query from root.
 func (a Agent) thirdPartyLens(ctx context.Context, root Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	attr, _ := a.Runner.Catalog.(AttributionCatalog)
-	report, err := searchThirdParties(ctx, a.Runner.Graph, attr, root)
+	report, err := searchThirdParties(ctx, a.Runner.Graph, a.Runner.Catalog, root)
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "third_party_lens", OutputPaths: len(report.Vendors),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {

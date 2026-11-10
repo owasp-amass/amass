@@ -51,6 +51,11 @@ type Relation struct {
 	Review   bool   `yaml:"review"`
 	Reviewed bool   `yaml:"reviewed"`
 	Note     string `yaml:"note"`
+	// NotVendor marks a third_party destination that is registry or
+	// protocol infrastructure (an abuse desk, RDAP, WHOIS or OCSP endpoint)
+	// rather than a party the source depends on. Written as vendor: false.
+	NotVendor bool  `yaml:"-"`
+	VendorRaw *bool `yaml:"vendor"`
 }
 
 // Table holds every relationship's meaning.
@@ -94,6 +99,15 @@ func parse(data []byte) (*Table, error) {
 		}
 		if !purposes[r.Purpose] {
 			return nil, fmt.Errorf("%s --%s--> %s: unknown purpose %q", r.Source, r.Label, r.Destination, r.Purpose)
+		}
+		if r.VendorRaw != nil {
+			if r.Attribution != ThirdParty {
+				return nil, fmt.Errorf("%s --%s--> %s: vendor applies only to third_party relationships", r.Source,
+					r.Label, r.Destination)
+			}
+
+			r.NotVendor = !*r.VendorRaw
+			t.Relations[i] = r
 		}
 		if r.Note == "" {
 			return nil, fmt.Errorf("%s --%s--> %s: a note explaining the choice is required", r.Source,

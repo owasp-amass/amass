@@ -33,61 +33,17 @@ type ControlledReport struct {
 	Reason         string         `json:"reason,omitempty"`
 }
 
-// footprintMoves returns, for each asset type, the types a controlled-asset
-// walk can move to according to the attribution table.
-func footprintMoves(schema SchemaCatalog, attr AttributionCatalog) map[string]map[string]bool {
-	moves := map[string]map[string]bool{}
-	add := func(from, to string, controls bool) {
-		if to == "Person" || (to == "Organization" && !controls) {
-			return
-		}
-		if moves[from] == nil {
-			moves[from] = map[string]bool{}
-		}
-
-		moves[from][to] = true
-	}
-	for _, r := range schema.Relations() {
-		a, ok := attr.Attribution(r.SourceType, r.Label, r.RelationType, r.DestinationType)
-		if !ok {
-			continue
-		}
-		switch a {
-		case attrSameSubject:
-			add(r.SourceType, r.DestinationType, false)
-			if r.Label != "node" {
-				add(r.DestinationType, r.SourceType, false)
-			}
-		case attrControls:
-			add(r.SourceType, r.DestinationType, true)
-		case attrController:
-			add(r.DestinationType, r.SourceType, false)
-		}
-	}
-
-	return moves
-}
-
 // footprintExpansionTypes returns the asset types from which a controlled
-// walk can still reach one of targets, so the walk need not read assets
-// (such as hundreds of URLs) that cannot lead to an answer.
-func footprintExpansionTypes(schema SchemaCatalog, attr AttributionCatalog, targets []string) map[string]bool {
-	reverse := map[string][]string{}
-	for from, tos := range footprintMoves(schema, attr) {
-		for to := range tos {
-			reverse[to] = append(reverse[to], from)
-		}
-	}
-
+// walk can still reach one of targets, from the semantics table, so the
+// walk need not read assets (such as hundreds of URLs) that cannot lead to
+// an answer.
+func footprintExpansionTypes(relations []RelationshipSchema, meaning meaningFunc, targets []string) map[string]bool {
+	moves := typeMoves(relations, meaning, footprintPass)
 	expand := map[string]bool{}
-	queue := append([]string(nil), targets...)
-	for len(queue) > 0 {
-		t := queue[0]
-		queue = queue[1:]
-		for _, from := range reverse[t] {
-			if !expand[from] {
-				expand[from] = true
-				queue = append(queue, from)
+	for _, t := range targets {
+		for kind, d := range distanceTo(moves, t) {
+			if d > 0 && kind != "Person" {
+				expand[kind] = true
 			}
 		}
 	}
@@ -97,13 +53,14 @@ func footprintExpansionTypes(schema SchemaCatalog, attr AttributionCatalog, targ
 
 // controlledReachable reports whether a controlled walk from an
 // Organization can reach every target type.
-func controlledReachable(schema SchemaCatalog, attr AttributionCatalog, targets []string) bool {
-	if schema == nil || attr == nil || len(targets) == 0 {
+func controlledReachable(schema SchemaCatalog, targets []string) bool {
+	meaning := meaningsOf(schema)
+	if schema == nil || meaning == nil || len(targets) == 0 {
 		return false
 	}
 	for _, t := range targets {
 		if t == "Organization" || t == "Person" ||
-			!footprintExpansionTypes(schema, attr, []string{t})["Organization"] {
+			!footprintExpansionTypes(schema.Relations(), meaning, []string{t})["Organization"] {
 			return false
 		}
 	}
@@ -132,11 +89,12 @@ func (w *lensWalker) path(id string, owned map[string]Asset) PlanMatch {
 }
 
 // searchControlled runs the controlled-assets lens from root.
-func searchControlled(ctx context.Context, graph Graph, schema SchemaCatalog, attr AttributionCatalog, root Asset, targets []string, limit int) (ControlledReport, error) {
+func searchControlled(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset, targets []string, limit int) (ControlledReport, error) {
 	report := ControlledReport{Root: root, TargetTypes: targets, FootprintTypes: map[string]int{},
 		Matches: []PlanMatch{}}
-	if attr == nil {
-		return report, errors.New("the controlled lens requires relationship attribution semantics")
+	meaning := meaningsOf(schema)
+	if schema == nil || meaning == nil {
+		return report, errors.New("the controlled lens requires relationship semantics")
 	}
 
 	bounded, ok := graph.(BoundedGraph)
@@ -145,10 +103,10 @@ func searchControlled(ctx context.Context, graph Graph, schema SchemaCatalog, at
 	}
 
 	counters := &ThirdPartyReport{}
-	w := &lensWalker{ctx: ctx, graph: graph, bounded: bounded, cat: attr, assets: map[string]Asset{root.ID: root},
-		edges: map[string][]Relation{}, report: counters, parent: map[string]string{}, via: map[string]Relation{}}
+	w := newLensWalker(ctx, graph, bounded, meaning, schema.Relations(), root, counters)
+	w.parent, w.via = map[string]string{}, map[string]Relation{}
 	if len(targets) > 0 {
-		w.expand = footprintExpansionTypes(schema, attr, targets)
+		w.expand = footprintExpansionTypes(w.relations, meaning, targets)
 	}
 
 	roots := []Asset{root}
@@ -266,8 +224,7 @@ func controlledAnswer(r ControlledReport) string {
 // controlledLens answers a controlled lens query from root.
 func (a Agent) controlledLens(ctx context.Context, root Asset, targets []string, opts AdaptiveOptions, out Investigation) (Investigation, error) {
 	started := time.Now()
-	attr, _ := a.Runner.Catalog.(AttributionCatalog)
-	report, err := searchControlled(ctx, a.Runner.Graph, a.Runner.Catalog, attr, root, targets, inventoryLimit(opts))
+	report, err := searchControlled(ctx, a.Runner.Graph, a.Runner.Catalog, root, targets, inventoryLimit(opts))
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "controlled_lens", OutputPaths: len(report.Matches),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {
@@ -290,9 +247,9 @@ func (a Agent) controlledLens(ctx context.Context, root Asset, targets []string,
 // promoteControlledGoal turns a model goal that asks which assets of
 // particular types an Organization has into the controlled lens, when the
 // attribution table can attribute every requested type to an Organization.
-func promoteControlledGoal(q *Query, schema SchemaCatalog, attr AttributionCatalog) bool {
+func promoteControlledGoal(q *Query, schema SchemaCatalog) bool {
 	if q.Subject.Type != "Organization" || len(q.Hops) != 0 || q.Purpose != "connected" ||
-		vendorLanguage.MatchString(q.Question) || !controlledReachable(schema, attr, q.TargetTypes) {
+		vendorLanguage.MatchString(q.Question) || !controlledReachable(schema, q.TargetTypes) {
 		return false
 	}
 

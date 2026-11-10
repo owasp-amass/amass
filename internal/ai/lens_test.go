@@ -10,121 +10,128 @@ import (
 	"testing"
 )
 
-// oamAttribution is every entry of semantics/oam_relations.yaml, so the lens
-// is tested against the reviewed table rather than a hand-picked subset.
-var oamAttribution = testAttribution{
-	"Account|id|SimpleRelation|Identifier":                             "attribute",
-	"Account|user|SimpleRelation|Organization":                         "controller",
-	"Account|user|SimpleRelation|Person":                               "controller",
-	"AutnumRecord|abuse_contact|SimpleRelation|ContactRecord":          "third_party",
-	"AutnumRecord|admin_contact|SimpleRelation|ContactRecord":          "controller",
-	"AutnumRecord|rdap_url|SimpleRelation|URL":                         "third_party",
-	"AutnumRecord|registrant|SimpleRelation|ContactRecord":             "controller",
-	"AutnumRecord|technical_contact|SimpleRelation|ContactRecord":      "third_party",
-	"AutnumRecord|whois_server|SimpleRelation|FQDN":                    "third_party",
-	"AutonomousSystem|announces|SimpleRelation|Netblock":               "infrastructure",
-	"AutonomousSystem|registration|SimpleRelation|AutnumRecord":        "same_subject",
-	"ContactRecord|fqdn|SimpleRelation|FQDN":                           "attribute",
-	"ContactRecord|id|SimpleRelation|Identifier":                       "attribute",
-	"ContactRecord|location|SimpleRelation|Location":                   "attribute",
-	"ContactRecord|organization|SimpleRelation|Organization":           "same_subject",
-	"ContactRecord|person|SimpleRelation|Person":                       "same_subject",
-	"ContactRecord|phone|SimpleRelation|Phone":                         "attribute",
-	"ContactRecord|url|SimpleRelation|URL":                             "attribute",
-	"DomainRecord|admin_contact|SimpleRelation|ContactRecord":          "controller",
-	"DomainRecord|billing_contact|SimpleRelation|ContactRecord":        "controller",
-	"DomainRecord|name_server|SimpleRelation|FQDN":                     "third_party",
-	"DomainRecord|registrant_contact|SimpleRelation|ContactRecord":     "controller",
-	"DomainRecord|registrar_contact|SimpleRelation|ContactRecord":      "third_party",
-	"DomainRecord|technical_contact|SimpleRelation|ContactRecord":      "third_party",
-	"DomainRecord|whois_server|SimpleRelation|FQDN":                    "third_party",
-	"FQDN|dns_record|BasicDNSRelation|FQDN":                            "infrastructure",
-	"FQDN|dns_record|BasicDNSRelation|IPAddress":                       "infrastructure",
-	"FQDN|dns_record|PrefDNSRelation|FQDN":                             "infrastructure",
-	"FQDN|dns_record|SRVDNSRelation|FQDN":                              "infrastructure",
-	"FQDN|node|SimpleRelation|FQDN":                                    "same_subject",
-	"FQDN|port|PortRelation|Service":                                   "infrastructure",
-	"FQDN|registration|SimpleRelation|DomainRecord":                    "same_subject",
-	"FQDN|verified_for|SimpleRelation|Organization":                    "third_party",
-	"FQDN|verified_for|SimpleRelation|Service":                         "third_party",
-	"File|contains|SimpleRelation|ContactRecord":                       "attribute",
-	"File|contains|SimpleRelation|URL":                                 "attribute",
-	"File|url|SimpleRelation|URL":                                      "attribute",
-	"FundsTransfer|id|SimpleRelation|Identifier":                       "attribute",
-	"FundsTransfer|recipient|SimpleRelation|Account":                   "attribute",
-	"FundsTransfer|sender|SimpleRelation|Account":                      "attribute",
-	"FundsTransfer|third_party|SimpleRelation|Organization":            "third_party",
-	"IPAddress|port|PortRelation|Service":                              "infrastructure",
-	"IPAddress|ptr_record|SimpleRelation|FQDN":                         "infrastructure",
-	"IPNetRecord|abuse_contact|SimpleRelation|ContactRecord":           "third_party",
-	"IPNetRecord|admin_contact|SimpleRelation|ContactRecord":           "controller",
-	"IPNetRecord|rdap_url|SimpleRelation|URL":                          "third_party",
-	"IPNetRecord|registrant|SimpleRelation|ContactRecord":              "controller",
-	"IPNetRecord|technical_contact|SimpleRelation|ContactRecord":       "third_party",
-	"IPNetRecord|whois_server|SimpleRelation|FQDN":                     "third_party",
-	"Identifier|issuing_agent|SimpleRelation|ContactRecord":            "third_party",
-	"Identifier|issuing_authority|SimpleRelation|ContactRecord":        "third_party",
-	"Identifier|registration_agency|SimpleRelation|ContactRecord":      "third_party",
-	"Location|id|SimpleRelation|Identifier":                            "attribute",
-	"Netblock|contains|SimpleRelation|IPAddress":                       "same_subject",
-	"Netblock|registration|SimpleRelation|IPNetRecord":                 "same_subject",
-	"Organization|account|SimpleRelation|Account":                      "controls",
-	"Organization|funding_source|SimpleRelation|Organization":          "attribute",
-	"Organization|funding_source|SimpleRelation|Person":                "attribute",
-	"Organization|hq_address|SimpleRelation|Location":                  "attribute",
-	"Organization|id|SimpleRelation|Identifier":                        "attribute",
-	"Organization|legal_address|SimpleRelation|Location":               "attribute",
-	"Organization|location|SimpleRelation|Location":                    "attribute",
-	"Organization|member|SimpleRelation|Person":                        "attribute",
-	"Organization|org_unit|SimpleRelation|Organization":                "controls",
-	"Organization|social_media_profile|SimpleRelation|URL":             "controls",
-	"Organization|subsidiary|SimpleRelation|Organization":              "controls",
-	"Organization|website|SimpleRelation|URL":                          "controls",
-	"Person|account|SimpleRelation|Account":                            "controls",
-	"Person|address|SimpleRelation|Location":                           "attribute",
-	"Person|id|SimpleRelation|Identifier":                              "attribute",
-	"Person|phone|SimpleRelation|Phone":                                "attribute",
-	"Phone|account|SimpleRelation|Account":                             "attribute",
-	"Phone|contact|SimpleRelation|ContactRecord":                       "attribute",
-	"ProductRelease|id|SimpleRelation|Identifier":                      "attribute",
-	"ProductRelease|website|SimpleRelation|URL":                        "controls",
-	"Product|id|SimpleRelation|Identifier":                             "attribute",
-	"Product|manufacturer|SimpleRelation|Organization":                 "controller",
-	"Product|release|SimpleRelation|ProductRelease":                    "controls",
-	"Product|website|SimpleRelation|URL":                               "controls",
-	"Service|certificate|SimpleRelation|TLSCertificate":                "same_subject",
-	"Service|product_used|SimpleRelation|Product":                      "third_party",
-	"Service|product_used|SimpleRelation|ProductRelease":               "third_party",
-	"Service|provider|SimpleRelation|Organization":                     "third_party",
-	"Service|terms_of_service|SimpleRelation|File":                     "attribute",
-	"Service|terms_of_service|SimpleRelation|URL":                      "attribute",
-	"TLSCertificate|common_name|SimpleRelation|FQDN":                   "same_subject",
-	"TLSCertificate|issuer_contact|SimpleRelation|ContactRecord":       "third_party",
-	"TLSCertificate|issuing_certificate_url|SimpleRelation|URL":        "third_party",
-	"TLSCertificate|issuing_certificate|SimpleRelation|TLSCertificate": "third_party",
-	"TLSCertificate|ocsp_server|SimpleRelation|URL":                    "third_party",
-	"TLSCertificate|san_dns_name|SimpleRelation|FQDN":                  "shared",
-	"TLSCertificate|san_email_address|SimpleRelation|Identifier":       "shared",
-	"TLSCertificate|san_ip_address|SimpleRelation|IPAddress":           "shared",
-	"TLSCertificate|san_url|SimpleRelation|URL":                        "shared",
-	"TLSCertificate|subject_contact|SimpleRelation|ContactRecord":      "controller",
-	"URL|domain|SimpleRelation|FQDN":                                   "same_subject",
-	"URL|file|SimpleRelation|File":                                     "attribute",
-	"URL|ip_address|SimpleRelation|IPAddress":                          "infrastructure",
-	"URL|port|PortRelation|Service":                                    "infrastructure",
+// oamSemantics is every entry of semantics/oam_relations.yaml, so the
+// lenses are tested against the reviewed table rather than a hand-picked
+// subset. Regenerate it when the table changes.
+var oamSemantics = map[string]RelationMeaning{
+	"Account|id|SimpleRelation|Identifier":                             {"attribute", "identity", true},
+	"Account|user|SimpleRelation|Organization":                         {"controller", "identity", true},
+	"Account|user|SimpleRelation|Person":                               {"controller", "identity", true},
+	"AutnumRecord|abuse_contact|SimpleRelation|ContactRecord":          {"third_party", "registration", false},
+	"AutnumRecord|admin_contact|SimpleRelation|ContactRecord":          {"controller", "registration", true},
+	"AutnumRecord|rdap_url|SimpleRelation|URL":                         {"third_party", "registration", false},
+	"AutnumRecord|registrant|SimpleRelation|ContactRecord":             {"controller", "registration", true},
+	"AutnumRecord|technical_contact|SimpleRelation|ContactRecord":      {"third_party", "registration", true},
+	"AutnumRecord|whois_server|SimpleRelation|FQDN":                    {"third_party", "registration", false},
+	"AutonomousSystem|announces|SimpleRelation|Netblock":               {"infrastructure", "network", true},
+	"AutonomousSystem|registration|SimpleRelation|AutnumRecord":        {"same_subject", "registration", true},
+	"ContactRecord|fqdn|SimpleRelation|FQDN":                           {"attribute", "contact", true},
+	"ContactRecord|id|SimpleRelation|Identifier":                       {"attribute", "contact", true},
+	"ContactRecord|location|SimpleRelation|Location":                   {"attribute", "contact", true},
+	"ContactRecord|organization|SimpleRelation|Organization":           {"same_subject", "contact", true},
+	"ContactRecord|person|SimpleRelation|Person":                       {"same_subject", "contact", true},
+	"ContactRecord|phone|SimpleRelation|Phone":                         {"attribute", "contact", true},
+	"ContactRecord|url|SimpleRelation|URL":                             {"attribute", "contact", true},
+	"DomainRecord|admin_contact|SimpleRelation|ContactRecord":          {"controller", "registration", true},
+	"DomainRecord|billing_contact|SimpleRelation|ContactRecord":        {"controller", "registration", true},
+	"DomainRecord|name_server|SimpleRelation|FQDN":                     {"third_party", "dns", true},
+	"DomainRecord|registrant_contact|SimpleRelation|ContactRecord":     {"controller", "registration", true},
+	"DomainRecord|registrar_contact|SimpleRelation|ContactRecord":      {"third_party", "registration", true},
+	"DomainRecord|technical_contact|SimpleRelation|ContactRecord":      {"third_party", "registration", true},
+	"DomainRecord|whois_server|SimpleRelation|FQDN":                    {"third_party", "registration", false},
+	"FQDN|dns_record|BasicDNSRelation|FQDN":                            {"infrastructure", "dns", true},
+	"FQDN|dns_record|BasicDNSRelation|IPAddress":                       {"infrastructure", "dns", true},
+	"FQDN|dns_record|PrefDNSRelation|FQDN":                             {"infrastructure", "dns", true},
+	"FQDN|dns_record|SRVDNSRelation|FQDN":                              {"infrastructure", "dns", true},
+	"FQDN|node|SimpleRelation|FQDN":                                    {"same_subject", "hierarchy", true},
+	"FQDN|port|PortRelation|Service":                                   {"infrastructure", "network", true},
+	"FQDN|registration|SimpleRelation|DomainRecord":                    {"same_subject", "registration", true},
+	"FQDN|verified_for|SimpleRelation|Organization":                    {"third_party", "dns", true},
+	"FQDN|verified_for|SimpleRelation|Service":                         {"third_party", "dns", true},
+	"File|contains|SimpleRelation|ContactRecord":                       {"attribute", "web", true},
+	"File|contains|SimpleRelation|URL":                                 {"attribute", "web", true},
+	"File|url|SimpleRelation|URL":                                      {"attribute", "web", true},
+	"FundsTransfer|id|SimpleRelation|Identifier":                       {"attribute", "financial", true},
+	"FundsTransfer|recipient|SimpleRelation|Account":                   {"attribute", "financial", true},
+	"FundsTransfer|sender|SimpleRelation|Account":                      {"attribute", "financial", true},
+	"FundsTransfer|third_party|SimpleRelation|Organization":            {"third_party", "financial", true},
+	"IPAddress|port|PortRelation|Service":                              {"infrastructure", "network", true},
+	"IPAddress|ptr_record|SimpleRelation|FQDN":                         {"infrastructure", "dns", true},
+	"IPNetRecord|abuse_contact|SimpleRelation|ContactRecord":           {"third_party", "registration", false},
+	"IPNetRecord|admin_contact|SimpleRelation|ContactRecord":           {"controller", "registration", true},
+	"IPNetRecord|rdap_url|SimpleRelation|URL":                          {"third_party", "registration", false},
+	"IPNetRecord|registrant|SimpleRelation|ContactRecord":              {"controller", "registration", true},
+	"IPNetRecord|technical_contact|SimpleRelation|ContactRecord":       {"third_party", "registration", true},
+	"IPNetRecord|whois_server|SimpleRelation|FQDN":                     {"third_party", "registration", false},
+	"Identifier|issuing_agent|SimpleRelation|ContactRecord":            {"third_party", "identity", true},
+	"Identifier|issuing_authority|SimpleRelation|ContactRecord":        {"third_party", "identity", true},
+	"Identifier|registration_agency|SimpleRelation|ContactRecord":      {"third_party", "identity", true},
+	"Location|id|SimpleRelation|Identifier":                            {"attribute", "identity", true},
+	"Netblock|contains|SimpleRelation|IPAddress":                       {"same_subject", "network", true},
+	"Netblock|registration|SimpleRelation|IPNetRecord":                 {"same_subject", "registration", true},
+	"Organization|account|SimpleRelation|Account":                      {"controls", "identity", true},
+	"Organization|funding_source|SimpleRelation|Organization":          {"attribute", "financial", true},
+	"Organization|funding_source|SimpleRelation|Person":                {"attribute", "financial", true},
+	"Organization|hq_address|SimpleRelation|Location":                  {"attribute", "corporate", true},
+	"Organization|id|SimpleRelation|Identifier":                        {"attribute", "identity", true},
+	"Organization|legal_address|SimpleRelation|Location":               {"attribute", "corporate", true},
+	"Organization|location|SimpleRelation|Location":                    {"attribute", "corporate", true},
+	"Organization|member|SimpleRelation|Person":                        {"attribute", "corporate", true},
+	"Organization|org_unit|SimpleRelation|Organization":                {"controls", "corporate", true},
+	"Organization|social_media_profile|SimpleRelation|URL":             {"controls", "web", true},
+	"Organization|subsidiary|SimpleRelation|Organization":              {"controls", "corporate", true},
+	"Organization|website|SimpleRelation|URL":                          {"controls", "web", true},
+	"Person|account|SimpleRelation|Account":                            {"controls", "identity", true},
+	"Person|address|SimpleRelation|Location":                           {"attribute", "identity", true},
+	"Person|id|SimpleRelation|Identifier":                              {"attribute", "identity", true},
+	"Person|phone|SimpleRelation|Phone":                                {"attribute", "identity", true},
+	"Phone|account|SimpleRelation|Account":                             {"attribute", "identity", true},
+	"Phone|contact|SimpleRelation|ContactRecord":                       {"attribute", "contact", true},
+	"ProductRelease|id|SimpleRelation|Identifier":                      {"attribute", "product", true},
+	"ProductRelease|website|SimpleRelation|URL":                        {"controls", "web", true},
+	"Product|id|SimpleRelation|Identifier":                             {"attribute", "product", true},
+	"Product|manufacturer|SimpleRelation|Organization":                 {"controller", "product", true},
+	"Product|release|SimpleRelation|ProductRelease":                    {"controls", "product", true},
+	"Product|website|SimpleRelation|URL":                               {"controls", "web", true},
+	"Service|certificate|SimpleRelation|TLSCertificate":                {"same_subject", "certificate", true},
+	"Service|product_used|SimpleRelation|Product":                      {"third_party", "product", true},
+	"Service|product_used|SimpleRelation|ProductRelease":               {"third_party", "product", true},
+	"Service|provider|SimpleRelation|Organization":                     {"third_party", "network", true},
+	"Service|terms_of_service|SimpleRelation|File":                     {"attribute", "web", true},
+	"Service|terms_of_service|SimpleRelation|URL":                      {"attribute", "web", true},
+	"TLSCertificate|common_name|SimpleRelation|FQDN":                   {"same_subject", "certificate", true},
+	"TLSCertificate|issuer_contact|SimpleRelation|ContactRecord":       {"third_party", "certificate", true},
+	"TLSCertificate|issuing_certificate_url|SimpleRelation|URL":        {"third_party", "certificate", false},
+	"TLSCertificate|issuing_certificate|SimpleRelation|TLSCertificate": {"third_party", "certificate", false},
+	"TLSCertificate|ocsp_server|SimpleRelation|URL":                    {"third_party", "certificate", false},
+	"TLSCertificate|san_dns_name|SimpleRelation|FQDN":                  {"shared", "certificate", true},
+	"TLSCertificate|san_email_address|SimpleRelation|Identifier":       {"shared", "certificate", true},
+	"TLSCertificate|san_ip_address|SimpleRelation|IPAddress":           {"shared", "certificate", true},
+	"TLSCertificate|san_url|SimpleRelation|URL":                        {"shared", "certificate", true},
+	"TLSCertificate|subject_contact|SimpleRelation|ContactRecord":      {"controller", "certificate", true},
+	"URL|domain|SimpleRelation|FQDN":                                   {"same_subject", "web", true},
+	"URL|file|SimpleRelation|File":                                     {"attribute", "web", true},
+	"URL|ip_address|SimpleRelation|IPAddress":                          {"infrastructure", "network", true},
+	"URL|port|PortRelation|Service":                                    {"infrastructure", "network", true},
 }
 
-// vendorCatalog is the full OAM attribution table with selectors.
+// vendorCatalog is the full OAM semantics table with selectors.
 type vendorCatalog struct{ planCatalog }
 
 func (vendorCatalog) Attribution(src, label, rt, dst string) (string, bool) {
-	return oamAttribution.Attribution(src, label, rt, dst)
+	m, ok := oamSemantics[src+"|"+label+"|"+rt+"|"+dst]
+	return m.Attribution, ok
+}
+
+func (vendorCatalog) Meaning(src, label, rt, dst string) (RelationMeaning, bool) {
+	m, ok := oamSemantics[src+"|"+label+"|"+rt+"|"+dst]
+	return m, ok
 }
 
 // Relations returns every transition in the attribution table.
 func (vendorCatalog) Relations() []RelationshipSchema {
-	out := make([]RelationshipSchema, 0, len(oamAttribution))
-	for k := range oamAttribution {
+	out := make([]RelationshipSchema, 0, len(oamSemantics))
+	for k := range oamSemantics {
 		p := strings.Split(k, "|")
 		out = append(out, RelationshipSchema{SourceType: p[0], Label: p[1], RelationType: p[2], DestinationType: p[3]})
 	}
@@ -272,11 +279,11 @@ func TestThirdPartyLensFindsVendorsOfOrganization(t *testing.T) {
 
 	got := vendorNames(result.ThirdPartyReport)
 	want := map[string]string{
-		"AS54113 FASTLY": "Hosting and network providers",
-		"ultradns.net":   "DNS hosting",
-		"pphosted.com":   "DNS record targets (CNAME, NS, MX)",
-		"EDUCAUSE":       "Domain registrars",
-		"DigiCert Inc":   "Certificate authorities",
+		"FASTLY":       "DNS: IP addresses",
+		"ultradns.net": "DNS: FQDNs",
+		"pphosted.com": "DNS: FQDNs",
+		"EDUCAUSE":     "Registration: contact records",
+		"DigiCert Inc": "Certificate: contact records",
 	}
 	for name, kind := range want {
 		if got[name] != kind {
@@ -291,7 +298,7 @@ func TestThirdPartyLensFindsVendorsOfOrganization(t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("vendors = %v, want exactly %v", got, want)
 	}
-	if !strings.Contains(result.Answer, "Certificate authorities:\n  DigiCert Inc: 1 asset(s)") {
+	if !strings.Contains(result.Answer, "Certificate: contact records:\n  DigiCert Inc: 1 asset(s)") {
 		t.Errorf("answer does not group vendors by kind:\n%s", result.Answer)
 	}
 }
@@ -311,7 +318,7 @@ func TestThirdPartyLensFromDomainIncludesRegistrantNetworks(t *testing.T) {
 	if r.FootprintTypes["Netblock"] != 1 || r.FootprintTypes["IPAddress"] != 1 {
 		t.Errorf("registrant netblock missing from footprint: %v", r.FootprintTypes)
 	}
-	if _, ok := vendorNames(r)["AS54113 FASTLY"]; !ok {
+	if _, ok := vendorNames(r)["FASTLY"]; !ok {
 		t.Errorf("CDN network missing: %v", vendorNames(r))
 	}
 }
@@ -424,8 +431,84 @@ func TestControlledPromotionRequiresAttributableTypes(t *testing.T) {
 	} {
 		q := Query{Question: "Which assets does Colgate University have?", Purpose: "connected",
 			Subject: PlanSubject{Type: "Organization", Name: "Colgate University"}, TargetTypes: tc.targets}
-		if got := promoteControlledGoal(&q, cat, cat); got != tc.want {
+		if got := promoteControlledGoal(&q, cat); got != tc.want {
 			t.Errorf("targets %v: promoted=%v, want %v", tc.targets, got, tc.want)
 		}
+	}
+}
+
+// extendedCatalog adds transitions the lens code has never seen, as a
+// future OAM release might.
+type extendedCatalog struct {
+	vendorCatalog
+	extra map[string]RelationMeaning
+}
+
+func (c extendedCatalog) Meaning(src, label, rt, dst string) (RelationMeaning, bool) {
+	if m, ok := c.extra[src+"|"+label+"|"+rt+"|"+dst]; ok {
+		return m, true
+	}
+
+	return c.vendorCatalog.Meaning(src, label, rt, dst)
+}
+
+func (c extendedCatalog) Relations() []RelationshipSchema {
+	out := c.vendorCatalog.Relations()
+	for k := range c.extra {
+		p := strings.Split(k, "|")
+		out = append(out, RelationshipSchema{SourceType: p[0], Label: p[1], RelationType: p[2], DestinationType: p[3]})
+	}
+
+	return out
+}
+
+// A new asset type and relationships, annotated only in the semantics
+// table, take part in both lenses without code changes.
+func TestNewOAMRelationshipsJoinLensesWithoutCode(t *testing.T) {
+	cat := extendedCatalog{vendorCatalog: vendorCatalog{testOAMCatalog}, extra: map[string]RelationMeaning{
+		"FQDN|hosted_on|SimpleRelation|CloudResource":            {"infrastructure", "network", true},
+		"CloudResource|tenant_of|SimpleRelation|CloudAccount":    {"same_subject", "network", true},
+		"CloudAccount|operated_by|SimpleRelation|Organization":   {"controller", "network", true},
+		"Organization|cloud_account|SimpleRelation|CloudAccount": {"controls", "network", true},
+		"CloudAccount|billing_portal|SimpleRelation|URL":         {"third_party", "financial", false},
+		"CloudResource|managed_by|SimpleRelation|ContactRecord":  {"third_party", "network", true},
+	}}
+
+	g := vendorFixture()
+	g.assets["bucket"] = Asset{ID: "bucket", Type: "CloudResource", Key: "assets-bucket"}
+	g.assets["tenant"] = Asset{ID: "tenant", Type: "CloudAccount", Key: "tenant-1"}
+	g.assets["cloudco"] = Asset{ID: "cloudco", Type: "Organization", Key: "cloudco",
+		Content: map[string]any{"name": "Example Cloud"}}
+	g.assets["own-acct"] = Asset{ID: "own-acct", Type: "CloudAccount", Key: "colgate-acct"}
+	g.links = append(g.links,
+		Relation{ID: "h1", FromID: "www.colgate.edu", ToID: "bucket", Label: "hosted_on", Type: "SimpleRelation"},
+		Relation{ID: "h2", FromID: "bucket", ToID: "tenant", Label: "tenant_of", Type: "SimpleRelation"},
+		Relation{ID: "h3", FromID: "tenant", ToID: "cloudco", Label: "operated_by", Type: "SimpleRelation"},
+		Relation{ID: "h4", FromID: "colgate", ToID: "own-acct", Label: "cloud_account", Type: "SimpleRelation"})
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: cat, Limits: DefaultLimits()}}
+
+	result, err := agent.AskQuery(context.Background(),
+		thirdPartyQuery("", PlanSubject{Type: "Organization", Name: "Colgate University"}, SourceCaller),
+		AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind := vendorNames(result.ThirdPartyReport)["Example Cloud"]; kind != "Network: cloud resources" {
+		t.Errorf("new hosting relationship not reported: %v", vendorNames(result.ThirdPartyReport))
+	}
+
+	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
+		Traversal: TraversalExplore, TargetTypes: []string{"CloudAccount"}, Direction: "both",
+		Purpose: "connected", Lens: LensControlled, Source: SourceCaller}
+	if !controlledReachable(cat, q.TargetTypes) {
+		t.Fatal("new controls relationship does not make CloudAccount attributable")
+	}
+
+	result, err = agent.AskQuery(context.Background(), q, AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := result.ControlledReport; len(r.Matches) != 1 || r.Matches[0].Nodes[1].ID != "own-acct" {
+		t.Fatalf("controlled lens did not use the new relationship: %+v", r)
 	}
 }
