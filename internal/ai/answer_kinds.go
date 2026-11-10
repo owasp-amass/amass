@@ -28,6 +28,9 @@ type AnswerKind struct {
 	Subjects []string
 	// Targets says how the kind uses target_types.
 	Targets string
+	// Examples are question shapes that call for the kind, shown to the
+	// planner as guidance on meaning, never matched against questions.
+	Examples []string
 }
 
 var answerKinds = []AnswerKind{
@@ -36,12 +39,18 @@ var answerKinds = []AnswerKind{
 		Description: "Explore stored relationships from the subject and choose the witnessed paths that answer " +
 			"the question. Use for connectivity, specific relationships and highest parent questions.",
 		Targets: "the asset types the answer is about, or [] to explore",
+		Examples: []string{"How is <asset> connected to <organization>?", "What is the highest parent organization of <asset>?",
+			"Which URLs are linked to <hostname> via domain relationships?"},
 	},
 	{
 		Name:        AnswerHierarchy,
 		Description: "List every name below the subject in the stored DNS name hierarchy (subdomain inventories).",
 		Subjects:    []string{"FQDN"},
 		Targets:     `["FQDN"]`,
+		Examples: []string{
+			"What subdomains does <domain> have?",
+			"List the hostnames in <organization>'s DNS namespace.",
+		},
 	},
 	{
 		Name: LensControlled,
@@ -50,6 +59,8 @@ var answerKinds = []AnswerKind{
 			"relationships.",
 		Subjects: []string{"Organization", "FQDN"},
 		Targets:  "the asset types to list, or [] for all controlled assets",
+		Examples: []string{"Which ASN is associated with <organization>?", "What netblocks does <organization> have?",
+			"Which domains belong to <organization>?"},
 	},
 	{
 		Name: LensThirdParty,
@@ -57,6 +68,7 @@ var answerKinds = []AnswerKind{
 			"service providers, registrars, DNS and hosting networks, certificate authorities and software.",
 		Subjects: []string{"Organization", "FQDN"},
 		Targets:  "[]",
+		Examples: []string{"Which vendors does <organization> use?", "Who hosts or provides services for <domain>?"},
 	},
 }
 
@@ -91,7 +103,12 @@ func answerKindCatalog() string {
 			subjects = "subject " + strings.Join(k.Subjects, " or ")
 		}
 
-		fmt.Fprintf(&b, "- %s (%s; target_types %s): %s\n", k.Name, subjects, k.Targets, k.Description)
+		fmt.Fprintf(&b, "- %s (%s; target_types %s): %s", k.Name, subjects, k.Targets, k.Description)
+		if len(k.Examples) > 0 {
+			fmt.Fprintf(&b, " Examples: %s", strings.Join(k.Examples, " | "))
+		}
+
+		b.WriteString("\n")
 	}
 
 	return b.String()
@@ -138,7 +155,14 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 
 // queryFromPlannedGoal turns a validated planner goal into a Query for its
 // answer kind.
-func queryFromPlannedGoal(goal InvestigationGoal, question string) Query {
+//
+// Two goal structures are answered deterministically whatever kind the
+// model chose: a goal that follows only the FQDN node hierarchy is a
+// hierarchy listing, and an unconstrained connected goal from an
+// Organization to asset types the semantics table can attribute to an
+// owner is the controlled lens, which reads the same attribution paths
+// without model path selection.
+func queryFromPlannedGoal(goal InvestigationGoal, question string, schema SchemaCatalog) Query {
 	q := QueryFromGoal(goal, question, SourceModelGoal)
 	switch goal.Answer {
 	case AnswerHierarchy:
@@ -150,8 +174,12 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string) Query {
 	case LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 	default:
-		// A goal that only follows the FQDN hierarchy is a hierarchy listing
-		// whatever answer the model chose.
+		if goal.Subject.Type == "Organization" && goal.Purpose == "connected" && len(goal.Relationships) == 0 &&
+			controlledReachable(schema, goal.TargetTypes) {
+			goal.Answer = LensControlled
+			return queryFromPlannedGoal(goal, question, schema)
+		}
+
 		promoteHierarchyGoal(&q)
 	}
 

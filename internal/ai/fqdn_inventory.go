@@ -127,8 +127,8 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 		return out, errors.New("max expansions exceeds inventory policy")
 	}
 
-	perNode := maxMatches + 1
-	maxEdges := 4 * perNode
+	perNode := min(maxMatches+1, MaxEdgeRead)
+	maxEdges := 4 * (maxMatches + 1)
 
 	type queued struct {
 		asset Asset

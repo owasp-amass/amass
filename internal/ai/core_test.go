@@ -59,6 +59,11 @@ func (g fakeGraph) Edges(_ context.Context, id, dir, label string, _ time.Time) 
 }
 
 func (g fakeGraph) EdgesLimited(ctx context.Context, id, dir, label string, since time.Time, limit int) ([]Relation, bool, error) {
+	// Enforce the repositories' limit so tests catch oversized reads.
+	if limit < 1 || limit > MaxEdgeRead {
+		return nil, false, errors.New("edge limit must be 1..500")
+	}
+
 	edges, err := g.Edges(ctx, id, dir, label, since)
 	if err != nil {
 		return nil, false, err

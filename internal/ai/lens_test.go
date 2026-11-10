@@ -6,6 +6,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -548,5 +549,55 @@ func TestNewOAMRelationshipsJoinLensesWithoutCode(t *testing.T) {
 	}
 	if r := result.ControlledReport; len(r.Matches) != 1 || r.Matches[0].Nodes[1].ID != "own-acct" {
 		t.Fatalf("controlled lens did not use the new relationship: %+v", r)
+	}
+}
+
+// Qwen answered the ASN question with answer "paths"; an Organization goal
+// for attributable types still runs the controlled lens.
+func TestAttributableOrganizationGoalRunsControlledLens(t *testing.T) {
+	model := &plannerModel{replies: []string{
+		`{"subject":{"type":"Organization","field":"name","value":"Colgate University"},` +
+			`"target_types":["AutonomousSystem"],"direction":"both","purpose":"connected","answer":"paths"}`,
+	}}
+
+	result, err := vendorAgent(model).AskAdaptive(context.Background(),
+		"Which ASN is associated to the Colgate University organization?", AdaptiveOptions{GuidanceRounds: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Query == nil || result.Query.Lens != LensControlled || model.calls != 1 {
+		t.Fatalf("calls=%d query=%+v, want the controlled lens after one planning call", model.calls, result.Query)
+	}
+}
+
+// The subject's owner is found even when many certificates and URLs share
+// its name and lead nowhere. An Organization's website edge makes every URL
+// look one step from an owner, so a budgeted best-first search spent its
+// budget on colgate.edu's URLs and missed the registrant (eval 2026-11-09).
+func TestDomainOwnerFoundPastManyCertificates(t *testing.T) {
+	g := vendorFixture()
+	for i := 0; i < 60; i++ {
+		cert, url := fmt.Sprintf("cn-cert-%02d", i), fmt.Sprintf("url-%02d", i)
+		g.assets[cert] = Asset{ID: cert, Type: "TLSCertificate", Key: cert}
+		g.assets[url] = Asset{ID: url, Type: "URL", Key: "https://colgate.edu/" + url}
+		g.links = append(g.links,
+			Relation{ID: "cn-" + cert, FromID: cert, ToID: "colgate.edu", Label: "common_name", Type: "SimpleRelation"},
+			Relation{ID: "dom-" + url, FromID: url, ToID: "colgate.edu", Label: "domain", Type: "SimpleRelation"})
+	}
+
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: vendorCatalog{testOAMCatalog}, Limits: DefaultLimits()}}
+	result, err := agent.AskQuery(context.Background(),
+		thirdPartyQuery("", PlanSubject{Type: "FQDN", Field: "name", Value: "colgate.edu"}, SourceCaller),
+		AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := result.ThirdPartyReport; len(r.Owners) != 1 || r.Owners[0] != "Colgate University" {
+		t.Fatalf("owner not found: %+v", r.Owners)
+	}
+	for name := range vendorNames(result.ThirdPartyReport) {
+		if strings.Contains(strings.ToLower(name), "colgate") {
+			t.Errorf("the subject's own organization is listed as a vendor: %s", name)
+		}
 	}
 }
