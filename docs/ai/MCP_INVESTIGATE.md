@@ -47,5 +47,12 @@ items. The last 64 investigations are kept in memory.
 The client writes its summary citing `[E#]` items and calls
 `verify_citations` before presenting it.
 
-Moving to the official MCP Go SDK is still planned; it adds a module
-dependency and is a separate change.
+## Transport
+
+Both servers use the official MCP Go SDK
+(`github.com/modelcontextprotocol/go-sdk`). The HTTP server keeps Amass's
+own checks in front of the SDK's Streamable HTTP handler: a bearer token,
+local browser origins only, a 1 MiB request limit, JSON responses (no
+server-sent event stream), and idle-session expiry with a session cap.
+Only sessions Amass admitted reach the SDK, and expired or evicted
+sessions are closed in the SDK too. Session IDs are 192 random bits.

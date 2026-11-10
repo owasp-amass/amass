@@ -6,25 +6,23 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 )
 
-// HTTPServer serves bounded read-only MCP requests using the Streamable HTTP
-// JSON response mode. Sessions are in memory and never authorize writes.
-// Authentication is required even when Docker publishes only on loopback.
+// HTTPServer serves read-only MCP over Streamable HTTP (JSON responses)
+// with the MCP Go SDK, behind Amass's checks: a bearer token is required
+// even when Docker publishes only on loopback, browser origins must be
+// local, request bodies are bounded, and sessions expire when idle and are
+// capped. Sessions are in memory and never authorize writes.
 type HTTPServer struct {
 	Runner ai.ToolRunner
 	// Model is optional; see Server.
@@ -38,11 +36,12 @@ type HTTPServer struct {
 	now         func() time.Time
 	mu          sync.Mutex
 	sessions    map[string]*mcpSession
+	once        sync.Once
+	sdk         http.Handler
 }
 
 type mcpSession struct {
-	initialized bool
-	lastSeen    time.Time
+	lastSeen time.Time
 }
 
 // Session defaults bound memory held for authenticated clients that never
@@ -74,12 +73,15 @@ func (s *HTTPServer) ttl() time.Duration {
 }
 
 // addSession registers id, first dropping expired sessions and, at the cap,
-// the least recently used one. The caller holds s.mu.
-func (s *HTTPServer) addSession(id string) {
+// the least recently used one, and returns the dropped IDs. The caller holds
+// s.mu.
+func (s *HTTPServer) addSession(id string) []string {
+	var dropped []string
 	now := s.clock()
 	for key, sess := range s.sessions {
 		if now.Sub(sess.lastSeen) > s.ttl() {
 			delete(s.sessions, key)
+			dropped = append(dropped, key)
 		}
 	}
 
@@ -96,9 +98,11 @@ func (s *HTTPServer) addSession(id string) {
 		}
 
 		delete(s.sessions, oldest)
+		dropped = append(dropped, oldest)
 	}
 
 	s.sessions[id] = &mcpSession{lastSeen: now}
+	return dropped
 }
 
 // touchSession returns the live session for id and refreshes its idle
@@ -177,135 +181,57 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if r.Method == http.MethodGet {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		// JSON responses only: no server-sent event stream is offered.
 		w.Header().Set("Allow", "POST, DELETE")
-		http.Error(w, "SSE not offered; use POST", http.StatusMethodNotAllowed)
+		http.Error(w, "use POST or DELETE", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.Method == http.MethodDelete {
-		session := r.Header.Get("Mcp-Session-Id")
+
+	// Only sessions this server admitted reach the SDK, so expiry and the
+	// session cap hold even though the SDK keeps its own session table.
+	session := r.Header.Get("Mcp-Session-Id")
+	if session != "" {
 		s.mu.Lock()
-		exists := s.touchSession(session) != nil
-		if exists {
+		live := s.touchSession(session) != nil
+		if live && r.Method == http.MethodDelete {
 			delete(s.sessions, session)
 		}
 
 		s.mu.Unlock()
-		if !exists {
-			http.Error(w, "unknown MCP session", http.StatusNotFound)
+		if !live {
+			s.closeSDKSession(session)
+			http.Error(w, "MCP session missing or expired", http.StatusNotFound)
 			return
 		}
-
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST, DELETE")
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		http.Error(w, "application/json required", http.StatusUnsupportedMediaType)
+	} else if r.Method == http.MethodDelete {
+		http.Error(w, "unknown MCP session", http.StatusNotFound)
 		return
 	}
 
-	// Streamable HTTP clients must advertise JSON and SSE; this server
-	// deliberately selects JSON responses for single-message POSTs.
-	accept := r.Header.Get("Accept")
-	if !strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/event-stream") {
-		http.Error(w, "Accept must include application/json and text/event-stream", http.StatusNotAcceptable)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if session != "" {
+		s.sdkHandler().ServeHTTP(w, r)
 		return
 	}
 
-	defer func() { _ = r.Body.Close() }()
-	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	var req incoming
-	if err := d.Decode(&req); err != nil {
-		mcpJSON(w, 400, rpcError(nil, -32700, "parse error"))
-		return
-	}
-
-	var extra any
-	if err := d.Decode(&extra); err != io.EOF {
-		mcpJSON(w, 400, rpcError(nil, -32600, "invalid request body"))
-		return
-	}
-	if req.JSONRPC != "2.0" || req.Method == "" {
-		mcpJSON(w, 400, rpcError(req.ID, -32600, "invalid JSON-RPC request"))
-		return
-	}
-	if req.Method == "initialize" {
-		if len(req.ID) == 0 {
-			mcpJSON(w, 400, rpcError(nil, -32600, "initialize requires ID"))
-			return
-		}
-
-		sessionBytes := make([]byte, 24)
-		if _, err := rand.Read(sessionBytes); err != nil {
-			http.Error(w, "session initialization failed", http.StatusInternalServerError)
-			return
-		}
-
-		id := hex.EncodeToString(sessionBytes)
+	// A request without a session can only be initialize; admit the session
+	// the SDK creates, evicting the least recently used one at the cap.
+	rec := &sessionRecorder{ResponseWriter: w}
+	s.sdkHandler().ServeHTTP(rec, r)
+	if id := rec.Header().Get("Mcp-Session-Id"); id != "" && rec.status < 300 {
 		s.mu.Lock()
-		s.addSession(id)
+		evicted := s.addSession(id)
 		s.mu.Unlock()
-		w.Header().Set("Mcp-Session-Id", id)
-		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{
-			"protocolVersion": "2025-11-25",
-			"serverInfo":      map[string]any{"name": "amass-ai", "version": "0.2.0"},
-			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-		}))
-		return
-	}
-
-	session := r.Header.Get("Mcp-Session-Id")
-	s.mu.Lock()
-	sess := s.touchSession(session)
-	initialized := sess != nil && sess.initialized
-	s.mu.Unlock()
-	if sess == nil {
-		http.Error(w, "MCP session missing or expired", http.StatusNotFound)
-		return
-	}
-	if len(req.ID) == 0 {
-		if req.Method == "notifications/initialized" {
-			s.mu.Lock()
-			if live := s.touchSession(session); live != nil {
-				live.initialized = true
-			}
-
-			s.mu.Unlock()
+		for _, old := range evicted {
+			s.closeSDKSession(old)
 		}
-
-		w.WriteHeader(http.StatusAccepted)
-		return
 	}
-	if !initialized && req.Method != "ping" {
-		mcpJSON(w, 200, rpcError(req.ID, -32000, "MCP not initialized"))
-		return
-	}
-	switch req.Method {
-	case "ping":
-		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{}))
-	case "tools/list":
-		tools := make([]any, 0)
-		for _, t := range toolSpecs(s.Runner) {
-			tools = append(tools,
-				map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
-		}
+}
 
-		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{"tools": tools}))
-	case "tools/call":
-		var p struct {
-			Name      string          `json:"name"`
-			Arguments json.RawMessage `json:"arguments"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Name == "" {
-			mcpJSON(w, 200, rpcError(req.ID, -32602, "invalid tool request"))
-			return
-		}
-
+// sdkHandler returns the SDK's Streamable HTTP handler, built once.
+func (s *HTTPServer) sdkHandler() http.Handler {
+	s.once.Do(func() {
 		s.mu.Lock()
 		if s.Evidence == nil {
 			s.Evidence = ai.NewEvidenceStore()
@@ -313,21 +239,62 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 		store := s.Evidence
 		s.mu.Unlock()
-		ctx, cancel := context.WithTimeout(r.Context(), ai.ToolTimeout(p.Name))
-		result, err := runTool(ctx, s.Runner, s.Model, store, p.Name, p.Arguments)
-		cancel()
-		if err != nil {
-			mcpJSON(w, 200, rpcResult(req.ID,
-				map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}))
-			return
-		}
+		server := newSDKServer(s.Runner, s.Model, store)
+		s.sdk = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
+			&mcp.StreamableHTTPOptions{JSONResponse: true, SessionTimeout: s.ttl()})
+	})
 
-		mcpJSON(w, 200, rpcResult(req.ID,
-			map[string]any{"content": []any{map[string]any{"type": "text", "text": string(result)}}}))
-	default:
-		mcpJSON(w, 200, rpcError(req.ID, -32601, fmt.Sprintf("unsupported method: %s", req.Method)))
+	return s.sdk
+}
+
+// closeSDKSession ends a session in the SDK after Amass expires or evicts it.
+func (s *HTTPServer) closeSDKSession(id string) {
+	if id == "" {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, "/mcp", nil)
+	if err != nil {
+		return
+	}
+
+	req.Header.Set("Mcp-Session-Id", id)
+	s.sdkHandler().ServeHTTP(discardResponse{header: http.Header{}}, req)
+}
+
+// sessionRecorder notes the status the SDK writes.
+type sessionRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *sessionRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *sessionRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+
+	return r.ResponseWriter.Write(b)
+}
+
+func (r *sessionRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
 	}
 }
+
+// discardResponse is a ResponseWriter for internal requests.
+type discardResponse struct{ header http.Header }
+
+func (d discardResponse) Header() http.Header { return d.header }
+
+func (d discardResponse) Write(b []byte) (int, error) { return len(b), nil }
+
+func (d discardResponse) WriteHeader(int) {}
 
 func mcpJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
