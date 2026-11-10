@@ -58,6 +58,7 @@ meaning rather than by wording rules:
 | `hierarchy` | FQDN | hierarchy traversal |
 | `controlled` | Organization or FQDN | controlled lens |
 | `third_party` | Organization or FQDN | third-party lens |
+| `table` | Organization or FQDN | table lens (rows of one controlled type, a chain of columns) |
 
 `validateAnswer` rejects a kind that does not fit the subject, targets or
 purpose (for example `controlled` with a type that the semantics table
@@ -123,6 +124,23 @@ registration AutonomousSystem). With target types set, the walk only expands
 asset types that can still lead to one, so an ASN question does not read the
 organization's URLs and hostnames. The planner reaches it through the
 `controlled` answer kind.
+
+`"lens": "table"` builds a table from the controlled footprint: one row per
+controlled asset of the single type in `target_types`, and one column per
+entry of `columns`. Columns form a chain, each derived from the previous
+column (the first from the row):
+
+- `{"type": T, "role": ""}` is the nearest asset of type T, reached through
+  `same_subject` edges (not the hierarchy) in either direction and
+  `infrastructure` edges forward, up to three steps: a URL reaches its IP
+  address through its domain name and that name's DNS records.
+- `{"type": "Organization", "role": "controller"}` is the party that
+  controls or operates the previous cell's asset, found as for the
+  third-party lens; cells the subject controls read "(self)".
+
+"Please create a table with each website, its IP address, and hosting
+provider within the Colgate University organization" plans to rows `URL`
+with columns `IPAddress` then the controlling `Organization`.
 
 Organization names are resolved by exact match, also trying lower, upper and title
 case and a final period, never by similarity.

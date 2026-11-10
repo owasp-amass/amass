@@ -601,3 +601,35 @@ func TestDomainOwnerFoundPastManyCertificates(t *testing.T) {
 		}
 	}
 }
+
+func TestTableColumnsAreValidated(t *testing.T) {
+	types := catalogTypes(vendorCatalog{testOAMCatalog}.Relations(), nil)
+	for _, tc := range []struct {
+		cols []TableColumn
+		ok   bool
+	}{
+		{[]TableColumn{{Type: "IPAddress"}, {Type: "Organization", Role: ColumnController}}, true},
+		{nil, false},
+		{[]TableColumn{{Type: "Website"}}, false},
+		{[]TableColumn{{Type: "IPAddress", Role: ColumnController}}, false},
+		{[]TableColumn{{Type: "IPAddress", Role: "owner"}}, false},
+	} {
+		if err := validateColumns(tc.cols, types); (err == nil) != tc.ok {
+			t.Errorf("columns %+v: err=%v, want ok=%v", tc.cols, err, tc.ok)
+		}
+	}
+}
+
+func TestTableAnswerNeedsAttributableRows(t *testing.T) {
+	goal := InvestigationGoal{Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
+		TargetTypes: []string{"Phone"}, Purpose: "connected", Answer: LensTable,
+		Columns: []TableColumn{{Type: "Organization", Role: ColumnController}}}
+	if err := validateAnswer(goal, vendorCatalog{testOAMCatalog}); err == nil {
+		t.Fatal("a table of unattributable rows was accepted")
+	}
+
+	goal.TargetTypes = []string{"URL"}
+	if err := validateAnswer(goal, vendorCatalog{testOAMCatalog}); err != nil {
+		t.Fatalf("valid table rejected: %v", err)
+	}
+}

@@ -32,6 +32,7 @@ type Investigation struct {
 	ThirdParties       []ThirdPartyConnection    `json:"third_parties,omitempty"`
 	ThirdPartyReport   *ThirdPartyReport         `json:"third_party_report,omitempty"`
 	ControlledReport   *ControlledReport         `json:"controlled_report,omitempty"`
+	TableReport        *TableReport              `json:"table_report,omitempty"`
 	Goal               *InvestigationGoal        `json:"goal,omitempty"`
 	Search             *GraphSearchResult        `json:"search,omitempty"`
 	EvidenceDossier    *EvidenceDossier          `json:"evidence_dossier,omitempty"`

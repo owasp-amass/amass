@@ -25,6 +25,8 @@ type InvestigationGoal struct {
 	// Answer is the kind of answer the planner chose (see answerKinds);
 	// empty means paths.
 	Answer string `json:"answer,omitempty"`
+	// Columns are the table columns for the table answer kind.
+	Columns []TableColumn `json:"columns,omitempty"`
 }
 
 type AdaptiveOptions struct {
@@ -213,7 +215,7 @@ func goalCorrection(err error, subject PlanSubject, selectors []AssetSearchSchem
 	}
 
 	return msg + " Return only the full JSON object (subject, target_types, direction, purpose, " +
-		"relationships, path_rule, answer)."
+		"relationships, path_rule, answer, columns)."
 }
 
 // After finding the nearest Organization, an ancestral subsidiary traversal
@@ -659,6 +661,8 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		return a.thirdPartyLens(ctx, root, out)
 	case LensControlled:
 		return a.controlledLens(ctx, root, q.TargetTypes, opts, out)
+	case LensTable:
+		return a.tableLens(ctx, root, q, opts, out)
 	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {

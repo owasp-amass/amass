@@ -73,6 +73,9 @@ type Query struct {
 	// lists the assets (of TargetTypes, when set) attributed to it. Lenses
 	// use the explore traversal and need no model.
 	Lens string `json:"lens,omitempty"`
+	// Columns are the column chain of the table lens; TargetTypes holds its
+	// single row type.
+	Columns []TableColumn `json:"columns,omitempty"`
 	// Source names the compiler that produced the Query.
 	Source string `json:"source"`
 }
@@ -109,6 +112,19 @@ func (q Query) Describe() string {
 		return fmt.Sprintf("List the third-party vendors used by the assets %s controls.", subject)
 	case LensControlled:
 		return fmt.Sprintf("List the %s assets controlled by %s.", targets, subject)
+	case LensTable:
+		cols := make([]string, 0, len(q.Columns))
+		for _, c := range q.Columns {
+			col := c.Type
+			if c.Role == ColumnController {
+				col = "controlling " + c.Type
+			}
+
+			cols = append(cols, col)
+		}
+
+		return fmt.Sprintf("Tabulate the %s assets controlled by %s with %s.", targets, subject,
+			strings.Join(cols, ", then "))
 	}
 
 	switch q.Traversal {
@@ -221,12 +237,22 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	}
 	switch q.Lens {
 	case "":
-	case LensThirdParty, LensControlled:
+	case LensThirdParty, LensControlled, LensTable:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}
 		if q.Subject.Type != "Organization" && q.Subject.Type != "FQDN" {
 			return fmt.Errorf("the %s lens starts from an Organization or FQDN", q.Lens)
+		}
+		if q.Lens == LensTable {
+			if len(q.TargetTypes) != 1 {
+				return errors.New("a table has exactly one row type in target_types")
+			}
+			if err := validateColumns(q.Columns, catalogTypes(catalog, selectors)); err != nil {
+				return err
+			}
+		} else if len(q.Columns) != 0 {
+			return errors.New("columns apply only to the table lens")
 		}
 	default:
 		return fmt.Errorf("unknown lens %q", q.Lens)
@@ -279,4 +305,17 @@ func sameRelations(a, b []GoalRelation) bool {
 	}
 
 	return true
+}
+
+// catalogTypes returns every asset type in the catalog.
+func catalogTypes(catalog []RelationshipSchema, selectors []AssetSearchSchema) map[string]bool {
+	types := map[string]bool{}
+	for _, s := range selectors {
+		types[s.Type] = true
+	}
+	for _, r := range catalog {
+		types[r.SourceType], types[r.DestinationType] = true, true
+	}
+
+	return types
 }
