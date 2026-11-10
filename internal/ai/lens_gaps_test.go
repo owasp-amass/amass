@@ -6,6 +6,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -139,5 +140,45 @@ func TestGapAnswerAndEvidence(t *testing.T) {
 	text := BuildEvidenceBundle(inv, 200).String()
 	if !strings.Contains(text, "ContactRecord https://rdap.example/alumni --phone--> Phone +1.3152287000") {
 		t.Errorf("evidence lacks the shared phone:\n%s", text)
+	}
+}
+
+func TestRedactedValuesGiveNoIdentitySignal(t *testing.T) {
+	g := campusGapsFixture()
+	g.assets["loc"] = Asset{ID: "loc", Type: "Location", Key: "REDACTED FOR PRIVACY",
+		Content: map[string]any{"address": "REDACTED FOR PRIVACY"}}
+	g.assets["phone"] = Asset{ID: "phone", Type: "Phone", Key: "REDACTED FOR PRIVACY",
+		Content: map[string]any{"e164": "REDACTED FOR PRIVACY"}}
+
+	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := gapCandidate(r, "https://rdap.example/alumni"); c != nil {
+		t.Errorf("a contact sharing only redacted values became a candidate: %+v", c)
+	}
+}
+
+func TestWidelySharedValuesGiveNoIdentitySignal(t *testing.T) {
+	g := campusGapsFixture()
+	for i := 0; i <= gapMaxShared; i++ {
+		id := fmt.Sprintf("cr-tenant-%d", i)
+		g.assets[id] = Asset{ID: id, Type: "ContactRecord", Key: "https://rdap.example/" + id}
+		for _, v := range []string{"phone", "loc"} {
+			g.links = append(g.links, Relation{ID: id + "-" + v, FromID: id, ToID: v,
+				Label: map[string]string{"phone": "phone", "loc": "location"}[v], Type: "SimpleRelation"})
+		}
+	}
+
+	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range r.Candidates {
+		for _, s := range c.Signals {
+			if s.Kind == SignalIdentity {
+				t.Fatalf("a value shared by %d assets gave an identity signal to %s", gapMaxShared+1, c.Asset)
+			}
+		}
 	}
 }
