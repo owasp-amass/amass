@@ -69,9 +69,19 @@ func validateColumns(columns []TableColumn, types map[string]bool) error {
 			if !types[c.Type] {
 				return fmt.Errorf("column %d: unknown OAM type %q", i+1, c.Type)
 			}
+			if i > 0 && columns[i-1] == c {
+				return fmt.Errorf("column %d repeats column %d", i+1, i)
+			}
 		case ColumnController:
 			if c.Type != "Organization" {
 				return fmt.Errorf("column %d: a controller column has type Organization", i+1)
+			}
+			if i > 0 && columns[i-1].Role == ColumnController {
+				return fmt.Errorf("column %d: a controller column names who controls the asset in the column "+
+					"before it, so two in a row repeat the same organization. Give each asset the question asks "+
+					"about its own column first, e.g. [{\"type\":\"IPAddress\",\"role\":\"\"},"+
+					"{\"type\":\"Organization\",\"role\":\"controller\"}] for an IP address and its hosting "+
+					"provider", i+1)
 			}
 		default:
 			return fmt.Errorf("column %d: role must be \"\" or %q", i+1, ColumnController)
