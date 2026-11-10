@@ -27,7 +27,10 @@ import (
 // Authentication is required even when Docker publishes only on loopback.
 type HTTPServer struct {
 	Runner ai.ToolRunner
-	Token  string
+	// Model is optional; see Server.
+	Model    ai.Model
+	Evidence *ai.EvidenceStore
+	Token    string
 	// SessionTTL is how long an idle session stays valid; MaxSessions caps
 	// concurrent sessions (the least recently used is evicted first).
 	SessionTTL  time.Duration
@@ -50,7 +53,7 @@ const (
 )
 
 func NewHTTPServer(runner ai.ToolRunner, token string) *HTTPServer {
-	return &HTTPServer{Runner: runner, Token: token, SessionTTL: DefaultSessionTTL,
+	return &HTTPServer{Runner: runner, Evidence: ai.NewEvidenceStore(), Token: token, SessionTTL: DefaultSessionTTL,
 		MaxSessions: DefaultMaxSessions, now: time.Now, sessions: map[string]*mcpSession{}}
 }
 
@@ -287,7 +290,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		mcpJSON(w, 200, rpcResult(req.ID, map[string]any{}))
 	case "tools/list":
 		tools := make([]any, 0)
-		for _, t := range ai.Specs() {
+		for _, t := range toolSpecs(s.Runner) {
 			tools = append(tools,
 				map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
 		}
@@ -303,8 +306,15 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
-		result, err := s.Runner.Run(ctx, p.Name, p.Arguments)
+		s.mu.Lock()
+		if s.Evidence == nil {
+			s.Evidence = ai.NewEvidenceStore()
+		}
+
+		store := s.Evidence
+		s.mu.Unlock()
+		ctx, cancel := context.WithTimeout(r.Context(), ai.ToolTimeout(p.Name))
+		result, err := runTool(ctx, s.Runner, s.Model, store, p.Name, p.Arguments)
 		cancel()
 		if err != nil {
 			mcpJSON(w, 200, rpcResult(req.ID,
