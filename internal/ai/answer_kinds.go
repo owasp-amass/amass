@@ -220,7 +220,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 	case LensTable:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
-			Lens: LensTable, Columns: tableColumns(goal), Source: SourceModelGoal}
+			Lens: LensTable, Columns: tableColumns(goal, mentionedTypes(question, schema)), Source: SourceModelGoal}
 	default:
 		if goal.Subject.Type == "Organization" && goal.Purpose == "connected" && len(goal.Relationships) == 0 &&
 			controlledReachable(schema, goal.TargetTypes) {
@@ -262,14 +262,98 @@ func ownedTypes(schema SchemaCatalog) []string {
 	return out
 }
 
-// tableColumns drops leading columns that only repeat the row asset (a URL
-// column in a table of URLs) while keeping at least one column.
-func tableColumns(goal InvestigationGoal) []TableColumn {
+// tableColumns normalizes a planned column chain. It drops leading columns
+// that only repeat the row asset (a URL column in a table of URLs), and
+// adds a column for each asset type the question mentions that the chain
+// leaves out, before the first controller column so that the controller
+// describes it (a question naming IP addresses and hosting providers gets
+// the IP address column the provider column needs). Mentions come from the
+// vocabulary data; the subject's and row's types and Organization (the
+// subject or a controller) are never added.
+func tableColumns(goal InvestigationGoal, mentioned []string) []TableColumn {
 	cols := append([]TableColumn(nil), goal.Columns...)
 	for len(cols) > 1 && len(goal.TargetTypes) == 1 && cols[0].Role == ColumnReached &&
 		cols[0].Type == goal.TargetTypes[0] {
 		cols = cols[1:]
 	}
 
-	return cols
+	present := map[string]bool{goal.Subject.Type: true, "Organization": true, "Person": true}
+	for _, t := range goal.TargetTypes {
+		present[t] = true
+	}
+	for _, c := range cols {
+		present[c.Type] = true
+	}
+
+	var missing []TableColumn
+	for _, t := range mentioned {
+		if !present[t] {
+			present[t] = true
+			missing = append(missing, TableColumn{Type: t, Role: ColumnReached})
+		}
+	}
+	if len(missing) == 0 {
+		return cols
+	}
+
+	at := len(cols)
+	for i, c := range cols {
+		if c.Role == ColumnController {
+			at = i
+			break
+		}
+	}
+
+	out := append(append(append([]TableColumn(nil), cols[:at]...), missing...), cols[at:]...)
+	if len(out) > tableMaxColumns {
+		return cols
+	}
+
+	return out
+}
+
+// mentionedTypes lists, sorted, the catalog asset types the question names
+// through the vocabulary. Longer phrases claim their words first, so "IP
+// address" names IPAddress and not also Location ("address").
+func mentionedTypes(question string, schema SchemaCatalog) []string {
+	if schema == nil {
+		return nil
+	}
+
+	type alias struct{ words, kind string }
+	var aliases []alias
+	for kind := range catalogTypes(schema.Relations(), nil) {
+		for _, a := range intentAssetAliases(kind) {
+			if n := normalizeSchemaAlias(a); n != "" {
+				aliases = append(aliases, alias{words: n, kind: kind})
+			}
+		}
+	}
+
+	sort.Slice(aliases, func(i, j int) bool {
+		if len(aliases[i].words) != len(aliases[j].words) {
+			return len(aliases[i].words) > len(aliases[j].words)
+		}
+
+		return aliases[i].words < aliases[j].words
+	})
+
+	text := " " + normalizeSchemaAlias(question) + " "
+	found := map[string]bool{}
+	for _, a := range aliases {
+		needle := " " + a.words + " "
+		if i := strings.Index(text, needle); i >= 0 {
+			found[a.kind] = true
+			// Blank the phrase so shorter aliases inside it cannot match.
+			text = text[:i+1] + strings.Repeat("#", len(a.words)) + text[i+1+len(a.words):]
+		}
+	}
+
+	out := make([]string, 0, len(found))
+	for t := range found {
+		out = append(out, t)
+	}
+
+	sort.Strings(out)
+	return out
 }
