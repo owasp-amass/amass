@@ -348,3 +348,20 @@ func (a Agent) tableLens(ctx context.Context, root Asset, q Query, opts Adaptive
 	out.Answer = tableAnswer(report)
 	return out, nil
 }
+
+// collapseRepeatedColumns drops a column identical to the one before it,
+// such as a second "controlling organization" column, which would only
+// repeat the same cells. Planner goals are normalized this way before
+// validation; structured callers get the validation error instead.
+func collapseRepeatedColumns(columns []TableColumn) []TableColumn {
+	var out []TableColumn
+	for i, c := range columns {
+		if i > 0 && c == columns[i-1] {
+			continue
+		}
+
+		out = append(out, c)
+	}
+
+	return out
+}

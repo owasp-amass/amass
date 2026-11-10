@@ -179,8 +179,12 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		if err == nil {
 			err = validateGoal(goal, relations, selectors)
 		}
+
+		narrow := false
 		if err == nil {
+			goal.Columns = collapseRepeatedColumns(goal.Columns)
 			err = validateAnswer(goal, a.Runner.Catalog)
+			narrow = err != nil
 		}
 		if err == nil {
 			return goal, nil
@@ -194,6 +198,13 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		if attempt == 1 && prompt.Sliced {
 			full := goalPlannerPrompt(question, relations, selectors, false, owned)
 			history[0].Text, schema = full.Text, full.Schema
+		}
+		if k, ok := answerKind(goal.Answer); narrow && ok && (k.Name == LensTable || k.Name == AnswerHierarchy) {
+			// The model chose a table or listing but filled it in wrongly: keep
+			// the kind and constrain the retry to what it accepts. Other kinds
+			// keep the full schema, because their rejection may mean the question
+			// needs another kind.
+			schema = narrowGoalSchema(schema, k, a.Runner.Catalog)
 		}
 	}
 
