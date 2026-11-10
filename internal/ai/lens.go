@@ -139,7 +139,8 @@ func (w *lensWalker) neighbors(id string) ([]Relation, error) {
 			return nil, err
 		}
 		if more {
-			w.truncate("per-asset edge limit")
+			a := w.assets[id]
+			w.truncate(fmt.Sprintf("more than %d %s edges on %s %s", lensMaxPerAsset, dir, a.Type, assetLabel(a)))
 		}
 
 		all = append(all, edges...)
@@ -674,7 +675,8 @@ func thirdPartyAnswer(r ThirdPartyReport) string {
 
 // assetLabel is the human name of an asset without its ID.
 func assetLabel(a Asset) string {
-	if v := contentString(a, "name", "legal_name", "url", "number", "handle"); v != "" {
+	if v := contentString(a, "name", "legal_name", "url", "subject_common_name", "cidr", "address", "number",
+		"handle"); v != "" {
 		return v
 	}
 

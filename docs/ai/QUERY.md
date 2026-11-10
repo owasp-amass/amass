@@ -75,7 +75,7 @@ about an Organization or FQDN are promoted to it. When nothing is documented
 as controlled by the subject, the answer says so rather than listing
 unrelated connections.
 
-Organization names are resolved by exact match, also trying upper and title
+Organization names are resolved by exact match, also trying lower, upper and title
 case and a final period, never by similarity.
 
 `ValidateQuery` rejects any subject selector, type, label, relation type or
