@@ -220,7 +220,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 	case LensTable:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
-			Lens: LensTable, Columns: append([]TableColumn(nil), goal.Columns...), Source: SourceModelGoal}
+			Lens: LensTable, Columns: tableColumns(goal), Source: SourceModelGoal}
 	default:
 		if goal.Subject.Type == "Organization" && goal.Purpose == "connected" && len(goal.Relationships) == 0 &&
 			controlledReachable(schema, goal.TargetTypes) {
@@ -260,4 +260,16 @@ func ownedTypes(schema SchemaCatalog) []string {
 
 	sort.Strings(out)
 	return out
+}
+
+// tableColumns drops leading columns that only repeat the row asset (a URL
+// column in a table of URLs) while keeping at least one column.
+func tableColumns(goal InvestigationGoal) []TableColumn {
+	cols := append([]TableColumn(nil), goal.Columns...)
+	for len(cols) > 1 && len(goal.TargetTypes) == 1 && cols[0].Role == ColumnReached &&
+		cols[0].Type == goal.TargetTypes[0] {
+		cols = cols[1:]
+	}
+
+	return cols
 }

@@ -701,3 +701,18 @@ func TestRepeatedControllerColumnsAreCorrected(t *testing.T) {
 		t.Errorf("correction does not explain the column chain: %s", correction)
 	}
 }
+
+// Live eval plan: "with URL, then IPAddress, then controlling Organization"
+// in a table of URLs; the URL column only repeats the row.
+func TestTableDropsColumnsRepeatingTheRow(t *testing.T) {
+	goal := InvestigationGoal{TargetTypes: []string{"URL"}, Columns: []TableColumn{{Type: "URL"}, {Type: "IPAddress"},
+		{Type: "Organization", Role: ColumnController}}}
+	if cols := tableColumns(goal); len(cols) != 2 || cols[0].Type != "IPAddress" {
+		t.Fatalf("columns = %+v, want IPAddress then controller", cols)
+	}
+
+	goal.Columns = []TableColumn{{Type: "URL"}}
+	if cols := tableColumns(goal); len(cols) != 1 {
+		t.Fatalf("the only column was dropped: %+v", cols)
+	}
+}
