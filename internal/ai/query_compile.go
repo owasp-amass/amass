@@ -34,7 +34,10 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 		}
 
 		q = QueryFromGoal(goal, question, SourceModelGoal)
-		promoteHierarchyGoal(&q)
+		q.Subject = organizationSubject(q.Subject)
+		if !promoteThirdPartyGoal(&q) {
+			promoteHierarchyGoal(&q)
+		}
 	}
 
 	var selectors []AssetSearchSchema
@@ -51,6 +54,9 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 // compileDeterministicQuestion runs the model-free compilers. It returns
 // false when no compiler recognises the wording.
 func compileDeterministicQuestion(question string, catalog SchemaCatalog) (Query, bool) {
+	if q, ok := deterministicThirdPartyQuery(question); ok {
+		return q, true
+	}
 	if goal, ok := deterministicFQDNInventoryGoal(question, catalog); ok {
 		q := QueryFromGoal(goal, question, SourceFQDNHierarchy)
 		q.Traversal = TraversalHierarchy

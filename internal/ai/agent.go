@@ -30,6 +30,7 @@ type Investigation struct {
 	Query              *Query                    `json:"query,omitempty"`
 	Usage              *ModelUsage               `json:"model_usage,omitempty"`
 	ThirdParties       []ThirdPartyConnection    `json:"third_parties,omitempty"`
+	ThirdPartyReport   *ThirdPartyReport         `json:"third_party_report,omitempty"`
 	Goal               *InvestigationGoal        `json:"goal,omitempty"`
 	Search             *GraphSearchResult        `json:"search,omitempty"`
 	EvidenceDossier    *EvidenceDossier          `json:"evidence_dossier,omitempty"`

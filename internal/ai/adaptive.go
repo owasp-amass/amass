@@ -510,6 +510,25 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 	return a.executeQuery(ctx, q, opts, out)
 }
 
+// thirdPartyLens answers a third_party lens query from root.
+func (a Agent) thirdPartyLens(ctx context.Context, root Asset, out Investigation) (Investigation, error) {
+	started := time.Now()
+	attr, _ := a.Runner.Catalog.(AttributionCatalog)
+	report, err := searchThirdParties(ctx, a.Runner.Graph, attr, root)
+	out.recordTrace(started, InvestigationTraceEvent{Stage: "third_party_lens", OutputPaths: len(report.Vendors),
+		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
+	if err != nil {
+		out.Incomplete = true
+		return out, err
+	}
+
+	out.ToolCalls++
+	out.ThirdPartyReport = &report
+	out.Incomplete = report.Truncated
+	out.Answer = thirdPartyAnswer(report)
+	return out, nil
+}
+
 // AskQuery validates and executes a structured Query, such as one supplied
 // by a CLI or MCP caller. Route and hierarchy queries need no model; explore
 // queries use the model to guide search and choose among witnessed paths.
@@ -526,6 +545,8 @@ func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (out
 	if a.Model == nil && !q.Deterministic() {
 		return out, errors.New("a model is required for explore queries")
 	}
+
+	q.Subject = organizationSubject(q.Subject)
 	if err := a.Runner.Limits.Validate(); err != nil {
 		return out, err
 	}
@@ -581,7 +602,10 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		out.Resolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
-			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates)
+			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates) + " Searched for " +
+				formatPlanSubject(goal.Subject) + "."
+			out.recordTrace(resolveStarted, InvestigationTraceEvent{Stage: "resolve_asset", Incomplete: true,
+				Detail: resolution.Status + " " + formatPlanSubject(goal.Subject)})
 			return out, nil
 		}
 
@@ -609,7 +633,10 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		out.AssetResolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
-			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates)
+			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates) + " Searched for " +
+				formatPlanSubject(goal.Subject) + "."
+			out.recordTrace(resolveStarted, InvestigationTraceEvent{Stage: "resolve_asset", Incomplete: true,
+				Detail: resolution.Status + " " + formatPlanSubject(goal.Subject)})
 			if resolution.Status == "not_found" {
 				proposal := PlanCollection(goal.Subject.AssetSelector())
 				out.Collection = &proposal
@@ -622,6 +649,10 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	}
 
 	out.recordTrace(resolveStarted, InvestigationTraceEvent{Stage: "resolve_asset", Detail: root.Type})
+	if q.Lens == LensThirdParty {
+		return a.thirdPartyLens(ctx, root, out)
+	}
+
 	if a.Runner.Limits.MaxToolCalls < 2 {
 		out.Incomplete = true
 		return out, errors.New("two graph tool operations must be permitted")

@@ -45,6 +45,39 @@ that starts at an FQDN, asks for FQDNs and either uses only `node` edges or
 comes from a subdomain or DNS namespace question, it is promoted to the
 hierarchy traversal, so the listing is the same as `amass subs -names`.
 
+## Lenses
+
+A lens answers a fixed question about the subject from the reviewed
+relationship attribution table (`RELATION_SEMANTICS.md`) instead of a
+traversal. It needs no model and its answer is built in Go.
+
+`"lens": "third_party"` (subject an Organization or FQDN) lists the outside
+parties that the subject's controlled assets depend on:
+
+1. **Controlled footprint.** Starting from the subject (and, for an FQDN, the
+   Organization documented as its registrant), follow `same_subject` edges
+   (FQDN `node` only downward), `controls` edges forward and `controller`
+   edges backward. Another Organization is entered only through `controls`
+   (subsidiary, org_unit), and a Person is never expanded, so a shared
+   contact cannot merge two footprints.
+2. **Vendors.** From each controlled asset, `third_party` edges name
+   registrars, DNS hosts, certificate authorities, service providers,
+   software and domain verification; DNS records to IP addresses name the
+   network operator (netblock registrant or announcing AS) unless the
+   netblock is controlled; DNS records to outside FQDNs name CNAME, NS and MX
+   targets by registered domain; certificates that list a controlled name
+   name their issuer. Abuse contacts and RDAP, WHOIS and OCSP endpoints are
+   registry infrastructure, not vendors, and are not reported.
+
+Questions such as "Which third-party vendors are used by Colgate
+University?" compile to this lens directly; model goals for vendor questions
+about an Organization or FQDN are promoted to it. When nothing is documented
+as controlled by the subject, the answer says so rather than listing
+unrelated connections.
+
+Organization names are resolved by exact match, also trying upper and title
+case and a final period, never by similarity.
+
 `ValidateQuery` rejects any subject selector, type, label, relation type or
 hop that is not in the OAM catalog, and any field that does not belong to the
 chosen traversal (for example `hops` on an explore query). Validation never
