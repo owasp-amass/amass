@@ -690,6 +690,19 @@ func (Catalog) Attribution(source, label, relationType, destination string) (str
 
 var _ ai.AttributionCatalog = Catalog{}
 
+// Meaning returns the full semantics table entry of an OAM relationship.
+func (Catalog) Meaning(source, label, relationType, destination string) (ai.RelationMeaning, bool) {
+	semanticsOnce.Do(func() { semanticsTable, _ = semantics.Load() })
+	if semanticsTable == nil {
+		return ai.RelationMeaning{}, false
+	}
+
+	r, ok := semanticsTable.Lookup(source, label, relationType, destination)
+	return ai.RelationMeaning{Attribution: r.Attribution, Purpose: r.Purpose, Vendor: !r.NotVendor}, ok
+}
+
+var _ ai.SemanticsCatalog = Catalog{}
+
 // SearchFields enumerates indexed typed selectors for each OAM asset kind.
 // These keys follow the Asset Database content-filter registries.
 // ContactRecord currently has only discovered_at, a non-identity timestamp:

@@ -35,8 +35,7 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 
 		q = QueryFromGoal(goal, question, SourceModelGoal)
 		q.Subject = organizationSubject(q.Subject)
-		attr, _ := a.Runner.Catalog.(AttributionCatalog)
-		if !promoteThirdPartyGoal(&q) && !promoteControlledGoal(&q, a.Runner.Catalog, attr) {
+		if !promoteThirdPartyGoal(&q) && !promoteControlledGoal(&q, a.Runner.Catalog) {
 			promoteHierarchyGoal(&q)
 		}
 	}

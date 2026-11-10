@@ -60,14 +60,32 @@ parties that the subject's controlled assets depend on:
    edges backward. Another Organization is entered only through `controls`
    (subsidiary, org_unit), and a Person is never expanded, so a shared
    contact cannot merge two footprints.
-2. **Vendors.** From each controlled asset, `third_party` edges name
-   registrars, DNS hosts, certificate authorities, service providers,
-   software and domain verification; DNS records to IP addresses name the
-   network operator (netblock registrant or announcing AS) unless the
-   netblock is controlled; DNS records to outside FQDNs name CNAME, NS and MX
-   targets by registered domain; certificates that list a controlled name
-   name their issuer. Abuse contacts and RDAP, WHOIS and OCSP endpoints are
-   registry infrastructure, not vendors, and are not reported.
+2. **Dependencies.** From each controlled asset, a `third_party` edge is a
+   dependency on the asset it reaches; an `infrastructure` edge is a
+   dependency too, and that asset's own `third_party` edges also count (a
+   service's provider and software); a `shared` edge into a controlled asset
+   (a certificate listing a controlled name) counts its `third_party` edges
+   (the issuer). Edges marked `vendor: false` in the table (abuse desks,
+   RDAP, WHOIS and OCSP endpoints) are skipped.
+3. **Who controls each dependency.** A best-first search follows ownership
+   attribution (`same_subject`, hierarchy edges only upward, `controller`
+   forward, `controls` backward) to the closest Organization, ordered by the
+   type distance to an Organization computed from the table, so a netblock's
+   registration record is read before its addresses. Without an
+   Organization, the operator of a network carrying the asset (an incoming
+   `infrastructure` edge with purpose `network`, such as an announcing AS)
+   is tried, then the most registration-like asset reached. A dependency
+   that leads back into the footprint is the subject's own.
+4. **Groups.** Vendors are grouped by the purpose of the dependency edge and
+   the type depended on, for example "DNS: IP addresses" (hosting networks),
+   "DNS: FQDNs" (CNAME, NS and MX targets), "Registration: contact records"
+   (registrars) and "Certificate: contact records" (certificate
+   authorities).
+
+Nothing in the lens names an OAM type or relationship label: a new OAM
+relationship takes part as soon as its row in the semantics table is
+annotated (a test adds a hypothetical CloudResource and CloudAccount this
+way).
 
 Questions such as "Which third-party vendors are used by Colgate
 University?" compile to this lens directly; model goals for vendor questions

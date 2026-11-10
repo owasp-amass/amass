@@ -25,6 +25,14 @@ The baseline follows the engine's scope association rules, which already
 treat `registrant`, `registrant_contact`, `common_name`, `subject_contact`,
 `node` and `registration` as tying assets together, and skip SANs.
 
+## Vendor flag
+
+`vendor: false` (third_party rows only) marks a destination that is registry
+or protocol infrastructure rather than a party the source chose to depend
+on: abuse contacts, RDAP and WHOIS servers, OCSP and issuing-certificate
+URLs, and issuing CA certificates. The third-party lens skips these rows;
+every other `third_party` row is a vendor dependency.
+
 ## Highest parent questions
 
 For `ultimate_parent` goals, a path qualifies only if every step from the

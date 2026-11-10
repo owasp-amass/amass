@@ -16,6 +16,9 @@ const (
 	attrControls    = "controls"
 	attrSameSubject = "same_subject"
 	attrThirdParty  = "third_party"
+	attrShared      = "shared"
+	// attrInfrastructure is a technical dependency such as DNS resolution.
+	attrInfrastructure = "infrastructure"
 )
 
 // AttributionCatalog is implemented by schema catalogs that know what each
