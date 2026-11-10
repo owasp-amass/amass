@@ -394,6 +394,141 @@
       "counter_indications": [
         "Organizations sometimes park defensive registrations with a registrar's default page."
       ]
+    },
+    {
+      "id": "shared_analytics_id",
+      "title": "Same analytics or tag identifier",
+      "kind": "fingerprint",
+      "strength": "supporting",
+      "weight": 0.3,
+      "matcher": "service_fingerprint",
+      "params": {
+        "property": "analytics_id",
+        "asset_types": [
+          "Service",
+          "URL"
+        ],
+        "min_length": 6
+      },
+      "finds": "A name, address or URL the organization does not yet own whose pages carry an analytics or tag-manager identifier (Google Analytics, Google Tag Manager, Google Ads, AdSense, Meta pixel, Hotjar, Clarity) that a page of the organization also carries.",
+      "rationale": "Analytics and tag-manager identifiers are issued to one account, and the account's owner adds them to the sites it runs, so two sites reporting to the same account are usually run by the same team. They are copied along with a page, though, so they only support other evidence.",
+      "guards": [
+        "Identifiers are recognized by provider-specific patterns (internal/fingerprint), not any string that looks like one.",
+        "An identifier on more than 50 services or URLs never counts.",
+        "Supporting only: without a strong signal it can at most send a candidate to review."
+      ],
+      "counter_indications": [
+        "A cloned or phishing copy of the organization's site carries the same identifiers; this is why it is never strong evidence.",
+        "Agencies sometimes run one tag-manager container across several clients."
+      ]
+    },
+    {
+      "id": "same_favicon",
+      "title": "Same favicon",
+      "kind": "fingerprint",
+      "strength": "supporting",
+      "weight": 0.15,
+      "matcher": "service_fingerprint",
+      "params": {
+        "property": "favicon_mmh3",
+        "asset_types": [
+          "Service",
+          "URL"
+        ],
+        "min_length": 2
+      },
+      "finds": "A name, address or URL the organization does not yet own whose site has the same favicon (by its MurmurHash3, as Shodan computes it) as a site of the organization.",
+      "rationale": "A custom favicon is a brand asset an organization reuses across its own sites, so the same icon suggests the same owner. Default icons of web servers, frameworks and hosting panels are shared by countless unrelated sites, which the 50-asset limit excludes.",
+      "guards": [
+        "A favicon on more than 50 services or URLs never counts (default and framework icons).",
+        "Supporting only: without a strong signal it can at most send a candidate to review."
+      ],
+      "counter_indications": [
+        "A cloned or phishing copy of the organization's site carries the same favicon; this is why it is never strong evidence.",
+        "Resellers and partners display the organization's logo as their icon."
+      ]
+    },
+    {
+      "id": "same_page_content",
+      "title": "Same page content",
+      "kind": "fingerprint",
+      "strength": "supporting",
+      "weight": 0.2,
+      "matcher": "service_fingerprint",
+      "params": {
+        "property": "body_sha256",
+        "asset_types": [
+          "Service",
+          "URL"
+        ],
+        "min_length": 64
+      },
+      "finds": "A name, address or URL the organization does not yet own that serves exactly the same page (by the SHA-256 of its normalized body) as a site of the organization.",
+      "rationale": "Serving byte-for-byte the same page usually means the same deployment behind several names, such as mirrors, aliases and old domains. Pages under 512 bytes are never hashed, because redirects, error stubs and default pages are identical everywhere.",
+      "guards": [
+        "Bodies shorter than 512 bytes are not hashed (internal/fingerprint).",
+        "A hash on more than 50 services or URLs never counts.",
+        "Supporting only: without a strong signal it can at most send a candidate to review."
+      ],
+      "counter_indications": [
+        "A cloned or phishing copy of the organization's site carries the same page; this is why it is never strong evidence.",
+        "Parking, maintenance and hosting-provider pages are identical across their customers."
+      ]
+    },
+    {
+      "id": "same_page_title",
+      "title": "Same page title",
+      "kind": "fingerprint",
+      "strength": "supporting",
+      "weight": 0.1,
+      "tiebreaker": true,
+      "matcher": "service_fingerprint",
+      "params": {
+        "property": "http_title",
+        "asset_types": [
+          "Service",
+          "URL"
+        ],
+        "min_length": 8,
+        "ignore_values": [
+          "403 Forbidden",
+          "404 Not Found",
+          "401 Unauthorized",
+          "500 Internal Server Error",
+          "502 Bad Gateway",
+          "503 Service Unavailable",
+          "Welcome to nginx!",
+          "Apache2 Ubuntu Default Page: It works",
+          "Apache2 Debian Default Page: It works",
+          "IIS Windows Server",
+          "Index of /",
+          "Just a moment...",
+          "Attention Required! | Cloudflare",
+          "Site Not Found",
+          "Domain for sale",
+          "Coming Soon",
+          "Under Construction",
+          "Default Web Site Page",
+          "Sign In",
+          "Log In",
+          "Login",
+          "Home",
+          "Welcome",
+          "Untitled",
+          "Document"
+        ]
+      },
+      "finds": "A name, address or URL the organization does not yet own whose page has the same title as a page of the organization.",
+      "rationale": "A distinctive title, such as one naming the organization or a product of it, is often reused across its sites. Titles are short, chosen freely and copied, so a title only breaks ties between candidates other evidence found.",
+      "guards": [
+        "Titles shorter than 8 characters and generic titles (this signal's ignore_values) never count.",
+        "A title on more than 50 services or URLs never counts.",
+        "A tiebreaker: it never counts as the second signal that lets a strong signal propose."
+      ],
+      "counter_indications": [
+        "A cloned or phishing copy of the organization's site carries the same title; this is why it is never strong evidence.",
+        "Products and templates give unrelated sites the same title."
+      ]
     }
   ]
 }

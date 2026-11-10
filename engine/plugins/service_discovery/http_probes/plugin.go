@@ -13,6 +13,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/fingerprint"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -145,6 +146,8 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 		return findings
 	}
 
+	hp.storeFingerprints(e, s, resp)
+
 	// for adding the source information
 	findings = append(findings, &support.Finding{
 		From:     entity,
@@ -165,6 +168,26 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 		})
 	}
 	return findings
+}
+
+// storeFingerprints records the page's web fingerprints (title, analytics
+// identifiers, content hash) on the service, under the property names of the
+// fingerprint package that every collector shares.
+func (hp *httpProbing) storeFingerprints(e *et.Event, svc *dbt.Entity, resp *amasshttp.Response) {
+	fps := fingerprint.FromHTTP(resp.Header, resp.Body)
+	if len(fps) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
+	for _, fp := range fps {
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, svc, &oamgen.SimpleProperty{
+			PropertyName:  fp.Name,
+			PropertyValue: fp.Value,
+		})
+	}
 }
 
 func (hp *httpProbing) createCertificates(sess et.Session, resp *amasshttp.Response) (*dbt.Entity, *x509.Certificate, []*support.Finding) {

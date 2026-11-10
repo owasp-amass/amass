@@ -238,66 +238,137 @@ func (g *gapSearch) nameserverSignals(dr Asset) error {
 	return nil
 }
 
-// fingerprintSignals finds the services that share a stored fingerprint
-// (JARM) with a service on a controlled name; the candidates are the names
-// and addresses serving them.
-func (g *gapSearch) fingerprintSignals(name Asset) error {
-	def, ok := firstSignal(matchFingerprint)
-	if !ok {
+// fingerprintSignals finds the assets that share a stored fingerprint (a
+// JARM hash, page title, analytics identifier, content or favicon hash) with
+// a service on a controlled name or with a controlled URL. Each catalog
+// signal of the service_fingerprint matcher names its property and the
+// asset types that carry it. A service's candidates are the names and
+// addresses serving it; a URL is its own candidate.
+func (g *gapSearch) fingerprintSignals(owned Asset) error {
+	defs := signalsByMatcher(matchFingerprint)
+	if len(defs) == 0 {
 		return nil
 	}
 
-	steps, err := g.w.steps(name)
-	if err != nil {
-		return err
-	}
-	for _, s := range steps {
-		if !s.forward || s.edge.Label != "port" || s.other.Type != "Service" || !g.read() {
-			continue
-		}
-
-		evidence, err := g.w.graph.Evidence(g.w.ctx, s.other.ID, 100)
+	var sources []WitnessEdge
+	var assets []Asset
+	switch owned.Type {
+	case "URL":
+		sources, assets = []WitnessEdge{{}}, []Asset{owned}
+	case "FQDN", "IPAddress":
+		steps, err := g.w.steps(owned)
 		if err != nil {
 			return err
 		}
-		for _, value := range propertyValues(evidence, def.Params.Property) {
-			if !g.read() {
-				return nil
+		for _, s := range steps {
+			if s.forward && s.edge.Label == "port" && s.other.Type == "Service" {
+				sources = append(sources, witnessOf(s.edge, owned, s.other))
+				assets = append(assets, s.other)
 			}
+		}
+	}
+	for i, src := range assets {
+		if !g.read() {
+			return nil
+		}
 
-			others, more, err := g.values.FindByTagValue(g.w.ctx, "Service", def.Params.Property, value, false,
-				gapMaxShared+1)
-			if err != nil {
-				return err
-			}
-			if more || len(others) > gapMaxShared {
+		evidence, err := g.w.graph.Evidence(g.w.ctx, src.ID, 100)
+		if err != nil {
+			return err
+		}
+		for _, def := range defs {
+			if !slices.Contains(fingerprintTypes(def), src.Type) {
 				continue
 			}
-			for _, o := range others {
-				if o.ID == s.other.ID {
+			for _, value := range propertyValues(evidence, def.Params.Property) {
+				if !usefulFingerprint(def, value) {
 					continue
 				}
 
-				g.w.assets[o.ID] = o
-				hosts, err := g.w.steps(o)
-				if err != nil {
-					return err
+				lead := g.pathTo(owned.ID)
+				if sources[i].Label != "" {
+					lead = append(lead, sources[i])
 				}
-				for _, h := range hosts {
-					if h.forward || h.edge.Label != "port" || (h.other.Type != "FQDN" && h.other.Type != "IPAddress") {
-						continue
-					}
-
-					witness := append(g.pathTo(name.ID), witnessOf(s.edge, name, s.other),
-						matched(s.other, o, "same_"+strings.ToLower(def.Params.Property), value),
-						witnessOf(h.edge, o, h.other))
-					g.add(h.other, def.ID, "Service "+def.Params.Property+" Service", witness)
+				if err := g.fingerprintMatches(def, owned, src, value, lead); err != nil {
+					return err
 				}
 			}
 		}
 	}
 
 	return nil
+}
+
+// fingerprintMatches records the candidates behind the assets that carry
+// value, unless more than gapMaxShared do.
+func (g *gapSearch) fingerprintMatches(def OwnershipSignal, owned, src Asset, value string, lead []WitnessEdge) error {
+	for _, t := range fingerprintTypes(def) {
+		if !g.read() {
+			return nil
+		}
+
+		others, more, err := g.values.FindByTagValue(g.w.ctx, t, def.Params.Property, value, false, gapMaxShared+1)
+		if err != nil {
+			return err
+		}
+		if more || len(others) > gapMaxShared {
+			continue
+		}
+		for _, o := range others {
+			if o.ID == src.ID || o.ID == owned.ID {
+				continue
+			}
+
+			g.w.assets[o.ID] = o
+			match := matched(src, o, "same_"+strings.ToLower(def.Params.Property), value)
+			via := src.Type + " " + def.Params.Property + " " + o.Type
+			if o.Type != "Service" {
+				g.add(o, def.ID, via, append(append([]WitnessEdge(nil), lead...), match))
+				continue
+			}
+
+			hosts, err := g.w.steps(o)
+			if err != nil {
+				return err
+			}
+			for _, h := range hosts {
+				if h.forward || h.edge.Label != "port" || (h.other.Type != "FQDN" && h.other.Type != "IPAddress") {
+					continue
+				}
+
+				g.add(h.other, def.ID, via, append(append([]WitnessEdge(nil), lead...), match,
+					witnessOf(h.edge, o, h.other)))
+			}
+		}
+	}
+
+	return nil
+}
+
+// fingerprintTypes are the asset types a fingerprint signal reads.
+func fingerprintTypes(def OwnershipSignal) []string {
+	if len(def.Params.AssetTypes) > 0 {
+		return def.Params.AssetTypes
+	}
+
+	return []string{"Service"}
+}
+
+// usefulFingerprint reports whether a stored value can tell owners apart:
+// long enough, and not one of the signal's generic values (default pages,
+// error pages, provider challenges).
+func usefulFingerprint(def OwnershipSignal, value string) bool {
+	v := strings.TrimSpace(value)
+	if len(v) < def.Params.MinLength {
+		return false
+	}
+	for _, ignore := range def.Params.IgnoreValues {
+		if strings.EqualFold(v, strings.TrimSpace(ignore)) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // propertyValues returns the values of an asset's stored simple properties

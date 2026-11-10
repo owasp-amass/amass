@@ -9,9 +9,12 @@ signals: shared registrant details, shared DNS verification tokens,
 certificate key reuse, a private CA's issuing key, self-hosted name and
 mail servers, SPF and DMARC delegation, web redirects into the
 organization's names, reverse DNS in its namespace, the same DNS provider
-account, hosting and certificate co-listing, with a matching TLS (JARM)
-fingerprint and the organization's name as tiebreakers, and a parked or
-for-sale page counting against ownership.
+account, shared analytics or tag identifiers, favicons and page content,
+hosting and certificate co-listing, with a matching TLS (JARM)
+fingerprint, page title and the organization's name as tiebreakers, and a
+parked or for-sale page counting against ownership. The web fingerprints
+are extracted by `internal/fingerprint`, which every collector (the HTTP
+probes today, a web scraper later) uses so the stored values are the same.
 
 Every signal, with what it finds, why it counts, the guards that stop it
 misfiring and when it can still mislead, is defined in

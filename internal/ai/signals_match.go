@@ -127,10 +127,13 @@ func (g *gapSearch) valueSignals(order []string) error {
 // valueSignalsOf runs the value signals one controlled asset gives in a
 // pass: verification tokens, email authentication and redirects for apex
 // domains, key matches for certificates and provider accounts for domain
-// registrations first, TLS fingerprints of named services second.
+// registrations first, then the fingerprints (JARM, page titles, analytics
+// identifiers, content and favicon hashes) of controlled names, addresses
+// and URLs.
 func (g *gapSearch) valueSignalsOf(a Asset, pass int) error {
 	if pass == 1 {
-		if a.Type == "FQDN" {
+		switch a.Type {
+		case "FQDN", "IPAddress", "URL":
 			return g.fingerprintSignals(a)
 		}
 
