@@ -66,11 +66,14 @@ type EvalChecks struct {
 
 // EvalResult is the outcome of one case.
 type EvalResult struct {
-	ID         string        `json:"id"`
-	Question   string        `json:"question"`
-	Pass       bool          `json:"pass"`
-	Failures   []string      `json:"failures,omitempty"`
-	Answer     string        `json:"answer_kind"`
+	ID       string   `json:"id"`
+	Question string   `json:"question"`
+	Pass     bool     `json:"pass"`
+	Failures []string `json:"failures,omitempty"`
+	Answer   string   `json:"answer_kind"`
+	// Plan describes the Query the question compiled to, so a live failure
+	// shows what the model chose.
+	Plan       string        `json:"plan,omitempty"`
 	ModelCalls int           `json:"model_calls"`
 	Results    int           `json:"results"`
 	Duration   time.Duration `json:"duration"`
@@ -161,6 +164,9 @@ func (a Agent) RunEvalCase(ctx context.Context, c EvalCase, checks EvalChecks, o
 	inv, err := a.AskAdaptive(ctx, c.Question, opts)
 	res.Duration = time.Since(started)
 	res.Answer, res.Text = answerKindOf(inv.Query), inv.Answer
+	if inv.Query != nil {
+		res.Plan = inv.Query.Describe()
+	}
 	if inv.Usage != nil {
 		res.ModelCalls = inv.Usage.Calls
 	}
@@ -258,6 +264,9 @@ func FormatEvalResults(results []EvalResult) string {
 			r.Results, r.Duration.Seconds())
 		for _, f := range r.Failures {
 			fmt.Fprintf(&b, "       - %s\n", f)
+		}
+		if !r.Pass && r.Plan != "" {
+			fmt.Fprintf(&b, "       plan: %s\n", r.Plan)
 		}
 	}
 

@@ -122,7 +122,12 @@ func TestEvalFailuresAreReported(t *testing.T) {
 	if res.Pass || len(res.Failures) != 2 {
 		t.Fatalf("want two failures (answer kind, missing result), got %v", res.Failures)
 	}
-	if !strings.Contains(FormatEvalResults([]EvalResult{res}), "0 of 1 passed") {
+
+	text := FormatEvalResults([]EvalResult{res})
+	if !strings.Contains(text, "0 of 1 passed") {
 		t.Error("summary line missing")
+	}
+	if !strings.Contains(text, "plan: List the third-party vendors used by the assets FQDN") {
+		t.Errorf("failed case does not show its plan:\n%s", text)
 	}
 }
