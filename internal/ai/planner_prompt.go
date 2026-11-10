@@ -177,7 +177,8 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 	}
 
 	out.Text = `You are a read-only OAM investigation goal planner. Return ONLY one JSON object, without prose.
-Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"paths"}.
+Exact shape: {"subject":{...},"target_types":["OAMType"],"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"paths","columns":[]}.
+"columns" is [] unless answer is "table".
 "answer" is the kind of answer the question asks for, chosen from ANSWER KINDS below by meaning, not by wording; use "paths" when no other kind fits.
 The OPTIONAL relationships list contains exact stored OAM transitions as {"source_type":"...","label":"...","relation_type":"...","destination_type":"..."}. Never fabricate labels, direction, relation types, or source/destination types. Use the OAM RELATIONSHIP CATALOG below.
 When the user requests particular relationship semantics, select the actual relevant relationship types, including all intermediate asset types. "path_rule" may be "" (no constraints), "any" (at least one listed relationship in the witnessed path), "all" (every listed relationship appears in the path), or "ordered" (listed relationships in traversal order starting at the user's subject; intermediate hops allowed, including when traversing stored edges backwards).

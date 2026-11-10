@@ -82,6 +82,14 @@
                    "results_exclude": ["let's encrypt"]}
       },
       "live": {"results_exclude": ["let's encrypt"], "answer_excludes": ["parent organization candidate(s) from stored OAM paths (not independently verified ultimate legal ownership): let's encrypt"]}
+    },
+    {
+      "id": "colgate-website-hosting-table",
+      "question": "Please create a table with each website, it's IP address, and hosting provider that's within the Colgate University organization?",
+      "note": "Reported 2026-11-09: explore search hit the node limit and found nothing; needs the table answer kind.",
+      "expect": {"answer": "table", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "campus-web", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Colgate University\"},\"target_types\":[\"URL\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"table\",\"columns\":[{\"type\":\"IPAddress\",\"role\":\"\"},{\"type\":\"Organization\",\"role\":\"controller\"}]}"], "checks": {"answer_contains": ["| URLs | IP addresses | Controlling organization |", "| https://www.colgate.edu | 151.101.1.1 | FASTLY |", "| https://portal.colgate.edu | 149.43.1.1 | Colgate University (self) |"], "complete": true}},
+      "live": {"answer_contains": ["| URLs | IP addresses | Controlling organization |"], "results_include": ["www.colgate.edu"], "answer_excludes": ["No URLs are documented"]}
     }
   ]
 }

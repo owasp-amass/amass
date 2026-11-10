@@ -144,6 +144,11 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, v.Vendor)
 		}
 	}
+	if r := inv.TableReport; r != nil {
+		for _, row := range r.Rows {
+			out = append(out, strings.Join(row, " | "))
+		}
+	}
 
 	return out
 }

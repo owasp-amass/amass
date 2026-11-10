@@ -169,6 +169,8 @@ type dependencyScan struct {
 	owned      map[string]Asset
 	ownDomains map[string]bool
 	vendors    vendorSet
+	// self names the subject in table cells it controls.
+	self string
 }
 
 func (d dependencyScan) scan(cur Asset) error {

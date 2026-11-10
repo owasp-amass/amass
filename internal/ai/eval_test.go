@@ -28,15 +28,37 @@ func owaspCertificateFixture() vendorGraph {
 	return vendorGraph{plannedGraph{fakeGraph: g}}
 }
 
+// campusWebFixture adds websites to the campus: the organization's website
+// on a CDN and a portal on its own network.
+func campusWebFixture() vendorGraph {
+	g := vendorFixture()
+	g.assets["url-www"] = Asset{ID: "url-www", Type: "URL", Key: "https://www.colgate.edu",
+		Content: map[string]any{"url": "https://www.colgate.edu"}}
+	g.assets["url-portal"] = Asset{ID: "url-portal", Type: "URL", Key: "https://portal.colgate.edu",
+		Content: map[string]any{"url": "https://portal.colgate.edu"}}
+	g.links = append(g.links,
+		Relation{ID: "w1", FromID: "colgate", ToID: "url-www", Label: "website", Type: "SimpleRelation"},
+		Relation{ID: "w2", FromID: "url-www", ToID: "www.colgate.edu", Label: "domain", Type: "SimpleRelation"},
+		Relation{ID: "w3", FromID: "url-portal", ToID: "portal.colgate.edu", Label: "domain", Type: "SimpleRelation"})
+	return g
+}
+
+func campus() (Graph, SchemaCatalog) { return vendorFixture(), vendorCatalog{testOAMCatalog} }
+
+func campusWeb() (Graph, SchemaCatalog) { return campusWebFixture(), vendorCatalog{testOAMCatalog} }
+
+func campusDNS() (Graph, SchemaCatalog) { return largeFQDNInventoryFixture(), fqdnInventoryCatalog }
+
+func owaspCerts() (Graph, SchemaCatalog) {
+	return owaspCertificateFixture(), vendorCatalog{testOAMCatalog}
+}
+
 // evalFixtures are the graphs offline evaluation cases name.
 var evalFixtures = map[string]func() (Graph, SchemaCatalog){
-	"campus":     func() (Graph, SchemaCatalog) { return vendorFixture(), vendorCatalog{testOAMCatalog} },
-	"campus-dns": func() (Graph, SchemaCatalog) { return largeFQDNInventoryFixture(), fqdnInventoryCatalog },
-	"owasp-certificate": func() (Graph, SchemaCatalog) {
-		return owaspCertificateFixture(), vendorCatalog{
-			testOAMCatalog,
-		}
-	},
+	"campus":            campus,
+	"campus-web":        campusWeb,
+	"campus-dns":        campusDNS,
+	"owasp-certificate": owaspCerts,
 }
 
 // Every reported question runs here on each CI build.

@@ -39,8 +39,11 @@ var answerKinds = []AnswerKind{
 		Description: "Explore stored relationships from the subject and choose the witnessed paths that answer " +
 			"the question. Use for connectivity, specific relationships and highest parent questions.",
 		Targets: "the asset types the answer is about, or [] to explore",
-		Examples: []string{"How is <asset> connected to <organization>?", "What is the highest parent organization of <asset>?",
-			"Which URLs are linked to <hostname> via domain relationships?"},
+		Examples: []string{
+			"How is <asset> connected to <organization>?",
+			"What is the highest parent organization of <asset>?",
+			"Which URLs are linked to <hostname> via domain relationships?",
+		},
 	},
 	{
 		Name:        AnswerHierarchy,
@@ -69,6 +72,21 @@ var answerKinds = []AnswerKind{
 		Subjects: []string{"Organization", "FQDN"},
 		Targets:  "[]",
 		Examples: []string{"Which vendors does <organization> use?", "Who hosts or provides services for <domain>?"},
+	},
+	{
+		Name: LensTable,
+		Description: "Build a table with one row per asset of the single target type that the subject controls " +
+			"and one column per entry of columns. Columns form a chain: the first follows from the row asset " +
+			"and each later one from the previous column. {\"type\":T,\"role\":\"\"} is the nearest asset of type T " +
+			"(for example the IP address of a URL or FQDN); {\"type\":\"Organization\",\"role\":\"controller\"} " +
+			"is the organization that controls or operates the previous column's asset (for example the hosting " +
+			"provider of an IP address).",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "exactly one row type",
+		Examples: []string{
+			"Table of each website of <organization> with its IP address and hosting provider",
+			"For each domain <organization> owns, show its IP addresses",
+		},
 	},
 }
 
@@ -148,6 +166,17 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 		if meaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
+	case LensTable:
+		if len(goal.TargetTypes) != 1 {
+			return fmt.Errorf("answer %q needs exactly one row type in target_types", k.Name)
+		}
+		if !controlledReachable(schema, goal.TargetTypes) {
+			return fmt.Errorf("answer %q rows must be a type that can be attributed to an owner; %s cannot be",
+				k.Name, goal.TargetTypes[0])
+		}
+		if err := validateColumns(goal.Columns, catalogTypes(schema.Relations(), nil)); err != nil {
+			return fmt.Errorf("answer %q: %w", k.Name, err)
+		}
 	}
 
 	return nil
@@ -173,6 +202,10 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 			Lens: LensControlled, Source: SourceModelGoal}
 	case LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
+	case LensTable:
+		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
+			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
+			Lens: LensTable, Columns: append([]TableColumn(nil), goal.Columns...), Source: SourceModelGoal}
 	default:
 		if goal.Subject.Type == "Organization" && goal.Purpose == "connected" && len(goal.Relationships) == 0 &&
 			controlledReachable(schema, goal.TargetTypes) {
