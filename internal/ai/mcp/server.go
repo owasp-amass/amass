@@ -2,19 +2,27 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package mcp implements a deliberately small MCP stdio JSON-RPC server.
-// It exposes only read-only tools and avoids new runtime dependencies.
+// Package mcp serves the read-only Amass AI tools over the Model Context
+// Protocol using the official MCP Go SDK: over stdio (Server) and over
+// Streamable HTTP behind Amass's own authentication and session limits
+// (HTTPServer).
 package mcp
 
 import (
-	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
+	"sync"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 )
+
+// serverVersion is reported to MCP clients.
+const serverVersion = "0.3.0"
 
 // Server serves MCP over stdio. Model is optional: without it the
 // investigate tool answers every kind except paths. Evidence keeps recent
@@ -25,136 +33,86 @@ type Server struct {
 	Evidence *ai.EvidenceStore
 }
 
-type incoming struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
-}
-
-func rpcResult(id json.RawMessage, result any) any {
-	return map[string]any{"jsonrpc": "2.0", "id": id, "result": result}
-}
-
-func rpcError(id json.RawMessage, code int, reason string) any {
-	return map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": reason}}
-}
-
+// Serve runs one MCP session over in and out until the client disconnects
+// or ctx ends.
 func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	if s.Evidence == nil {
 		s.Evidence = ai.NewEvidenceStore()
 	}
 
-	reader := bufio.NewScanner(in)
-	reader.Buffer(make([]byte, 4096), 2<<20)
-	writer := bufio.NewWriter(out)
-	initialized := false
-	for reader.Scan() {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		var request incoming
-		if err := json.Unmarshal(reader.Bytes(), &request); err != nil {
-			if err := write(writer, rpcError(nil, -32700, "parse error")); err != nil {
-				return err
-			}
-
-			continue
-		}
-		if request.JSONRPC != "2.0" || request.Method == "" {
-			if err := write(writer, rpcError(request.ID, -32600, "invalid JSON-RPC request")); err != nil {
-				return err
-			}
-
-			continue
-		}
-		// Notifications intentionally have no response.
-		if len(request.ID) == 0 {
-			if request.Method == "notifications/initialized" {
-				initialized = true
-			}
-
-			continue
-		}
-		if !initialized && request.Method != "initialize" && request.Method != "ping" {
-			if err := write(writer, rpcError(request.ID, -32000, "MCP not initialized")); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		var reply any
-		switch request.Method {
-		case "initialize":
-			initialized = false
-			var p struct {
-				ProtocolVersion string `json:"protocolVersion"`
-			}
-			_ = json.Unmarshal(request.Params, &p)
-			version := p.ProtocolVersion
-			if version != "2025-11-25" {
-				version = "2025-11-25"
-			}
-
-			reply = rpcResult(request.ID, map[string]any{"protocolVersion": version,
-				"serverInfo":   map[string]any{"name": "amass-ai", "version": "0.1.0"},
-				"capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}})
-		case "ping":
-			reply = rpcResult(request.ID, map[string]any{})
-		case "tools/list":
-			tools := []any{}
-			for _, t := range toolSpecs(s.Runner) {
-				tools = append(tools,
-					map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters})
-			}
-
-			reply = rpcResult(request.ID, map[string]any{"tools": tools})
-		case "tools/call":
-			var p struct {
-				Name      string          `json:"name"`
-				Arguments json.RawMessage `json:"arguments"`
-			}
-			if err := json.Unmarshal(request.Params, &p); err != nil || p.Name == "" {
-				reply = rpcError(request.ID, -32602, "invalid tool request")
-				break
-			}
-
-			toolCtx, cancel := context.WithTimeout(ctx, ai.ToolTimeout(p.Name))
-			result, err := runTool(toolCtx, s.Runner, s.Model, s.Evidence, p.Name, p.Arguments)
-			cancel()
-			if err != nil {
-				reply = rpcResult(request.ID,
-					map[string]any{
-						"isError": true,
-						"content": []any{map[string]any{"type": "text", "text": err.Error()}},
-					})
-			} else {
-				reply = rpcResult(request.ID,
-					map[string]any{"content": []any{map[string]any{"type": "text", "text": string(result)}}})
-			}
-		default:
-			reply = rpcError(request.ID, -32601, fmt.Sprintf("unsupported method: %s", request.Method))
-		}
-		if err := write(writer, reply); err != nil {
-			return err
-		}
+	server := newSDKServer(s.Runner, s.Model, s.Evidence)
+	reader := &eofReader{Reader: in}
+	err := server.Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(reader), Writer: nopWriteCloser{out}})
+	if err != nil && reader.closed() && ctx.Err() == nil {
+		// The client closed stdin: the session ended normally. The SDK
+		// reports this as its own closing error rather than io.EOF.
+		return nil
 	}
 
-	return reader.Err()
+	return err
 }
 
-func write(w *bufio.Writer, response any) error {
-	data, err := json.Marshal(response)
-	if err != nil {
-		return err
-	}
-	if _, err = w.Write(append(data, '\n')); err != nil {
-		return err
+// eofReader records whether the client closed its end of the stream.
+type eofReader struct {
+	io.Reader
+	mu  sync.Mutex
+	eof bool
+}
+
+func (r *eofReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if errors.Is(err, io.EOF) {
+		r.mu.Lock()
+		r.eof = true
+		r.mu.Unlock()
 	}
 
-	return w.Flush()
+	return n, err
+}
+
+func (r *eofReader) closed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.eof
+}
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
+
+// newSDKServer builds an MCP server with every read-only tool: the graph
+// tools and the investigation tools.
+func newSDKServer(runner ai.ToolRunner, model ai.Model, store *ai.EvidenceStore) *mcp.Server {
+	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
+		&mcp.ServerOptions{GetSessionID: newSessionID})
+	for _, spec := range toolSpecs(runner) {
+		name := spec.Name
+		server.AddTool(&mcp.Tool{Name: name, Description: spec.Description, InputSchema: spec.Parameters},
+			func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				var args json.RawMessage
+				if req.Params != nil {
+					args = req.Params.Arguments
+				}
+
+				ctx, cancel := context.WithTimeout(ctx, ai.ToolTimeout(name))
+				defer cancel()
+
+				result, err := runTool(ctx, runner, model, store, name, args)
+				if err != nil {
+					// Tool failures are results the model can read, not protocol errors.
+					return &mcp.CallToolResult{
+							IsError: true,
+							Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
+						},
+						nil
+				}
+
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(result)}}}, nil
+			})
+	}
+
+	return server
 }
 
 // toolSpecs lists the graph tools and the investigation tools.
@@ -169,4 +127,15 @@ func runTool(ctx context.Context, runner ai.ToolRunner, model ai.Model, store *a
 	}
 
 	return runner.Run(ctx, name, args)
+}
+
+// newSessionID returns 192 random bits, hex encoded, for HTTP sessions.
+func newSessionID() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		// An empty ID makes the SDK refuse the session rather than reuse one.
+		return ""
+	}
+
+	return hex.EncodeToString(b)
 }

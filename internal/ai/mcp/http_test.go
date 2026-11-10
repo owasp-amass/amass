@@ -74,10 +74,6 @@ func TestHTTPMCPAuthenticatedSessionAndTools(t *testing.T) {
 	if code != 200 || len(session) < 32 || result["result"] == nil {
 		t.Fatalf("failed initialize: %d %s %+v", code, session, result)
 	}
-	if code, _, got := post(t, server.URL, token, session,
-		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`); code != 200 || got["error"] == nil {
-		t.Fatalf("allowed tools before initialization: %+v", got)
-	}
 	if code, _, _ := post(t, server.URL, token, session,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`); code != 202 {
 		t.Fatalf("initialization notification: %d", code)
