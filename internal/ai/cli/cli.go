@@ -40,7 +40,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
-	var queryPath string
+	var queryPath, evalPath string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
 	var modelTimeout, investigationTimeout time.Duration
@@ -58,6 +58,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
+	fs.StringVar(&evalPath, "eval-cases", "",
+		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
 		"JSON Query file to execute with ask (\"-\" reads stdin); route and hierarchy queries need no model")
 	fs.StringVar(&subjectType, "subject-type", "", "Starting OAM asset type (FQDN, IPAddress, Organization, etc.)")
@@ -106,11 +108,11 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: amass ai [flags] ask|plan|mcp|infer|scan|search|collect-plan|collect")
+		return errors.New("usage: amass ai [flags] ask|plan|eval|mcp|infer|scan|search|collect-plan|collect")
 	}
 
 	operation := fs.Arg(0)
-	if operation != "ask" && operation != "plan" && operation != "mcp" && operation != "infer" &&
+	if operation != "ask" && operation != "plan" && operation != "eval" && operation != "mcp" && operation != "infer" &&
 		operation != "scan" && operation != "search" && operation != "collect-plan" && operation != "collect" {
 		return fmt.Errorf("unknown operation %q", operation)
 	}
@@ -230,7 +232,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	// Only plan, ask, infer and scan can use a model, and plan and ask can
 	// run deterministic queries without one. MCP, search and collection never
 	// build a model client, so a model setting cannot break them.
-	usesModel := operation == "plan" || operation == "ask" || operation == "infer" || operation == "scan"
+	usesModel := operation == "plan" || operation == "ask" || operation == "eval" || operation == "infer" ||
+		operation == "scan"
 	var provider ai.Model
 	if usesModel && modelName != "" {
 		var err error
@@ -290,6 +293,44 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
 		cancel()
 		return (mcp.Server{Runner: runner}).Serve(context.Background(), in, out)
+	}
+	if operation == "eval" {
+		if provider == nil {
+			return errors.New("-model required: eval measures the configured model against the Asset Database")
+		}
+
+		cases, err := loadEvalCases(evalPath)
+		if err != nil {
+			return err
+		}
+
+		results := (ai.Agent{Model: provider, Runner: runner}).RunEvalLive(context.Background(), cases,
+			investigationTimeout, ai.AdaptiveOptions{
+				MaxDepth:         graphDepth,
+				MaxMatches:       graphMatches,
+				MaxPathsPerAsset: graphAlternates,
+				MaxExpansions:    graphExpansions,
+				GuidanceRounds:   guidanceRounds,
+				MaxInventory:     inventoryNames,
+			})
+		if explicitFlags["format"] && outputFormat == "json" {
+			b, err := ai.MarshalEvalResults(results)
+			if err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintln(out, string(b)); err != nil {
+				return err
+			}
+		} else if _, err := fmt.Fprint(out, ai.FormatEvalResults(results)); err != nil {
+			return err
+		}
+		for _, r := range results {
+			if !r.Pass {
+				return errors.New("one or more evaluation cases failed")
+			}
+		}
+
+		return nil
 	}
 	if operation == "search" {
 		return graphSearch(ctx, runner, graphSearchOptions{
@@ -531,4 +572,19 @@ func validateClassifierEndpoint(endpoint string) error {
 	}
 
 	return nil
+}
+
+// loadEvalCases reads an evaluation set from path, or the embedded set of
+// reported questions when path is empty.
+func loadEvalCases(path string) ([]ai.EvalCase, error) {
+	if path == "" {
+		return ai.DefaultEvalCases()
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read evaluation set: %w", err)
+	}
+
+	return ai.LoadEvalCases(data)
 }
