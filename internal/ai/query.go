@@ -112,6 +112,8 @@ func (q Query) Describe() string {
 		return fmt.Sprintf("List the third-party vendors used by the assets %s controls.", subject)
 	case LensControlled:
 		return fmt.Sprintf("List the %s assets controlled by %s.", targets, subject)
+	case LensOwnershipGaps:
+		return fmt.Sprintf("Find unattributed assets that share signals with the assets %s controls.", subject)
 	case LensTable:
 		cols := make([]string, 0, len(q.Columns))
 		for _, c := range q.Columns {
@@ -237,7 +239,7 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	}
 	switch q.Lens {
 	case "":
-	case LensThirdParty, LensControlled, LensTable:
+	case LensThirdParty, LensControlled, LensTable, LensOwnershipGaps:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}

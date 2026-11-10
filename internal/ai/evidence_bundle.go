@@ -51,6 +51,14 @@ func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 	if r := inv.ControlledReport; r != nil {
 		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
 	}
+	if r := inv.GapReport; r != nil {
+		subjects = append(subjects, assetLabel(r.Root), assetLabel(r.Owner))
+		for _, c := range r.Candidates {
+			for _, s := range c.Signals {
+				edges = append(edges, s.Witness...)
+			}
+		}
+	}
 	if r := inv.TableReport; r != nil {
 		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
 		for _, w := range r.Witness {

@@ -675,6 +675,8 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		return a.controlledLens(ctx, root, q.TargetTypes, opts, out)
 	case LensTable:
 		return a.tableLens(ctx, root, q, opts, out)
+	case LensOwnershipGaps:
+		return a.gapLens(ctx, root, out)
 	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {

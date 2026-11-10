@@ -97,6 +97,18 @@ var answerKinds = []AnswerKind{
 			"For each domain <organization> owns, show its IP addresses",
 		},
 	},
+	{
+		Name: LensOwnershipGaps,
+		Description: "Find assets with no documented owner that share identity (contact details), hosting (resolving " +
+			"into its networks) or certificate signals with what the subject controls, each scored, with the OAM " +
+			"relationship that would record the subject as owner. Proposals only; nothing is written.",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"What assets might <organization> own that are not attributed to it?",
+			"Which domains look like they belong to <organization> but have no documented owner?",
+		},
+	},
 }
 
 func answerKind(name string) (AnswerKind, bool) {
@@ -175,7 +187,7 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
 				strings.Join(ownedTypes(schema), ", "), AnswerPaths)
 		}
-	case LensThirdParty:
+	case LensThirdParty, LensOwnershipGaps:
 		if meaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -217,6 +229,9 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 			Lens: LensControlled, Source: SourceModelGoal}
 	case LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
+	case LensOwnershipGaps:
+		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
+		q.Lens = LensOwnershipGaps
 	case LensTable:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
@@ -411,7 +426,7 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
 	case LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case LensThirdParty:
+	case LensThirdParty, LensOwnershipGaps:
 		props["target_types"] = none
 	case LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)
