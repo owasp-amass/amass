@@ -47,14 +47,17 @@ type TableColumn struct {
 
 // TableReport is the result of the table lens.
 type TableReport struct {
-	Root      Asset      `json:"root"`
-	Owners    []string   `json:"owners,omitempty"`
-	RowType   string     `json:"row_type"`
-	Headers   []string   `json:"headers"`
-	Rows      [][]string `json:"rows"`
-	Reads     int        `json:"reads"`
-	Truncated bool       `json:"truncated"`
-	Reason    string     `json:"reason,omitempty"`
+	Root    Asset      `json:"root"`
+	Owners  []string   `json:"owners,omitempty"`
+	RowType string     `json:"row_type"`
+	Headers []string   `json:"headers"`
+	Rows    [][]string `json:"rows"`
+	// Witness holds, for each row, the stored edges that attribute the row
+	// asset to the subject and support its cells.
+	Witness   [][]WitnessEdge `json:"witness,omitempty"`
+	Reads     int             `json:"reads"`
+	Truncated bool            `json:"truncated"`
+	Reason    string          `json:"reason,omitempty"`
 }
 
 // validateColumns checks a column chain against the asset types in the
@@ -96,11 +99,12 @@ func validateColumns(columns []TableColumn, types map[string]bool) error {
 // forward, up to tableReachDepth. It never crosses ownership or third
 // parties, so a URL reaches its IP address through its domain name and
 // that name's DNS records.
-func (w *lensWalker) reach(a Asset, kind string) ([]Asset, error) {
+func (w *lensWalker) reach(a Asset, kind string) ([]Asset, map[string][]WitnessEdge, error) {
 	if a.Type == kind {
-		return []Asset{a}, nil
+		return []Asset{a}, map[string][]WitnessEdge{a.ID: nil}, nil
 	}
 
+	links := controller{links: map[string]link{}}
 	seen := map[string]bool{a.ID: true}
 	frontier := []Asset{a}
 	for depth := 0; depth < tableReachDepth && len(frontier) > 0; depth++ {
@@ -108,7 +112,7 @@ func (w *lensWalker) reach(a Asset, kind string) ([]Asset, error) {
 		for _, cur := range frontier {
 			steps, err := w.steps(cur)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, s := range steps {
 				pass := (s.attr == attrSameSubject && s.purpose != purposeHierarchy) ||
@@ -118,6 +122,7 @@ func (w *lensWalker) reach(a Asset, kind string) ([]Asset, error) {
 				}
 
 				seen[s.other.ID] = true
+				links.links[s.other.ID] = link{parent: cur, edge: s.edge}
 				if s.other.Type == kind {
 					found = append(found, s.other)
 					continue
@@ -128,13 +133,18 @@ func (w *lensWalker) reach(a Asset, kind string) ([]Asset, error) {
 		}
 		if len(found) > 0 {
 			sort.Slice(found, func(i, j int) bool { return assetLabel(found[i]) < assetLabel(found[j]) })
-			return found, nil
+			witness := map[string][]WitnessEdge{}
+			for _, f := range found {
+				witness[f.ID] = links.witness(f.ID, w.assets)
+			}
+
+			return found, witness, nil
 		}
 
 		frontier = next
 	}
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 // searchTable runs the table lens from root.
@@ -153,6 +163,7 @@ func searchTable(ctx context.Context, graph Graph, schema SchemaCatalog, root As
 	counters := &ThirdPartyReport{}
 	w := newLensWalker(ctx, graph, bounded, meaning, schema.Relations(), root, counters)
 	w.expand = footprintExpansionTypes(w.relations, meaning, []string{rowType})
+	w.parent, w.via = map[string]string{}, map[string]Relation{}
 	roots := []Asset{root}
 	owners, err := w.owningOrganizations(root)
 	if err != nil {
@@ -203,22 +214,35 @@ func searchTable(ctx context.Context, graph Graph, schema SchemaCatalog, root As
 		}
 
 		seenRow[assetLabel(row)] = true
-		cells, err := d.tableRow(row, columns)
+		cells, witness, err := d.tableRow(row, columns)
 		if err != nil {
 			return report, err
 		}
 
+		report.Witness = append(report.Witness, append(pathWitness(w.path(id, owned)), witness...))
 		report.Rows = append(report.Rows, append([]string{assetLabel(row)}, cells...))
 	}
 
-	sort.SliceStable(report.Rows, func(i, j int) bool { return report.Rows[i][0] < report.Rows[j][0] })
+	byLabel := make([]int, len(report.Rows))
+	for i := range byLabel {
+		byLabel[i] = i
+	}
+
+	sort.SliceStable(byLabel, func(i, j int) bool { return report.Rows[byLabel[i]][0] < report.Rows[byLabel[j]][0] })
+	rows, witness := make([][]string, len(byLabel)), make([][]WitnessEdge, len(byLabel))
+	for i, k := range byLabel {
+		rows[i], witness[i] = report.Rows[k], report.Witness[k]
+	}
+
+	report.Rows, report.Witness = rows, witness
 	report.Reads, report.Truncated, report.Reason = counters.Reads, counters.Truncated, counters.Reason
 	return report, nil
 }
 
 // tableRow fills the column chain for one row asset.
-func (d dependencyScan) tableRow(row Asset, columns []TableColumn) ([]string, error) {
+func (d dependencyScan) tableRow(row Asset, columns []TableColumn) ([]string, []WitnessEdge, error) {
 	cells := make([]string, 0, len(columns))
+	var witness []WitnessEdge
 	current := []Asset{row}
 	for _, c := range columns {
 		var next []Asset
@@ -226,9 +250,9 @@ func (d dependencyScan) tableRow(row Asset, columns []TableColumn) ([]string, er
 		seen := map[string]bool{}
 		for _, a := range current {
 			if c.Role == ColumnController {
-				name, _, own, err := d.party(a)
+				name, _, own, chain, err := d.party(a)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				if own {
 					name = d.self + tableOwnedSuffix
@@ -236,20 +260,22 @@ func (d dependencyScan) tableRow(row Asset, columns []TableColumn) ([]string, er
 				if name != "" && !seen[name] {
 					seen[name] = true
 					labels = append(labels, name)
+					witness = append(witness, chain...)
 				}
 
 				continue
 			}
 
-			found, err := d.w.reach(a, c.Type)
+			found, chains, err := d.w.reach(a, c.Type)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, f := range found {
 				if !seen[f.ID] && len(next) < tableMaxCell {
 					seen[f.ID] = true
 					next = append(next, f)
 					labels = append(labels, assetLabel(f))
+					witness = append(witness, chains[f.ID]...)
 				}
 			}
 		}
@@ -260,7 +286,7 @@ func (d dependencyScan) tableRow(row Asset, columns []TableColumn) ([]string, er
 		}
 	}
 
-	return cells, nil
+	return cells, witness, nil
 }
 
 // tableAnswer renders a TableReport as a plain-text table.

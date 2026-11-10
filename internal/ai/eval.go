@@ -25,10 +25,12 @@ var defaultEvalJSON []byte
 
 // EvalCase is one question in the evaluation set.
 type EvalCase struct {
-	ID       string     `json:"id"`
-	Question string     `json:"question"`
-	Note     string     `json:"note,omitempty"`
-	Expect   EvalExpect `json:"expect"`
+	ID       string `json:"id"`
+	Question string `json:"question"`
+	Note     string `json:"note,omitempty"`
+	// Narrate also asks for a verified cited summary.
+	Narrate bool       `json:"narrate,omitempty"`
+	Expect  EvalExpect `json:"expect"`
 	// Offline runs the case against a named fixture in CI.
 	Offline *EvalOffline `json:"offline,omitempty"`
 	// Live holds the checks for a run against a real Asset Database.
@@ -62,6 +64,8 @@ type EvalChecks struct {
 	ResultsExclude []string `json:"results_exclude,omitempty"`
 	MinResults     int      `json:"min_results,omitempty"`
 	Complete       bool     `json:"complete,omitempty"`
+	// NarrativeVerified requires a narrative that passed citation checks.
+	NarrativeVerified bool `json:"narrative_verified,omitempty"`
 }
 
 // EvalResult is the outcome of one case.
@@ -162,6 +166,10 @@ func (a Agent) RunEvalCase(ctx context.Context, c EvalCase, checks EvalChecks, o
 	res := EvalResult{ID: c.ID, Question: c.Question}
 	started := time.Now()
 	inv, err := a.AskAdaptive(ctx, c.Question, opts)
+	if err == nil && c.Narrate {
+		err = a.AttachNarrative(ctx, c.Question, &inv)
+	}
+
 	res.Duration = time.Since(started)
 	res.Answer, res.Text = answerKindOf(inv.Query), inv.Answer
 	if inv.Query != nil {
@@ -226,6 +234,14 @@ func (a Agent) RunEvalCase(ctx context.Context, c EvalCase, checks EvalChecks, o
 	}
 	if checks.Complete && inv.Incomplete {
 		fail("answer is incomplete")
+	}
+	if checks.NarrativeVerified {
+		switch {
+		case inv.Narrative == nil:
+			fail("no narrative was written")
+		case !inv.Narrative.Verified:
+			fail("narrative rejected: %s", strings.Join(inv.Narrative.Rejected, "; "))
+		}
 	}
 
 	res.Pass = len(res.Failures) == 0

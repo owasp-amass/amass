@@ -347,11 +347,71 @@ func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []str
 	return owned, order, nil
 }
 
+// WitnessEdge is one stored relationship that supports an answer, with
+// the labels of its two assets.
+type WitnessEdge struct {
+	EdgeID       string `json:"edge_id"`
+	Label        string `json:"label"`
+	RelationType string `json:"relation_type"`
+	FromID       string `json:"from_id"`
+	FromType     string `json:"from_type"`
+	From         string `json:"from"`
+	ToID         string `json:"to_id"`
+	ToType       string `json:"to_type"`
+	To           string `json:"to"`
+}
+
+// witnessOf orients a stored edge between a and b as it is stored.
+func witnessOf(e Relation, a, b Asset) WitnessEdge {
+	from, to := a, b
+	if e.FromID == b.ID {
+		from, to = b, a
+	}
+
+	return WitnessEdge{EdgeID: e.ID, Label: e.Label, RelationType: e.Type, FromID: from.ID, FromType: from.Type,
+		From: assetLabel(from), ToID: to.ID, ToType: to.Type, To: assetLabel(to)}
+}
+
+// pathWitness returns the edges of a witnessed path.
+func pathWitness(p PlanMatch) []WitnessEdge {
+	out := make([]WitnessEdge, 0, len(p.Edges))
+	for i, e := range p.Edges {
+		if i+1 < len(p.Nodes) {
+			out = append(out, witnessOf(e, p.Nodes[i], p.Nodes[i+1]))
+		}
+	}
+
+	return out
+}
+
+// link records how a search reached an asset.
+type link struct {
+	parent Asset
+	edge   Relation
+}
+
 // controller is the result of a controller search from one asset.
 type controller struct {
 	orgs    []Asset
 	visited []Asset
 	own     bool
+	links   map[string]link
+}
+
+// witness returns the edges from the search's start to id.
+func (c controller) witness(id string, assets map[string]Asset) []WitnessEdge {
+	var out []WitnessEdge
+	for cur := id; ; {
+		l, ok := c.links[cur]
+		if !ok {
+			break
+		}
+
+		out = append([]WitnessEdge{witnessOf(l.edge, l.parent, assets[cur])}, out...)
+		cur = l.parent.ID
+	}
+
+	return out
 }
 
 // controllerOf searches from a toward the Organization that controls it
@@ -371,7 +431,7 @@ func (w *lensWalker) controllerSearch(a Asset, owned map[string]Asset, maxPops i
 		return c, nil
 	}
 
-	var c controller
+	c := controller{links: map[string]link{}}
 	type item struct {
 		asset Asset
 		depth int
@@ -425,6 +485,7 @@ func (w *lensWalker) controllerSearch(a Asset, owned map[string]Asset, maxPops i
 			}
 
 			seen[s.other.ID] = true
+			c.links[s.other.ID] = link{parent: cur.asset, edge: s.edge}
 			frontier = append(frontier, item{asset: s.other, depth: cur.depth + 1})
 		}
 	}

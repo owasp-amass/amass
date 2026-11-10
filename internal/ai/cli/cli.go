@@ -46,7 +46,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var modelTimeout, investigationTimeout time.Duration
 	var maxTokens, contextTokens int
 	var temperatureFlag string
-	var think, showTrace bool
+	var think, showTrace, narrate bool
 	var classifierReview, allowHTTP bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
@@ -100,6 +100,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.IntVar(&contextTokens, "context-tokens", 0, "Ollama context window in tokens (0 = 8192)")
 	fs.BoolVar(&think, "think", false, "Let an Ollama reasoning model think before answering (slower; off by default)")
 	fs.BoolVar(&showTrace, "trace", false, "Print stage timings and model usage to stderr after ask")
+	fs.BoolVar(&narrate, "narrate", false,
+		"After ask, have the model write a short cited summary, verified against the answer's evidence")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute,
 		"Maximum time per model request (e.g., 4m for local Ollama)")
 	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute,
@@ -399,6 +401,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 				GuidanceRounds:   guidanceRounds,
 				MaxInventory:     inventoryNames,
 			})
+		if err == nil && narrate && provider != nil {
+			err = (ai.Agent{Model: provider, Runner: runner}).AttachNarrative(ctx, narrativeQuestion(result), &result)
+		}
 		if showTrace {
 			writeTrace(errout, result)
 		}
@@ -428,6 +433,9 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 				GuidanceRounds:   guidanceRounds,
 				MaxInventory:     inventoryNames,
 			})
+		if err == nil && narrate && provider != nil {
+			err = (ai.Agent{Model: provider, Runner: runner}).AttachNarrative(ctx, narrativeQuestion(result), &result)
+		}
 		if showTrace {
 			writeTrace(errout, result)
 		}
@@ -587,4 +595,17 @@ func loadEvalCases(path string) ([]ai.EvalCase, error) {
 	}
 
 	return ai.LoadEvalCases(data)
+}
+
+// narrativeQuestion is the question a narrative answers: the user's words,
+// or the Query description for a structured Query.
+func narrativeQuestion(inv ai.Investigation) string {
+	if inv.Query == nil {
+		return ""
+	}
+	if inv.Query.Question != "" {
+		return inv.Query.Question
+	}
+
+	return inv.Query.Describe()
 }

@@ -33,6 +33,9 @@ type VendorUse struct {
 	Via      string   `json:"via"`
 	Assets   int      `json:"assets"`
 	Examples []string `json:"examples"`
+	// Witness holds the stored edges behind the first example: from the
+	// controlled asset to the dependency and on to the party behind it.
+	Witness []WitnessEdge `json:"witness,omitempty"`
 }
 
 // ThirdPartyReport is the result of the third-party lens.
@@ -50,7 +53,7 @@ type ThirdPartyReport struct {
 // vendorSet accumulates vendor uses keyed by vendor and kind.
 type vendorSet map[string]*VendorUse
 
-func (v vendorSet) add(name, id, kind, via string, user Asset) {
+func (v vendorSet) add(name, id, kind, via string, user Asset, witness []WitnessEdge) {
 	if name == "" {
 		return
 	}
@@ -58,7 +61,7 @@ func (v vendorSet) add(name, id, kind, via string, user Asset) {
 	key := kind + "\x00" + strings.ToLower(name)
 	use, ok := v[key]
 	if !ok {
-		use = &VendorUse{Vendor: name, VendorID: id, Kind: kind, Via: via, Examples: []string{}}
+		use = &VendorUse{Vendor: name, VendorID: id, Kind: kind, Via: via, Examples: []string{}, Witness: witness}
 		v[key] = use
 	}
 
@@ -184,20 +187,21 @@ func (d dependencyScan) scan(cur Asset) error {
 		}
 
 		via := cur.Type + " " + s.edge.Label
+		hop := []WitnessEdge{witnessOf(s.edge, cur, s.other)}
 		switch {
 		case s.attr == attrThirdParty && s.forward && s.vendor:
-			if err := d.depend(cur, s, via); err != nil {
+			if err := d.depend(cur, cur, s, via, nil); err != nil {
 				return err
 			}
 		case s.attr == attrInfrastructure && s.forward:
-			if err := d.depend(cur, s, via); err != nil {
+			if err := d.depend(cur, cur, s, via, nil); err != nil {
 				return err
 			}
-			if err := d.through(cur, s.other, via); err != nil {
+			if err := d.through(cur, s.other, via, hop); err != nil {
 				return err
 			}
 		case s.attr == attrShared && !s.forward:
-			if err := d.through(cur, s.other, s.other.Type); err != nil {
+			if err := d.through(cur, s.other, s.other.Type, hop); err != nil {
 				return err
 			}
 		}
@@ -208,7 +212,7 @@ func (d dependencyScan) scan(cur Asset) error {
 
 // through records the vendor dependencies of an intermediate asset on
 // behalf of the controlled asset cur.
-func (d dependencyScan) through(cur, mid Asset, via string) error {
+func (d dependencyScan) through(cur, mid Asset, via string, prefix []WitnessEdge) error {
 	steps, err := d.w.steps(mid)
 	if err != nil {
 		return err
@@ -217,7 +221,7 @@ func (d dependencyScan) through(cur, mid Asset, via string) error {
 		if _, mine := d.owned[s.other.ID]; mine || s.attr != attrThirdParty || !s.forward || !s.vendor {
 			continue
 		}
-		if err := d.depend(cur, s, via+" "+mid.Type+" "+s.edge.Label); err != nil {
+		if err := d.depend(cur, mid, s, via+" "+mid.Type+" "+s.edge.Label, prefix); err != nil {
 			return err
 		}
 	}
@@ -225,14 +229,16 @@ func (d dependencyScan) through(cur, mid Asset, via string) error {
 	return nil
 }
 
-// depend records the party controlling s.other as a vendor of cur.
-func (d dependencyScan) depend(cur Asset, s step, via string) error {
-	name, id, own, err := d.party(s.other)
+// depend records the party controlling s.other as a vendor of cur; s is a
+// step from from (cur, or an intermediate asset reached through prefix).
+func (d dependencyScan) depend(cur, from Asset, s step, via string, prefix []WitnessEdge) error {
+	name, id, own, witness, err := d.party(s.other)
 	if err != nil || own || name == "" {
 		return err
 	}
 
-	d.vendors.add(name, id, dependencyKind(s.purpose, s.other.Type), via, cur)
+	chain := append(append(append([]WitnessEdge(nil), prefix...), witnessOf(s.edge, from, s.other)), witness...)
+	d.vendors.add(name, id, dependencyKind(s.purpose, s.other.Type), via, cur, chain)
 	return nil
 }
 
@@ -241,51 +247,59 @@ func (d dependencyScan) depend(cur Asset, s step, via string) error {
 // infrastructure edge with purpose network, such as an autonomous system
 // announcing its netblock); otherwise the most registration-like asset
 // reached. own is set when control leads back to the footprint.
-func (d dependencyScan) party(a Asset) (string, string, bool, error) {
+func (d dependencyScan) party(a Asset) (string, string, bool, []WitnessEdge, error) {
 	c, err := d.w.controllerOf(a, d.owned)
-	if err != nil || c.own {
-		return "", "", c.own, err
+	if err != nil {
+		return "", "", false, nil, err
+	}
+	if c.own {
+		return "", "", true, c.witness(c.visited[len(c.visited)-1].ID, d.w.assets), nil
 	}
 	if len(c.orgs) > 0 {
 		org := c.orgs[0]
 		_, own := d.owned[org.ID]
-		return assetLabel(org), org.ID, own, nil
+		return assetLabel(org), org.ID, own, c.witness(org.ID, d.w.assets), nil
 	}
 	for _, v := range c.visited {
 		steps, err := d.w.steps(v)
 		if err != nil {
-			return "", "", false, err
+			return "", "", false, nil, err
 		}
 		for _, s := range steps {
 			if s.forward || s.attr != attrInfrastructure || s.purpose != "network" {
 				continue
 			}
 			if _, mine := d.owned[s.other.ID]; mine {
-				return "", "", true, nil
+				return "", "", true, nil, nil
 			}
 
 			oc, err := d.w.controllerOf(s.other, d.owned)
 			if err != nil || oc.own {
-				return "", "", oc.own, err
-			}
-			if len(oc.orgs) > 0 {
-				return assetLabel(oc.orgs[0]), oc.orgs[0].ID, false, nil
+				return "", "", oc.own, nil, err
 			}
 
-			return d.fallbackName(oc.visited)
+			base := append(c.witness(v.ID, d.w.assets), witnessOf(s.edge, v, s.other))
+			if len(oc.orgs) > 0 {
+				org := oc.orgs[0]
+				return assetLabel(org), org.ID, false, append(base, oc.witness(org.ID, d.w.assets)...), nil
+			}
+
+			name, id, own, best, err := d.fallbackName(oc.visited)
+			return name, id, own, append(base, oc.witness(best, d.w.assets)...), err
 		}
 	}
 
-	return d.fallbackName(c.visited)
+	name, id, own, best, err := d.fallbackName(c.visited)
+	return name, id, own, c.witness(best, d.w.assets), err
 }
 
 // fallbackName names a party with no documented Organization by the
 // visited asset closest to one (a registration record before the address
 // it registers). FQDNs are named by their registrable domain, and a domain
 // of the footprint counts as controlled.
-func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, error) {
+func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, string, error) {
 	if len(visited) == 0 {
-		return "", "", false, nil
+		return "", "", false, "", nil
 	}
 
 	best := visited[0]
@@ -298,10 +312,10 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, err
 	}
 	if best.Type == "FQDN" {
 		domain := registeredDomain(fqdnName(best))
-		return domain, "", d.ownDomains[domain], nil
+		return domain, "", d.ownDomains[domain], best.ID, nil
 	}
 
-	return assetLabel(best), best.ID, false, nil
+	return assetLabel(best), best.ID, false, best.ID, nil
 }
 
 // dependencyKind names a vendor group from the semantics table: the purpose

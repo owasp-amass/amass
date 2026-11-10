@@ -90,6 +90,15 @@
       "expect": {"answer": "table", "subject_type": "Organization", "max_model_calls": 3},
       "offline": {"fixture": "campus-web", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Colgate University\"},\"target_types\":[\"URL\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"table\",\"columns\":[{\"type\":\"IPAddress\",\"role\":\"\"},{\"type\":\"Organization\",\"role\":\"controller\"}]}"], "checks": {"answer_contains": ["| URLs | IP addresses | Controlling organization |", "| https://www.colgate.edu | 151.101.1.1 | FASTLY |", "| https://portal.colgate.edu | 149.43.1.1 | Colgate University (self) |"], "complete": true}},
       "live": {"answer_contains": ["| URLs |", "| IP addresses |", "| Controlling organization |", "(self)"], "results_include": ["www.colgate.edu"], "answer_excludes": ["No URLs are documented"]}
+    },
+    {
+      "id": "colgate-vendors-cited-summary",
+      "question": "Which third-party vendors are used by colgate.edu?",
+      "note": "Roadmap 1c: the model's summary must cite the stored relationships it uses, verified in Go.",
+      "narrate": true,
+      "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 2},
+      "offline": {"fixture": "campus", "planner_replies": ["colgate.edu receives mail through mx1.pphosted.com and uses pdns1.ultradns.net as a name server [E1, E2]. www.colgate.edu resolves to 151.101.1.1, which AutonomousSystem 54113 announces and whose registration names FASTLY [E6, E7, E8, E9]. Its certificate was issued by DigiCert Inc [E3, E4, E5]. The domain's registrar contact belongs to EDUCAUSE [E10, E11]."], "checks": {"narrative_verified": true}},
+      "live": {"narrative_verified": true}
     }
   ]
 }
