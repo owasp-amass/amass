@@ -7,6 +7,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -110,5 +111,84 @@ func TestRetractRemovesAppliedEdgeAndBlocksRewrites(t *testing.T) {
 	state, err := (&ai.Journal{Path: path}).OwnershipState()
 	if err != nil || state[p.ID].Status != ai.ProposalRetracted {
 		t.Errorf("status = %+v, %v", state[p.ID], err)
+	}
+}
+
+type adviceModel struct{}
+
+func (adviceModel) Generate(_ context.Context, _ []ai.Message, _ []ai.ToolSpec) (ai.Response, error) {
+	return ai.Response{Text: "RECOMMENDATION: reject\nThe only link is shared hosting [E1]."}, nil
+}
+
+func TestReviewRecordsAdviceWithoutDeciding(t *testing.T) {
+	_, p := journalWithProposal(t)
+	p.Witness = []ai.WitnessEdge{{FromType: "FQDN", From: "alumni.example", Label: "dns_record", ToType: "IPAddress",
+		To: "192.0.2.1"}}
+	path := filepath.Join(t.TempDir(), "review.jsonl")
+	j := &ai.Journal{Path: path}
+	if _, err := j.SubmitOwnership([]ai.OwnershipProposal{p}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := reviewProposals(context.Background(), ai.Agent{Model: adviceModel{}}, "test-model", path, "", 10,
+		&out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "advice from test-model: reject.") {
+		t.Errorf("output = %q", out.String())
+	}
+
+	state, err := j.OwnershipState()
+	if err != nil || state[p.ID].Status != ai.ProposalPending || state[p.ID].Advice == nil {
+		t.Fatalf("state = %+v, %v", state[p.ID], err)
+	}
+
+	out.Reset()
+	if err := reviewProposals(context.Background(), ai.Agent{Model: adviceModel{}}, "test-model", path, "", 10,
+		&out); err != nil || !strings.Contains(out.String(), "No pending proposals need advice") {
+		t.Errorf("second review = %q, %v", out.String(), err)
+	}
+}
+
+func TestTrainAttributionWritesALoadableModel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "review.jsonl")
+	j := &ai.Journal{Path: path}
+	for i := 0; i < 90; i++ {
+		edge := ai.ProposedEdge{FromID: fmt.Sprint(i), Label: "organization", RelationType: "SimpleRelation", ToID: "o"}
+		p := ai.OwnershipProposal{ID: ai.ProposalID(edge), Edge: edge}
+		outcome := ai.OwnershipOutcome{ProposalID: p.ID, Status: ai.ProposalApplied, Reviewer: "jeff", EdgeID: "e"}
+		if i%2 == 0 {
+			p.Signals = []string{"identity via ContactRecord phone Phone", "identity via ContactRecord location Location"}
+		} else {
+			p.Signals = []string{"hosting via FQDN dns_record IPAddress"}
+			outcome.Status, outcome.EdgeID = ai.ProposalRejected, ""
+		}
+		if _, err := j.SubmitOwnership([]ai.OwnershipProposal{p}); err != nil {
+			t.Fatal(err)
+		}
+		if err := j.RecordOwnership(outcome); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := trainAttribution(path, "", &out); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := ai.LoadAttributionModel(ai.AttributionModelPath(path))
+	if err != nil || m == nil || m.Task != ai.OwnershipTask {
+		t.Fatalf("model = %+v, %v", m, err)
+	}
+	if !strings.Contains(out.String(), "the engine uses it from the next enumeration") {
+		t.Errorf("output = %q", out.String())
+	}
+}
+
+func TestTrainAttributionNeedsEnoughReviews(t *testing.T) {
+	path, _ := journalWithProposal(t)
+	if err := trainAttribution(path, "", &bytes.Buffer{}); err == nil {
+		t.Error("a model was trained from one pending proposal")
 	}
 }

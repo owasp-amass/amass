@@ -24,6 +24,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -128,6 +129,14 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 		}
 
 		t.journal = j
+		model, err := ai.LoadAttributionModel(ai.AttributionModelPath(path))
+		if err != nil {
+			sess.Log().Error(fmt.Sprintf("AI attribution uses its rules: %v", err))
+		} else if model != nil {
+			sess.Log().Info(fmt.Sprintf("AI attribution decides with ownership model %s", model.ModelID))
+		}
+
+		t.model = model
 	}
 
 	p.sessions[sess.ID()] = t
@@ -140,6 +149,8 @@ type tracker struct {
 	sess    et.Session
 	mode    string
 	journal *ai.Journal
+	// model is the ownership model trained from review decisions, if any.
+	model *classify.LinearModel
 
 	mu      sync.Mutex
 	orgs    map[string]*dbt.Entity
@@ -260,7 +271,8 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 			continue
 		}
 
-		res, err := ai.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal, t.mode)
+		res, err := ai.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal,
+			ai.AttributionPolicy{Mode: t.mode, Model: t.model})
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", ai.AssetLabel(org), err))
 		}

@@ -50,7 +50,13 @@ type OwnershipProposal struct {
 	Signals   []string     `json:"signals"`
 	Gains     []string     `json:"gains,omitempty"`
 	Evidence  []string     `json:"evidence"`
-	CreatedAt time.Time    `json:"created_at"`
+	// Witness holds the evidence as stored relationships.
+	Witness []WitnessEdge `json:"witness,omitempty"`
+	// ModelID and ModelScore record the ownership model's view, when one
+	// decided the proposal; the score is its probability of ownership.
+	ModelID    string    `json:"model_id,omitempty"`
+	ModelScore float64   `json:"model_score,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // OwnershipOutcome records a reviewer's decision, and for an applied
@@ -92,6 +98,7 @@ func OwnershipProposals(r OwnershipGapReport) []OwnershipProposal {
 				if !seen[line] {
 					seen[line] = true
 					p.Evidence = append(p.Evidence, line)
+					p.Witness = append(p.Witness, w)
 				}
 			}
 		}
@@ -144,11 +151,12 @@ func (j *Journal) RecordOwnership(o OwnershipOutcome) error {
 	return j.append("ownership_outcome", o)
 }
 
-// OwnershipEntry is a proposal with its latest outcome.
+// OwnershipEntry is a proposal with its latest outcome and advice.
 type OwnershipEntry struct {
 	Proposal OwnershipProposal `json:"proposal"`
 	Status   string            `json:"status"`
 	Outcome  *OwnershipOutcome `json:"outcome,omitempty"`
+	Advice   *OwnershipAdvice  `json:"advice,omitempty"`
 }
 
 // OwnershipState replays the journal into each proposal's current status.
@@ -187,6 +195,14 @@ func (j *Journal) OwnershipState() (map[string]*OwnershipEntry, error) {
 			}
 			if e, ok := state[o.ProposalID]; ok {
 				e.Status, e.Outcome = o.Status, &o
+			}
+		case "ownership_advice":
+			var a OwnershipAdvice
+			if err := json.Unmarshal(rec.Data, &a); err != nil {
+				return nil, err
+			}
+			if e, ok := state[a.ProposalID]; ok {
+				e.Advice = &a
 			}
 		}
 	}
@@ -237,8 +253,18 @@ func FormatOwnershipEntries(entries []OwnershipEntry) string {
 		}
 
 		fmt.Fprintf(&b, "  signals: %s\n", strings.Join(p.Signals, "; "))
+		if p.ModelID != "" {
+			fmt.Fprintf(&b, "  model %s: %.2f\n", p.ModelID, p.ModelScore)
+		}
 		for _, ev := range p.Evidence {
 			fmt.Fprintf(&b, "    %s\n", ev)
+		}
+		if a := e.Advice; a != nil {
+			if a.Verified {
+				fmt.Fprintf(&b, "  advice from %s: %s. %s\n", a.Model, a.Recommendation, a.Rationale)
+			} else {
+				fmt.Fprintf(&b, "  advice from %s was rejected: %s\n", a.Model, strings.Join(a.Problems, "; "))
+			}
 		}
 		if e.Outcome != nil {
 			fmt.Fprintf(&b, "  %s by %s at %s", e.Outcome.Status, e.Outcome.Reviewer,

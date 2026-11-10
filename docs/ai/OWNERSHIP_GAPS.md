@@ -14,7 +14,10 @@ is the attribution of the bridging edge in the semantics table:
 | co-listing | `shared` asset listing a controlled asset and the candidate (at most 10 listed) | a certificate naming both |
 
 Assets documented as controlled by any organization are excluded; those are
-partner signals, not gaps.
+partner signals, not gaps. An identity signal never passes through a value
+that identifies no one: a redaction or privacy-service placeholder (phrases
+in `internal/ai/semantics/placeholder_values.json`) or a value more than 50
+assets carry.
 
 ## Scoring
 
@@ -107,3 +110,45 @@ reviewer and edge ID.
 
 No OAM relationship types are added: a proposal uses only relationships OAM
 already defines.
+
+## Learning from reviews
+
+The scoring weights above are a starting point. Every approve, reject and
+retract a person records is a labeled example: approvals are positive,
+rejections and retractions negative. Automatic writes and model advice are
+never labels, so the model does not learn from its own decisions.
+
+```bash
+amass ai train-attribution
+```
+
+trains a small logistic model (task `ownership_attribution`, features
+`ownership-signals-v1`) and saves it as `attribution-model.json` beside the
+journal, where the engine loads it at the start of each enumeration. Its
+features are the counts of each signal kind and one feature per kind and
+route (`identity:Phone`, `hosting:IPAddress`, `colisting:san_dns_name`), so
+new signal kinds become features without code changes. Training needs at
+least 40 reviewed proposals across 20 independent cases, holds a fifth out
+for evaluation and refuses a model whose held-out precision is below 0.9.
+The probability needed for an automatic write is set just above the highest
+score any rejected or retracted proposal received, and never below 0.7.
+
+With a model, it decides which attachable proposals are written, its
+probability becomes the written confidence, and the journal records the
+model ID and score. Without one, the rules above decide.
+
+## Model advice
+
+```bash
+amass ai -model qwen3:8b review
+```
+
+asks the language model to recommend approve, reject or unsure for each
+pending proposal without verified advice (`-proposal ID` for one,
+`-scan-limit` to bound how many). The model sees only the proposal and its
+numbered evidence. Its rationale must cite that evidence, and the same
+citation checker that verifies cited summaries rejects advice that cites
+nothing, cites unknown items or names assets its citations do not mention;
+the model gets one retry. Advice is recorded in the journal and shown by
+`proposals`. It never approves, rejects or writes anything, and it is
+never a training label.

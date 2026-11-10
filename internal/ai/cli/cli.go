@@ -34,7 +34,7 @@ const Description = "AI investigation, MCP tools, and reviewed inference proposa
 // the Asset Database, and only for a proposal a reviewer names. Automatic
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject", "retract"}
+	"proposals", "approve", "reject", "retract", "train-attribution", "review"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -48,7 +48,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
-	var queryPath, evalPath, proposalID, reviewer string
+	var queryPath, evalPath, proposalID, reviewer, modelOutput string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
 	var modelTimeout, investigationTimeout time.Duration
@@ -93,6 +93,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&journalPath, "journal", "",
 		"Review journal path (default: the attribution journal, ai-review.jsonl in the output directory)")
 	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID for approve, reject or retract")
+	fs.StringVar(&modelOutput, "model-output", "",
+		"Where train-attribution writes the ownership model (default: attribution-model.json beside the journal)")
 	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve, reject or retract decision")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
 	fs.StringVar(&aliasesPath, "organization-aliases", "",
@@ -103,7 +105,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		"Provider-neutral classifier service URL, e.g., http://classifier:8092")
 	fs.BoolVar(&classifierReview, "classifier-review", true,
 		"Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
-	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer")
+	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer, or proposals to review")
 	fs.IntVar(&maxTokens, "max-tokens", 0,
 		"Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
 	fs.StringVar(&temperatureFlag, "temperature", "",
@@ -241,11 +243,12 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return errors.New("investigation timeout must be at least model timeout and at most 30m")
 	}
 
-	// Only plan, ask, infer and scan can use a model, and plan and ask can
-	// run deterministic queries without one. MCP, search and collection never
-	// build a model client, so a model setting cannot break them.
+	// Only plan, ask, eval, infer, scan and review can use a model, and plan
+	// and ask can run deterministic queries without one. MCP, search,
+	// collection and the other proposal operations never build a model
+	// client, so a model setting cannot break them.
 	usesModel := operation == "plan" || operation == "ask" || operation == "eval" || operation == "infer" ||
-		operation == "scan"
+		operation == "scan" || operation == "review"
 	var provider ai.Model
 	if usesModel && modelName != "" {
 		var err error
@@ -272,6 +275,16 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return listProposals(journalPath, outputFormat, out)
 	case "reject":
 		return rejectProposal(journalPath, proposalID, reviewer, out)
+	case "train-attribution":
+		return trainAttribution(journalPath, modelOutput, out)
+	case "review":
+		if provider == nil {
+			return errors.New("-model required: review asks the model for advice on pending proposals")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
+		defer cancel()
+		return reviewProposals(ctx, ai.Agent{Model: provider}, modelName, journalPath, proposalID, scanLimit, out)
 	}
 	if operation == "plan" {
 		// Compiling a question reads only the static OAM catalog, never the
