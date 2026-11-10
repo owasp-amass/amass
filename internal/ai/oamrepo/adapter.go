@@ -402,8 +402,9 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 
 // organizationNameVariants returns the exact name forms tried for an
 // organization lookup: the name as given, upper case and title case (as
-// registries and GLEIF often store names), each with and without a final
-// period. No other normalization or similarity is applied.
+// registries and GLEIF often store names) and lower case (as Amass stores
+// the names it collects), each with and without a final period. No other
+// normalization or similarity is applied.
 func organizationNameVariants(name string) []string {
 	name = strings.Join(strings.Fields(name), " ")
 	if name == "" {
@@ -418,7 +419,7 @@ func organizationNameVariants(name string) []string {
 
 	seen := map[string]bool{}
 	var out []string
-	for _, form := range []string{name, strings.ToUpper(name), strings.Join(words, " ")} {
+	for _, form := range []string{name, strings.ToLower(name), strings.ToUpper(name), strings.Join(words, " ")} {
 		alt := form + "."
 		if strings.HasSuffix(form, ".") {
 			alt = strings.TrimSuffix(form, ".")

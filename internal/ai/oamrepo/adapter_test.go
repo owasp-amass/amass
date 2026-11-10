@@ -56,8 +56,8 @@ func TestEveryOAMAssetHasARegisteredRootSelector(t *testing.T) {
 
 func TestOrganizationNameVariantsAreExactCaseForms(t *testing.T) {
 	got := organizationNameVariants("  Colgate   university ")
-	want := []string{"Colgate university", "Colgate university.", "COLGATE UNIVERSITY", "COLGATE UNIVERSITY.",
-		"Colgate University", "Colgate University."}
+	want := []string{"Colgate university", "Colgate university.", "colgate university", "colgate university.",
+		"COLGATE UNIVERSITY", "COLGATE UNIVERSITY.", "Colgate University", "Colgate University."}
 	if len(got) != len(want) {
 		t.Fatalf("variants = %q, want %q", got, want)
 	}
