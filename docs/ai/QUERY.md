@@ -75,6 +75,16 @@ about an Organization or FQDN are promoted to it. When nothing is documented
 as controlled by the subject, the answer says so rather than listing
 unrelated connections.
 
+`"lens": "controlled"` (subject an Organization or FQDN) lists the assets
+attributed to the subject by that same footprint walk, optionally only those
+of `target_types`, each with the witnessed path that attributes it (for
+example Organization <- ContactRecord <- registrant AutnumRecord <-
+registration AutonomousSystem). With target types set, the walk only expands
+asset types that can still lead to one, so an ASN question does not read the
+organization's URLs and hostnames. A model goal that asks which assets of
+attributable types an Organization has (not other Organizations or People,
+and not a vendor question) is promoted to this lens.
+
 Organization names are resolved by exact match, also trying lower, upper and title
 case and a final period, never by similarity.
 

@@ -97,6 +97,13 @@ type lensWalker struct {
 	assets  map[string]Asset
 	edges   map[string][]Relation
 	report  *ThirdPartyReport
+	// expand, when set, limits which controlled asset types are expanded
+	// further; other controlled assets are recorded but not read.
+	expand map[string]bool
+	// parent and via record how each controlled asset was reached, so a
+	// witnessed path can be rebuilt from the root.
+	parent map[string]string
+	via    map[string]Relation
 }
 
 func (w *lensWalker) truncate(reason string) {
@@ -255,7 +262,13 @@ func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []str
 
 			owned[s.other.ID] = s.other
 			order = append(order, s.other.ID)
-			queue = append(queue, s.other.ID)
+			if w.parent != nil {
+				w.parent[s.other.ID] = cur.ID
+				w.via[s.other.ID] = s.edge
+			}
+			if w.expand == nil || w.expand[s.other.Type] {
+				queue = append(queue, s.other.ID)
+			}
 		}
 	}
 
