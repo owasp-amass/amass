@@ -130,10 +130,18 @@ func validateGoal(goal InvestigationGoal, catalog []RelationshipSchema, selector
 // The LLM selects user-provided identifiers and desired output types; the
 // graph database, not the model, determines the actual relationships.
 func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal, error) {
+	goal, _, err := a.planGoalCorrected(ctx, question)
+	return goal, err
+}
+
+// planGoalCorrected plans a goal and also returns why each rejected plan
+// was rejected.
+func (a Agent) planGoalCorrected(ctx context.Context, question string) (InvestigationGoal, []string, error) {
 	var zero InvestigationGoal
+	var corrections []string
 	sc, ok := a.Runner.Catalog.(AssetSearchCatalog)
 	if !ok {
-		return zero, errors.New("OAM indexed selector catalog is required")
+		return zero, nil, errors.New("OAM indexed selector catalog is required")
 	}
 
 	selectors := sc.SearchFields()
@@ -148,7 +156,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 	for attempt := 0; attempt < 3; attempt++ {
 		response, err := generateJSON(ctx, a.Model, history, schema)
 		if err != nil {
-			return zero, err
+			return zero, corrections, err
 		}
 
 		goal, err := parseGoal(response.Text, selectors)
@@ -182,15 +190,18 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 
 		narrow := false
 		if err == nil {
+			goal = repairRowType(goal, question, a.Runner.Catalog)
 			goal.Columns = repairColumns(goal.Columns)
 			err = validateAnswer(goal, a.Runner.Catalog)
 			narrow = err != nil
 		}
 		if err == nil {
-			return goal, nil
+			return goal, corrections, nil
 		}
+
+		corrections = append(corrections, err.Error())
 		if attempt == 2 {
-			return zero, fmt.Errorf("invalid investigation goal after 3 attempts: %w", err)
+			return zero, corrections, fmt.Errorf("invalid investigation goal after 3 attempts: %w", err)
 		}
 
 		history = append(history, Message{Role: "assistant", Text: response.Text},
@@ -208,7 +219,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 		}
 	}
 
-	return zero, errors.New("goal planner exhausted attempts")
+	return zero, corrections, errors.New("goal planner exhausted attempts")
 }
 
 // goalCorrection tells the planner why its goal was rejected and how to fix
@@ -524,6 +535,10 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 	planningMode := "model_interpretation"
 	if q.Source != SourceModelGoal {
 		planningMode = "deterministic_schema_grounding"
+	}
+
+	if len(q.PlanCorrections) > 0 {
+		planningMode += "; rejected plans: " + strings.Join(q.PlanCorrections, " | ")
 	}
 
 	out.recordTrace(planStarted, InvestigationTraceEvent{Stage: "goal_planning", Detail: planningMode})

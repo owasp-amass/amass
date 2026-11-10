@@ -646,21 +646,37 @@ func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
 		`"target_types":["Organization"],"direction":"both","purpose":"connected","answer":"table",` +
 		`"columns":[{"type":"IPAddress","role":""},{"type":"Organization","role":"controller"}]}`
 	good := strings.Replace(bad, `"target_types":["Organization"]`, `"target_types":["URL"]`, 1)
-	model := &inspectingPlannerModel{replies: []string{bad, good}}
+	agent := func(model Model) Agent {
+		return Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
+			Limits: DefaultLimits()}}
+	}
 
-	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
+	// The question names websites, so the controller row type is repaired
+	// to URL without a correction.
+	model := &inspectingPlannerModel{replies: []string{bad}}
+	q, err := agent(model).CompileQuestion(context.Background(),
 		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Lens != LensTable || q.TargetTypes[0] != "URL" {
-		t.Fatalf("corrected table not compiled: %+v", q)
+	if q.Lens != LensTable || q.TargetTypes[0] != "URL" || len(model.requests) != 1 {
+		t.Fatalf("row type not repaired in one call: %+v after %d calls", q, len(model.requests))
 	}
 
 	prompt := model.requests[0][0].Text
 	if !strings.Contains(prompt, "Types an owner can control:") || !strings.Contains(prompt, "URL") {
 		t.Error("planner prompt does not list controllable row types")
+	}
+
+	// A question that names no type an owner controls gets the correction.
+	model = &inspectingPlannerModel{replies: []string{bad, good}}
+	q, err = agent(model).CompileQuestion(context.Background(),
+		"Please create a table of Colgate University and its hosting providers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.TargetTypes[0] != "URL" || len(model.requests) != 2 || len(q.PlanCorrections) != 1 {
+		t.Fatalf("corrected table = %+v after %d calls", q, len(model.requests))
 	}
 
 	correction := model.requests[1][len(model.requests[1])-1].Text
@@ -747,8 +763,8 @@ func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
 func TestMentionedTypesPreferLongestPhrase(t *testing.T) {
 	cat := vendorCatalog{testOAMCatalog}
 	got := strings.Join(mentionedTypes("each website, it's IP address, and hosting provider", cat), ",")
-	if got != "IPAddress" {
-		t.Errorf("mentioned = %q, want only IPAddress (not Location for \"address\")", got)
+	if got != "IPAddress,URL" {
+		t.Errorf("mentioned = %q, want IPAddress and URL (website), not Location for \"address\"", got)
 	}
 	if got := strings.Join(mentionedTypes("list the netblocks and ASNs",
 		cat), ","); got != "AutonomousSystem,Netblock" {
@@ -788,9 +804,11 @@ func TestTableRetryNarrowsTheSchema(t *testing.T) {
 	good := strings.Replace(bad, `"target_types":["Organization"]`, `"target_types":["URL"]`, 1)
 	model := &structuredPlanner{replies: []string{bad, good}}
 
+	// The question names no type an owner controls, so the row type cannot
+	// be repaired from it and the retry is needed.
 	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
 		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
-		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
+		"Please create a table of Colgate University and its hosting providers")
 	if err != nil || q.Lens != LensTable || len(model.schemas) != 2 {
 		t.Fatalf("q=%+v err=%v calls=%d", q, err, len(model.schemas))
 	}
