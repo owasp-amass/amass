@@ -12,10 +12,7 @@ import (
 	"net/url"
 	"time"
 
-	et "github.com/owasp-amass/amass/v5/engine/types"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
-	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/contact"
 	"golang.org/x/time/rate"
 )
 
@@ -129,59 +126,4 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 	}
 
 	return children, nil
-}
-
-// LocMatch checks if the LEI record matches the location of the organization entity.
-func LocMatch(e *et.Event, orgent *dbt.Entity, rec *LEIRecord) bool {
-	if rec == nil {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 2*time.Minute)
-	defer cancel()
-
-	legal_addr := rec.Attributes.Entity.LegalAddress
-	hq_addr := rec.Attributes.Entity.HeadquartersAddress
-	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent,
-		time.Time{}, "legal_address", "hq_address", "location"); err == nil {
-		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-				if loc, ok := a.Asset.(*contact.Location); ok {
-					for _, p := range append([]LEIAddress{legal_addr, hq_addr}, rec.Attributes.Entity.OtherAddresses...) {
-						if loc.PostalCode == p.PostalCode {
-							return true
-						}
-					}
-				}
-			}
-		}
-	}
-
-	var crs []*dbt.Entity
-	if edges, err := e.Session.DB().IncomingEdges(ctx, orgent, time.Time{}, "organization"); err == nil {
-		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*contact.ContactRecord); ok {
-					crs = append(crs, a)
-				}
-			}
-		}
-	}
-
-	for _, cr := range crs {
-		if edges, err := e.Session.DB().OutgoingEdges(ctx, cr, time.Time{}, "location"); err == nil {
-			for _, edge := range edges {
-				if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-					if loc, ok := a.Asset.(*contact.Location); ok {
-						for _, p := range append([]LEIAddress{legal_addr, hq_addr}, rec.Attributes.Entity.OtherAddresses...) {
-							if loc.PostalCode == p.PostalCode {
-								return true
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	return false
 }
