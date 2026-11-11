@@ -628,8 +628,12 @@ func gapAnswer(r OwnershipGapReport) string {
 
 	var b strings.Builder
 	if len(r.Candidates) == 0 {
-		fmt.Fprintf(&b, "No unattributed assets share identity, hosting or certificate signals with the %d assets "+
-			"controlled by %s.", r.Footprint, assetLabel(r.Owner))
+		fmt.Fprintf(&b, "No unattributed assets share ownership signals with the %d assets controlled by %s.",
+			r.Footprint, assetLabel(r.Owner))
+		if r.Truncated && r.Reason != "" {
+			fmt.Fprintf(&b, " Results are partial (%s).", r.Reason)
+		}
+
 		return b.String()
 	}
 
