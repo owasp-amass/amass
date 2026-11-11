@@ -67,3 +67,12 @@ func TestFQDNFilterSlice(t *testing.T) {
 		t.Errorf("Passive DNS Filter Slice failed to produce the expected FQDN: %s", fqdn)
 	}
 }
+
+func TestKeyIDString(t *testing.T) {
+	if got := KeyIDString([]byte{0x00, 0xab, 0x0f, 0xff}); got != "00:AB:0F:FF" {
+		t.Errorf("KeyIDString = %q", got)
+	}
+	if got := KeyIDString(nil); got != "" {
+		t.Errorf("KeyIDString(nil) = %q", got)
+	}
+}

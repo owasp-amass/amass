@@ -130,6 +130,13 @@ func signalsFixture() valueGraph {
 		"serial_number": "1234", "subject_key_id": "aa:bb", "authority_key_id": "ca:01",
 		"issuer_common_name": "Colgate Internal CA"}}
 	link("cert", "common_name", "www.colgate.edu", "SimpleRelation", nil)
+	// Colgate's issuing CA and its root: a private chain.
+	add("ca-int", "TLSCertificate", "ca-int", map[string]any{"serial_number": "ca-int",
+		"subject_common_name": "Colgate Internal CA", "issuer_common_name": "Colgate Root CA", "is_ca": true})
+	add("ca-root", "TLSCertificate", "ca-root", map[string]any{"serial_number": "ca-root",
+		"subject_common_name": "Colgate Root CA", "issuer_common_name": "Colgate Root CA", "is_ca": true})
+	link("cert", "issuing_certificate", "ca-int", "SimpleRelation", nil)
+	link("ca-int", "issuing_certificate", "ca-root", "SimpleRelation", nil)
 	add("cert-portal", "TLSCertificate", "5678", map[string]any{"serial_number": "5678", "subject_key_id": "aa:bb",
 		"authority_key_id": "ca:01", "issuer_common_name": "Colgate Internal CA"})
 	registered("colgate-portal.net")
@@ -389,5 +396,46 @@ func TestProposalsExplainTheirSignals(t *testing.T) {
 	}
 	if f := OwnershipFeatures(*p); f["signal:txt_verification_token"] != 1 {
 		t.Errorf("features = %v", f)
+	}
+}
+
+// Live review: owasp.org shared an issuing key with calendar.colgate.edu
+// because both had certificates from a public intermediate with a short name
+// (WE1) that the public list lacked. Its chain reaches a public root.
+func TestPublicIntermediatesAreFoundThroughTheChain(t *testing.T) {
+	g := signalsFixture()
+	add := func(id, cn, issuer string) {
+		g.assets[id] = Asset{ID: id, Type: "TLSCertificate", Key: id, Content: map[string]any{"serial_number": id,
+			"subject_common_name": cn, "issuer_common_name": issuer, "authority_key_id": "AA:BB:CC",
+			"subject_key_id": id}}
+	}
+	link := func(from, label, to string) {
+		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
+			Type: "SimpleRelation"})
+	}
+
+	add("cert-cal", "calendar.colgate.edu", "WE1")
+	add("we1", "WE1", "GTS Root R4")
+	link("cert-cal", "common_name", "portal.colgate.edu")
+	link("cert-cal", "issuing_certificate", "we1")
+	add("cert-owasp", "owasp.org", "WE1")
+	g.assets["owasp.org"] = Asset{ID: "owasp.org", Type: "FQDN", Key: "owasp.org",
+		Content: map[string]any{"name": "owasp.org"}}
+	link("cert-owasp", "common_name", "owasp.org")
+
+	if c := candidateByID(signalsReport(t, g), "owasp.org"); c != nil {
+		t.Errorf("a certificate from a public intermediate counted as a private CA: %+v", c)
+	}
+}
+
+func TestNamesUnderOwnedDomainsAreOwned(t *testing.T) {
+	g := signalsFixture()
+	g.assets["csvm02"] = Asset{ID: "csvm02", Type: "FQDN", Key: "csvm02.colgate.edu",
+		Content: map[string]any{"name": "csvm02.colgate.edu"}}
+	g.links = append(g.links, Relation{ID: "csvm02-dns", FromID: "csvm02", ToID: "ip-own", Label: "dns_record",
+		Type: "BasicDNSRelation"})
+
+	if c := candidateByID(signalsReport(t, g), "csvm02"); c != nil {
+		t.Errorf("a name under colgate.edu became a candidate: %+v", c)
 	}
 }

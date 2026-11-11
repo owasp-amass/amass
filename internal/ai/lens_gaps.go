@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -132,6 +133,9 @@ type gapSearch struct {
 	// one is owned even when the netblock has more addresses than the lens
 	// reads.
 	ranges []netip.Prefix
+	// domains are the owned registered domains: a name below one is in the
+	// subject's namespace even when no stored edge links it.
+	domains []string
 	// values searches by value for the signals that need it; valueReads
 	// counts its searches and tag reads.
 	values     ValueSearcher
@@ -184,11 +188,15 @@ func searchOwnershipGaps(ctx context.Context, graph Graph, schema SchemaCatalog,
 		g.ownable[t] = true
 	}
 	for _, a := range owned {
-		if a.Type != "Netblock" {
-			continue
-		}
-		if p, err := netip.ParsePrefix(contentString(a, "cidr")); err == nil {
-			g.ranges = append(g.ranges, p.Masked())
+		switch a.Type {
+		case "Netblock":
+			if p, err := netip.ParsePrefix(contentString(a, "cidr")); err == nil {
+				g.ranges = append(g.ranges, p.Masked())
+			}
+		case "DomainRecord":
+			if d := strings.ToLower(strings.TrimSuffix(contentString(a, "domain"), ".")); strings.Contains(d, ".") {
+				g.domains = append(g.domains, d)
+			}
 		}
 	}
 	for _, id := range order {
@@ -356,7 +364,7 @@ func (g *gapSearch) add(a Asset, id, via string, witness []WitnessEdge) {
 	if !g.ownable[a.Type] || reverseLookupName(a) {
 		return
 	}
-	if _, mine := g.owned[a.ID]; mine || g.inOwnedRange(a) {
+	if _, mine := g.owned[a.ID]; mine || g.inOwnedRange(a) || g.inOwnedNamespace(a) {
 		return
 	}
 
@@ -396,6 +404,29 @@ func (g *gapSearch) inOwnedRange(a Asset) bool {
 	}
 	for _, p := range g.ranges {
 		if p.Contains(addr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// inOwnedNamespace reports whether a is a name, or a URL on a name, at or
+// below a registered domain the subject owns.
+func (g *gapSearch) inOwnedNamespace(a Asset) bool {
+	var host string
+	switch a.Type {
+	case "FQDN":
+		host = assetLabel(a)
+	case "URL":
+		if u, err := url.Parse(assetLabel(a)); err == nil {
+			host = u.Hostname()
+		}
+	default:
+		return false
+	}
+	for _, d := range g.domains {
+		if hostWithin(host, d) {
 			return true
 		}
 	}
