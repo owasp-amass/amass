@@ -106,3 +106,26 @@ func TestAttributeOwnershipNeedsAJournal(t *testing.T) {
 		t.Error("attribution ran without a journal")
 	}
 }
+
+func TestAttributionOnlyForAnchoredOrganizations(t *testing.T) {
+	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	w := &recordingWriter{}
+
+	// Colgate's footprint holds colgate.edu: an enumeration of colgate.edu
+	// (or a name below it) attributes for Colgate.
+	if res := attributeWith(t, w, j, AttributionPolicy{Mode: "auto", Anchors: []string{"www.colgate.edu"}}); res.Unanchored ||
+		len(res.Applied) != 1 {
+		t.Fatalf("anchored run = %+v", res)
+	}
+
+	// An enumeration of another domain never attributes for Colgate, as for
+	// a vendor pulled into its scope.
+	j2 := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	res := attributeWith(t, &recordingWriter{}, j2, AttributionPolicy{Mode: "auto", Anchors: []string{"digicert.com"}})
+	if !res.Unanchored || len(res.Applied) != 0 || len(res.Queued) != 0 {
+		t.Errorf("unanchored run = %+v", res)
+	}
+	if entries, err := j2.OwnershipEntries(); err != nil || len(entries) != 0 {
+		t.Errorf("an unanchored organization was journaled: %+v, %v", entries, err)
+	}
+}

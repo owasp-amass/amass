@@ -112,9 +112,11 @@ type GapCandidate struct {
 
 // OwnershipGapReport is the result of the ownership-gap lens.
 type OwnershipGapReport struct {
-	Root       Asset          `json:"root"`
-	Owner      Asset          `json:"owner"`
-	Footprint  int            `json:"footprint"`
+	Root      Asset `json:"root"`
+	Owner     Asset `json:"owner"`
+	Footprint int   `json:"footprint"`
+	// Domains are the registered domains in the owner's footprint.
+	Domains    []string       `json:"domains,omitempty"`
 	Candidates []GapCandidate `json:"candidates"`
 	Reads      int            `json:"reads"`
 	Truncated  bool           `json:"truncated"`
@@ -235,6 +237,7 @@ func searchOwnershipGaps(ctx context.Context, graph Graph, schema SchemaCatalog,
 
 		return a.Asset < b.Asset
 	})
+	report.Domains = g.domains
 	report.Reads, report.Truncated = counters.Reads, counters.Truncated
 	if counters.Reason != "" {
 		report.Reason = counters.Reason
