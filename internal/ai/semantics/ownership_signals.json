@@ -100,7 +100,6 @@
           "entrust",
           "amazon",
           "google trust",
-          "gts ",
           "microsoft",
           "cloudflare",
           "zerossl",
@@ -132,18 +131,40 @@
           "r11",
           "r12",
           "r13",
-          "r14"
+          "r14",
+          "gts root",
+          "gts ca",
+          "google trust services",
+          "we1",
+          "we2",
+          "we3",
+          "wr1",
+          "wr2",
+          "wr3",
+          "wr4",
+          "ye1",
+          "yr1",
+          "e9",
+          "r15",
+          "aaa certificate services",
+          "amazon rsa",
+          "amazon ecdsa",
+          "microsoft azure",
+          "cloudflare inc ecc",
+          "baltimore cybertrust",
+          "digicert global",
+          "certainly"
         ]
       },
       "finds": "A certificate signed by the same issuing key as a certificate the organization controls, when that issuer is not a public certificate authority; the candidate is the name that certificate was issued to.",
       "rationale": "Organizations run private certificate authorities for internal and partner-facing services, and only they can sign with that CA's key. A certificate from the same private issuing key was issued by the same organization.",
       "guards": [
-        "Issuers that name a public certificate authority never count (list in this signal's public_issuers).",
+        "The issuing certificate must be stored, and no certificate up the chain (to four levels) may name a public certificate authority (this signal's public_issuers). Public intermediates with short names chain to well-known public roots, so the walk finds them; a certificate whose chain is unknown never counts.",
         "An issuing key shared by more than 50 certificates never counts."
       ],
       "counter_indications": [
         "A managed PKI provider can operate one private CA for several customers.",
-        "A public CA missing from public_issuers would wrongly count until it is added (the 50-certificate limit catches large ones)."
+        "A public root missing from public_issuers would wrongly count until it is added."
       ]
     },
     {

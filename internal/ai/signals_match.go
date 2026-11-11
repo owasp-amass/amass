@@ -372,9 +372,19 @@ func (g *gapSearch) dmarcDomain(f Asset) Asset {
 func (g *gapSearch) certificateSignals(cert Asset) error {
 	for _, def := range signalsByMatcher(matchCertificateField) {
 		value := contentString(cert, def.Params.Attribute)
-		if value == "" || publicIssuer(contentString(cert, "issuer_common_name"), def.Params.PublicIssuers) ||
-			!g.read() {
+		if value == "" || !g.read() {
 			continue
+		}
+		if len(def.Params.PublicIssuers) > 0 {
+			// The issuing key must belong to a private CA: its chain is stored
+			// and names no public certificate authority.
+			private, err := g.privateChain(cert, def.Params.PublicIssuers)
+			if err != nil {
+				return err
+			}
+			if !private {
+				continue
+			}
 		}
 
 		others, more, err := g.values.FindByAttribute(g.w.ctx, "TLSCertificate", def.Params.Attribute, value, false,
@@ -411,6 +421,47 @@ func (g *gapSearch) certificateSignals(cert Asset) error {
 	}
 
 	return nil
+}
+
+// maxChainDepth bounds the issuing certificates walked above a certificate.
+const maxChainDepth = 4
+
+// privateChain reports whether cert was issued by a private CA: its issuing
+// certificate is stored, and no name on the chain above it (the issuer and
+// subject names of each issuing certificate) names a public certificate
+// authority. Public intermediates go by short codes (R11, WE1) that a list
+// cannot keep up with, but they chain to well-known roots (ISRG Root X1, GTS
+// Root R4), so the walk finds them. An unknown chain is not private.
+func (g *gapSearch) privateChain(cert Asset, public []string) (bool, error) {
+	cur := cert
+	issued := false
+	for depth := 0; depth < maxChainDepth; depth++ {
+		if publicIssuer(contentString(cur, "issuer_common_name"), public) ||
+			(cur.ID != cert.ID && publicIssuer(contentString(cur, "subject_common_name"), public)) {
+			return false, nil
+		}
+
+		steps, err := g.w.steps(cur)
+		if err != nil {
+			return false, err
+		}
+
+		var next *Asset
+		for _, s := range steps {
+			if s.forward && s.edge.Label == "issuing_certificate" && s.other.Type == "TLSCertificate" &&
+				s.other.ID != cur.ID {
+				next = &s.other
+				break
+			}
+		}
+		if next == nil {
+			break
+		}
+
+		issued, cur = true, *next
+	}
+
+	return issued, nil
 }
 
 // publicIssuer reports whether an issuer common name names a public

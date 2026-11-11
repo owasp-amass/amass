@@ -217,6 +217,22 @@ func Hash64Hex(s string) string {
 	return hex.EncodeToString(b[:]) // 16 hex chars
 }
 
+// KeyIDString formats a certificate key identifier as colon-separated
+// uppercase hex, as OpenSSL prints it. Storing the raw bytes is lossy: JSON
+// replaces bytes that are not valid UTF-8.
+func KeyIDString(id []byte) string {
+	if len(id) == 0 {
+		return ""
+	}
+
+	parts := make([]string, len(id))
+	for i, b := range id {
+		parts[i] = fmt.Sprintf("%02X", b)
+	}
+
+	return strings.Join(parts, ":")
+}
+
 func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 	if cert == nil {
 		return nil
@@ -233,8 +249,8 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 		PublicKeyAlgorithm:    cert.PublicKeyAlgorithm.String(),
 		IsCA:                  cert.IsCA,
 		CRLDistributionPoints: cert.CRLDistributionPoints,
-		SubjectKeyID:          string(cert.SubjectKeyId),
-		AuthorityKeyID:        string(cert.AuthorityKeyId),
+		SubjectKeyID:          KeyIDString(cert.SubjectKeyId),
+		AuthorityKeyID:        KeyIDString(cert.AuthorityKeyId),
 	}
 
 	if cert.KeyUsage&x509.KeyUsageDigitalSignature > 0 {
