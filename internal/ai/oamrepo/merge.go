@@ -86,7 +86,57 @@ func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID
 		return rec, a.rollback(wctx, rec, fmt.Errorf("delete organization %s: %w", dup.ID, err))
 	}
 
+	// Filling comes last: the Asset Database cannot clear a field, so a
+	// rollback could not undo it.
+	if err := a.fillEmptyFields(wctx, surv, dup, &rec); err != nil {
+		rec.FillError = err.Error()
+	}
+
 	return rec, nil
+}
+
+// fillEmptyFields gives the survivor the duplicate's organization fields
+// that the survivor lacks. It never overwrites a value.
+func (a Adapter) fillEmptyFields(ctx context.Context, surv, dup *dbt.Entity, rec *ai.MergeRecord) error {
+	so, ok := surv.Asset.(*oamorg.Organization)
+	if !ok {
+		return errors.New("survivor is not an organization")
+	}
+	do, ok := dup.Asset.(*oamorg.Organization)
+	if !ok {
+		return errors.New("duplicate is not an organization")
+	}
+
+	merged := *so
+	fill := func(field string, have *string, from string) {
+		if *have == "" && from != "" {
+			*have = from
+			rec.FilledFields = append(rec.FilledFields, field)
+		}
+	}
+	fill("legal_name", &merged.LegalName, do.LegalName)
+	fill("founding_date", &merged.FoundingDate, do.FoundingDate)
+	fill("jurisdiction", &merged.Jurisdiction, do.Jurisdiction)
+	fill("registration_id", &merged.RegistrationID, do.RegistrationID)
+	fill("industry", &merged.Industry, do.Industry)
+	if len(merged.TargetMarkets) == 0 && len(do.TargetMarkets) > 0 {
+		merged.TargetMarkets = append([]string(nil), do.TargetMarkets...)
+		rec.FilledFields = append(rec.FilledFields, "target_markets")
+	}
+	if merged.Headcount == 0 && do.Headcount > 0 {
+		merged.Headcount = do.Headcount
+		rec.FilledFields = append(rec.FilledFields, "headcount")
+	}
+	if len(rec.FilledFields) == 0 {
+		return nil
+	}
+
+	if _, err := a.Repo.CreateAsset(ctx, &merged); err != nil {
+		rec.FilledFields = nil
+		return err
+	}
+
+	return nil
 }
 
 func (a Adapter) edgesOf(ctx context.Context, ent *dbt.Entity, outgoing bool) ([]*dbt.Edge, error) {
