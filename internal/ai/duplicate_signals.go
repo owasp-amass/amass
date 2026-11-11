@@ -149,8 +149,8 @@ func DuplicateSignalsMarkdown() string {
 		"recorded evidence, then deletes the duplicate. Fields the kept organization lacks, such as its legal name, " +
 		"jurisdiction or registration number, are filled from the duplicate; a value is never replaced. The journal " +
 		"records everything the merge changed, so `amass ai -proposal <id> -reviewer <name> retract` restores the " +
-		"duplicate and removes the relationships and properties the merge added. Filled fields stay on the kept " +
-		"organization: the Asset Database cannot clear a field.\n\n")
+		"duplicate and removes the relationships, properties and filled fields the merge added. A filled field that " +
+		"has changed since the merge is kept.\n\n")
 	b.WriteString("| Signal | Strength | Kind | Weight |\n| --- | --- | --- | --- |\n")
 	for _, s := range DuplicateSignals() {
 		strength := s.Strength

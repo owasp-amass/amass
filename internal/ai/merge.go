@@ -59,8 +59,8 @@ type MergeRecord struct {
 	SurvivorTagIDs []string     `json:"survivor_tag_ids,omitempty"`
 	Edges          []MergedEdge `json:"edges"`
 	// FilledFields are the survivor's empty organization fields the merge
-	// filled from the duplicate. Undoing the merge leaves them: the Asset
-	// Database cannot clear a field.
+	// filled from the duplicate. Undoing the merge clears them again where
+	// the repository can clear a field and the value is unchanged.
 	FilledFields []string `json:"filled_fields,omitempty"`
 	// FillError says why the fields could not be filled after the merge.
 	FillError string `json:"fill_error,omitempty"`
@@ -70,7 +70,16 @@ type MergeRecord struct {
 // undoes a merge from its record.
 type OrganizationMerger interface {
 	MergeOrganizations(ctx context.Context, survivorID, duplicateID string, confidence int) (MergeRecord, error)
-	UnmergeOrganizations(ctx context.Context, rec MergeRecord) (string, error)
+	UnmergeOrganizations(ctx context.Context, rec MergeRecord) (UnmergeResult, error)
+}
+
+// UnmergeResult is what undoing a merge restored.
+type UnmergeResult struct {
+	// RestoredID is the recreated duplicate, which has a new entity ID.
+	RestoredID string `json:"restored_id"`
+	// KeptFields are filled fields left on the survivor: changed since the
+	// merge, or not clearable by the repository.
+	KeptFields []string `json:"kept_fields,omitempty"`
 }
 
 // DuplicateProposal is a reviewed-before-written proposal to merge one
@@ -98,6 +107,7 @@ type DuplicateOutcome struct {
 	Reviewer   string       `json:"reviewer"`
 	Merge      *MergeRecord `json:"merge,omitempty"`
 	RestoredID string       `json:"restored_id,omitempty"`
+	KeptFields []string     `json:"kept_fields,omitempty"`
 	At         time.Time    `json:"at"`
 }
 
@@ -303,9 +313,9 @@ func FormatDuplicateEntries(entries []DuplicateEntry) string {
 			case ProposalRetracted:
 				fmt.Fprintf(&b, "  undone by %s at %s: restored as [%s]\n", o.Reviewer, o.At.Format(time.RFC3339),
 					o.RestoredID)
-				if o.Merge != nil && len(o.Merge.FilledFields) > 0 {
+				if len(o.KeptFields) > 0 {
 					fmt.Fprintf(&b, "  %s [%s] keeps %s filled by the merge\n", p.Survivor, p.SurvivorID,
-						strings.Join(o.Merge.FilledFields, ", "))
+						strings.Join(o.KeptFields, ", "))
 				}
 			default:
 				fmt.Fprintf(&b, "  %s by %s at %s\n", o.Status, o.Reviewer, o.At.Format(time.RFC3339))

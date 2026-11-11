@@ -241,9 +241,24 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 		t.Fatal(err)
 	}
 
-	restored, err := adapter.UnmergeOrganizations(ctx, rec)
+	res, err := adapter.UnmergeOrganizations(ctx, rec)
 	if err != nil {
 		t.Fatal(err)
+	}
+	restored := res.RestoredID
+	if len(res.KeptFields) != 0 {
+		t.Errorf("undo kept filled fields %v", res.KeptFields)
+	}
+
+	// The fields the merge filled are empty again; the survivor's own value
+	// is kept.
+	sent, err := repo.FindEntityById(ctx, surv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if so := sent.Asset.(*oamorg.Organization); so.LegalName != "" || so.RegistrationID != "" ||
+		so.FoundingDate != "" || so.Jurisdiction != "BE" {
+		t.Errorf("survivor after undo: %+v", so)
 	}
 
 	links = f.links(surv.ID)

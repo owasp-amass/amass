@@ -115,17 +115,21 @@ func retractMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id,
 		return fmt.Errorf("proposal %s is %s, not applied", id, e.Status)
 	}
 
-	restored, err := m.UnmergeOrganizations(ctx, *e.Outcome.Merge)
+	res, err := m.UnmergeOrganizations(ctx, *e.Outcome.Merge)
 	if err != nil {
 		return fmt.Errorf("undo merge %s: %w", id, err)
 	}
 	if err := j.RecordDuplicate(ai.DuplicateOutcome{ProposalID: id, Status: ai.ProposalRetracted,
-		Reviewer: reviewer, RestoredID: restored}); err != nil {
+		Reviewer: reviewer, RestoredID: res.RestoredID, KeptFields: res.KeptFields}); err != nil {
 		return fmt.Errorf("%s was restored as %s but the journal was not updated: %w", e.Proposal.Duplicate,
-			restored, err)
+			res.RestoredID, err)
 	}
 
 	_, err = fmt.Fprintf(out, "Undid merge %s: %s restored as [%s]; %s [%s] no longer has what the merge added.\n",
-		id, e.Proposal.Duplicate, restored, e.Proposal.Survivor, e.Proposal.SurvivorID)
+		id, e.Proposal.Duplicate, res.RestoredID, e.Proposal.Survivor, e.Proposal.SurvivorID)
+	if err == nil && len(res.KeptFields) > 0 {
+		_, err = fmt.Fprintf(out, "It keeps %s filled by the merge: changed since, or not clearable here.\n",
+			strings.Join(res.KeptFields, ", "))
+	}
 	return err
 }
