@@ -10,7 +10,7 @@ Sources record one company several times: a certificate, an RDAP lookup and GLEI
 - One strong signal, or two signals of any strength, **needs review**: it waits in the review journal for a person. A pair linked only by its name, with nothing against it, also needs review.
 - A **negative** signal lowers the score and keeps a pair from being merged automatically; without a strong signal it also keeps the pair out of review.
 - A matching name is never strong: organizations in different jurisdictions often share a name and are different companies.
-- A merge moves the duplicate's properties and relationships onto the organization that has more recorded evidence, then deletes the duplicate. Fields the kept organization lacks, such as its legal name, jurisdiction or registration number, are filled from the duplicate; a value is never replaced. The journal records everything the merge changed, so `amass ai -proposal <id> -reviewer <name> retract` restores the duplicate and removes the relationships and properties the merge added. Filled fields stay on the kept organization: the Asset Database cannot clear a field.
+- A merge moves the duplicate's properties and relationships onto the organization that has more recorded evidence, then deletes the duplicate. Fields the kept organization lacks, such as its legal name, jurisdiction or registration number, are filled from the duplicate; a value is never replaced. The journal records everything the merge changed, so `amass ai -proposal <id> -reviewer <name> retract` restores the duplicate and removes the relationships, properties and filled fields the merge added. A filled field that has changed since the merge is kept.
 
 | Signal | Strength | Kind | Weight |
 | --- | --- | --- | --- |

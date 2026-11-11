@@ -382,12 +382,13 @@ func (a Adapter) removeAdditions(ctx context.Context, rec ai.MergeRecord) error 
 }
 
 // UnmergeOrganizations undoes a merge: it removes what the merge added to
-// the survivor and recreates the duplicate with its properties and the
-// relationships whose other end still exists. It returns the restored
-// organization's ID, which differs from the original.
-func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (string, error) {
+// the survivor, clears the fields it filled when they are unchanged, and
+// recreates the duplicate with its properties and the relationships whose
+// other end still exists. The restored organization has a new ID.
+func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (ai.UnmergeResult, error) {
+	var res ai.UnmergeResult
 	if a.Repo == nil {
-		return "", errors.New("missing OAM repository")
+		return res, errors.New("missing OAM repository")
 	}
 
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mergeTimeout)
@@ -395,31 +396,34 @@ func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (
 
 	surv, err := a.entityOfType(wctx, rec.SurvivorID, string(oam.Organization))
 	if err != nil {
-		return "", err
+		return res, err
 	}
 
 	var o oamorg.Organization
 	if err := json.Unmarshal(rec.DuplicateAsset, &o); err != nil {
-		return "", fmt.Errorf("merge record organization: %w", err)
+		return res, fmt.Errorf("merge record organization: %w", err)
 	}
 	if err := a.removeAdditions(wctx, rec); err != nil {
-		return "", err
+		return res, err
 	}
+	res.KeptFields = a.clearFilledFields(wctx, surv, &o, rec.FilledFields)
 
 	dup, err := a.Repo.CreateAsset(wctx, &o)
 	if err != nil {
-		return "", err
+		return res, err
 	} else if dup == nil {
-		return "", errors.New("failed to restore the organization")
+		return res, errors.New("failed to restore the organization")
 	}
 
 	for _, t := range rec.DuplicateTags {
 		p, err := propertyFromTag(t)
 		if err != nil {
-			return dup.ID, err
+			res.RestoredID = dup.ID
+			return res, err
 		}
 		if _, err := a.Repo.CreateEntityProperty(wctx, dup, p); err != nil {
-			return dup.ID, err
+			res.RestoredID = dup.ID
+			return res, err
 		}
 	}
 
@@ -434,7 +438,8 @@ func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (
 
 		rel, err := relationFromJSON(m.RelationType, m.Relation)
 		if err != nil {
-			return dup.ID, err
+			res.RestoredID = dup.ID
+			return res, err
 		}
 
 		from, to := dup, other
@@ -444,20 +449,102 @@ func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (
 
 		edge, err := a.Repo.CreateEdge(wctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
 		if err != nil {
-			return dup.ID, err
+			res.RestoredID = dup.ID
+			return res, err
 		}
 		for _, t := range m.Tags {
 			p, err := propertyFromTag(t)
 			if err != nil {
-				return dup.ID, err
+				res.RestoredID = dup.ID
+				return res, err
 			}
 			if _, err := a.Repo.CreateEdgeProperty(wctx, edge, p); err != nil {
-				return dup.ID, err
+				res.RestoredID = dup.ID
+				return res, err
 			}
 		}
 	}
 
-	return dup.ID, nil
+	res.RestoredID = dup.ID
+	return res, nil
+}
+
+// assetReplacer is the asset-db capability that stores an asset's content
+// exactly, clearing the fields it leaves empty.
+type assetReplacer interface {
+	ReplaceAsset(ctx context.Context, asset oam.Asset) (*dbt.Entity, error)
+}
+
+// clearFilledFields empties the survivor's fields a merge filled, when each
+// still holds the duplicate's value, and returns the fields it left.
+func (a Adapter) clearFilledFields(ctx context.Context, surv *dbt.Entity, dup *oamorg.Organization,
+	filled []string) []string {
+	if len(filled) == 0 {
+		return nil
+	}
+
+	r, ok := a.Repo.(assetReplacer)
+	if !ok {
+		return filled
+	}
+
+	ent, err := a.Repo.FindEntityById(ctx, surv.ID)
+	if err != nil || ent == nil {
+		return filled
+	}
+	cur, ok := ent.Asset.(*oamorg.Organization)
+	if !ok {
+		return filled
+	}
+
+	next := *cur
+	var kept, cleared []string
+	clear := func(field string, have *string, was string) {
+		if *have == was {
+			*have = ""
+			cleared = append(cleared, field)
+		} else {
+			kept = append(kept, field)
+		}
+	}
+	for _, f := range filled {
+		switch f {
+		case "legal_name":
+			clear(f, &next.LegalName, dup.LegalName)
+		case "founding_date":
+			clear(f, &next.FoundingDate, dup.FoundingDate)
+		case "jurisdiction":
+			clear(f, &next.Jurisdiction, dup.Jurisdiction)
+		case "registration_id":
+			clear(f, &next.RegistrationID, dup.RegistrationID)
+		case "industry":
+			clear(f, &next.Industry, dup.Industry)
+		case "target_markets":
+			if slices.Equal(next.TargetMarkets, dup.TargetMarkets) {
+				next.TargetMarkets = nil
+				cleared = append(cleared, f)
+			} else {
+				kept = append(kept, f)
+			}
+		case "headcount":
+			if next.Headcount == dup.Headcount {
+				next.Headcount = 0
+				cleared = append(cleared, f)
+			} else {
+				kept = append(kept, f)
+			}
+		default:
+			kept = append(kept, f)
+		}
+	}
+	if len(cleared) == 0 {
+		return kept
+	}
+	if _, err := r.ReplaceAsset(ctx, &next); err != nil {
+		return filled
+	}
+
+	return kept
 }
 
 // missing reports whether err means the tag is already gone.
