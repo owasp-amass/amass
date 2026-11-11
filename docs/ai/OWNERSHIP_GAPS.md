@@ -75,7 +75,8 @@ handlers note each arriving Organization, ContactRecord, DomainRecord,
 IPNetRecord, AutnumRecord, FQDN, IPAddress and TLSCertificate. Once an
 in-scope organization has been seen and the signals settle (5 seconds of
 quiet, or at least once a minute while the enumeration is busy), a pass
-runs the ownership-gap lens for each in-scope organization and then:
+runs the ownership-gap lens for each in-scope organization whose footprint
+includes one of the enumeration's domains (`-d`), and then:
 
 - writes each `propose` proposal as described under Review and write, with
   the reviewer recorded as `amass-ai (automatic)`;
@@ -84,6 +85,10 @@ runs the ownership-gap lens for each in-scope organization and then:
   configuration's confidence for their type allows it, exactly as the
   Horizontals plugin does (nothing is widened when the config is `rigid`);
 - leaves `review` proposals in the journal for a person.
+
+Organizations an enumeration only touched, such as certificate
+authorities and other vendors pulled into scope, are not attribution
+roots: their footprints hold none of the enumerated domains.
 
 A pending pass counts as session work, so `amass enum` does not finish
 before it runs, and anything it adds is enumerated in the same session.

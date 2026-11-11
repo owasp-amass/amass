@@ -40,6 +40,12 @@ type AttributionPolicy struct {
 	// threshold. Without one, a proposal qualifies when the rules decide
 	// propose.
 	Model *classify.LinearModel
+	// Anchors, when set, are the registered domains an enumeration was asked
+	// about. Only an organization whose footprint includes one of them (or
+	// a domain above or below one) is attributed, so organizations an
+	// enumeration only touched, such as certificate authorities and other
+	// vendors pulled into scope, are never attribution roots.
+	Anchors []string
 }
 
 // AttributionResult is one automatic attribution pass for an organization.
@@ -50,6 +56,9 @@ type AttributionResult struct {
 	Applied []AppliedOwnership
 	// Queued are proposals left in the journal for review.
 	Queued []OwnershipProposal
+	// Unanchored reports an organization whose footprint holds none of the
+	// policy's anchor domains; nothing was proposed for it.
+	Unanchored bool
 }
 
 // AppliedOwnership is a proposal written to the Asset Database.
@@ -90,6 +99,10 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 	res.Report = report
 	if err != nil {
 		return res, err
+	}
+	if !anchored(report.Domains, policy.Anchors) {
+		res.Unanchored = true
+		return res, nil
 	}
 
 	state, err := j.OwnershipState()
@@ -150,4 +163,21 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 	}
 
 	return res, nil
+}
+
+// anchored reports whether an owner's domains include an anchor domain, or a
+// domain above or below one. Without anchors every owner is anchored.
+func anchored(domains, anchors []string) bool {
+	if len(anchors) == 0 {
+		return true
+	}
+	for _, d := range domains {
+		for _, a := range anchors {
+			if hostWithin(a, d) || hostWithin(d, a) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

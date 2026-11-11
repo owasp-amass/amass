@@ -272,9 +272,12 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 		}
 
 		res, err := ai.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal,
-			ai.AttributionPolicy{Mode: t.mode, Model: t.model})
+			ai.AttributionPolicy{Mode: t.mode, Model: t.model, Anchors: t.sess.Config().Domains()})
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", ai.AssetLabel(org), err))
+		}
+		if res.Unanchored {
+			continue
 		}
 		for _, a := range res.Applied {
 			if !a.Existed {

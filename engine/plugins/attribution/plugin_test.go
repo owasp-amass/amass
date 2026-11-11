@@ -256,3 +256,43 @@ func TestAttributionLoadsTheTrainedModel(t *testing.T) {
 		t.Fatalf("tracker = %+v", tr)
 	}
 }
+
+func TestAttributionSkipsOrganizationsOutsideTheEnumeratedDomains(t *testing.T) {
+	db, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "attribution.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = db.Close() }()
+	ents := seed(t, db)
+	journal := filepath.Join(t.TempDir(), "review.jsonl")
+	p := NewAttribution().(*plugin)
+	p.lookup = func(k string) (string, bool) {
+		if k == "AMASS_AI_JOURNAL" {
+			return journal, true
+		}
+		return "", false
+	}
+	p.quiet, p.maxWait = 50*time.Millisecond, time.Second
+
+	// The enumeration asked about example.org, not colgate.edu.
+	cfg := config.NewConfig()
+	cfg.Scope.Domains = []string{"example.org"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sess := &fakeSession{id: uuid.New(), ctx: ctx, cfg: cfg, db: db, scope: &fakeScope{org: "Colgate University"},
+		backlog: &fakeBacklog{}, stats: &et.SessionStats{}}
+
+	if err := p.check(&et.Event{Entity: ents["colgate"], Session: sess}); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(20 * time.Second)
+	for sess.stats.Background() != 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if edges, err := db.OutgoingEdges(context.Background(), ents["cr-alt"], time.Time{}, "organization"); err == nil &&
+		len(edges) != 0 {
+		t.Errorf("attributed for an organization outside the enumerated domains: %v", edges)
+	}
+}
