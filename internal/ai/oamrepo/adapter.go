@@ -69,6 +69,12 @@ func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limi
 		return nil, fmt.Errorf("unknown OAM asset type %q", t)
 	}
 
+	if since.IsZero() {
+		// The repositories require a start time to list a type; no stored
+		// entity predates the Unix epoch.
+		since = time.Unix(0, 0).UTC()
+	}
+
 	ents, err := a.Repo.FindEntitiesByType(ctx, oam.AssetType(t), since, limit)
 	if err != nil {
 		return nil, err
