@@ -121,13 +121,24 @@ type DuplicateEntry struct {
 // DuplicatePrefix starts every merge proposal ID.
 const DuplicatePrefix = "dup-"
 
-// DuplicateProposalID is a stable identifier for merging one organization
-// into another; it does not depend on which one survives.
-func DuplicateProposalID(a, b string) string {
-	ids := []string{a, b}
+// DuplicateProposalID is a stable identifier for merging two organizations.
+// It is built from their keys, which survive an undone merge (the restored
+// organization gets a new entity ID), so a rejected or undone merge is
+// recognized and never applied again. It does not depend on which one
+// survives.
+func DuplicateProposalID(a, b Asset) string {
+	ids := []string{proposalKey(a), proposalKey(b)}
 	sort.Strings(ids)
 	sum := sha256.Sum256([]byte(ids[0] + "\x00" + ids[1]))
 	return DuplicatePrefix + hex.EncodeToString(sum[:8])
+}
+
+func proposalKey(a Asset) string {
+	if a.Key != "" {
+		return a.Type + ":" + a.Key
+	}
+
+	return a.ID
 }
 
 // DuplicateProposals turns a duplicate report's propose and review
@@ -140,7 +151,7 @@ func DuplicateProposals(r DuplicateReport) []DuplicateProposal {
 			continue
 		}
 
-		p := DuplicateProposal{ID: DuplicateProposalID(c.Survivor.ID, c.Duplicate.ID),
+		p := DuplicateProposal{ID: DuplicateProposalID(c.Survivor, c.Duplicate),
 			Survivor: AssetLabel(c.Survivor), SurvivorID: c.Survivor.ID, Duplicate: AssetLabel(c.Duplicate),
 			DuplicateID: c.Duplicate.ID, Score: c.Score, Decision: c.Decision, CreatedAt: now}
 		for _, s := range c.Signals {
