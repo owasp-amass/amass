@@ -28,7 +28,8 @@ const (
 // watchMerges finds duplicate organizations once the session's other work
 // has drained, records the merge proposals in the journal and, in auto
 // mode, applies the proposed merges. It also records contradicted legal
-// identities for review. Merging earlier could delete an
+// identities for review. Merges also wait for the engine's other sessions to
+// drain, and one merge pass runs at a time. Merging earlier could delete an
 // organization a plugin is still writing to. The watcher holds one unit of
 // background work, counted by its caller, so the session is not reported
 // finished before the merges run; it releases the unit when it returns.
@@ -47,17 +48,42 @@ func (t *tracker) watchMerges() {
 		if t.sess.Done() {
 			return
 		}
-		if !t.drained() {
+		// Another enumeration on the same database may still be writing to
+		// an organization a merge would delete.
+		if !t.drained() || t.p.othersBusy(t) {
 			settled = 0
 			continue
 		}
 
 		settled++
 		if settled >= mergeSettled {
+			t.p.mergeMu.Lock()
 			t.mergeDuplicates()
+			t.p.mergeMu.Unlock()
 			return
 		}
 	}
+}
+
+// othersBusy reports whether any other session of this engine still has
+// work besides background work, such as its own merge watcher.
+func (p *plugin) othersBusy(self *tracker) bool {
+	p.mu.Lock()
+	others := make([]*tracker, 0, len(p.sessions))
+	for _, t := range p.sessions {
+		if t != self {
+			others = append(others, t)
+		}
+	}
+	p.mu.Unlock()
+
+	for _, t := range others {
+		if !t.sess.Done() && t.sess.Ctx().Err() == nil && !t.drained() {
+			return true
+		}
+	}
+
+	return false
 }
 
 // drained reports whether only background work remains and no attribution

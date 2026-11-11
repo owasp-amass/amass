@@ -54,9 +54,11 @@ type plugin struct {
 	// mergeCheck is how often the merge watcher checks for drained work;
 	// zero turns duplicate merging off.
 	mergeCheck time.Duration
-	mu         sync.Mutex
-	sessions   map[uuid.UUID]*tracker
-	journals   map[string]*ai.Journal
+	// mergeMu lets one session's merge pass run at a time.
+	mergeMu  sync.Mutex
+	mu       sync.Mutex
+	sessions map[uuid.UUID]*tracker
+	journals map[string]*ai.Journal
 }
 
 // NewAttribution returns the ownership attribution plugin.

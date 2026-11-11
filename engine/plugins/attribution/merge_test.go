@@ -222,3 +222,68 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 		}
 	}
 }
+
+// A merge waits while another enumeration on the engine still has work: it
+// could be writing to an organization the merge would delete.
+func TestMergesWaitForOtherSessions(t *testing.T) {
+	db, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "concurrent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	ents := seedDuplicates(t, db)
+	journal := filepath.Join(t.TempDir(), "review.jsonl")
+	env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": config.AttributionAuto}
+	p := NewAttribution().(*plugin)
+	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session := func(total, completed int) *fakeSession {
+		s := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), db: db,
+			scope: &fakeScope{org: "none"}, backlog: &fakeBacklog{}, stats: &et.SessionStats{}}
+		s.stats.WorkItemsTotal, s.stats.WorkItemsCompleted = total, completed
+		return s
+	}
+
+	// The other enumeration starts first and is still busy.
+	busy := session(50, 10)
+	if p.tracker(busy) == nil {
+		t.Fatal("attribution is off")
+	}
+	done := session(1, 0)
+	if p.tracker(done) == nil {
+		t.Fatal("attribution is off")
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	for _, uid := range []string{"globalsign:1", "globalsign:2"} {
+		if _, err := db.FindEntityById(context.Background(), ents[uid].ID); err != nil {
+			t.Fatalf("merged while another enumeration still had work: %s is gone", uid)
+		}
+	}
+	if n := done.stats.Background(); n != 1 {
+		t.Fatalf("the drained session's watcher stopped waiting: background work = %d", n)
+	}
+
+	// The other enumeration drains; only its own watcher is left.
+	busy.stats.Lock()
+	busy.stats.WorkItemsTotal, busy.stats.WorkItemsCompleted = 11, 10
+	busy.stats.Unlock()
+
+	deadline := time.Now().Add(20 * time.Second)
+	for (done.stats.Background() != 0 || busy.stats.Background() != 0) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if done.stats.Background() != 0 || busy.stats.Background() != 0 {
+		t.Fatal("the merge watchers did not finish")
+	}
+
+	_, err1 := db.FindEntityById(context.Background(), ents["globalsign:1"].ID)
+	_, err2 := db.FindEntityById(context.Background(), ents["globalsign:2"].ID)
+	if (err1 == nil) == (err2 == nil) {
+		t.Fatalf("want exactly one GlobalSign left after both drained: %v, %v", err1, err2)
+	}
+}
