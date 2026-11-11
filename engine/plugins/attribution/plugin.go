@@ -7,7 +7,8 @@
 // finds the ownership gaps of the session's in-scope organizations, writes
 // the strong proposals with an amass-ai source, widens the scope the same
 // way the Horizontals plugin does, and leaves the rest in the review
-// journal. It needs no model.
+// journal. Once the enumeration's other work has drained, it merges the
+// duplicate organizations the evidence supports. It needs no model.
 package attribution
 
 import (
@@ -45,20 +46,23 @@ var signalTypes = []oam.AssetType{oam.Organization, oam.ContactRecord, oam.Domai
 	oam.AutnumRecord, oam.FQDN, oam.IPAddress, oam.TLSCertificate}
 
 type plugin struct {
-	name     string
-	log      *slog.Logger
-	lookup   func(string) (string, bool)
-	quiet    time.Duration
-	maxWait  time.Duration
-	mu       sync.Mutex
-	sessions map[uuid.UUID]*tracker
-	journals map[string]*ai.Journal
+	name    string
+	log     *slog.Logger
+	lookup  func(string) (string, bool)
+	quiet   time.Duration
+	maxWait time.Duration
+	// mergeCheck is how often the merge watcher checks for drained work;
+	// zero turns duplicate merging off.
+	mergeCheck time.Duration
+	mu         sync.Mutex
+	sessions   map[uuid.UUID]*tracker
+	journals   map[string]*ai.Journal
 }
 
 // NewAttribution returns the ownership attribution plugin.
 func NewAttribution() et.Plugin {
 	return &plugin{name: "AI-Attribution", lookup: os.LookupEnv, quiet: defaultQuiet, maxWait: defaultMaxWait,
-		sessions: map[uuid.UUID]*tracker{}, journals: map[string]*ai.Journal{}}
+		mergeCheck: defaultMergeCheck, sessions: map[uuid.UUID]*tracker{}, journals: map[string]*ai.Journal{}}
 }
 
 func (p *plugin) Name() string {
@@ -137,6 +141,12 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 		}
 
 		t.model = model
+		if p.mergeCheck > 0 {
+			// Counted before the watcher starts, so the session cannot be
+			// reported finished in between.
+			sess.Stats().AddBackground(1)
+			go t.watchMerges()
+		}
 	}
 
 	p.sessions[sess.ID()] = t
