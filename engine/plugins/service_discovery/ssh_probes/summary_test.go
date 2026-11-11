@@ -38,7 +38,8 @@ func TestProbeOutcome(t *testing.T) {
 	}
 }
 
-// A refused port is reported as a dial failure, not as a non-SSH service.
+// A refused port is dialed once and reported as a dial failure, not as a
+// non-SSH service.
 func TestHostKeysMarksDialFailure(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -48,9 +49,18 @@ func TestHostKeysMarksDialFailure(t *testing.T) {
 	_ = l.Close()
 
 	var d net.Dialer
-	banner, keys, err := hostKeys(context.Background(), d.DialContext, addr)
+	var dials int
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		dials++
+		return d.DialContext(ctx, network, address)
+	}
+
+	banner, keys, err := hostKeys(context.Background(), dial, addr)
 	if len(keys) != 0 {
 		t.Fatalf("got keys %v from a closed port", keys)
+	}
+	if dials != 1 {
+		t.Fatalf("dialed a closed port %d times, want 1", dials)
 	}
 	if got := probeOutcome(banner, err); got != outcomeNoAnswer {
 		t.Fatalf("got %s for a closed port, want no_answer (err %v)", outcomeKeys[got], err)

@@ -34,7 +34,8 @@ type dialFunc func(ctx context.Context, network, address string) (net.Conn, erro
 
 // hostKeys connects to the SSH server at addr once per host key algorithm
 // and returns its version banner and the distinct host keys it presented,
-// each as "<key type> SHA256:<base64 fingerprint>".
+// each as "<key type> SHA256:<base64 fingerprint>". It stops after the first
+// attempt when nothing answers on the port.
 func hostKeys(ctx context.Context, dial dialFunc, addr string) (string, []string, error) {
 	var banner string
 	var keys []string
@@ -47,6 +48,13 @@ func hostKeys(ctx context.Context, dial dialFunc, addr string) (string, []string
 		b, key, err := hostKey(ctx, dial, addr, algo)
 		if b != "" && banner == "" {
 			banner = b
+		}
+
+		var de *dialError
+		if errors.As(err, &de) && len(keys) == 0 && banner == "" {
+			// Nothing answers on the port, so the other algorithms would only
+			// wait out the same timeout.
+			return "", nil, err
 		}
 		if err != nil {
 			lastErr = err
