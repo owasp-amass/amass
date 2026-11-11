@@ -27,7 +27,8 @@ const (
 
 // watchMerges finds duplicate organizations once the session's other work
 // has drained, records the merge proposals in the journal and, in auto
-// mode, applies the proposed merges. Merging earlier could delete an
+// mode, applies the proposed merges. It also records contradicted legal
+// identities for review. Merging earlier could delete an
 // organization a plugin is still writing to. The watcher holds one unit of
 // background work, counted by its caller, so the session is not reported
 // finished before the merges run; it releases the unit when it returns.
@@ -121,6 +122,8 @@ func (t *tracker) mergeDuplicates() {
 		}
 	}
 
+	t.recordIdentityConflicts(ctx, adapter)
+
 	state, err := t.journal.DuplicateState()
 	if err != nil {
 		return
@@ -135,5 +138,26 @@ func (t *tracker) mergeDuplicates() {
 	if pending > 0 || merged > 0 {
 		t.sess.Log().Info(fmt.Sprintf("AI duplicate search compared %d organizations: %d merged, %d merge "+
 			"proposal(s) waiting for review in %s", report.Organizations, merged, pending, t.journal.Path))
+	}
+}
+
+// recordIdentityConflicts records the organizations whose legal identity
+// contradicts their own evidence. A correction is never applied
+// automatically: companies do rename and relocate.
+func (t *tracker) recordIdentityConflicts(ctx context.Context, adapter oamrepo.Adapter) {
+	report, err := ai.FindIdentityConflicts(ctx, adapter)
+	if err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI identity check: %v", err))
+		return
+	}
+
+	added, err := t.journal.SubmitIdentityConflicts(report.Conflicts)
+	if err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI identity check could not record proposals: %v", err))
+		return
+	}
+	if len(added) > 0 {
+		t.sess.Log().Info(fmt.Sprintf("AI identity check found %d organization(s) whose legal identity contradicts "+
+			"their evidence; corrections are waiting for review in %s", len(added), t.journal.Path))
 	}
 }
