@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"math"
 	"strings"
 	"time"
 
@@ -102,7 +101,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 				m[key] = d.Relationships.LEIRecords.Data.ID
 			}
 		}
-		rec = filterFuzzyCompletions(e, orgent, o.Name, m)
+		rec, conf = filterFuzzyCompletions(e, orgent, o.Name, m)
 	}
 
 	if rec == nil {
@@ -114,8 +113,9 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	return fc.store(e, orgent, rec, conf)
 }
 
-func filterFuzzyCompletions(e *et.Event, orgent *dbt.Entity, brand string, m map[string]string) *LEIRecord {
-	var rec *LEIRecord
+// filterFuzzyCompletions picks the LEI record from a name search that the
+// organization's names and stored locations support, with its confidence.
+func filterFuzzyCompletions(e *et.Event, orgent *dbt.Entity, brand string, m map[string]string) (*LEIRecord, int) {
 	o := orgent.Asset.(*oamorg.Organization)
 
 	var names []string
@@ -123,65 +123,46 @@ func filterFuzzyCompletions(e *et.Event, orgent *dbt.Entity, brand string, m map
 		names = append(names, k)
 	}
 	if len(names) == 0 {
-		return nil
+		return nil, 0
 	}
 
-	if exact, partial, found := org.NameMatch(e.Session, orgent, names); found {
-		var conf int
+	exact, partial, found := org.NameMatch(e.Session, orgent, names)
+	if !found {
+		return nil, 0
+	}
 
-		for _, match := range exact {
-			score := 30
+	swg := metrics.NewSmithWatermanGotoh()
+	swg.CaseSensitive = false
+	swg.GapPenalty = -0.1
+	swg.Substitution = metrics.MatchMismatch{
+		Match:    1,
+		Mismatch: -0.5,
+	}
 
-			if len(exact) == 1 {
-				score += 30
-			}
-
-			lei := m[match]
-			if r, err := GLEIFGetLEIRecord(e.Session.Ctx(), lei); err == nil {
-				if LocMatch(e, orgent, r) {
-					score += 40
-				}
-				if score > conf {
-					rec = r
-					conf = score
-				}
-			}
+	var cands []leiCandidate
+	for _, match := range exact {
+		if r, err := GLEIFGetLEIRecord(e.Session.Ctx(), m[match]); err == nil {
+			cands = append(cands, leiCandidate{name: match, rec: r, exact: true, sim: 1, unique: len(exact) == 1})
 		}
-
-		swg := metrics.NewSmithWatermanGotoh()
-		swg.CaseSensitive = false
-		swg.GapPenalty = -0.1
-		swg.Substitution = metrics.MatchMismatch{
-			Match:    1,
-			Mismatch: -0.5,
+	}
+	for _, match := range partial {
+		if !strings.Contains(strings.ToLower(match), strings.ToLower(brand)) {
+			continue
 		}
-
-		for _, match := range partial {
-			if !strings.Contains(strings.ToLower(match), strings.ToLower(brand)) {
-				continue
-			}
-
-			sim := strutil.Similarity(o.Name, match, swg)
-			score := int(math.Round(sim * 30))
-
-			if len(partial) == 1 {
-				score += 30
-			}
-
-			lei := m[match]
-			if r, err := GLEIFGetLEIRecord(e.Session.Ctx(), lei); err == nil {
-				if LocMatch(e, orgent, r) {
-					score += 40
-				}
-				if score > conf {
-					rec = r
-					conf = score
-				}
-			}
+		if r, err := GLEIFGetLEIRecord(e.Session.Ctx(), m[match]); err == nil {
+			cands = append(cands, leiCandidate{name: match, rec: r, sim: strutil.Similarity(o.Name, match, swg),
+				unique: len(partial) == 1})
 		}
 	}
 
-	return rec
+	var brands []string
+	for _, n := range []string{o.Name, o.LegalName} {
+		if b := brandForm(n); b != "" {
+			brands = append(brands, b)
+		}
+	}
+
+	return chooseLEIRecord(brands, orgLocEvidence(e, orgent), cands)
 }
 
 func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, rec *LEIRecord, conf int) *dbt.Entity {
