@@ -14,6 +14,7 @@ import (
 	"github.com/owasp-amass/amass/v5/config"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
@@ -161,6 +162,63 @@ func TestDuplicatesAreOnlyRecordedInJournalMode(t *testing.T) {
 	for _, e := range entries {
 		if e.Status != ai.ProposalPending {
 			t.Errorf("journal mode left %s %s", e.Proposal.ID, e.Status)
+		}
+	}
+}
+
+// An undone merge restores the duplicate under a new entity ID; the next
+// enumeration must still recognize the pair and not merge it again.
+func TestUndoneMergeIsNotRepeated(t *testing.T) {
+	db, _, journal, _ := runMergeWatcher(t, config.AttributionAuto)
+
+	j := &ai.Journal{Path: journal}
+	entries, err := j.DuplicateEntries()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var applied *ai.DuplicateEntry
+	for i, e := range entries {
+		if e.Status == ai.ProposalApplied {
+			applied = &entries[i]
+		}
+	}
+	if applied == nil {
+		t.Fatalf("nothing was merged: %+v", entries)
+	}
+
+	adapter := oamrepo.Adapter{Repo: db}
+	res, err := adapter.UnmergeOrganizations(context.Background(), *applied.Outcome.Merge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.RecordDuplicate(ai.DuplicateOutcome{ProposalID: applied.Proposal.ID, Status: ai.ProposalRetracted,
+		Reviewer: "caffix", RestoredID: res.RestoredID}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A later enumeration over the same database.
+	env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": config.AttributionAuto}
+	p := NewAttribution().(*plugin)
+	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sess := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), db: db,
+		scope: &fakeScope{org: "none"}, backlog: &fakeBacklog{}, stats: &et.SessionStats{}}
+	if p.tracker(sess) == nil {
+		t.Fatal("attribution is off")
+	}
+
+	deadline := time.Now().Add(20 * time.Second)
+	for sess.stats.Background() != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	survivor := applied.Proposal.SurvivorID
+	for _, id := range []string{survivor, res.RestoredID} {
+		if _, err := db.FindEntityById(context.Background(), id); err != nil {
+			t.Errorf("an undone merge was applied again: %s is gone", id)
 		}
 	}
 }

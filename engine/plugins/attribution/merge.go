@@ -102,7 +102,7 @@ func (t *tracker) mergeDuplicates() {
 		}
 
 		for _, c := range report.Candidates {
-			id := ai.DuplicateProposalID(c.Survivor.ID, c.Duplicate.ID)
+			id := ai.DuplicateProposalID(c.Survivor, c.Duplicate)
 			e, ok := state[id]
 			// Only proposed pairs nobody has decided on: a rejected or undone
 			// merge is never applied again.
