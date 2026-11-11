@@ -1,0 +1,189 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Duplicate-organization signals: the evidence used to propose that two stored organizations are the same company and should be merged, with the rationale for each. docs/ai/DUPLICATES.md and `amass ai duplicate-signals` are generated from this file; edit the rationale here. The rules match the ownership signals: two strong signals, or one strong signal and a different signal that is not a tiebreaker, propose a merge; one strong signal or two signals of any strength need review; a negative signal lowers the score and keeps a pair from being merged automatically. A matching name is never strong: organizations in different jurisdictions often share a name and are different companies.",
+  "signals": [
+    {
+      "id": "shared_registry_identifier",
+      "title": "Same registry identifier",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.5,
+      "matcher": "shared_identifier",
+      "params": {
+        "id_types": ["lei", "ocid", "duns", "ein", "tin", "gln", "spglobal"],
+        "names_must_agree": true
+      },
+      "finds": "Two organizations that carry the same Legal Entity Identifier, OpenCorporates ID, D-U-N-S number, tax number or other registry identifier, and that share at least one name.",
+      "rationale": "A registry identifier is issued to exactly one legal entity, so two organizations holding the same one are the same entity recorded twice. The names must also agree because enrichment can attach an identifier to the wrong organization; a shared identifier between organizations with unrelated names points to that mistake, not to a duplicate.",
+      "guards": [
+        "Counts only when the two organizations share a name after legal forms (Inc, LLC, Ltd and the like) are removed.",
+        "A parent and subsidiary linked in the graph are never merged automatically, even with the same identifier (see parent_or_subsidiary)."
+      ],
+      "counter_indications": [
+        "Enrichment that matched a subsidiary to its parent's record gives both the parent's identifier."
+      ]
+    },
+    {
+      "id": "shared_registration",
+      "title": "Same jurisdiction and registration number",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.5,
+      "matcher": "shared_registration",
+      "finds": "Two organizations registered in the same jurisdiction under the same registration number.",
+      "rationale": "A company registry assigns each registration number once within its jurisdiction, so the pair identifies one legal entity. The same number in two different jurisdictions means nothing: registries number independently.",
+      "guards": [
+        "The jurisdictions must match exactly, including the subdivision (US-DE is not US-NV)."
+      ],
+      "counter_indications": [
+        "A registration number copied onto the wrong organization by enrichment."
+      ]
+    },
+    {
+      "id": "shared_network_handle",
+      "title": "Same internet registry handle",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.5,
+      "matcher": "shared_identifier",
+      "params": {
+        "id_types": ["arin"]
+      },
+      "finds": "Two organizations that carry the same ARIN organization handle.",
+      "rationale": "An internet registry issues an organization handle to one registrant, which uses it for every netblock and autonomous system it holds. Two stored organizations with the same handle are that registrant recorded twice, typically once from a registry lookup and once from a certificate or WHOIS record under a different spelling.",
+      "guards": [
+        "Point-of-contact handles are not organization handles and are not used."
+      ],
+      "counter_indications": [
+        "A registry handle reassigned after an acquisition can sit on the old and new company."
+      ]
+    },
+    {
+      "id": "shared_contact_record",
+      "title": "Named by the same contact record",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.45,
+      "matcher": "shared_contact_record",
+      "finds": "One registration or certificate contact record that names both organizations.",
+      "rationale": "A contact record describes one registrant. When it points to two organizations, the same registrant was recorded under two names, such as a brand and its legal name.",
+      "guards": [
+        "Placeholder and privacy-service organizations are never candidates."
+      ],
+      "counter_indications": [
+        "A record that names a registrant and a separate administrative organization."
+      ]
+    },
+    {
+      "id": "same_brand_name",
+      "title": "Same name",
+      "kind": "name",
+      "strength": "supporting",
+      "weight": 0.2,
+      "matcher": "same_brand",
+      "params": {
+        "legal_forms": ["inc", "incorporated", "corp", "corporation", "co", "company", "llc", "l.l.c", "ltd", "limited", "plc", "gmbh", "ag", "sa", "s.a", "nv", "n.v", "nv-sa", "bv", "b.v", "sarl", "s.a.r.l", "s.à r.l", "srl", "s.r.l", "spa", "s.p.a", "pty", "pty ltd", "pte", "pte ltd", "oy", "ab", "as", "a/s", "kk", "k.k", "lp", "llp", "pbc", "sas", "s.a.s"]
+      },
+      "finds": "Two organizations whose names are the same once case, punctuation and legal forms such as Inc, LLC, Ltd or NV-SA are removed.",
+      "rationale": "Sources spell one company's name differently: a certificate says 'Google Trust Services LLC' where another says 'Google Trust Services'. A matching name supports other evidence, but it is never strong: organizations in different jurisdictions often share a name and are different companies.",
+      "guards": [
+        "Never proposes a merge alone, and a jurisdiction conflict overrides it."
+      ],
+      "counter_indications": [
+        "Unrelated companies with the same name in different countries or states."
+      ]
+    },
+    {
+      "id": "shared_location",
+      "title": "Same address",
+      "kind": "location",
+      "strength": "supporting",
+      "weight": 0.15,
+      "matcher": "shared_location",
+      "finds": "Two organizations that share a stored address, directly or through their contact records.",
+      "rationale": "Two spellings of a company found in certificates or registrations usually carry the same street address. A shared address supports a name match, but on its own it describes a building, not a company.",
+      "guards": [
+        "Never proposes a merge alone."
+      ],
+      "counter_indications": [
+        "Office buildings, campuses and registered-agent addresses shared by unrelated companies."
+      ]
+    },
+    {
+      "id": "name_abbreviation",
+      "title": "Name is the other's abbreviation",
+      "kind": "name",
+      "strength": "supporting",
+      "weight": 0.1,
+      "tiebreaker": true,
+      "matcher": "abbreviation",
+      "params": {
+        "min_length": 3,
+        "stop_words": ["of", "the", "and", "for", "de", "la"]
+      },
+      "finds": "An organization whose name is the initials of the other's name, such as ISRG and Internet Security Research Group.",
+      "rationale": "Organizations are often recorded under their initials. Initials are short and collide often, so this only ranks candidates and sends a pair to review together with other evidence.",
+      "guards": [
+        "The abbreviation must have at least three letters.",
+        "A tiebreaker: it never counts as the second signal that lets a strong signal propose."
+      ],
+      "counter_indications": [
+        "Unrelated organizations with the same initials."
+      ]
+    },
+    {
+      "id": "jurisdiction_conflict",
+      "title": "Different jurisdictions or registrations",
+      "kind": "conflict",
+      "strength": "negative",
+      "weight": 0.5,
+      "matcher": "jurisdiction_conflict",
+      "finds": "Two organizations registered in different countries, or in the same jurisdiction under different registration numbers.",
+      "rationale": "Companies with the same name in different jurisdictions are separate legal entities, and one jurisdiction does not register one company twice. Either difference is evidence of two companies, so the pair is never merged automatically; a person who knows better can still merge it.",
+      "guards": [
+        "Counts only when both organizations have a jurisdiction; an unknown jurisdiction is not a conflict."
+      ],
+      "counter_indications": [
+        "An organization whose recorded jurisdiction came from a wrong enrichment match."
+      ]
+    },
+    {
+      "id": "conflicting_registry_identifier",
+      "title": "Different Legal Entity Identifiers",
+      "kind": "conflict",
+      "strength": "negative",
+      "weight": 0.5,
+      "matcher": "conflicting_identifier",
+      "params": {
+        "id_types": ["lei"]
+      },
+      "finds": "Two organizations that each carry a Legal Entity Identifier, and none in common.",
+      "rationale": "Each legal entity has at most one LEI, so different LEIs mean different legal entities, even under the same name.",
+      "guards": [
+        "Counts only when both organizations carry an LEI."
+      ],
+      "counter_indications": [
+        "An LEI attached to the wrong organization by enrichment."
+      ]
+    },
+    {
+      "id": "parent_or_subsidiary",
+      "title": "Recorded as parent and subsidiary",
+      "kind": "conflict",
+      "strength": "negative",
+      "weight": 0.5,
+      "matcher": "parent_child",
+      "params": {
+        "labels": ["subsidiary", "org_unit"]
+      },
+      "finds": "Two organizations already linked as parent and subsidiary or as an organizational unit.",
+      "rationale": "The graph records them as distinct organizations in a corporate structure. Merging them would erase that structure, so the pair is never merged automatically; when the link itself came from a bad match, a person can still merge them.",
+      "guards": [
+        "Applies to a direct link in either direction."
+      ],
+      "counter_indications": [
+        "A subsidiary link created by an enrichment that matched the organization to its own record."
+      ]
+    }
+  ]
+}

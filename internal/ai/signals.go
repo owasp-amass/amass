@@ -64,6 +64,11 @@ type SignalParams struct {
 	Phrases       []string `json:"phrases,omitempty"`
 	AssetTypes    []string `json:"asset_types,omitempty"`
 	IgnoreValues  []string `json:"ignore_values,omitempty"`
+	// IDTypes, LegalForms and NamesMustAgree configure the duplicate
+	// organization signals in duplicate_signals.json.
+	IDTypes        []string `json:"id_types,omitempty"`
+	LegalForms     []string `json:"legal_forms,omitempty"`
+	NamesMustAgree bool     `json:"names_must_agree,omitempty"`
 }
 
 // OwnershipSignal is one kind of ownership evidence and why it counts.
