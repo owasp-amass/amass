@@ -39,16 +39,28 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 		return errors.New("-journal required")
 	}
 
-	entries, err := (&ai.Journal{Path: journalPath}).OwnershipEntries()
+	j := &ai.Journal{Path: journalPath}
+	entries, err := j.OwnershipEntries()
+	if err != nil {
+		return err
+	}
+
+	merges, err := j.DuplicateEntries()
 	if err != nil {
 		return err
 	}
 	// Text unless JSON is asked for: -format defaults to json for search.
 	if explicit && format == "json" {
-		return writeJSON(out, entries)
+		return writeJSON(out, struct {
+			Ownership []ai.OwnershipEntry `json:"ownership"`
+			Merges    []ai.DuplicateEntry `json:"merges"`
+		}{entries, merges})
 	}
 
 	_, err = fmt.Fprintln(out, ai.FormatOwnershipEntries(entries))
+	if err == nil && len(merges) > 0 {
+		_, err = fmt.Fprint(out, "\nMerge proposals:\n\n"+ai.FormatDuplicateEntries(merges))
+	}
 	return err
 }
 
@@ -79,6 +91,10 @@ func pendingProposal(j *ai.Journal, id, reviewer string) (ai.OwnershipProposal, 
 func rejectProposal(journalPath, id, reviewer string, out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
+	}
+
+	if isMergeProposal(id) {
+		return rejectMerge(journalPath, id, reviewer, out)
 	}
 
 	j := &ai.Journal{Path: journalPath}
@@ -285,4 +301,21 @@ func listSignals(format string, explicit bool, out io.Writer) error {
 	}
 
 	return fmt.Errorf("signals format %q: use text, json or markdown", format)
+}
+
+// listDuplicateSignals prints the duplicate-organization signal catalog.
+// Text is the default; markdown is docs/ai/DUPLICATES.md.
+func listDuplicateSignals(format string, explicit bool, out io.Writer) error {
+	switch {
+	case !explicit || format == "text":
+		_, err := fmt.Fprint(out, ai.DuplicateSignalsText())
+		return err
+	case format == "markdown":
+		_, err := fmt.Fprint(out, ai.DuplicateSignalsMarkdown())
+		return err
+	case format == "json":
+		return writeJSON(out, ai.DuplicateSignals())
+	}
+
+	return fmt.Errorf("duplicate-signals format %q: use text, json or markdown", format)
 }

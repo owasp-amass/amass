@@ -13,11 +13,22 @@ import (
 )
 
 // listDuplicates compares the stored organizations and prints the pairs
-// the duplicate signals link. It reads only.
-func listDuplicates(ctx context.Context, graph ai.Graph, format string, explicit bool, out io.Writer) error {
+// the duplicate signals link. Proposed and review pairs are recorded in the
+// journal as merge proposals; nothing in the Asset Database changes.
+func listDuplicates(ctx context.Context, graph ai.Graph, journalPath, format string, explicit bool,
+	out, errout io.Writer) error {
 	r, err := ai.FindDuplicateOrganizations(ctx, graph)
 	if err != nil {
 		return err
+	}
+	if journalPath != "" {
+		added, err := (&ai.Journal{Path: journalPath}).SubmitDuplicates(ai.DuplicateProposals(r))
+		if err != nil {
+			return fmt.Errorf("record merge proposals: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(errout, "%d new merge proposal(s) recorded in %s; review with `amass ai proposals`\n",
+			len(added), journalPath)
 	}
 
 	switch {

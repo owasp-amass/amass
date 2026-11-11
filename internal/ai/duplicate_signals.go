@@ -123,3 +123,82 @@ var legalForms = sync.OnceValue(func() map[string]bool {
 func normLegalForm(s string) string {
 	return strings.Trim(strings.ToLower(strings.TrimSpace(s)), ".,")
 }
+
+// DuplicateSignalsMarkdown renders the duplicate catalog as the user
+// documentation in docs/ai/DUPLICATES.md.
+func DuplicateSignalsMarkdown() string {
+	var b strings.Builder
+	b.WriteString("# Duplicate organizations\n\n")
+	b.WriteString("<!-- Generated from internal/ai/semantics/duplicate_signals.json by `amass ai duplicate-signals " +
+		"-format markdown`. Edit that file, not this one. -->\n\n")
+	b.WriteString("Sources record one company several times: a certificate, an RDAP lookup and GLEIF can each create " +
+		"an organization under a different spelling. Amass proposes merging two stored organizations only from " +
+		"stored evidence. Each kind of evidence is a signal, listed here with why it counts, what stops it from " +
+		"misfiring, and when it can still mislead. The same text is shown by `amass ai duplicate-signals`.\n\n")
+	b.WriteString("## How signals decide\n\n")
+	b.WriteString("- Two strong signals, or one strong signal and a different signal that is not a tiebreaker, " +
+		"**propose** a merge. During enumeration a proposed merge is applied automatically when the session ends " +
+		"(with the `amass-ai` source on every moved relationship) unless attribution is set to `journal` or `off`.\n")
+	b.WriteString("- One strong signal, or two signals of any strength, **needs review**: it waits in the review " +
+		"journal for a person. A pair linked only by its name, with nothing against it, also needs review.\n")
+	b.WriteString("- A **negative** signal lowers the score and keeps a pair from being merged automatically; without " +
+		"a strong signal it also keeps the pair out of review.\n")
+	b.WriteString("- A matching name is never strong: organizations in different jurisdictions often share a name and " +
+		"are different companies.\n")
+	b.WriteString("- A merge moves the duplicate's properties and relationships onto the organization that has more " +
+		"recorded evidence, then deletes the duplicate. The journal records everything the merge changed, so " +
+		"`amass ai -proposal <id> -reviewer <name> retract` restores the duplicate and removes only what the merge " +
+		"added.\n\n")
+	b.WriteString("| Signal | Strength | Kind | Weight |\n| --- | --- | --- | --- |\n")
+	for _, s := range DuplicateSignals() {
+		strength := s.Strength
+		if s.Tiebreaker {
+			strength += " (tiebreaker)"
+		}
+
+		fmt.Fprintf(&b, "| [%s](#%s) | %s | %s | %.2f |\n", s.Title, s.ID, strength, s.Kind, s.Weight)
+	}
+	for _, s := range DuplicateSignals() {
+		fmt.Fprintf(&b, "\n<a id=\"%s\"></a>\n## %s\n\n", s.ID, s.Title)
+		tie := ""
+		if s.Tiebreaker {
+			tie = " Tiebreaker."
+		}
+
+		fmt.Fprintf(&b, "`%s`: %s %s signal, weight %.2f.%s\n\n", s.ID, s.Strength, s.Kind, s.Weight, tie)
+		fmt.Fprintf(&b, "**Finds:** %s\n\n**Why it counts:** %s\n", s.Finds, s.Rationale)
+		writeList(&b, "Guards", s.Guards)
+		writeList(&b, "Can still mislead when", s.CounterIndications)
+		if len(s.Params.IDTypes) > 0 {
+			fmt.Fprintf(&b, "\n**Identifier types:** `%s`\n", strings.Join(s.Params.IDTypes, "`, `"))
+		}
+	}
+
+	return b.String()
+}
+
+// DuplicateSignalsText renders the duplicate catalog for a terminal.
+func DuplicateSignalsText() string {
+	var b strings.Builder
+	for i, s := range DuplicateSignals() {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+
+		tie := ""
+		if s.Tiebreaker {
+			tie = ", tiebreaker"
+		}
+
+		fmt.Fprintf(&b, "%s (%s): %s %s signal, weight %.2f%s\n", s.Title, s.ID, s.Strength, s.Kind, s.Weight, tie)
+		fmt.Fprintf(&b, "  Finds: %s\n  Why it counts: %s\n", s.Finds, s.Rationale)
+		for _, g := range s.Guards {
+			fmt.Fprintf(&b, "  Guard: %s\n", g)
+		}
+		for _, c := range s.CounterIndications {
+			fmt.Fprintf(&b, "  Can mislead: %s\n", c)
+		}
+	}
+
+	return b.String()
+}

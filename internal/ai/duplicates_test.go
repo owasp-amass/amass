@@ -7,6 +7,8 @@ package ai
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -244,5 +246,27 @@ func TestDuplicateCatalog(t *testing.T) {
 		Matcher: matchSameBrand, Params: SignalParams{LegalForms: []string{"inc"}}, Finds: "x", Rationale: "x"}}
 	if validateDuplicateSignals(negativeName) == nil {
 		t.Error("a negative non-conflict signal was accepted")
+	}
+}
+
+// docs/ai/DUPLICATES.md is generated from the duplicate catalog.
+// Regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run
+// TestDuplicatesDocIsCurrent ./internal/ai/.
+func TestDuplicatesDocIsCurrent(t *testing.T) {
+	path := filepath.Join("..", "..", "docs", "ai", "DUPLICATES.md")
+	want := DuplicateSignalsMarkdown()
+	if os.Getenv("AMASS_UPDATE_SIGNALS_DOC") != "" {
+		if err := os.WriteFile(path, []byte(want), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Error("docs/ai/DUPLICATES.md is out of date; regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run " +
+			"TestDuplicatesDocIsCurrent ./internal/ai/")
 	}
 }

@@ -31,10 +31,11 @@ import (
 const Description = "AI investigation, MCP tools, and reviewed inference proposals"
 
 // operations are the amass ai subcommands. Only approve and retract change
-// the Asset Database, and only for a proposal a reviewer names. Automatic
+// the Asset Database, and only for a proposal a reviewer names: an
+// ownership relationship, or a merge of duplicate organizations. Automatic
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates"}
+	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -274,6 +275,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	switch operation {
 	case "signals":
 		return listSignals(outputFormat, explicitFlags["format"], out)
+	case "duplicate-signals":
+		return listDuplicateSignals(outputFormat, explicitFlags["format"], out)
 	case "proposals":
 		return listProposals(journalPath, outputFormat, explicitFlags["format"], out)
 	case "reject":
@@ -336,11 +339,17 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	defer cancel()
 	switch operation {
 	case "approve":
+		if isMergeProposal(proposalID) {
+			return approveMerge(ctx, graph, journalPath, proposalID, reviewer, out)
+		}
 		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	case "retract":
+		if isMergeProposal(proposalID) {
+			return retractMerge(ctx, graph, journalPath, proposalID, reviewer, out)
+		}
 		return retractProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	case "duplicates":
-		return listDuplicates(ctx, graph, outputFormat, explicitFlags["format"], out)
+		return listDuplicates(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
