@@ -114,6 +114,11 @@ func FindDuplicateOrganizations(ctx context.Context, graph Graph) (DuplicateRepo
 		if !hasPositive(signals) {
 			continue
 		}
+		if decision == GapReview && hasStrength(signals, StrengthNegative) && !hasStrength(signals, StrengthStrong) {
+			// Supporting evidence such as a shared name does not outweigh
+			// evidence that the two are different companies.
+			decision = GapWeak
+		}
 
 		survivor, dup := chooseSurvivor(a, b)
 		s.report.Candidates = append(s.report.Candidates, DuplicateCandidate{Survivor: survivor.asset,
@@ -148,6 +153,16 @@ func decisionRank(d string) int {
 func hasPositive(signals []GapSignal) bool {
 	for _, s := range signals {
 		if def, ok := duplicateSignal(s.Signal); ok && def.Strength != StrengthNegative {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasStrength(signals []GapSignal, strength string) bool {
+	for _, s := range signals {
+		if def, ok := duplicateSignal(s.Signal); ok && def.Strength == strength {
 			return true
 		}
 	}

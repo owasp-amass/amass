@@ -130,6 +130,17 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 	g.ident("2565", "arin", "ITHAK")
 	g.ident("12527", "arin", "ITHAK")
 
+	// A parent and subsidiary sharing a name and an address, with different
+	// registrations and LEIs.
+	g.org("270", "google", "google llc", "US-DE", "3582691")
+	g.org("11437", "google international", "google international llc", "US-DE", "3525923")
+	g.ident("270", "lei", "7ZW8QJWVPR4P1J1KQY45")
+	g.ident("11437", "lei", "549300Y7W34DK0WBPY51")
+	g.ident("11437", "org_name", "Google")
+	g.contact("270", "cr-goog1", "loc-goog")
+	g.contact("11437", "cr-goog2", "loc-goog")
+	g.link("270", "11437", "subsidiary")
+
 	// Privacy placeholders are never organizations to merge.
 	g.org("4585", "registration private", "", "", "")
 	g.org("4586", "registration private", "", "", "")
@@ -154,6 +165,8 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 			has: []string{"name_abbreviation", "shared_location"}},
 		{name: "same name, different jurisdictions", a: "6466", b: "9001", decision: GapWeak,
 			has: []string{"same_brand_name", "jurisdiction_conflict"}},
+		{name: "shared name and address against conflicting registrations", a: "270", b: "11437", decision: GapWeak,
+			has: []string{"same_brand_name", "shared_location", "jurisdiction_conflict", "conflicting_registry_identifier"}},
 		{name: "one ARIN handle", a: "2565", b: "12527", decision: GapReview,
 			has: []string{"shared_network_handle"}},
 	}
