@@ -182,3 +182,65 @@ func TestWidelySharedValuesGiveNoIdentitySignal(t *testing.T) {
 		}
 	}
 }
+
+func TestReverseLookupNamesAreNotCandidates(t *testing.T) {
+	g := campusGapsFixture()
+	g.assets["rev"] = Asset{ID: "rev", Type: "FQDN", Key: "1.1.43.149.in-addr.arpa",
+		Content: map[string]any{"name": "1.1.43.149.in-addr.arpa"}}
+	g.links = append(g.links, Relation{ID: "rev-ip", FromID: "rev", ToID: "ip-own", Label: "dns_record",
+		Type: "BasicDNSRelation"})
+
+	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := gapCandidate(r, "1.1.43.149.in-addr.arpa"); c != nil {
+		t.Errorf("a reverse-DNS lookup name became a candidate: %+v", c)
+	}
+	if c := gapCandidate(r, "raiders.example.net"); c == nil {
+		t.Error("the ordinary hosted name is no longer a candidate")
+	}
+}
+
+func TestLargeGainsAreCounted(t *testing.T) {
+	g := campusGapsFixture()
+	for i := 0; i < gapMaxGains+5; i++ {
+		id := fmt.Sprintf("alumni-%02d.colgatealumni.org", i)
+		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
+		g.links = append(g.links, Relation{ID: "node-" + id, FromID: "colgatealumni.org", ToID: id, Label: "node",
+			Type: "SimpleRelation"})
+	}
+
+	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := gapCandidate(r, "https://rdap.example/alumni")
+	if c == nil || len(c.GainAssets) != gapMaxGains || len(c.Gains) != gapMaxGains+1 ||
+		!strings.HasPrefix(c.Gains[gapMaxGains], "and ") {
+		t.Fatalf("gains = %v (%d assets)", c.Gains, len(c.GainAssets))
+	}
+}
+
+func TestAddressesInOwnedNetblocksAreOwned(t *testing.T) {
+	g := campusGapsFixture()
+	// An address in Colgate's 149.43.0.0/16 that the lens never read as
+	// contained (a large netblock), and one outside it.
+	for id, addr := range map[string]string{"ip-unread": "149.43.200.9", "ip-outside": "198.51.100.9"} {
+		g.assets[id] = Asset{ID: id, Type: "IPAddress", Key: addr, Content: map[string]any{"address": addr}}
+		g.links = append(g.links, Relation{ID: id + "-ptr", FromID: id, ToID: "portal.colgate.edu", Label: "ptr_record",
+			Type: "SimpleRelation"})
+	}
+
+	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := gapCandidate(r, "149.43.200.9"); c != nil {
+		t.Errorf("an address in an owned netblock became a candidate: %+v", c)
+	}
+	if c := gapCandidate(r, "198.51.100.9"); c == nil {
+		t.Error("an address outside the owned netblocks is no longer a candidate")
+	}
+}

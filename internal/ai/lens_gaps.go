@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -43,6 +44,8 @@ const (
 	// provider's or privacy service's phone or address, not an owner's.
 	gapMaxShared = 50
 	gapMaxGains  = 10
+	// gapMaxGainsCounted bounds the gains counted beyond those named.
+	gapMaxGainsCounted = 1000
 )
 
 // Gap decisions.
@@ -125,6 +128,10 @@ type gapSearch struct {
 	ownable map[string]bool
 	found   map[string]*GapCandidate
 	report  *OwnershipGapReport
+	// ranges are the address ranges of the owned netblocks: an address in
+	// one is owned even when the netblock has more addresses than the lens
+	// reads.
+	ranges []netip.Prefix
 	// values searches by value for the signals that need it; valueReads
 	// counts its searches and tag reads.
 	values     ValueSearcher
@@ -175,6 +182,14 @@ func searchOwnershipGaps(ctx context.Context, graph Graph, schema SchemaCatalog,
 		ownable: map[string]bool{}}
 	for _, t := range ownedTypes(schema) {
 		g.ownable[t] = true
+	}
+	for _, a := range owned {
+		if a.Type != "Netblock" {
+			continue
+		}
+		if p, err := netip.ParsePrefix(contentString(a, "cidr")); err == nil {
+			g.ranges = append(g.ranges, p.Masked())
+		}
 	}
 	for _, id := range order {
 		if err := ctx.Err(); err != nil {
@@ -338,10 +353,10 @@ func (g *gapSearch) colisting(cur, shared Asset, hop WitnessEdge) error {
 
 // add records signal id, found via a route, for candidate a.
 func (g *gapSearch) add(a Asset, id, via string, witness []WitnessEdge) {
-	if !g.ownable[a.Type] {
+	if !g.ownable[a.Type] || reverseLookupName(a) {
 		return
 	}
-	if _, mine := g.owned[a.ID]; mine {
+	if _, mine := g.owned[a.ID]; mine || g.inOwnedRange(a) {
 		return
 	}
 
@@ -369,6 +384,37 @@ func (g *gapSearch) add(a Asset, id, via string, witness []WitnessEdge) {
 	c.Signals = append(c.Signals, GapSignal{Signal: id, Kind: def.Kind, Via: via, Witness: witness})
 }
 
+// inOwnedRange reports whether a is an address inside an owned netblock.
+func (g *gapSearch) inOwnedRange(a Asset) bool {
+	if a.Type != "IPAddress" {
+		return false
+	}
+
+	addr, err := netip.ParseAddr(contentString(a, "address"))
+	if err != nil {
+		return false
+	}
+	for _, p := range g.ranges {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// reverseLookupName reports whether a is a reverse-DNS lookup name
+// (in-addr.arpa, RFC 1035; ip6.arpa, RFC 3596): DNS mechanics for an
+// address, not an asset anyone owns.
+func reverseLookupName(a Asset) bool {
+	if a.Type != "FQDN" {
+		return false
+	}
+
+	name := strings.ToLower(strings.TrimSuffix(assetLabel(a), "."))
+	return strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa")
+}
+
 // finish drops candidates another organization controls, then scores the
 // rest and finds their attachment edge and gains.
 func (g *gapSearch) finish(c *GapCandidate) error {
@@ -391,9 +437,19 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 		c.Attachment, c.Alternatives = &edges[0], edges[1:]
 	}
 
+	// The answer names the first gains and counts the rest; scope widening
+	// uses the named ones.
+	more := 0
+	if len(gains) > gapMaxGains {
+		more, gains = len(gains)-gapMaxGains, gains[:gapMaxGains]
+	}
+
 	c.GainAssets = gains
 	for _, v := range gains {
 		c.Gains = append(c.Gains, v.Type+" "+assetLabel(v))
+	}
+	if more > 0 {
+		c.Gains = append(c.Gains, fmt.Sprintf("and %d more", more))
 	}
 
 	if err := g.contextSignals(a, c); err != nil {
@@ -505,7 +561,7 @@ func (g *gapSearch) gains(v Asset) ([]Asset, error) {
 	seen := map[string]bool{v.ID: true}
 	queue := []Asset{v}
 	var out []Asset
-	for len(queue) > 0 && len(out) < gapMaxGains {
+	for len(queue) > 0 && len(out) < gapMaxGainsCounted {
 		cur := queue[0]
 		queue = queue[1:]
 		steps, err := g.w.steps(cur)
@@ -520,6 +576,9 @@ func (g *gapSearch) gains(v Asset) ([]Asset, error) {
 			seen[s.other.ID] = true
 			out = append(out, s.other)
 			queue = append(queue, s.other)
+			if len(out) >= gapMaxGainsCounted {
+				break
+			}
 		}
 	}
 

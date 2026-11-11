@@ -64,7 +64,7 @@ func TestApproveWritesOnceWithScoreAsConfidence(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := listProposals(path, "text", &out); err != nil || !strings.Contains(out.String(), "applied by jeff") {
+	if err := listProposals(path, "json", false, &out); err != nil || !strings.Contains(out.String(), "applied by jeff") {
 		t.Errorf("listing = %q, %v", out.String(), err)
 	}
 }
