@@ -108,6 +108,11 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 	g.contact("1673", "cr-gts1", "loc-gts")
 	g.contact("1758", "cr-gts2", "loc-gts")
 
+	// Ithaka Harbors from a certificate and from ARIN: only the name.
+	g.org("7001", "ithaka harbors", "", "", "")
+	g.org("7002", "ithaka harbors", "", "", "")
+	g.ident("7002", "org_name", "Ithaka Harbors, Inc.")
+
 	// ISRG and its full name, at one address.
 	g.org("2053", "isrg", "", "", "")
 	g.org("2462", "internet security research group", "", "", "")
@@ -163,6 +168,8 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 			has: []string{"same_brand_name", "shared_location"}},
 		{name: "initials at one address", a: "2053", b: "2462", decision: GapReview,
 			has: []string{"name_abbreviation", "shared_location"}},
+		{name: "only the same name, nothing against it", a: "7001", b: "7002", decision: GapReview,
+			has: []string{"same_brand_name"}},
 		{name: "same name, different jurisdictions", a: "6466", b: "9001", decision: GapWeak,
 			has: []string{"same_brand_name", "jurisdiction_conflict"}},
 		{name: "shared name and address against conflicting registrations", a: "270", b: "11437", decision: GapWeak,
