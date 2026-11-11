@@ -275,7 +275,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	case "signals":
 		return listSignals(outputFormat, explicitFlags["format"], out)
 	case "proposals":
-		return listProposals(journalPath, outputFormat, out)
+		return listProposals(journalPath, outputFormat, explicitFlags["format"], out)
 	case "reject":
 		return rejectProposal(journalPath, proposalID, reviewer, out)
 	case "train-attribution":

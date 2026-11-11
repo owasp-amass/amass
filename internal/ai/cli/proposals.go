@@ -34,7 +34,7 @@ func recordGapProposals(journalPath string, result ai.Investigation, errout io.W
 }
 
 // listProposals prints the journal's ownership proposals.
-func listProposals(journalPath, format string, out io.Writer) error {
+func listProposals(journalPath, format string, explicit bool, out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
 	}
@@ -43,7 +43,8 @@ func listProposals(journalPath, format string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if format == "json" {
+	// Text unless JSON is asked for: -format defaults to json for search.
+	if explicit && format == "json" {
 		return writeJSON(out, entries)
 	}
 
