@@ -1,0 +1,8 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass checks an organization's legal identity against its own evidence. An enrichment source looks a company up by name in a registry and can attach another company's record. A legal identity is contradicted when the organization's contact records, from other sources, are all in other countries than its jurisdiction, or when its legal name matches none of the names other sources gave it. A contradicted identity is proposed for correction in the review journal and never corrected automatically: companies do rename and relocate. A correction removes what only the enrichment sources recorded (the identifiers, addresses and corporate links listed here) and clears the legal fields; undoing it restores them. Add values here, not in Go code.",
+  "enrichment_sources": ["GLEIF"],
+  "identity_id_types": ["lei", "ocid", "legal_name", "registration_id", "spglobal", "bic", "mic"],
+  "identity_labels": ["legal_address", "hq_address", "location", "subsidiary"],
+  "legal_fields": ["legal_name", "jurisdiction", "registration_id", "founding_date"]
+}

@@ -35,7 +35,8 @@ const Description = "AI investigation, MCP tools, and reviewed inference proposa
 // ownership relationship, or a merge of duplicate organizations. Automatic
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals"}
+	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
+	"identity-conflicts"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -339,17 +340,25 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	defer cancel()
 	switch operation {
 	case "approve":
+		if isIdentityProposal(proposalID) {
+			return approveIdentity(ctx, graph, journalPath, proposalID, reviewer, out)
+		}
 		if isMergeProposal(proposalID) {
 			return approveMerge(ctx, graph, journalPath, proposalID, reviewer, out)
 		}
 		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	case "retract":
+		if isIdentityProposal(proposalID) {
+			return retractIdentity(ctx, graph, journalPath, proposalID, reviewer, out)
+		}
 		if isMergeProposal(proposalID) {
 			return retractMerge(ctx, graph, journalPath, proposalID, reviewer, out)
 		}
 		return retractProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	case "duplicates":
 		return listDuplicates(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+	case "identity-conflicts":
+		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
