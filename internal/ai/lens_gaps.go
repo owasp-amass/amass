@@ -505,13 +505,19 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 // at most twice toward the score, which ranks candidates and is not a
 // probability.
 func scoreGap(signals []GapSignal, attachable bool) (float64, string) {
+	return scoreSignals(signals, attachable, ownershipSignal)
+}
+
+// scoreSignals applies the shared decision rules to signals defined by
+// lookup.
+func scoreSignals(signals []GapSignal, attachable bool, lookup func(string) (OwnershipSignal, bool)) (float64, string) {
 	count := map[string]int{}
 	corroborating := map[string]bool{}
 	strong := 0
 	negative := false
 	score := 0.0
 	for _, s := range signals {
-		def, ok := ownershipSignal(s.Signal)
+		def, ok := lookup(s.Signal)
 		if !ok {
 			continue
 		}

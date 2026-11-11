@@ -34,7 +34,7 @@ const Description = "AI investigation, MCP tools, and reviewed inference proposa
 // the Asset Database, and only for a proposal a reviewer names. Automatic
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals"}
+	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -339,6 +339,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	case "retract":
 		return retractProposal(ctx, graph, journalPath, proposalID, reviewer, out)
+	case "duplicates":
+		return listDuplicates(ctx, graph, outputFormat, explicitFlags["format"], out)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
