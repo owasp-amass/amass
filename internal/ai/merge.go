@@ -58,6 +58,12 @@ type MergeRecord struct {
 	// SurvivorTagIDs are the properties the merge added to the survivor.
 	SurvivorTagIDs []string     `json:"survivor_tag_ids,omitempty"`
 	Edges          []MergedEdge `json:"edges"`
+	// FilledFields are the survivor's empty organization fields the merge
+	// filled from the duplicate. Undoing the merge leaves them: the Asset
+	// Database cannot clear a field.
+	FilledFields []string `json:"filled_fields,omitempty"`
+	// FillError says why the fields could not be filled after the merge.
+	FillError string `json:"fill_error,omitempty"`
 }
 
 // OrganizationMerger merges two organizations in the Asset Database and
@@ -291,9 +297,16 @@ func FormatDuplicateEntries(entries []DuplicateEntry) string {
 				}
 				fmt.Fprintf(&b, "  merged by %s at %s: %d relationships moved\n", o.Reviewer,
 					o.At.Format(time.RFC3339), moved)
+				if o.Merge != nil && len(o.Merge.FilledFields) > 0 {
+					fmt.Fprintf(&b, "  filled %s from the duplicate\n", strings.Join(o.Merge.FilledFields, ", "))
+				}
 			case ProposalRetracted:
 				fmt.Fprintf(&b, "  undone by %s at %s: restored as [%s]\n", o.Reviewer, o.At.Format(time.RFC3339),
 					o.RestoredID)
+				if o.Merge != nil && len(o.Merge.FilledFields) > 0 {
+					fmt.Fprintf(&b, "  %s [%s] keeps %s filled by the merge\n", p.Survivor, p.SurvivorID,
+						strings.Join(o.Merge.FilledFields, ", "))
+				}
 			default:
 				fmt.Fprintf(&b, "  %s by %s at %s\n", o.Status, o.Reviewer, o.At.Format(time.RFC3339))
 			}

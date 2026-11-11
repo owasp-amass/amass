@@ -155,7 +155,8 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 	f := mergeFixture{t: t, ctx: ctx, repo: repo}
 
 	surv := f.asset(&oamorg.Organization{ID: "globalsign:1", Name: "globalsign", Jurisdiction: "BE"})
-	dup := f.asset(&oamorg.Organization{ID: "globalsign:2", Name: "globalsign", Jurisdiction: "BE"})
+	dup := f.asset(&oamorg.Organization{ID: "globalsign:2", Name: "globalsign", Jurisdiction: "NL",
+		LegalName: "globalsign nv", RegistrationID: "0459134256", FoundingDate: "1996-01-01"})
 	if _, err := repo.CreateEntityProperty(ctx, surv, &oamgen.SourceProperty{Source: "GLEIF", Confidence: 100}); err != nil {
 		t.Fatal(err)
 	}
@@ -203,6 +204,24 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 	}
 	if !contains(f.entitySources(surv.ID), "DNS-SD") || !contains(f.entitySources(surv.ID), "GLEIF") {
 		t.Errorf("survivor sources after the merge: %v", f.entitySources(surv.ID))
+	}
+
+	// Empty fields are filled from the duplicate; a value is never replaced.
+	ent, err := repo.FindEntityById(ctx, surv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	so := ent.Asset.(*oamorg.Organization)
+	if so.LegalName != "globalsign nv" || so.RegistrationID != "0459134256" || so.Jurisdiction != "BE" {
+		t.Errorf("survivor after the merge: %+v", so)
+	}
+	for _, field := range []string{"legal_name", "registration_id", "founding_date"} {
+		if !contains(rec.FilledFields, field) {
+			t.Errorf("filled fields %v lack %s", rec.FilledFields, field)
+		}
+	}
+	if contains(rec.FilledFields, "jurisdiction") {
+		t.Error("the survivor's jurisdiction was replaced")
 	}
 
 	var skipped int
@@ -263,11 +282,11 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 		t.Errorf("restored organization sources: %v", f.entitySources(restored))
 	}
 
-	ent, err := repo.FindEntityById(ctx, restored)
+	ent, err = repo.FindEntityById(ctx, restored)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o, ok := ent.Asset.(*oamorg.Organization); !ok || o.ID != "globalsign:2" {
+	if o, ok := ent.Asset.(*oamorg.Organization); !ok || o.ID != "globalsign:2" || o.Jurisdiction != "NL" {
 		t.Errorf("restored asset %+v", ent.Asset)
 	}
 
