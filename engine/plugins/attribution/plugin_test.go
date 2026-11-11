@@ -162,7 +162,8 @@ func TestAttributionPassWritesAndWidensScopeOnSQLite(t *testing.T) {
 	env := map[string]string{"AMASS_AI_JOURNAL": journal}
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
-	p.quiet, p.maxWait = 50*time.Millisecond, time.Second
+	// Duplicate merging has its own test; this one counts only the pass.
+	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 0
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -273,7 +274,7 @@ func TestAttributionSkipsOrganizationsOutsideTheEnumeratedDomains(t *testing.T) 
 		}
 		return "", false
 	}
-	p.quiet, p.maxWait = 50*time.Millisecond, time.Second
+	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 0
 
 	// The enumeration asked about example.org, not colgate.edu.
 	cfg := config.NewConfig()
