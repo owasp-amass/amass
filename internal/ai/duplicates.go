@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 )
 
 const (
@@ -87,7 +89,7 @@ func FindDuplicateOrganizations(ctx context.Context, graph Graph) (DuplicateRepo
 	}
 
 	for _, o := range orgs {
-		if isPlaceholder(o) {
+		if isPlaceholder(o) || semantics.IsPlaceholderOrganization(contentString(o, "name")) {
 			continue
 		}
 
