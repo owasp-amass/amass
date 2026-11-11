@@ -15,6 +15,7 @@ import (
 	"github.com/biter777/countries"
 	"github.com/google/uuid"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -31,6 +32,13 @@ func CreateOrgAsset(sess et.Session, obj *dbt.Entity, rel oam.Relation, o *oamor
 		return nil, errors.New("missing the organization name")
 	} else if src == nil {
 		return nil, errors.New("missing the source")
+	}
+	// Redaction placeholders and template text name no one.
+	if semantics.IsPlaceholderOrganization(o.Name) {
+		return nil, fmt.Errorf("%q is a placeholder, not an organization name", o.Name)
+	}
+	if semantics.IsPlaceholderOrganization(o.LegalName) {
+		o.LegalName = ""
 	}
 
 	orgent, err := FindOrgByNameClaim(sess, o.Name, src)
