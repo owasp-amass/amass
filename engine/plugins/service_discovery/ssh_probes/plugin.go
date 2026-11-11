@@ -29,17 +29,20 @@ import (
 var sshPorts = []int{22}
 
 type sshProbing struct {
-	name   string
-	log    *slog.Logger
-	source *et.Source
+	name    string
+	log     *slog.Logger
+	source  *et.Source
+	summary *summaries
 }
 
 // NewSSHProbing returns the SSH host key plugin.
 func NewSSHProbing() et.Plugin {
-	return &sshProbing{
+	sp := &sshProbing{
 		name:   "SSH-Probes",
 		source: &et.Source{Name: "SSH-Probes", Confidence: 100},
 	}
+	sp.summary = newSummaries(func() *slog.Logger { return sp.log })
+	return sp
 }
 
 func (sp *sshProbing) Name() string {
@@ -65,6 +68,7 @@ func (sp *sshProbing) Start(r et.Registry) error {
 }
 
 func (sp *sshProbing) Stop() {
+	sp.summary.flushAll()
 	sp.log.Info("Plugin stopped")
 }
 
@@ -74,12 +78,15 @@ func (sp *sshProbing) check(e *et.Event) error {
 		return errors.New("failed to extract the IPAddress asset")
 	}
 	if !e.Session.Config().Active {
+		sp.summary.record(e.Session, outcomePassive)
 		return nil
 	}
 	if reserved, _ := amassnet.IsReservedAddress(ip.Address.String()); reserved {
+		sp.summary.record(e.Session, outcomeReserved)
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf <= 0 {
+		sp.summary.record(e.Session, outcomeOutOfScope)
 		return nil
 	}
 
@@ -88,14 +95,17 @@ func (sp *sshProbing) check(e *et.Event) error {
 		return err
 	}
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, sp.source, since) {
+		sp.summary.record(e.Session, outcomeAlreadyProbed)
 		return nil
 	}
 
 	var findings []*support.Finding
 	for _, port := range sshPorts {
-		if f := sp.probe(e, e.Entity, ip, port); f != nil {
+		f, o := sp.probe(e, e.Entity, ip, port)
+		if f != nil {
 			findings = append(findings, f)
 		}
+		sp.summary.record(e.Session, o)
 	}
 
 	support.MarkAssetMonitored(e.Session, e.Entity, sp.source)
@@ -105,8 +115,9 @@ func (sp *sshProbing) check(e *et.Event) error {
 	return nil
 }
 
-// probe records the SSH service on ip's port with its banner and host keys.
-func (sp *sshProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddress, port int) *support.Finding {
+// probe records the SSH service on ip's port with its banner and host keys,
+// and returns what happened for the session summary.
+func (sp *sshProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddress, port int) (*support.Finding, outcome) {
 	dial := amassnet.NewDialContext(dialTimeout)
 	addr := net.JoinHostPort(ip.Address.String(), strconv.Itoa(port))
 	banner, keys, err := hostKeys(e.Session.Ctx(), func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -116,7 +127,7 @@ func (sp *sshProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddre
 		return dial(ctx, network, address)
 	}, addr)
 	if err != nil || len(keys) == 0 {
-		return nil
+		return nil, probeOutcome(banner, err)
 	}
 
 	serv := support.ServiceWithIdentifier(ip.Address.String(), "tcp", port)
@@ -127,19 +138,27 @@ func (sp *sshProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddre
 
 	svc, err := support.CreateServiceAsset(e.Session, entity, portrel, serv, nil)
 	if err != nil || svc == nil {
-		return nil
+		return nil, outcomeStoreFailed
 	}
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
 	defer cancel()
 
+	var stored int
 	for _, key := range keys {
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, svc, &oamgen.SimpleProperty{
+		if _, err := e.Session.DB().CreateEntityProperty(ctx, svc, &oamgen.SimpleProperty{
 			PropertyName:  fingerprint.SSHHostKey,
 			PropertyValue: key,
-		})
+		}); err == nil {
+			stored++
+		}
+	}
+
+	o := outcomeRecorded
+	if stored == 0 {
+		o = outcomeStoreFailed
 	}
 
 	return &support.Finding{From: entity, FromName: entity.Asset.Key(), To: svc, ToName: "Service: " + serv.ID,
-		Rel: portrel}
+		Rel: portrel}, o
 }

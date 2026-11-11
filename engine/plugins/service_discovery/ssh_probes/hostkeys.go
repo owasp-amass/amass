@@ -81,7 +81,7 @@ func hostKey(ctx context.Context, dial dialFunc, addr, algo string) (string, str
 
 	conn, err := dial(dctx, "tcp", addr)
 	if err != nil {
-		return "", "", err
+		return "", "", &dialError{err: err}
 	}
 	defer func() { _ = conn.Close() }()
 
