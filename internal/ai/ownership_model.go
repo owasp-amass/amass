@@ -73,6 +73,11 @@ func OwnershipLabel(e OwnershipEntry) (string, bool) {
 
 		return "potential_relation", true
 	case ProposalRejected, ProposalRetracted:
+		// A re-check retracts when evidence disappears; no person decided.
+		if e.Outcome.Reviewer == RecheckReviewer {
+			return "", false
+		}
+
 		return "unrelated", true
 	}
 
