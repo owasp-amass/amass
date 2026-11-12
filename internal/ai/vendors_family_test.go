@@ -307,3 +307,39 @@ func TestThirdPartyLensNamesContactsByEmail(t *testing.T) {
 		t.Errorf("contact without an email was dropped: %v", got)
 	}
 }
+
+// A redacted WHOIS contact with no organization or email does not name a
+// party by its record's key; the domain it is the contact for does.
+func TestThirdPartyLensSkipsAnonymousContacts(t *testing.T) {
+	g := vendorFixture()
+	add := func(id, typ string, content map[string]any) {
+		g.assets[id] = Asset{ID: id, Type: typ, Key: id, Content: content}
+	}
+	link := func(from, label, to, rt string) {
+		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
+			Type: rt})
+	}
+
+	add("edge.cdn.example", "FQDN", map[string]any{"name": "edge.cdn.example"})
+	add("cdn.example", "FQDN", map[string]any{"name": "cdn.example"})
+	add("dr-cdn", "DomainRecord", map[string]any{"domain": "cdn.example"})
+	key := "whois.cdn.example, cdn.example, Admin Contact Info"
+	add(key, "ContactRecord", map[string]any{"discovered_at": key})
+	link("portal.colgate.edu", "dns_record", "edge.cdn.example", "BasicDNSRelation")
+	link("cdn.example", "node", "edge.cdn.example", "SimpleRelation")
+	link("cdn.example", "registration", "dr-cdn", "SimpleRelation")
+	link("dr-cdn", "admin_contact", key, "SimpleRelation")
+
+	r, err := searchThirdParties(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := vendorNames(&r)
+	if _, ok := got[key]; ok {
+		t.Errorf("an anonymous contact's record key named a vendor: %v", got)
+	}
+	if got["cdn.example"] == "" {
+		t.Errorf("the provider's domain does not name it: %v", got)
+	}
+}
