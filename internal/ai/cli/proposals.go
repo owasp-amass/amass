@@ -28,7 +28,7 @@ func recordGapProposals(journalPath string, result ai.Investigation, errout io.W
 		return fmt.Errorf("record ownership proposals: %w", err)
 	}
 
-	_, err = fmt.Fprintf(errout, "%d new ownership proposal(s) recorded in %s; review with `amass ai -journal %s proposals`\n",
+	_, err = fmt.Fprintf(errout, "%d new ownership proposal(s) recorded in %s; review with `amass review proposals -journal %s`\n",
 		len(added), journalPath, journalPath)
 	return err
 }

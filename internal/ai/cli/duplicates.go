@@ -27,7 +27,7 @@ func listDuplicates(ctx context.Context, graph ai.Graph, journalPath, format str
 			return fmt.Errorf("record merge proposals: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(errout, "%d new merge proposal(s) recorded in %s; review with `amass ai proposals`\n",
+		_, _ = fmt.Fprintf(errout, "%d new merge proposal(s) recorded in %s; review with `amass review proposals`\n",
 			len(added), journalPath)
 	}
 

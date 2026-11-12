@@ -28,7 +28,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
-const Description = "AI investigation, MCP tools, and reviewed inference proposals"
+const Description = "Ask questions with a language model, MCP tools, and model-assisted review"
 
 // operations are the amass ai subcommands. Only approve and retract change
 // the Asset Database, and only for a proposal a reviewer names: an
@@ -45,8 +45,14 @@ func CLIWorkflow(_ string, args []string) {
 	}
 }
 
+// Run runs amass ai. Operations that moved to amass lens or amass review
+// still run, with a note naming the new command.
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
-	fs := flag.NewFlagSet("ai", flag.ContinueOnError)
+	return run("ai", in, out, errout, args)
+}
+
+func run(group string, in io.Reader, out, errout io.Writer, args []string) error {
+	fs := flag.NewFlagSet(group, flag.ContinueOnError)
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
@@ -68,7 +74,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
-	fs.StringVar(&domainName, "domain", "", "Enumerated domain for family")
+	fs.StringVar(&domainName, "domain", "", "Enumerated domain for the family lens")
+	fs.StringVar(&domainName, "d", "", "Enumerated domain for the family lens (same as -domain)")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
@@ -123,16 +130,27 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		"Maximum time per model request (e.g., 4m for local Ollama)")
 	fs.DurationVar(&investigationTimeout, "investigation-timeout", 8*time.Minute,
 		"Maximum total time for a single investigation")
+	// The operation may come first (amass ai family -d jhu.edu) or last
+	// (amass ai -d jhu.edu family).
+	if len(args) > 1 && slices.Contains(operations, args[0]) {
+		args = append(append([]string{}, args[1:]...), args[0])
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
+		if group != "ai" {
+			return fmt.Errorf("usage: amass %s <name> [flags]; unexpected arguments %v", group, fs.Args())
+		}
 		return errors.New("usage: amass ai [flags] " + strings.Join(operations, "|"))
 	}
 
 	operation := fs.Arg(0)
 	if !slices.Contains(operations, operation) {
 		return fmt.Errorf("unknown operation %q", operation)
+	}
+	if moved, ok := movedOps[operation]; ok && group == "ai" {
+		_, _ = fmt.Fprintf(errout, "note: amass ai %s is now %s\n", operation, moved)
 	}
 
 	cfg := config.NewConfig()

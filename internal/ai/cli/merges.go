@@ -85,7 +85,7 @@ func approveMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id,
 	}
 
 	_, err = fmt.Fprintf(out, "Merged %s [%s] into %s [%s]: %d relationship(s) moved (source %s, confidence %d). "+
-		"Undo with -proposal %s retract.\n", p.Duplicate, p.DuplicateID, p.Survivor, p.SurvivorID, moved,
+		"Undo with `amass review retract -proposal %s`.\n", p.Duplicate, p.DuplicateID, p.Survivor, p.SurvivorID, moved,
 		ai.InferenceSource, ai.MergeConfidence(p), id)
 	return err
 }

@@ -27,7 +27,7 @@ Every signal, with what it finds, why it counts, the guards that stop it
 misfiring and when it can still mislead, is defined in
 `internal/ai/semantics/ownership_signals.json` and documented in
 [Ownership signals](SIGNALS.md), which is generated from that file. `amass
-ai signals` prints the same text, and `amass ai proposals` shows the
+review signals` prints the same text, and `amass review proposals` shows the
 rationale of each signal behind a proposal. Signals that compare values
 (verification tokens, SPF and DMARC references, certificate key
 identifiers, redirects, TLS fingerprints) use asset-db's value search (`repository.ValueFinder`) and are
@@ -105,9 +105,10 @@ still pending is written once its evidence reaches `propose`.
 
 ## Review and write
 
-Advanced users can review the journal. `amass ai` uses the same journal by
-default (`-journal` overrides it), and nothing is written by these commands
-without a named reviewer. `ask` records the gap answer's proposals (propose
+Advanced users can review the journal with `amass review`, which uses the
+same journal by default (`-journal` overrides it); nothing is written by
+these commands without a named reviewer. See [Lenses and review](../LENSES.md)
+for every review command. `ask` records the gap answer's proposals (propose
 and review decisions with exactly one attachment) in the journal, with
 their signals and evidence lines. Asking again does not duplicate a
 proposal; its ID is a hash of the relationship it would write.
@@ -115,10 +116,10 @@ proposal; its ID is a hash of the relationship it would write.
 ```bash
 amass ai -model qwen3:8b \
   -question "Which assets probably belong to Colgate University but are not attributed to it?" ask
-amass ai proposals
-amass ai -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff approve
-amass ai -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff reject
-amass ai -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff retract
+amass review proposals
+amass review approve -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff
+amass review reject -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff
+amass review retract -proposal own-1a2b3c4d5e6f7a8b -reviewer jeff
 ```
 
 `approve` re-reads both entities, checks that their types still match the

@@ -129,12 +129,12 @@ func normLegalForm(s string) string {
 func DuplicateSignalsMarkdown() string {
 	var b strings.Builder
 	b.WriteString("# Duplicate organizations\n\n")
-	b.WriteString("<!-- Generated from internal/ai/semantics/duplicate_signals.json by `amass ai duplicate-signals " +
+	b.WriteString("<!-- Generated from internal/ai/semantics/duplicate_signals.json by `amass review duplicate-signals " +
 		"-format markdown`. Edit that file, not this one. -->\n\n")
 	b.WriteString("Sources record one company several times: a certificate, an RDAP lookup and GLEIF can each create " +
 		"an organization under a different spelling. Amass proposes merging two stored organizations only from " +
 		"stored evidence. Each kind of evidence is a signal, listed here with why it counts, what stops it from " +
-		"misfiring, and when it can still mislead. The same text is shown by `amass ai duplicate-signals`.\n\n")
+		"misfiring, and when it can still mislead. The same text is shown by `amass review duplicate-signals`.\n\n")
 	b.WriteString("## How signals decide\n\n")
 	b.WriteString("- Two strong signals, or one strong signal and a different signal that is not a tiebreaker, " +
 		"**propose** a merge. During enumeration a proposed merge is applied automatically when the session ends " +
@@ -148,7 +148,7 @@ func DuplicateSignalsMarkdown() string {
 	b.WriteString("- A merge moves the duplicate's properties and relationships onto the organization that has more " +
 		"recorded evidence, then deletes the duplicate. Fields the kept organization lacks, such as its legal name, " +
 		"jurisdiction or registration number, are filled from the duplicate; a value is never replaced. The journal " +
-		"records everything the merge changed, so `amass ai -proposal <id> -reviewer <name> retract` restores the " +
+		"records everything the merge changed, so `amass review retract -proposal <id> -reviewer <name>` restores the " +
 		"duplicate and removes the relationships, properties and filled fields the merge added. A filled field that " +
 		"has changed since the merge is kept.\n\n")
 	b.WriteString("| Signal | Strength | Kind | Weight |\n| --- | --- | --- | --- |\n")
