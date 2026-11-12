@@ -84,6 +84,14 @@ type ThirdPartyReport struct {
 	// verification-like TXT records no DNS-SD prefix recognizes.
 	UnrecognizedSPF    []string `json:"unrecognized_spf,omitempty"`
 	UnrecognizedTokens []string `json:"unrecognized_tokens,omitempty"`
+	// Institution, InstitutionOwn and Affiliates are set by the vendors lens
+	// from the family lens: the domain's main organization, and the uses
+	// moved out of Vendors because they are the institution's own or an
+	// affiliate's. FamilyNote says why the family lens was not applied.
+	Institution    string      `json:"institution,omitempty"`
+	InstitutionOwn []VendorUse `json:"institution_own,omitempty"`
+	Affiliates     []VendorUse `json:"affiliates,omitempty"`
+	FamilyNote     string      `json:"family_note,omitempty"`
 }
 
 // vendorSet accumulates vendor uses keyed by vendor and kind.

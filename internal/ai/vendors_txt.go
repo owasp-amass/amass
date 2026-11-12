@@ -253,6 +253,13 @@ func FindVendors(ctx context.Context, graph Graph, schema SchemaCatalog, root As
 		return r, err
 	}
 
+	if family, err := FindOrganizationFamily(ctx, graph, root); err != nil {
+		r.FamilyNote = fmt.Sprintf("The family lens could not run (%v), so the institution's own organizations may "+
+			"be listed as vendors.", err)
+	} else {
+		applyFamily(&r, family)
+	}
+
 	verified, err := verifiedFor(ctx, graph, root)
 	if err != nil {
 		return r, fmt.Errorf("verification relationships of %s: %w", assetLabel(root), err)
@@ -345,6 +352,7 @@ func FormatVendorReport(r ThirdPartyReport) string {
 	var b strings.Builder
 	b.WriteString(thirdPartyAnswer(groupVendorKinds(r)))
 	b.WriteString("\n")
+	b.WriteString(familyLines(r))
 	if len(r.UnrecognizedSPF) > 0 {
 		fmt.Fprintf(&b, "\nSPF includes no vendor entry recognizes (%d): %s\n", len(r.UnrecognizedSPF),
 			strings.Join(r.UnrecognizedSPF, ", "))
