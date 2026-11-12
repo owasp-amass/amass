@@ -45,11 +45,10 @@ domains. The family lens finds the organizations tied to the domain:
   its names;
 - a registration contact for the domain that uses an address in it, such as
   an IT department;
-- the holders of networks that mostly serve the domain's names. The lens
-  samples where the domain's names resolve and then samples each of those
-  networks: a network that mostly serves the domain is dedicated, and one
-  serving many other customers is a hosting provider, which is listed but
-  is not family.
+- the holders of networks dedicated to the domain. The lens samples where
+  the domain's names resolve. A network is dedicated when an organization
+  tied in one of the ways above holds it, or when most of the names stored
+  for it are the domain's; otherwise it is a hosting provider.
 
 It classifies each organization against the one with the most ties:
 
@@ -59,11 +58,22 @@ It classifies each organization against the one with the most ties:
   normalization (`5801 Smith Avenue` and `5801 Smith Ave, Suite 3110B`);
 - **department** when its name carries a department or role word (IT
   services, hostmaster, school of);
-- **affiliate** otherwise, for example the Johns Hopkins Medical
-  Institutions, whose network serves jhu.edu names.
+- **affiliate** when its name shares a distinctive word with the
+  institution's (generic words such as university or college do not count)
+  or it registered the domain, for example the Johns Hopkins Medical
+  Institutions, whose network serves jhu.edu names;
+- **other organizations on its assets** otherwise: hosting providers,
+  internet service providers and vendors named on certificates. The
+  database stores only the addresses an enumeration found, so a provider's
+  network can look dedicated to the domain; without the institution's name
+  or registration its holder is listed here, not as family.
+
+A shared street address alone puts an organization with the same
+institution in the report, but only a name variant is proposed for merging:
+a registrant who is a person can share the institution's address.
 
 The report also lists the networks serving the domain and the other
-registered domains on its dedicated networks.
+registered domains on dedicated networks the family holds.
 
 The lens records two kinds of proposal in the review journal, and the
 engine records the same ones for each enumerated domain when an

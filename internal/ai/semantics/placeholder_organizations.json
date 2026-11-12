@@ -25,6 +25,8 @@
     "none",
     "null",
     "unknown",
+    "unspecified",
+    "not specified",
     "not applicable",
     "-"
   ],
