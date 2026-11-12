@@ -1,0 +1,15 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the organization family lens decides which organizations belong to an enumerated domain's institution and how. An organization is tied to the domain when it registered the domain, is named on certificates for the domain's names, is a registration contact for the domain using an address in it, or holds a network that mostly serves the domain's names. A network is dedicated when at least dedicated_share of the names sampled from it belong to the domain; a network that serves the domain's names but mostly others is a hosting provider, not family. Tied organizations are then classified against the organization with the most ties: the same institution when a name is a variant of its name or the street address matches, a department when the name carries one of department_words, otherwise an affiliate. Nothing the lens finds is written to the Asset Database. Add values here, not in Go code.",
+  "department_words": ["its", "it", "information technology", "information technology services", "computing",
+    "computer services", "computing center", "network services", "networking", "enterprise infrastructure",
+    "hostmaster", "postmaster", "webmaster", "dns admin", "dns administrator", "domain admin", "noc",
+    "department", "dept", "office of", "division of", "school of", "college of", "faculty of", "library",
+    "libraries", "athletics", "admissions", "registrar's office"],
+  "generic_words": ["university", "college", "institute", "school", "the", "of", "at", "and", "for", "inc", "llc",
+    "corporation", "company", "group", "services", "systems", "center", "state", "new"],
+  "sample_names": 500,
+  "sample_network": 200,
+  "min_hosted_names": 5,
+  "dedicated_share": 0.3
+}

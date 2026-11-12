@@ -36,7 +36,7 @@ const Description = "AI investigation, MCP tools, and reviewed inference proposa
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
 	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
-	"identity-conflicts"}
+	"identity-conflicts", "family"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -51,7 +51,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
 	var queryPath, evalPath, proposalID, reviewer, modelOutput string
-	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
+	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince, domainName string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
 	var modelTimeout, investigationTimeout time.Duration
 	var maxTokens, contextTokens int
@@ -68,6 +68,7 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
+	fs.StringVar(&domainName, "domain", "", "Enumerated domain for family")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
@@ -359,6 +360,8 @@ func Run(in io.Reader, out, errout io.Writer, args []string) error {
 		return listDuplicates(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "identity-conflicts":
 		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+	case "family":
+		return listFamily(ctx, graph, domainName, outputFormat, explicitFlags["format"], out)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
