@@ -129,6 +129,13 @@ domain (`dnsmadeeasy` and `dnsmadeeasy.com`) is listed once, under the
 organization's name. Organizations named by a placeholder such as
 `domain admin` are skipped when naming a party.
 
+The lens also runs the family lens for the domain. Organizations the family
+lens counts as the institution itself (the same institution or a department)
+are listed as the institution's own instead of as vendors, and affiliates,
+with the domains the institution's dedicated networks also serve, are listed
+as affiliated. This matters most for a domain with no documented owner, whose
+own networks would otherwise appear as its largest vendor.
+
 These are stored records, not verified contracts: a token or SPF include can
 outlive the service.
 
