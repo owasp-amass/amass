@@ -228,3 +228,63 @@ func TestNameVariant(t *testing.T) {
 		}
 	}
 }
+
+// A company's family: its security unit (a registration contact) is a
+// department; a vendor on a certificate with a unit word in its name is not;
+// an organization sharing only generic words such as holdings or
+// international is not an affiliate.
+func TestFindOrganizationFamilyOfCompany(t *testing.T) {
+	g := newOrgGraph()
+	a := func(id, typ string, content map[string]any) {
+		g.g.assets[id] = Asset{ID: id, Type: typ, Key: id, Content: content}
+	}
+	cert := func(id, cn, org string) {
+		a(id, "TLSCertificate", map[string]any{"subject_common_name": cn})
+		a("cr-"+id, "ContactRecord", nil)
+		g.link(id, "cr-"+id, "subject_contact")
+		g.link("cr-"+id, org, "organization")
+	}
+
+	g.org("acme", "acme robotics holdings", "acme robotics holdings, inc.", "US-DE", "7")
+	g.org("secops", "acme security operations", "", "", "")
+	g.org("vendor", "global library services", "", "", "")
+	g.org("generic", "holdings international ltd", "", "", "")
+
+	a("acme.example", "FQDN", map[string]any{"name": "acme.example"})
+	for i := 0; i < 3; i++ {
+		name := fmt.Sprintf("www%d.acme.example", i)
+		a(name, "FQDN", map[string]any{"name": name})
+		g.link("acme.example", name, "node")
+		cert(fmt.Sprintf("c%d", i), name, "acme")
+	}
+	cert("cv", "docs.acme.example", "vendor")
+	cert("cg", "shop.acme.example", "generic")
+
+	a("dr", "DomainRecord", map[string]any{"domain": "acme.example"})
+	a("cr-sec", "ContactRecord", nil)
+	g.link("dr", "cr-sec", "technical_contact")
+	g.link("cr-sec", "secops", "organization")
+	g.g.assets["email:soc@acme.example"] = Asset{ID: "email:soc@acme.example", Type: "Identifier",
+		Key: "email:soc@acme.example", Content: map[string]any{"id": "soc@acme.example", "id_type": "email"}}
+	g.link("cr-sec", "email:soc@acme.example", "id")
+
+	r, err := FindOrganizationFamily(context.Background(), g.g, g.g.assets["acme.example"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Main == nil || r.Main.ID != "acme" {
+		t.Fatalf("main = %+v", r.Main)
+	}
+
+	got := map[string]string{}
+	for _, m := range r.Members {
+		got[m.Organization.ID] = m.Relation
+	}
+	want := map[string]string{"acme": FamilySame, "secops": FamilyDepartment, "vendor": FamilyOther,
+		"generic": FamilyOther}
+	for id, rel := range want {
+		if got[id] != rel {
+			t.Errorf("%s: relation %q, want %q (members %v)", id, got[id], rel, got)
+		}
+	}
+}
