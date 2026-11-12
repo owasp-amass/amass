@@ -23,8 +23,10 @@ type familyGraph interface {
 
 // listFamily prints the organizations tied to a domain, how each relates
 // to its main organization, and the networks and registered domains that
-// serve them. It reads only.
-func listFamily(ctx context.Context, graph familyGraph, domain, format string, explicit bool, out io.Writer) error {
+// serve them. Departments and same-institution organizations are recorded
+// in the journal as proposals; nothing in the Asset Database changes.
+func listFamily(ctx context.Context, graph familyGraph, domain, journalPath, format string, explicit bool,
+	out, errout io.Writer) error {
 	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
 	if domain == "" {
 		return errors.New("-domain required")
@@ -42,6 +44,11 @@ func listFamily(ctx context.Context, graph familyGraph, domain, format string, e
 	if err != nil {
 		return err
 	}
+	if journalPath != "" {
+		if err := recordFamily(&ai.Journal{Path: journalPath}, r, errout); err != nil {
+			return err
+		}
+	}
 
 	switch {
 	case !explicit || format == "text":
@@ -52,4 +59,19 @@ func listFamily(ctx context.Context, graph familyGraph, domain, format string, e
 	}
 
 	return fmt.Errorf("family format %q: use text or json", format)
+}
+
+// recordFamily records a family's departments and same-institution
+// organizations as proposals.
+func recordFamily(j *ai.Journal, r ai.FamilyReport, errout io.Writer) error {
+	units, merges, err := j.SubmitFamily(r)
+	if err != nil {
+		return err
+	}
+	if units+merges > 0 {
+		_, _ = fmt.Fprintf(errout, "%d department and %d merge proposal(s) recorded in %s; review with "+
+			"`amass review proposals`\n", units, merges, j.Path)
+	}
+
+	return nil
 }

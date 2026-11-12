@@ -379,7 +379,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	case "identity-conflicts":
 		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "family":
-		return listFamily(ctx, graph, domainName, outputFormat, explicitFlags["format"], out)
+		return listFamily(ctx, graph, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
