@@ -83,6 +83,15 @@ type BoundedGraph interface {
 	EdgesLimited(context.Context, string, string, string, time.Time, int) ([]Relation, bool, error)
 }
 
+// PagedGraph reads an asset's edges past the first bounded page:
+// EdgesPage(ctx, id, direction, label, since, cursor, limit) returns the
+// page after cursor ("" for the first) and the cursor of the next page (""
+// after the last). The cursor is a keyset position, so edges written while
+// a reader pages do not shift later pages.
+type PagedGraph interface {
+	EdgesPage(context.Context, string, string, string, time.Time, string, int) ([]Relation, string, error)
+}
+
 type Limits struct {
 	MaxDepth     int
 	MaxNodes     int
