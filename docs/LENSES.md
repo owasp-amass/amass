@@ -124,6 +124,9 @@ not reported, an address inside one of the organization's netblocks counts as
 its own, other bare addresses are grouped as having no recorded network owner,
 and providers whose names span many domains (such as Amazon Route 53's
 `awsdns-NN` name servers) are grouped by `internal/ai/semantics/vendor_names.json`.
+A registration contact with no organization is the institution's own when its
+email is in one of the institution's domains, and is named by its email domain
+otherwise.
 A party reached once through its organization and once only through its
 domain (`dnsmadeeasy` and `dnsmadeeasy.com`) is listed once, under the
 organization's name. Organizations named by a placeholder such as
