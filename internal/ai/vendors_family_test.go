@@ -265,3 +265,45 @@ func TestFootprintFollowsURLsLast(t *testing.T) {
 		}
 	}
 }
+
+// A registration contact with no organization is the subject's own when its
+// email is in one of the subject's domains, and is named by its email
+// domain otherwise, never by its RDAP URL.
+func TestThirdPartyLensNamesContactsByEmail(t *testing.T) {
+	g := vendorFixture()
+	add := func(id, typ string, content map[string]any) {
+		g.assets[id] = Asset{ID: id, Type: typ, Key: id, Content: content}
+	}
+	link := func(from, label, to string) {
+		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
+			Type: "SimpleRelation"})
+	}
+
+	add("https://rdap.arin.net/registry/entity/RG3622-ARIN", "ContactRecord", nil)
+	add("email-own", "Identifier", map[string]any{"id": "netops@colgate.edu", "id_type": "email"})
+	add("https://rdap.arin.net/registry/entity/NOC1-ARIN", "ContactRecord", nil)
+	add("email-out", "Identifier", map[string]any{"id": "noc@acmehosting.com", "id_type": "email"})
+	add("https://rdap.arin.net/registry/entity/NONE-ARIN", "ContactRecord", nil)
+	link("ipnet-own", "technical_contact", "https://rdap.arin.net/registry/entity/RG3622-ARIN")
+	link("https://rdap.arin.net/registry/entity/RG3622-ARIN", "id", "email-own")
+	link("dr", "technical_contact", "https://rdap.arin.net/registry/entity/NOC1-ARIN")
+	link("https://rdap.arin.net/registry/entity/NOC1-ARIN", "id", "email-out")
+	link("dr", "technical_contact", "https://rdap.arin.net/registry/entity/NONE-ARIN")
+
+	r, err := searchThirdParties(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := vendorNames(&r)
+	if _, ok := got["https://rdap.arin.net/registry/entity/RG3622-ARIN"]; ok {
+		t.Errorf("the subject's own contact is a vendor: %v", got)
+	}
+	if got["acmehosting.com"] == "" {
+		t.Errorf("outside contact not named by its email domain: %v", got)
+	}
+	// A contact with nothing to name it by keeps its record's name.
+	if got["https://rdap.arin.net/registry/entity/NONE-ARIN"] == "" {
+		t.Errorf("contact without an email was dropped: %v", got)
+	}
+}

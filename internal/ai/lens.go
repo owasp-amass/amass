@@ -392,6 +392,22 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 		}
 	}
 	switch best.Type {
+	case "ContactRecord":
+		// A contact with no organization is named by its email domain: one of
+		// the subject's own domains makes it the subject's own contact (a
+		// university's network engineer), any other names the outside party.
+		domains, err := d.contactEmailDomains(best)
+		if err != nil {
+			return "", "", false, "", err
+		}
+		for _, dom := range domains {
+			if d.ownDomains[dom] {
+				return "", "", true, best.ID, nil
+			}
+		}
+		if len(domains) > 0 {
+			return vendorNameOf(domains[0]), "", false, best.ID, nil
+		}
 	case "FQDN":
 		domain := registeredDomain(fqdnName(best))
 		if reverseZone(domain) {
@@ -422,6 +438,33 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 	}
 
 	return assetLabel(best), best.ID, false, best.ID, nil
+}
+
+// contactEmailDomains returns the registered domains of a contact
+// record's email identifiers, sorted.
+func (d dependencyScan) contactEmailDomains(cr Asset) ([]string, error) {
+	steps, err := d.w.steps(cr)
+	if err != nil {
+		return nil, err
+	}
+
+	set := map[string]bool{}
+	for _, s := range steps {
+		if !s.forward || s.edge.Label != "id" || s.other.Type != "Identifier" ||
+			!strings.EqualFold(contentString(s.other, "id_type"), "email") {
+			continue
+		}
+		if _, dom, ok := strings.Cut(contentString(s.other, "id"), "@"); ok && dom != "" {
+			set[registeredDomain(dom)] = true
+		}
+	}
+
+	out := make([]string, 0, len(set))
+	for dom := range set {
+		out = append(out, dom)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // unattributedAddresses names the party behind public addresses with no
