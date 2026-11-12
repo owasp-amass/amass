@@ -71,7 +71,47 @@ func familyGraph() fakeGraph {
 		Key: "email:hostmaster@jhu.edu", Content: map[string]any{"id": "hostmaster@jhu.edu", "id_type": "email"}}
 	g.link("cr-its", "email:hostmaster@jhu.edu", "id")
 
+	// An ISP whose only stored addresses are the few jhu.edu names using it,
+	// so its stored names look dedicated to jhu.edu.
+	g.org("isp", "comcast cable communications", "", "", "")
+	network("nb-isp", "50.128.0.0/9", "isp")
+	for i := 0; i < 6; i++ {
+		name := fmt.Sprintf("home%d.jhu.edu", i)
+		resolve(name, fmt.Sprintf("50.128.0.%d", i), "nb-isp")
+		g.link("jhu.edu", name, "node")
+	}
+
+	// A person named as the domain's registrant, sharing only the street
+	// address; and a placeholder certificate subject.
+	g.org("person", "eric torgersen", "", "", "")
+	a("dr-reg", "DomainRecord", map[string]any{"domain": "jhu.edu"})
+	a("cr-person", "ContactRecord", nil)
+	g.link("dr-reg", "cr-person", "registrant_contact")
+	g.link("cr-person", "person", "organization")
+	a("loc-1", "Location", map[string]any{"address": "3400 north charles street baltimore md 21218"})
+	a("loc-2", "Location", map[string]any{"address": "3400 n. charles st., garland hall, baltimore, md 21218-2683"})
+	g.link("cr-person", "loc-1", "location")
+	g.org("unspecified", "unspecified", "", "", "")
+	a("cert-u", "TLSCertificate", map[string]any{"subject_common_name": "x.jhu.edu"})
+	a("cr-cert-u", "ContactRecord", nil)
+	g.link("cert-u", "cr-cert-u", "subject_contact")
+	g.link("cr-cert-u", "unspecified", "organization")
+
+	// A network the university holds, whose stored names are mostly other
+	// domains' (as when an active probe stores addresses without names):
+	// held by a directly tied organization, it is dedicated anyway.
+	network("nb-campus", "10.20.0.0/16", "jhu")
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("lab%d.jhu.edu", i)
+		resolve(name, fmt.Sprintf("10.20.0.%d", i), "nb-campus")
+		g.link("jhu.edu", name, "node")
+	}
+	for i := 0; i < 30; i++ {
+		resolve(fmt.Sprintf("guest%d.example%d.org", i, i), fmt.Sprintf("10.20.1.%d", i), "nb-campus")
+	}
+
 	network("nb-jhu", "128.220.0.0/16", "jhu-arin")
+	g.link("cr-nb-jhu", "loc-2", "location")
 	network("nb-jhmi", "162.129.0.0/16", "jhmi")
 	network("nb-cloud", "52.0.0.0/8", "cloud")
 
@@ -119,13 +159,13 @@ func TestFindOrganizationFamily(t *testing.T) {
 		got[m.Organization.ID] = m.Relation
 	}
 	want := map[string]string{"jhu": FamilySame, "jhu-arin": FamilySame, "its": FamilyDepartment,
-		"jhmi": FamilyAffiliate}
+		"jhmi": FamilyAffiliate, "isp": FamilyOther, "person": FamilySame}
 	for id, rel := range want {
 		if got[id] != rel {
 			t.Errorf("%s: relation %q, want %q (members %v)", id, got[id], rel, got)
 		}
 	}
-	for _, id := range []string{"cloud", "other"} {
+	for _, id := range []string{"cloud", "other", "unspecified"} {
 		if rel, ok := got[id]; ok {
 			t.Errorf("%s should not be family, got %s", id, rel)
 		}
@@ -135,7 +175,8 @@ func TestFindOrganizationFamily(t *testing.T) {
 	for _, n := range r.Networks {
 		dedicated[n.CIDR] = n.Dedicated
 	}
-	if !dedicated["128.220.0.0/16"] || !dedicated["162.129.0.0/16"] || dedicated["52.0.0.0/8"] {
+	if !dedicated["128.220.0.0/16"] || !dedicated["162.129.0.0/16"] || dedicated["52.0.0.0/8"] ||
+		!dedicated["10.20.0.0/16"] {
 		t.Errorf("networks = %+v", r.Networks)
 	}
 
@@ -147,9 +188,22 @@ func TestFindOrganizationFamily(t *testing.T) {
 		t.Errorf("related domains = %+v", r.RelatedDomains)
 	}
 
+	// Only name variants are proposed for merging: the person who shares
+	// the address is reported, not merged.
+	units, merges := FamilyProposals(r)
+	if len(units) != 1 || units[0].AssetID != "its" {
+		t.Errorf("department proposals = %+v", units)
+	}
+	if len(merges) != 1 || (merges[0].DuplicateID != "jhu" && merges[0].SurvivorID != "jhu") {
+		t.Errorf("merge proposals = %+v", merges)
+	}
+	if r.Reads == 0 {
+		t.Error("the report does not count its reads")
+	}
+
 	text := FormatFamilyReport(r)
 	for _, want := range []string{"Main organization: johns hopkins university", "Affiliates:",
-		"hosting provider", "jhsph.edu"} {
+		"hosting provider", "jhsph.edu", "Other organizations on its assets"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("report lacks %q:\n%s", want, text)
 		}

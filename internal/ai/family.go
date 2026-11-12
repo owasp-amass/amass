@@ -52,6 +52,10 @@ const (
 	FamilySame       = "same_institution"
 	FamilyDepartment = "department"
 	FamilyAffiliate  = "affiliate"
+	// FamilyOther is an organization on the domain's assets that is not
+	// family by name or registration, such as a hosting provider or a
+	// vendor named on a certificate.
+	FamilyOther = "other"
 )
 
 // FamilyMember is an organization tied to the domain, how it relates to
@@ -60,6 +64,9 @@ type FamilyMember struct {
 	Organization Asset    `json:"organization"`
 	Relation     string   `json:"relation"`
 	Evidence     []string `json:"evidence"`
+	// ByName reports that a same-institution member's name is a variant of
+	// another's; only those are proposed for merging.
+	ByName bool `json:"by_name,omitempty"`
 }
 
 // FamilyNetwork is a network that serves the domain's names.
@@ -90,9 +97,11 @@ type FamilyReport struct {
 	Networks       []FamilyNetwork `json:"networks"`
 	RelatedDomains []RelatedDomain `json:"related_domains"`
 	SampledNames   int             `json:"sampled_names"`
-	Reads          int             `json:"reads"`
-	Truncated      bool            `json:"truncated"`
-	Reason         string          `json:"reason,omitempty"`
+	// MoreNames reports that the domain has more names than were sampled.
+	MoreNames bool   `json:"more_names,omitempty"`
+	Reads     int    `json:"reads"`
+	Truncated bool   `json:"truncated"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // familyProfile adds to an organization's profile what it controls.
@@ -141,26 +150,32 @@ func FindOrganizationFamily(ctx context.Context, graph Graph, root Asset) (Famil
 		rules: loadFamilyRules(), table: table, report: FamilyReport{Domain: domain},
 		profiles: map[string]*familyProfile{}, holders: map[string][]string{}, cidrs: map[string]string{},
 		netNames: map[string]int{}}
-	defer func() { s.report.Reads = s.dup.report.Reads }()
-
 	if err := s.profileAll(); err != nil {
-		return s.report, err
+		return s.finish(), err
 	}
 	if err := s.sampleDomain(root); err != nil && !errors.Is(err, errDupReadLimit) {
-		return s.report, err
+		return s.finish(), err
 	}
 
-	dedicated, err := s.classifyNetworks(domain)
+	direct := s.directTies(domain)
+	dedicated, sampled, err := s.classifyNetworks(domain, direct)
 	if err != nil && !errors.Is(err, errDupReadLimit) {
-		return s.report, err
+		return s.finish(), err
 	}
 
-	s.members(domain, dedicated)
+	s.members(domain, direct, dedicated)
+	s.relatedDomains(domain, dedicated, sampled)
+	return s.finish(), nil
+}
+
+// finish completes the report with what the search read.
+func (s *familySearch) finish() FamilyReport {
+	s.report.Reads = s.dup.report.Reads
 	if s.dup.report.Truncated {
-		s.report.Truncated, s.report.Reason = true, s.dup.report.Reason
+		s.truncate(s.dup.report.Reason)
 	}
 
-	return s.report, nil
+	return s.report
 }
 
 func (s *familySearch) truncate(reason string) {
@@ -303,9 +318,7 @@ func (s *familySearch) sampleDomain(root Asset) error {
 			}
 		}
 	}
-	if len(queue) > 0 {
-		s.truncate(fmt.Sprintf("sampled %d of the domain's names", s.report.SampledNames))
-	}
+	s.report.MoreNames = len(queue) > 0
 
 	return nil
 }
@@ -391,11 +404,35 @@ func (s *familySearch) holdersOf(block string) error {
 	return nil
 }
 
-// classifyNetworks samples each network serving enough of the domain's
-// names: one mostly serving the domain is dedicated to it, the rest are
-// hosting providers. It returns the dedicated netblocks.
-func (s *familySearch) classifyNetworks(domain string) (map[string]bool, error) {
+// directTies are the organizations tied to the domain by something other
+// than a network: registering it, certificates for its names, or a
+// registration contact role with an address in it.
+func (s *familySearch) directTies(domain string) map[string][]string {
+	ties := map[string][]string{}
+	for id, p := range s.profiles {
+		if p.registers[domain] {
+			ties[id] = append(ties[id], "registered "+domain)
+		}
+		if n := p.certified[domain]; n > 0 {
+			ties[id] = append(ties[id], fmt.Sprintf("named on %d certificate(s) for %s names", n, domain))
+		}
+		if p.contactFor[domain] && p.emails[domain] {
+			ties[id] = append(ties[id], fmt.Sprintf("registration contact for %s with a %s address", domain, domain))
+		}
+	}
+
+	return ties
+}
+
+// classifyNetworks decides which networks serving enough of the domain's
+// names are dedicated to it: those held by an organization directly tied
+// to the domain, and those mostly serving its names among the names
+// stored for them. It returns the dedicated netblocks and each sampled
+// network's registered domains.
+func (s *familySearch) classifyNetworks(domain string, direct map[string][]string) (map[string]bool,
+	map[string]map[string]int, error) {
 	dedicated := map[string]bool{}
+	sampled := map[string]map[string]int{}
 	blocks := make([]string, 0, len(s.netNames))
 	for b, n := range s.netNames {
 		if n >= s.rules.MinHostedNames {
@@ -404,31 +441,63 @@ func (s *familySearch) classifyNetworks(domain string) (map[string]bool, error) 
 	}
 	sort.Slice(blocks, func(i, j int) bool { return s.netNames[blocks[i]] > s.netNames[blocks[j]] })
 
-	related := map[string]*RelatedDomain{}
 	for _, b := range blocks {
 		domains, total, err := s.sampleNetwork(b)
 		if err != nil {
-			return dedicated, err
+			return dedicated, sampled, err
 		}
+		sampled[b] = domains
 
 		share := 0.0
 		if total > 0 {
 			share = float64(domains[domain]) / float64(total)
 		}
+		held := false
+		for _, h := range s.holders[b] {
+			if len(direct[h]) > 0 {
+				held = true
+			}
+		}
+
 		net := FamilyNetwork{CIDR: s.cidrs[b], Names: s.netNames[b], Share: share,
-			Dedicated: share >= s.rules.DedicatedShare}
+			Dedicated: held || share >= s.rules.DedicatedShare}
 		if hs := s.holders[b]; len(hs) > 0 {
 			if p, ok := s.profiles[hs[0]]; ok {
 				net.Holder, net.HolderID = AssetLabel(p.asset), p.asset.ID
 			}
 		}
 		s.report.Networks = append(s.report.Networks, net)
-		if !net.Dedicated {
+		if net.Dedicated {
+			dedicated[b] = true
+		}
+	}
+
+	return dedicated, sampled, nil
+}
+
+// relatedDomains lists the other registered domains on dedicated networks
+// held by the family's members.
+func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, sampled map[string]map[string]int) {
+	family := map[string]bool{}
+	for _, m := range s.report.Members {
+		if m.Relation != FamilyOther {
+			family[m.Organization.ID] = true
+		}
+	}
+
+	related := map[string]*RelatedDomain{}
+	for b := range dedicated {
+		held := false
+		for _, h := range s.holders[b] {
+			if family[h] {
+				held = true
+			}
+		}
+		if !held {
 			continue
 		}
 
-		dedicated[b] = true
-		for d, n := range domains {
+		for d, n := range sampled[b] {
 			if d == domain {
 				continue
 			}
@@ -448,8 +517,6 @@ func (s *familySearch) classifyNetworks(domain string) (map[string]bool, error) 
 		}
 		return a.Domain < b.Domain
 	})
-
-	return dedicated, nil
 }
 
 // sampleNetwork counts the registered domains of the names whose addresses
@@ -487,7 +554,7 @@ func (s *familySearch) sampleNetwork(block string) (map[string]int, int, error) 
 			if err != nil {
 				return out, total, err
 			}
-			if name := contentString(a, "name"); name != "" {
+			if name := contentString(a, "name"); name != "" && !reverseLookupName(a) {
 				out[registeredDomain(name)]++
 				total++
 			}
@@ -497,39 +564,27 @@ func (s *familySearch) sampleNetwork(block string) (map[string]int, int, error) 
 	return out, total, nil
 }
 
-// members finds the organizations tied to the domain and classifies them
-// against the one with the most ties.
-func (s *familySearch) members(domain string, dedicated map[string]bool) {
+// members classifies the organizations tied to the domain against the one
+// with the most ties.
+func (s *familySearch) members(domain string, direct map[string][]string, dedicated map[string]bool) {
 	ties := map[string][]string{}
 	weight := map[string]int{}
-	tie := func(id, why string, w int) {
-		if !slices.Contains(ties[id], why) {
-			ties[id] = append(ties[id], why)
-		}
-		weight[id] += w
-	}
-
-	ids := make([]string, 0, len(s.profiles))
-	for id := range s.profiles {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
-	for _, id := range ids {
+	for id, why := range direct {
+		ties[id] = append(ties[id], why...)
 		p := s.profiles[id]
+		weight[id] += p.certified[domain]
 		if p.registers[domain] {
-			tie(id, "registered "+domain, 10)
+			weight[id] += 5
 		}
-		if n := p.certified[domain]; n > 0 {
-			tie(id, fmt.Sprintf("named on %d certificate(s) for %s names", n, domain), n)
-		}
-		if p.contactFor[domain] && p.emails[domain] {
-			tie(id, fmt.Sprintf("registration contact for %s with a %s address", domain, domain), 1)
+		if p.contactFor[domain] {
+			weight[id]++
 		}
 	}
 	for b := range dedicated {
 		for _, id := range s.holders[b] {
-			tie(id, fmt.Sprintf("holds %s, which mostly serves %s names", s.cidrs[b], domain), s.netNames[b])
+			ties[id] = append(ties[id], fmt.Sprintf("holds %s, which serves %d of the sampled %s names", s.cidrs[b],
+				s.netNames[b], domain))
+			weight[id] += s.netNames[b]
 		}
 	}
 	if len(ties) == 0 {
@@ -546,20 +601,25 @@ func (s *familySearch) members(domain string, dedicated map[string]bool) {
 	s.report.Main = &m
 
 	same := s.sameInstitution(main, ties)
+	words := s.familyWords(main, same)
 	for id, why := range ties {
 		p := s.profiles[id]
 		member := FamilyMember{Organization: p.asset, Evidence: why}
-		switch {
+		switch r, ok := same[id]; {
 		case id == main:
-			member.Relation = FamilySame
+			member.Relation, member.ByName = FamilySame, true
 			member.Evidence = append(member.Evidence, "the domain's main organization")
 		case s.isDepartment(p):
 			member.Relation = FamilyDepartment
-		case same[id] != "":
-			member.Relation = FamilySame
-			member.Evidence = append(member.Evidence, same[id])
-		default:
+		case ok:
+			member.Relation, member.ByName = FamilySame, r.byName
+			member.Evidence = append(member.Evidence, r.why)
+		case p.registers[domain] || s.sharesWord(p, words):
 			member.Relation = FamilyAffiliate
+		default:
+			// A provider or vendor on the domain's assets: a network or a
+			// certificate, without the institution's name or registration.
+			member.Relation = FamilyOther
 		}
 		s.report.Members = append(s.report.Members, member)
 	}
@@ -569,7 +629,10 @@ func (s *familySearch) members(domain string, dedicated map[string]bool) {
 		if familyRank(a.Relation) != familyRank(b.Relation) {
 			return familyRank(a.Relation) < familyRank(b.Relation)
 		}
-		return weight[a.Organization.ID] > weight[b.Organization.ID]
+		if weight[a.Organization.ID] != weight[b.Organization.ID] {
+			return weight[a.Organization.ID] > weight[b.Organization.ID]
+		}
+		return a.Organization.ID < b.Organization.ID
 	})
 }
 
@@ -579,15 +642,22 @@ func familyRank(r string) int {
 		return 0
 	case FamilyDepartment:
 		return 1
-	default:
+	case FamilyAffiliate:
 		return 2
+	default:
+		return 3
 	}
+}
+
+type sameReason struct {
+	why    string
+	byName bool
 }
 
 // sameInstitution groups the tied organizations whose names are variants
 // of each other or whose street addresses match, and returns why each
 // member of the main organization's group belongs to it.
-func (s *familySearch) sameInstitution(main string, ties map[string][]string) map[string]string {
+func (s *familySearch) sameInstitution(main string, ties map[string][]string) map[string]sameReason {
 	ids := make([]string, 0, len(ties))
 	for id := range ties {
 		if !s.isDepartment(s.profiles[id]) {
@@ -596,44 +666,84 @@ func (s *familySearch) sameInstitution(main string, ties map[string][]string) ma
 	}
 	sort.Strings(ids)
 
-	why := map[string]string{main: "main"}
+	same := map[string]sameReason{main: {why: "main", byName: true}}
 	for changed := true; changed; {
 		changed = false
 		for _, id := range ids {
-			if why[id] != "" {
+			if _, ok := same[id]; ok {
 				continue
 			}
 			for _, other := range ids {
-				if why[other] == "" {
+				if _, ok := same[other]; !ok {
 					continue
 				}
-				if r := s.sameAs(s.profiles[id], s.profiles[other]); r != "" {
-					why[id], changed = r, true
+				if r, ok := s.sameAs(s.profiles[id], s.profiles[other]); ok {
+					same[id], changed = r, true
 					break
 				}
 			}
 		}
 	}
 
-	delete(why, main)
-	return why
+	delete(same, main)
+	return same
 }
 
-// sameAs says why two organizations are one institution, or "".
-func (s *familySearch) sameAs(a, b *familyProfile) string {
-	if k := firstShared(a.addresses, b.addresses); k != "" {
-		street, _, _ := strings.Cut(k, "|")
-		return "same street address as " + AssetLabel(b.asset) + " (" + street + ")"
-	}
+// sameAs says why two organizations are one institution: a name variant,
+// or else a matching street address.
+func (s *familySearch) sameAs(a, b *familyProfile) (sameReason, bool) {
 	for na := range a.brands {
 		for nb := range b.brands {
 			if nameVariant(na, nb, s.rules.GenericWords) || nameVariant(nb, na, s.rules.GenericWords) {
-				return fmt.Sprintf("%q is a variant of %q (%s)", na, nb, AssetLabel(b.asset))
+				return sameReason{why: fmt.Sprintf("%q is a variant of %q (%s)", na, nb, AssetLabel(b.asset)),
+					byName: true}, true
+			}
+		}
+	}
+	if k := firstShared(a.addresses, b.addresses); k != "" {
+		street, _, _ := strings.Cut(k, "|")
+		return sameReason{why: "same street address as " + AssetLabel(b.asset) + " (" + street + ")"}, true
+	}
+
+	return sameReason{}, false
+}
+
+// familyWords are the distinctive words of the main organization's and
+// its same-institution members' names.
+func (s *familySearch) familyWords(main string, same map[string]sameReason) map[string]bool {
+	out := map[string]bool{}
+	add := func(p *familyProfile) {
+		for b := range p.brands {
+			for _, w := range strings.Fields(b) {
+				if len(w) >= 3 && !slices.Contains(s.rules.GenericWords, w) {
+					out[w] = true
+				}
 			}
 		}
 	}
 
-	return ""
+	add(s.profiles[main])
+	for id, r := range same {
+		if r.byName {
+			add(s.profiles[id])
+		}
+	}
+
+	return out
+}
+
+// sharesWord reports whether an organization's name has one of the
+// family's distinctive words.
+func (s *familySearch) sharesWord(p *familyProfile, words map[string]bool) bool {
+	for b := range p.brands {
+		for _, w := range strings.Fields(b) {
+			if words[w] {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // nameVariant reports whether name a is a variant of name b: its words are
@@ -714,7 +824,12 @@ func (s *familySearch) isDepartment(p *familyProfile) bool {
 // FormatFamilyReport renders a family report for a terminal.
 func FormatFamilyReport(r FamilyReport) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Organization family of %s (%d names sampled, %d reads).", r.Domain, r.SampledNames, r.Reads)
+	more := ""
+	if r.MoreNames {
+		more = "; it has more"
+	}
+	fmt.Fprintf(&b, "Organization family of %s (%d of its names sampled%s, %d reads).", r.Domain, r.SampledNames,
+		more, r.Reads)
 	if r.Truncated {
 		fmt.Fprintf(&b, " Incomplete: %s.", r.Reason)
 	}
@@ -726,7 +841,7 @@ func FormatFamilyReport(r FamilyReport) string {
 
 	fmt.Fprintf(&b, "Main organization: %s [%s]\n", AssetLabel(*r.Main), r.Main.ID)
 	titles := map[string]string{FamilySame: "Same institution", FamilyDepartment: "Departments",
-		FamilyAffiliate: "Affiliates"}
+		FamilyAffiliate: "Affiliates", FamilyOther: "Other organizations on its assets (providers and vendors)"}
 	last := ""
 	for _, m := range r.Members {
 		if m.Relation != last {
@@ -750,12 +865,12 @@ func FormatFamilyReport(r FamilyReport) string {
 			if holder == "" {
 				holder = "holder unknown"
 			}
-			fmt.Fprintf(&b, "  %s (%s): %d of the sampled names, %s, %.0f%% of its names are the domain's\n",
-				n.CIDR, holder, n.Names, kind, n.Share*100)
+			fmt.Fprintf(&b, "  %s (%s): %d of the sampled names, %s, %.0f%% of the names stored for it are the "+
+				"domain's\n", n.CIDR, holder, n.Names, kind, n.Share*100)
 		}
 	}
 	if len(r.RelatedDomains) > 0 {
-		b.WriteString("\nOther registered domains on its dedicated networks:\n")
+		b.WriteString("\nOther registered domains on the family's networks:\n")
 		for _, d := range r.RelatedDomains {
 			fmt.Fprintf(&b, "  %s (%d names, %s)\n", d.Domain, d.Names, d.CIDR)
 		}
@@ -793,6 +908,10 @@ func FamilyProposals(r FamilyReport) ([]OwnershipProposal, []DuplicateProposal) 
 				AssetID: m.Organization.ID, AssetType: "Organization", Edge: edge, Decision: GapReview,
 				Signals: evidence, Evidence: evidence, CreatedAt: now})
 		case FamilySame:
+			if !m.ByName {
+				// A shared address alone is reported, never merged.
+				continue
+			}
 			survivor, dup := main, m.Organization
 			merges = append(merges, DuplicateProposal{ID: DuplicateProposalID(survivor, dup),
 				Survivor: AssetLabel(survivor), SurvivorID: survivor.ID, Duplicate: AssetLabel(dup), DuplicateID: dup.ID,
