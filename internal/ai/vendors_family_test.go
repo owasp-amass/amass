@@ -5,6 +5,8 @@
 package ai
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -70,5 +72,33 @@ func TestApplyFamilyWithoutInstitution(t *testing.T) {
 	applyFamily(&r, FamilyReport{})
 	if len(r.Vendors) != 1 || r.Institution != "" || familyLines(r) != "" {
 		t.Errorf("a family without a main organization changed the report: %+v", r)
+	}
+}
+
+// A domain with more subdomains than one read returns still shows the
+// vendors its other relationships name, and the report names the label
+// that stayed partial.
+func TestThirdPartyLensReadsBusyAssetsByLabel(t *testing.T) {
+	g := vendorFixture()
+	var nodes []Relation
+	for i := 0; i < MaxEdgeRead+100; i++ {
+		name := fmt.Sprintf("h%d.colgate.edu", i)
+		g.assets[name] = Asset{ID: name, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+		nodes = append(nodes, Relation{ID: "node-" + name, FromID: "colgate.edu", ToID: name, Label: "node",
+			Type: "SimpleRelation"})
+	}
+	// The fake reader returns edges in stored order, so the subdomains fill
+	// the first read.
+	g.links = append(nodes, g.links...)
+
+	r, err := searchThirdParties(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := vendorNames(&r)["pphosted.com"]; got != "DNS: FQDNs" {
+		t.Errorf("mail provider behind the busy domain missing: %v", vendorNames(&r))
+	}
+	if !r.Truncated || !strings.Contains(r.Reason, "out node edges on FQDN colgate.edu") {
+		t.Errorf("reason %q does not name the partial label", r.Reason)
 	}
 }

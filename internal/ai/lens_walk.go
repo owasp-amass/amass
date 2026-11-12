@@ -228,8 +228,12 @@ func (w *lensWalker) neighbors(id string) ([]Relation, error) {
 			return nil, err
 		}
 		if more {
-			a := w.assets[id]
-			w.truncate(fmt.Sprintf("more than %d %s edges on %s %s", lensMaxPerAsset, dir, a.Type, assetLabel(a)))
+			// One busy relationship (an FQDN's subdomains, a netblock's
+			// addresses) can fill the read; read each label on its own so
+			// the others are complete.
+			if edges, err = w.neighborsByLabel(id, dir); err != nil {
+				return nil, err
+			}
 		}
 
 		all = append(all, edges...)
@@ -237,6 +241,61 @@ func (w *lensWalker) neighbors(id string) ([]Relation, error) {
 
 	w.edges[id] = all
 	return all, nil
+}
+
+// neighborsByLabel reads the edges of id in one direction label by label,
+// for the labels the schema allows there and the semantics table gives a
+// meaning. A label that alone has more than lensMaxPerAsset edges is still
+// partial, and the report names it.
+func (w *lensWalker) neighborsByLabel(id, dir string) ([]Relation, error) {
+	a := w.assets[id]
+	seen := map[string]bool{}
+	var out []Relation
+	for _, label := range w.labelsFor(a.Type, dir) {
+		if w.report.Reads >= lensMaxReads {
+			w.truncate("database read limit")
+			break
+		}
+
+		w.report.Reads++
+		edges, more, err := w.bounded.EdgesLimited(w.ctx, id, dir, label, time.Time{}, lensMaxPerAsset)
+		if err != nil {
+			return nil, err
+		}
+		if more {
+			w.truncate(fmt.Sprintf("more than %d %s %s edges on %s %s", lensMaxPerAsset, dir, label, a.Type,
+				assetLabel(a)))
+		}
+		for _, e := range edges {
+			if !seen[e.ID] {
+				seen[e.ID] = true
+				out = append(out, e)
+			}
+		}
+	}
+
+	return out, nil
+}
+
+// labelsFor returns the relationship labels the schema allows for an asset
+// type in one direction that the semantics table gives a meaning, sorted.
+func (w *lensWalker) labelsFor(kind, dir string) []string {
+	set := map[string]bool{}
+	for _, r := range w.relations {
+		if (dir == "out" && r.SourceType != kind) || (dir == "in" && r.DestinationType != kind) {
+			continue
+		}
+		if _, ok := w.meaning(r.SourceType, r.Label, r.RelationType, r.DestinationType); ok {
+			set[r.Label] = true
+		}
+	}
+
+	out := make([]string, 0, len(set))
+	for l := range set {
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // step is one stored edge seen from the asset being expanded, with its
