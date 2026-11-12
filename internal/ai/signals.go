@@ -187,11 +187,11 @@ func SignalsMarkdown() string {
 
 	var b strings.Builder
 	b.WriteString("# Ownership signals\n\n")
-	b.WriteString("<!-- Generated from internal/ai/semantics/ownership_signals.json by `amass ai signals -format markdown`." +
+	b.WriteString("<!-- Generated from internal/ai/semantics/ownership_signals.json by `amass review signals -format markdown`." +
 		" Edit that file, not this one. -->\n\n")
 	b.WriteString("Amass proposes that an organization owns an asset it has not been attributed to only from stored " +
 		"evidence. Each kind of evidence is a signal, listed here with why it counts, what stops it from " +
-		"misfiring, and when it can still mislead. The same text is shown by `amass ai signals`.\n\n")
+		"misfiring, and when it can still mislead. The same text is shown by `amass review signals`.\n\n")
 	b.WriteString("## How signals decide\n\n")
 	b.WriteString("- A candidate with two strong signals, or one strong signal and a different second signal, is " +
 		"**proposed** when exactly one OAM relationship can record the owner. During enumeration a proposed " +

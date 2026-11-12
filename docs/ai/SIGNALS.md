@@ -1,8 +1,8 @@
 # Ownership signals
 
-<!-- Generated from internal/ai/semantics/ownership_signals.json by `amass ai signals -format markdown`. Edit that file, not this one. -->
+<!-- Generated from internal/ai/semantics/ownership_signals.json by `amass review signals -format markdown`. Edit that file, not this one. -->
 
-Amass proposes that an organization owns an asset it has not been attributed to only from stored evidence. Each kind of evidence is a signal, listed here with why it counts, what stops it from misfiring, and when it can still mislead. The same text is shown by `amass ai signals`.
+Amass proposes that an organization owns an asset it has not been attributed to only from stored evidence. Each kind of evidence is a signal, listed here with why it counts, what stops it from misfiring, and when it can still mislead. The same text is shown by `amass review signals`.
 
 ## How signals decide
 

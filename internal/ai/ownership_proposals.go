@@ -49,8 +49,8 @@ type OwnershipProposal struct {
 	Score     float64      `json:"score"`
 	Decision  string       `json:"decision"`
 	Signals   []string     `json:"signals"`
-	// SignalIDs are the catalog signals behind Signals, each once; `amass ai
-	// signals` explains them.
+	// SignalIDs are the catalog signals behind Signals, each once; `amass
+	// review signals` explains them.
 	SignalIDs []string `json:"signal_ids,omitempty"`
 	Gains     []string `json:"gains,omitempty"`
 	Evidence  []string `json:"evidence"`

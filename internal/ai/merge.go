@@ -93,8 +93,8 @@ type DuplicateProposal struct {
 	Score       float64  `json:"score"`
 	Decision    string   `json:"decision"`
 	Signals     []string `json:"signals"`
-	// SignalIDs are the catalog signals behind Signals, each once; `amass ai
-	// duplicate-signals` explains them.
+	// SignalIDs are the catalog signals behind Signals, each once; `amass
+	// review duplicate-signals` explains them.
 	SignalIDs []string  `json:"signal_ids,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }

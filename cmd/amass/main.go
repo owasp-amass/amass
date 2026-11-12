@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	usageMsg string = "[ai|assoc|engine|enum|subs|track|viz] [options]"
+	usageMsg string = "[ai|assoc|engine|enum|lens|review|subs|track|viz] [options]"
 )
 
 type Args struct {
@@ -62,6 +62,8 @@ var subcommands = []subDesc{
 	{"assoc", assoc.Description},
 	{"engine", ae.Description},
 	{"enum", enum.Description},
+	{"lens", aicli.LensDescription},
+	{"review", aicli.ReviewDescription},
 	{"subs", subs.Description},
 	{"track", track.Description},
 	{"viz", viz.Description},
@@ -87,7 +89,7 @@ func main() {
 			_, _ = afmt.G.Fprintln(color.Error, defaultBuf.String())
 			_, _ = afmt.G.Fprintf(color.Error, "Subcommands: \n\n")
 			for _, sub := range subcommands {
-				_, _ = afmt.G.Fprintf(color.Error, "\t%-5s\t%s\n", sub.Name, sub.Description)
+				_, _ = afmt.G.Fprintf(color.Error, "\t%-6s\t%s\n", sub.Name, sub.Description)
 			}
 			_, _ = afmt.G.Fprintln(color.Error)
 			return
@@ -161,6 +163,10 @@ func main() {
 		}
 
 		enum.CLIWorkflow(cmdName, os.Args[2:])
+	case "lens":
+		aicli.LensWorkflow(cmdName, os.Args[2:])
+	case "review":
+		aicli.ReviewWorkflow(cmdName, os.Args[2:])
 	case "subs":
 		subs.CLIWorkflow(cmdName, os.Args[2:])
 	case "track":

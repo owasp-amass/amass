@@ -34,7 +34,7 @@ func listIdentityConflicts(ctx context.Context, graph ai.Graph, journalPath, for
 			return fmt.Errorf("record identity corrections: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(errout, "%d new identity correction(s) recorded in %s; review with `amass ai proposals`\n",
+		_, _ = fmt.Fprintf(errout, "%d new identity correction(s) recorded in %s; review with `amass review proposals`\n",
 			len(added), journalPath)
 	}
 
@@ -109,7 +109,7 @@ func approveIdentity(ctx context.Context, c ai.IdentityCorrector, journalPath, i
 	}
 
 	_, err = fmt.Fprintf(out, "Removed legal identity %q (%s) from %s [%s]: %d relationship(s) deleted, %d kept "+
-		"with their other sources. Undo with -proposal %s retract.\n", p.LegalName, p.Jurisdiction, p.Organization,
+		"with their other sources. Undo with `amass review retract -proposal %s`.\n", p.LegalName, p.Jurisdiction, p.Organization,
 		p.OrgID, deleted, len(rec.Edges)-deleted, id)
 	return err
 }
