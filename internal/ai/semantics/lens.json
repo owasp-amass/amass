@@ -1,0 +1,5 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the lenses walk an organization's controlled assets. follow_last lists OAM asset types a lens follows only after every other controlled asset it can reach: they are numerous and mostly lead back to assets the lens already follows (a URL sits on a name already in the footprint), so following them first would spend the asset limit before the names, certificates and networks that show more outside parties. They are still followed while the limit allows. Add values here, not in Go code.",
+  "follow_last": ["URL"]
+}

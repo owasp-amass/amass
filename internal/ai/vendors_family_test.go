@@ -229,3 +229,39 @@ func TestThirdPartyLensLimits(t *testing.T) {
 		}
 	}
 }
+
+// URLs are followed after every other controlled asset, so a run that
+// reaches its asset limit spends it on names and networks first.
+func TestFootprintFollowsURLsLast(t *testing.T) {
+	base := vendorFixture()
+	want, err := searchThirdParties(context.Background(), base, vendorCatalog{testOAMCatalog}, base.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	g := vendorFixture()
+	var urls []Relation
+	for i := 0; i < 50; i++ {
+		u := fmt.Sprintf("https://colgate.edu/page%d", i)
+		g.assets[u] = Asset{ID: u, Type: "URL", Key: u, Content: map[string]any{"url": u}}
+		urls = append(urls, Relation{ID: "domain-" + u, FromID: u, ToID: "colgate.edu", Label: "domain",
+			Type: "SimpleRelation"})
+	}
+	// Stored first, so a walk in stored order would admit the URLs first.
+	g.links = append(urls, g.links...)
+
+	r, err := searchThirdPartiesWithin(context.Background(), g, vendorCatalog{testOAMCatalog},
+		g.assets["colgate.edu"], LensLimits{MaxAssets: want.Footprint + 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Footprint != want.Footprint+5 || r.FootprintTypes["URL"] != 5 || r.Reason != "controlled asset limit" {
+		t.Errorf("footprint %d with %d URLs (%q), want %d with 5", r.Footprint, r.FootprintTypes["URL"], r.Reason,
+			want.Footprint+5)
+	}
+	for name, kind := range vendorNames(&want) {
+		if vendorNames(&r)[name] != kind {
+			t.Errorf("vendor %s (%s) lost to URLs: %v", name, kind, vendorNames(&r))
+		}
+	}
+}
