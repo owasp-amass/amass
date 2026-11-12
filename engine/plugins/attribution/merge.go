@@ -28,7 +28,7 @@ const (
 // watchMerges finds duplicate organizations once the session's other work
 // has drained, records the merge proposals in the journal and, in auto
 // mode, applies the proposed merges. It also records contradicted legal
-// identities for review. Merges also wait for the engine's other sessions to
+// identities and each enumerated domain's departments for review. Merges also wait for the engine's other sessions to
 // drain, and one merge pass runs at a time. Merging earlier could delete an
 // organization a plugin is still writing to. The watcher holds one unit of
 // background work, counted by its caller, so the session is not reported
@@ -149,6 +149,7 @@ func (t *tracker) mergeDuplicates() {
 	}
 
 	t.recordIdentityConflicts(ctx, adapter)
+	t.recordFamilies(ctx, adapter)
 
 	state, err := t.journal.DuplicateState()
 	if err != nil {
@@ -185,5 +186,33 @@ func (t *tracker) recordIdentityConflicts(ctx context.Context, adapter oamrepo.A
 	if len(added) > 0 {
 		t.sess.Log().Info(fmt.Sprintf("AI identity check found %d organization(s) whose legal identity contradicts "+
 			"their evidence; corrections are waiting for review in %s", len(added), t.journal.Path))
+	}
+}
+
+// recordFamilies records, for each enumerated domain, the departments of
+// its organization family as org_unit proposals and its same-institution
+// organizations as merge proposals. Neither is applied automatically.
+func (t *tracker) recordFamilies(ctx context.Context, adapter oamrepo.Adapter) {
+	for _, d := range t.sess.Config().Domains() {
+		res, err := adapter.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "name", Value: d}, 2)
+		if err != nil || len(res.Candidates) != 1 {
+			continue
+		}
+
+		r, err := ai.FindOrganizationFamily(ctx, adapter, res.Candidates[0].Asset)
+		if err != nil {
+			t.sess.Log().Error(fmt.Sprintf("AI family of %s: %v", d, err))
+			continue
+		}
+
+		units, merges, err := t.journal.SubmitFamily(r)
+		if err != nil {
+			t.sess.Log().Error(fmt.Sprintf("AI family of %s could not record proposals: %v", d, err))
+			continue
+		}
+		if units+merges > 0 {
+			t.sess.Log().Info(fmt.Sprintf("AI family of %s: %d department and %d merge proposal(s) waiting for "+
+				"review in %s", d, units, merges, t.journal.Path))
+		}
 	}
 }

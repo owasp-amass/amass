@@ -85,6 +85,11 @@ func OwnershipTrainingSet(entries []OwnershipEntry) ([]classify.LabeledExample, 
 	var rows []classify.LabeledExample
 	names := map[string]bool{}
 	for _, e := range entries {
+		// Departments are decided on other evidence than ownership signals.
+		if e.Proposal.Kind != "" {
+			continue
+		}
+
 		label, ok := OwnershipLabel(e)
 		if !ok {
 			continue

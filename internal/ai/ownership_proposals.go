@@ -32,6 +32,10 @@ const (
 	ProposalRetracted = "retracted"
 )
 
+// ProposalKindOrgUnit marks a proposal to record an organization as a unit
+// of another with an org_unit relationship.
+const ProposalKindOrgUnit = "org_unit"
+
 // AutomaticReviewer is the reviewer recorded for proposals written during
 // an enumeration without a person's review.
 const AutomaticReviewer = "amass-ai (automatic)"
@@ -39,7 +43,10 @@ const AutomaticReviewer = "amass-ai (automatic)"
 // OwnershipProposal is a reviewed-before-written proposal to record an
 // organization as an asset's owner with one OAM relationship.
 type OwnershipProposal struct {
-	ID        string       `json:"id"`
+	ID string `json:"id"`
+	// Kind is empty for an ownership attribution, or ProposalKindOrgUnit for
+	// a department recorded by the family lens.
+	Kind      string       `json:"kind,omitempty"`
 	Owner     string       `json:"owner"`
 	OwnerID   string       `json:"owner_id"`
 	Asset     string       `json:"asset"`
@@ -253,8 +260,13 @@ func FormatOwnershipEntries(entries []OwnershipEntry) string {
 	var b strings.Builder
 	for _, e := range entries {
 		p := e.Proposal
-		fmt.Fprintf(&b, "%s [%s, %s %.2f] %s owns %s %s\n  would record: %s\n", p.ID, e.Status, p.Decision, p.Score,
-			p.Owner, p.AssetType, p.Asset, p.Edge)
+		if p.Kind == ProposalKindOrgUnit {
+			fmt.Fprintf(&b, "%s [%s, %s] %s is a unit of %s\n  would record: %s\n", p.ID, e.Status, p.Decision,
+				p.Asset, p.Owner, p.Edge)
+		} else {
+			fmt.Fprintf(&b, "%s [%s, %s %.2f] %s owns %s %s\n  would record: %s\n", p.ID, e.Status, p.Decision,
+				p.Score, p.Owner, p.AssetType, p.Asset, p.Edge)
+		}
 		if len(p.Gains) > 0 {
 			fmt.Fprintf(&b, "  brings: %s\n", strings.Join(p.Gains, ", "))
 		}

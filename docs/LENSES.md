@@ -63,7 +63,21 @@ It classifies each organization against the one with the most ties:
   Institutions, whose network serves jhu.edu names.
 
 The report also lists the networks serving the domain and the other
-registered domains on its dedicated networks. The words, thresholds and
+registered domains on its dedicated networks.
+
+The lens records two kinds of proposal in the review journal, and the
+engine records the same ones for each enumerated domain when an
+enumeration finishes. Neither is ever applied automatically:
+
+- each **department** as an `org_unit` relationship from the main
+  organization, the relationship OAM already defines for an organization's
+  units. Approving writes it with the `amass-ai` source; retracting removes
+  it. Department decisions are not used to train the ownership model.
+- each **same-institution** organization as a merge proposal, reviewed and
+  undone like the duplicate search's.
+
+Affiliates are only reported: OAM has no affiliate relationship, and the
+lens finds them again from the evidence whenever it is asked. The words, thresholds and
 sample sizes are in `internal/ai/semantics/family.json`, address spellings
 in `internal/ai/semantics/address_terms.json`.
 
