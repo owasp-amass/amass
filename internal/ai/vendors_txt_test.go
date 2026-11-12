@@ -34,7 +34,8 @@ func TestScanTXT(t *testing.T) {
 		"MS=ms12345678",
 		"v=spf1 ip4:149.43.0.0/16 include:_spf.google.com include:spf.protection.outlook.com " +
 			"include:u123.wl.sendgrid.net include:_spf.colgate.edu ~include:us._netblocks.mimecast.com " +
-			"include:spf.acme-mailer.example redirect=_spf.mailgun.org -all",
+			"include:spf.acme-mailer.example include:service-now.com include:e2ma.net " +
+			"redirect=_spf.mailgun.org -all",
 		"some unrelated note mentioning sendgrid.net",
 	}
 
@@ -47,7 +48,10 @@ func TestScanTXT(t *testing.T) {
 		senders = append(senders, v.Vendor)
 	}
 
-	want := []string{"Google Workspace", "Mailgun", "Microsoft 365", "Mimecast", "Twilio SendGrid"}
+	// The vendor's own domain (service-now.com, e2ma.net) names it as well
+	// as the documented include does.
+	want := []string{"Emma", "Google Workspace", "Mailgun", "Microsoft 365", "Mimecast", "ServiceNow",
+		"Twilio SendGrid"}
 	if !reflect.DeepEqual(senders, want) {
 		t.Errorf("senders = %v, want %v", senders, want)
 	}
