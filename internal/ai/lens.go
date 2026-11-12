@@ -408,6 +408,24 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 		if len(domains) > 0 {
 			return vendorNameOf(domains[0]), "", false, best.ID, nil
 		}
+		// Nothing identifies the contact (a redacted WHOIS contact), so its
+		// record's internal key would name the party: name it by the next
+		// asset reached instead, such as the domain the contact is for. A
+		// person never names a party.
+		var rest []Asset
+		for _, v := range visited {
+			if v.ID != best.ID && v.Type != "Person" {
+				rest = append(rest, v)
+			}
+		}
+		if len(rest) > 0 {
+			return d.fallbackName(rest)
+		}
+	case "DomainRecord":
+		if name := contentString(best, "domain"); name != "" {
+			domain := registeredDomain(name)
+			return vendorNameOf(domain), "", d.ownDomains[domain], best.ID, nil
+		}
 	case "FQDN":
 		domain := registeredDomain(fqdnName(best))
 		if reverseZone(domain) {
