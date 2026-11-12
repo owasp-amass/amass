@@ -440,17 +440,51 @@ func (w *lensWalker) steps(cur Asset) ([]step, error) {
 func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []string, error) {
 	owned := map[string]Asset{}
 	var order, queue []string
+	admit := func(a Asset, parent string, via Relation) {
+		owned[a.ID] = a
+		order = append(order, a.ID)
+		if w.parent != nil && parent != "" {
+			w.parent[a.ID] = parent
+			w.via[a.ID] = via
+		}
+		if parent == "" || w.expand == nil || w.expand[a.Type] {
+			queue = append(queue, a.ID)
+		}
+	}
 	for _, r := range roots {
 		if _, ok := owned[r.ID]; !ok {
-			owned[r.ID] = r
-			order = append(order, r.ID)
-			queue = append(queue, r.ID)
+			admit(r, "", Relation{})
 		}
 	}
 
-	for len(queue) > 0 {
+	// Assets of the follow_last types wait here until nothing else is left
+	// to follow, so they spend only what remains of the asset limit.
+	type waiting struct {
+		asset  Asset
+		parent string
+		via    Relation
+	}
+	var later []waiting
+	queued := map[string]bool{}
+	last := followLast()
+
+	for len(queue) > 0 || len(later) > 0 {
 		if err := w.ctx.Err(); err != nil {
 			return nil, nil, err
+		}
+		if len(queue) == 0 {
+			next := later[0]
+			later = later[1:]
+			if _, seen := owned[next.asset.ID]; seen {
+				continue
+			}
+			if len(owned) >= w.maxAssets {
+				w.truncate("controlled asset limit")
+				break
+			}
+
+			admit(next.asset, next.parent, next.via)
+			continue
 		}
 		if w.report.Reads >= w.maxReads {
 			w.truncate("database read limit")
@@ -472,20 +506,19 @@ func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []str
 				(s.other.Type == "Organization" && s.attr != attrControls) {
 				continue
 			}
+			if last[s.other.Type] {
+				if !queued[s.other.ID] {
+					queued[s.other.ID] = true
+					later = append(later, waiting{asset: s.other, parent: cur.ID, via: s.edge})
+				}
+				continue
+			}
 			if len(owned) >= w.maxAssets {
 				w.truncate("controlled asset limit")
 				break
 			}
 
-			owned[s.other.ID] = s.other
-			order = append(order, s.other.ID)
-			if w.parent != nil {
-				w.parent[s.other.ID] = cur.ID
-				w.via[s.other.ID] = s.edge
-			}
-			if w.expand == nil || w.expand[s.other.Type] {
-				queue = append(queue, s.other.ID)
-			}
+			admit(s.other, cur.ID, s.edge)
 		}
 	}
 

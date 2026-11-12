@@ -143,7 +143,10 @@ relationships up to 5,000 per asset. A report that reached a bound says so and
 names the relationship that stayed partial.
 
 The vendors lens follows at most 2,000 controlled assets and makes at most
-20,000 database reads per run. A large institution can reach either; raise
+20,000 database reads per run. URLs are followed last, after every name,
+certificate and network the lens can reach: they are numerous and mostly lead
+back to names it already follows (`follow_last` in
+`internal/ai/semantics/lens.json`). A large institution can reach either; raise
 them for one run with `-max-assets` (up to 100,000) and `-max-reads` (up to
 1,000,000). A larger run takes longer and may need a longer
 `-investigation-timeout` (8 minutes by default, up to 30):
