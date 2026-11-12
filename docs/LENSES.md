@@ -15,6 +15,7 @@ evidence does and nothing is left behind to clean up.
 | Command | What it does |
 | --- | --- |
 | `amass lens family -d <domain>` | The organizations behind an enumerated domain, the networks and other registered domains that serve it |
+| `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
 | `amass review proposals` | Every proposal in the journal and its status |
@@ -90,6 +91,23 @@ Affiliates are only reported: OAM has no affiliate relationship, and the
 lens finds them again from the evidence whenever it is asked. The words, thresholds and
 sample sizes are in `internal/ai/semantics/family.json`, address spellings
 in `internal/ai/semantics/address_terms.json`.
+
+## Vendors
+
+```bash
+amass lens vendors -d colgate.edu
+```
+
+Lists the outside parties the domain, and the assets its registrant
+organization controls, depend on: registrars, DNS hosts, certificate
+authorities, hosting networks and service providers, from the stored
+relationships the [relationship semantics](ai/RELATION_SEMANTICS.md) mark as
+third-party dependencies. It adds the services the domain's DNS TXT records
+name: verification tokens (Google, Microsoft 365, Atlassian, DocuSign, Zoom
+and others) and the mail senders its SPF record authorizes (Google
+Workspace, Microsoft 365, SendGrid, Mailgun and others). The patterns are in
+`internal/ai/semantics/txt_vendors.json`. These are stored records, not
+verified contracts: a token or SPF include can outlive the service.
 
 ## Duplicates and merges
 

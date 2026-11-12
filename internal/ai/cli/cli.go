@@ -36,7 +36,7 @@ const Description = "Ask questions with a language model, MCP tools, and model-a
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
 	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
-	"identity-conflicts", "family"}
+	"identity-conflicts", "family", "vendors"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -74,8 +74,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
-	fs.StringVar(&domainName, "domain", "", "Enumerated domain for the family lens")
-	fs.StringVar(&domainName, "d", "", "Enumerated domain for the family lens (same as -domain)")
+	fs.StringVar(&domainName, "domain", "", "Enumerated domain for the family and vendors lenses")
+	fs.StringVar(&domainName, "d", "", "Enumerated domain for the family and vendors lenses (same as -domain)")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
@@ -378,6 +378,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		return listDuplicates(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "identity-conflicts":
 		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+	case "vendors":
+		return listVendors(ctx, graph, domainName, outputFormat, explicitFlags["format"], out)
 	case "family":
 		return listFamily(ctx, graph, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	}

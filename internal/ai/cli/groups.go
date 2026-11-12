@@ -16,7 +16,7 @@ import (
 // LensDescription and ReviewDescription describe the amass lens and amass
 // review commands.
 const (
-	LensDescription   = "Read-only views of the Asset Database: organization families, duplicates and contradicted identities"
+	LensDescription   = "Read-only views of the Asset Database: organization families, vendors, duplicates and identities"
 	ReviewDescription = "Review and apply inferred changes: ownership, merges of duplicates, identity corrections"
 )
 
@@ -27,6 +27,7 @@ var lensOps = map[string]string{
 	"family":     "family",
 	"duplicates": "duplicates",
 	"identity":   "identity-conflicts",
+	"vendors":    "vendors",
 }
 
 // reviewOps are the amass review commands. Only approve and retract change
