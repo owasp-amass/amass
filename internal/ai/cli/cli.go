@@ -58,6 +58,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
 	var lensAssets, lensReads int
+	var orgName string
 	var queryPath, evalPath, proposalID, reviewer, modelOutput string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince, domainName string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
@@ -78,6 +79,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.StringVar(&question, "question", "", "Natural-language question")
 	fs.StringVar(&domainName, "domain", "", "Enumerated domain for the family and vendors lenses")
 	fs.StringVar(&domainName, "d", "", "Enumerated domain for the family and vendors lenses (same as -domain)")
+	fs.StringVar(&orgName, "org", "", "Organization name for the org-group lens (or use -d for a domain's organization)")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
@@ -390,6 +392,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 			outputFormat, explicitFlags["format"], out)
 	case "family":
 		return listFamily(ctx, graph, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
+	case "org-group":
+		return listGroup(ctx, graph, domainName, orgName, outputFormat, explicitFlags["format"], out)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.

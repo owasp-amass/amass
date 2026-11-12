@@ -301,6 +301,15 @@ func investigateResult(id string, q Query, inv Investigation, b EvidenceBundle) 
 		}
 		out["family"] = family
 	}
+	if r := inv.OrgGroupReport; r != nil {
+		members := make([]map[string]any, 0, len(r.Members))
+		for _, m := range r.Members {
+			members = append(members, map[string]any{"organization": assetLabel(m.Organization),
+				"parent_id": m.ParentID, "relationship": m.Label, "depth": m.Depth,
+				"jurisdiction": m.Jurisdiction, "registration_id": m.RegistrationID})
+		}
+		out["org_group"] = members
+	}
 	if r := inv.TableReport; r != nil {
 		rows := r.Rows
 		if len(rows) > investigateMaxRows {

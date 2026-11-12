@@ -163,6 +163,11 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, c.Decision+" "+c.Type+" "+c.Asset)
 		}
 	}
+	if r := inv.OrgGroupReport; r != nil {
+		for _, m := range r.Members {
+			out = append(out, fmt.Sprintf("%d %s", m.Depth, assetLabel(m.Organization)))
+		}
+	}
 	if r := inv.FamilyReport; r != nil {
 		for _, m := range r.Members {
 			out = append(out, m.Relation+" "+assetLabel(m.Organization))

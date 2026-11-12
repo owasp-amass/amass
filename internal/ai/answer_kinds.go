@@ -112,6 +112,20 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
+		Name: LensOrgGroup,
+		Description: "Show the corporate group of an organization: its ultimate parent company and every " +
+			"subsidiary and organizational unit below it, from stored corporate relationships, with each " +
+			"organization's jurisdiction and registration. From a domain, the group of its main organization. " +
+			"Read-only; nothing is written.",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"Who owns <organization>?",
+			"What companies are part of <organization>'s corporate group?",
+			"What is the parent company of the organization behind <domain>?",
+		},
+	},
+	{
 		Name: LensOwnershipGaps,
 		Description: "Find assets with no documented owner that share identity (contact details), hosting (resolving " +
 			"into its networks) or certificate signals with what the subject controls, each scored, with the OAM " +
@@ -201,7 +215,7 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
 				strings.Join(ownedTypes(schema), ", "), AnswerPaths)
 		}
-	case LensThirdParty, LensOwnershipGaps, LensFamily:
+	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup:
 		if meaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -243,7 +257,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 			Lens: LensControlled, Source: SourceModelGoal}
 	case LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-	case LensOwnershipGaps, LensFamily:
+	case LensOwnershipGaps, LensFamily, LensOrgGroup:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
 	case LensTable:
@@ -491,7 +505,7 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
 	case LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case LensThirdParty, LensOwnershipGaps, LensFamily:
+	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup:
 		props["target_types"] = none
 	case LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)
