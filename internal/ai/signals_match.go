@@ -107,7 +107,7 @@ func (g *gapSearch) valueSignals(order []string) error {
 			if err := g.w.ctx.Err(); err != nil {
 				return err
 			}
-			if g.valueReads >= gapMaxValueReads || g.w.report.Reads >= lensMaxReads {
+			if g.valueReads >= gapMaxValueReads || g.w.report.Reads >= g.w.maxReads {
 				g.w.truncate("value search limit")
 				return nil
 			}
@@ -160,7 +160,7 @@ func (g *gapSearch) valueSignalsOf(a Asset, pass int) error {
 
 // read counts one value search or tag read against the run's budgets.
 func (g *gapSearch) read() bool {
-	if g.valueReads >= gapMaxValueReads || g.w.report.Reads >= lensMaxReads {
+	if g.valueReads >= gapMaxValueReads || g.w.report.Reads >= g.w.maxReads {
 		return false
 	}
 

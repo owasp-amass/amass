@@ -192,3 +192,40 @@ func TestThirdPartyLensCapsPagedLabels(t *testing.T) {
 		t.Errorf("vendor behind the capped label missing: %v", vendorNames(&r))
 	}
 }
+
+// A run's limits replace the defaults, and the report says which limit
+// stopped it.
+func TestThirdPartyLensLimits(t *testing.T) {
+	g := busyColgate(MaxEdgeRead + 100)
+	pg := pagedVendorGraph{vendorGraph: g, pages: new(int)}
+	root := g.assets["colgate.edu"]
+
+	r, err := searchThirdPartiesWithin(context.Background(), pg, vendorCatalog{testOAMCatalog}, root,
+		LensLimits{MaxAssets: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Footprint != 100 || r.Reason != "controlled asset limit" {
+		t.Errorf("footprint %d, reason %q; want 100 and the asset limit", r.Footprint, r.Reason)
+	}
+	if text := FormatVendorReport(r); !strings.Contains(text, "Raise -max-assets") {
+		t.Errorf("report does not point at -max-assets:\n%s", text)
+	}
+
+	r, err = searchThirdPartiesWithin(context.Background(), pg, vendorCatalog{testOAMCatalog}, root,
+		LensLimits{MaxReads: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Reason != "database read limit" {
+		t.Errorf("reason %q, want the read limit", r.Reason)
+	}
+
+	for _, l := range []LensLimits{{MaxAssets: -1}, {MaxAssets: LensMaxAssetsLimit + 1},
+		{MaxReads: LensMaxReadsLimit + 1}} {
+		if _, err := searchThirdPartiesWithin(context.Background(), pg, vendorCatalog{testOAMCatalog}, root,
+			l); err == nil {
+			t.Errorf("limits %+v accepted", l)
+		}
+	}
+}
