@@ -6,6 +6,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -192,5 +193,68 @@ func TestVendorNameCatalog(t *testing.T) {
 		if got := vendorNameOf(domain); got != want {
 			t.Errorf("vendorNameOf(%s) = %q, want %q", domain, got, want)
 		}
+	}
+}
+
+// A provider reached once through its organization and once only through
+// its domain is one vendor, named by the organization.
+func TestVendorSetMergesDomainAndOrganization(t *testing.T) {
+	v := vendorSet{}
+	kind := "DNS: FQDNs"
+	asset := func(name string) Asset { return Asset{ID: name, Type: "FQDN", Content: map[string]any{"name": name}} }
+
+	v.add("dnsmadeeasy.com", "", kind, "FQDN dns_record", asset("a.example.edu"), nil)
+	v.add("dnsmadeeasy", "org-1", kind, "FQDN dns_record", asset("b.example.edu"), nil)
+	v.add("dnsmadeeasy.com", "", kind, "FQDN dns_record", asset("a.example.edu"), nil)
+	v.add("DNS Made Easy, LLC", "org-1", kind, "FQDN dns_record", asset("c.example.edu"), nil)
+	v.add("google.com", "", kind, "FQDN dns_record", asset("a.example.edu"), nil)
+	for i := 0; i < 5; i++ {
+		v.add("google", "org-2", kind, "FQDN dns_record", asset(fmt.Sprintf("h%d.example.edu", i)), nil)
+	}
+	v.add("google", "org-2", kind, "FQDN dns_record", asset("h4.example.edu"), nil)
+
+	if len(v) != 2 {
+		t.Fatalf("got %d vendors, want 2: %+v", len(v), v)
+	}
+	for _, use := range v {
+		switch use.VendorID {
+		case "org-1":
+			if use.Vendor != "DNS Made Easy, LLC" && use.Vendor != "dnsmadeeasy" {
+				t.Errorf("DNS Made Easy named %q", use.Vendor)
+			}
+			if use.Assets != 3 {
+				t.Errorf("DNS Made Easy counted %d assets, want 3", use.Assets)
+			}
+		case "org-2":
+			// Counted once each, even past the examples kept.
+			if use.Vendor != "google" || use.Assets != 6 {
+				t.Errorf("Google: %q with %d assets, want google with 6", use.Vendor, use.Assets)
+			}
+		default:
+			t.Errorf("vendor %q kept its domain name", use.Vendor)
+		}
+	}
+}
+
+func TestPartyKey(t *testing.T) {
+	for name, want := range map[string]string{"dnsmadeeasy.com": "dnsmadeeasy", "DNSMadeEasy": "dnsmadeeasy",
+		"Fastly, Inc.": "fastly", "awsdns-67.co.uk": "awsdns67", "Let's Encrypt": "letsencrypt", "...": "..."} {
+		if got := partyKey(name); got != want {
+			t.Errorf("partyKey(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestNamedOrganizationSkipsPlaceholders(t *testing.T) {
+	org := func(id, name string) Asset {
+		return Asset{ID: id, Type: "Organization", Content: map[string]any{"name": name}}
+	}
+
+	if got, ok := namedOrganization([]Asset{org("1", "domain admin"), org("2", "Ithaka Harbors")}); !ok ||
+		got.ID != "2" {
+		t.Errorf("got %+v, want Ithaka Harbors", got)
+	}
+	if _, ok := namedOrganization([]Asset{org("1", "Domain Admin")}); ok {
+		t.Error("a placeholder organization named the party")
 	}
 }

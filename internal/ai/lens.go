@@ -13,6 +13,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 )
 
 // LensThirdParty asks for the outside parties that the subject's controlled
@@ -37,6 +40,33 @@ type VendorUse struct {
 	// Witness holds the stored edges behind the first example: from the
 	// controlled asset to the dependency and on to the party behind it.
 	Witness []WitnessEdge `json:"witness,omitempty"`
+	// seen holds every asset counted in Assets, beyond the few examples.
+	seen map[string]bool
+}
+
+// partyKey reduces a vendor name to the form compared when uses are
+// grouped. A party with no stored organization is named by its registrable
+// domain (dnsmadeeasy.com) and the same party's organization by its name
+// (DNSMadeEasy), so a domain is keyed by the label before its public
+// suffix and a name by its brand without spaces or punctuation.
+func partyKey(name string) string {
+	s := brandName(name)
+	if domainName.MatchString(name) {
+		s, _, _ = strings.Cut(registeredDomain(name), ".")
+	}
+
+	key := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+
+		return -1
+	}, s)
+	if key == "" {
+		return strings.ToLower(name)
+	}
+
+	return key
 }
 
 // ThirdPartyReport is the result of the third-party lens.
@@ -64,20 +94,24 @@ func (v vendorSet) add(name, id, kind, via string, user Asset, witness []Witness
 		return
 	}
 
-	key := kind + "\x00" + strings.ToLower(name)
+	key := kind + "\x00" + partyKey(name)
 	use, ok := v[key]
 	if !ok {
-		use = &VendorUse{Vendor: name, VendorID: id, Kind: kind, Via: via, Examples: []string{}, Witness: witness}
+		use = &VendorUse{Vendor: name, VendorID: id, Kind: kind, Via: via, Examples: []string{}, Witness: witness,
+			seen: map[string]bool{}}
 		v[key] = use
+	} else if use.VendorID == "" && id != "" && !domainName.MatchString(name) {
+		// The same party reached through a stored organization: name it by
+		// that organization rather than by its domain.
+		use.Vendor, use.VendorID, use.Witness = name, id, witness
 	}
 
 	example := assetLabel(user)
-	for _, e := range use.Examples {
-		if e == example {
-			return
-		}
+	if use.seen[example] {
+		return
 	}
 
+	use.seen[example] = true
 	use.Assets++
 	if len(use.Examples) < lensMaxExamples {
 		use.Examples = append(use.Examples, example)
@@ -270,8 +304,7 @@ func (d dependencyScan) party(a Asset) (string, string, bool, []WitnessEdge, err
 	if c.own {
 		return "", "", true, c.witness(c.visited[len(c.visited)-1].ID, d.w.assets), nil
 	}
-	if len(c.orgs) > 0 {
-		org := c.orgs[0]
+	if org, ok := namedOrganization(c.orgs); ok {
 		_, own := d.owned[org.ID]
 		return assetLabel(org), org.ID, own, c.witness(org.ID, d.w.assets), nil
 	}
@@ -294,8 +327,7 @@ func (d dependencyScan) party(a Asset) (string, string, bool, []WitnessEdge, err
 			}
 
 			base := append(c.witness(v.ID, d.w.assets), witnessOf(s.edge, v, s.other))
-			if len(oc.orgs) > 0 {
-				org := oc.orgs[0]
+			if org, ok := namedOrganization(oc.orgs); ok {
 				return assetLabel(org), org.ID, false, append(base, oc.witness(org.ID, d.w.assets)...), nil
 			}
 
@@ -306,6 +338,19 @@ func (d dependencyScan) party(a Asset) (string, string, bool, []WitnessEdge, err
 
 	name, id, own, best, err := d.fallbackName(c.visited)
 	return name, id, own, c.witness(best, d.w.assets), err
+}
+
+// namedOrganization returns the closest organization whose name identifies
+// someone. Organizations stored before a placeholder such as "domain admin"
+// was refused are skipped, so the party is named by what lies behind them.
+func namedOrganization(orgs []Asset) (Asset, bool) {
+	for _, o := range orgs {
+		if !semantics.IsPlaceholderOrganization(assetLabel(o)) {
+			return o, true
+		}
+	}
+
+	return Asset{}, false
 }
 
 // fallbackName names a party with no documented Organization by the
