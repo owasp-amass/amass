@@ -627,7 +627,7 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 		case id == main:
 			member.Relation, member.ByName = FamilySame, true
 			member.Evidence = append(member.Evidence, "the domain's main organization")
-		case s.isDepartment(p):
+		case s.isDepartment(p, domain, words):
 			member.Relation = FamilyDepartment
 		case ok:
 			member.Relation, member.ByName = FamilySame, r.byName
@@ -678,7 +678,7 @@ type sameReason struct {
 func (s *familySearch) sameInstitution(main string, ties map[string][]string) map[string]sameReason {
 	ids := make([]string, 0, len(ties))
 	for id := range ties {
-		if !s.isDepartment(s.profiles[id]) {
+		if !s.hasUnitWord(s.profiles[id]) {
 			ids = append(ids, id)
 		}
 	}
@@ -830,7 +830,21 @@ func abbreviationStopWords() []string {
 
 // isDepartment reports whether an organization's name carries a department
 // or role word.
-func (s *familySearch) isDepartment(p *familyProfile) bool {
+func (s *familySearch) isDepartment(p *familyProfile, domain string, words map[string]bool) bool {
+	// A unit word alone is not enough: a vendor on a certificate or a
+	// provider holding a network may have one in its name. A department also
+	// carries the institution's name or is one of the domain's own
+	// registration contacts.
+	if !s.sharesWord(p, words) && !p.registers[domain] && !p.contactFor[domain] {
+		return false
+	}
+
+	return s.hasUnitWord(p)
+}
+
+// hasUnitWord reports whether an organization's name carries one of
+// department_words. Such a name is never merged into the institution.
+func (s *familySearch) hasUnitWord(p *familyProfile) bool {
 	for _, name := range p.names {
 		words := " " + strings.Join(addressWords(name), " ") + " "
 		for _, d := range s.rules.DepartmentWords {
