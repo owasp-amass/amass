@@ -104,3 +104,52 @@ func TestMissingWitnessReadsPastOnePage(t *testing.T) {
 		t.Errorf("unread evidence was declared gone: %q", missing)
 	}
 }
+
+// A domain with more direct subdomains than one read returns is listed in
+// full, up to the inventory's name limit, when the graph pages.
+func TestInventoryPagesBusyNames(t *testing.T) {
+	n := MaxEdgeRead + 100
+	g := busyColgate(n)
+	root := g.assets["colgate.edu"]
+	opts := AdaptiveOptions{MaxInventory: 1000}
+
+	paged := pagedVendorGraph{vendorGraph: g, pages: new(int)}
+	r, err := searchFQDNInventory(context.Background(), paged, DefaultLimits(), root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Matches) < n || r.Truncated {
+		t.Errorf("paged inventory listed %d names (truncated=%v, %s); want at least %d", len(r.Matches),
+			r.Truncated, r.Reason, n)
+	}
+
+	r, err = searchFQDNInventory(context.Background(), g, DefaultLimits(), root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Truncated || len(r.Matches) > MaxEdgeRead {
+		t.Errorf("bounded inventory: %d names, truncated=%v; want one read's worth, reported partial",
+			len(r.Matches), r.Truncated)
+	}
+}
+
+// A typed relationship answer returns as many matches as were asked for,
+// past the per-node limit meant for model context.
+func TestTypedRelationReadsRequestedMatches(t *testing.T) {
+	g := busyColgate(100)
+	paged := pagedVendorGraph{vendorGraph: g, pages: new(int)}
+	intent := TypedRelationIntent{Goal: InvestigationGoal{Subject: PlanSubject{Type: "FQDN", Field: "name",
+		Value: "colgate.edu"}, TargetTypes: []string{"FQDN"}},
+		Hops: []PlanHop{{Direction: "out", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"}}}
+	limits := DefaultLimits()
+
+	r, err := searchTypedRelationIntent(context.Background(), paged, limits, g.assets["colgate.edu"], intent,
+		AdaptiveOptions{MaxMatches: limits.MaxFind})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Matches) != limits.MaxFind || limits.MaxFind <= limits.MaxPerNode {
+		t.Errorf("got %d matches with max %d (per-node limit %d)", len(r.Matches), limits.MaxFind,
+			limits.MaxPerNode)
+	}
+}

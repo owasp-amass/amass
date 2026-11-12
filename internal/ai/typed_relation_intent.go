@@ -382,14 +382,26 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 			out.ExpandedPaths++
 			diagnostic.QueriedPaths++
 			last := path.Nodes[len(path.Nodes)-1]
-			edges, more, err := bounded.EdgesLimited(ctx, last.ID, hop.Direction, hop.Label, time.Time{},
-				limits.MaxPerNode)
+			// The answer is computed here, so a hop reads as many edges as
+			// matches were asked for, a page at a time, when that exceeds the
+			// per-node limit meant for model context.
+			perNode := limits.MaxPerNode
+			var edges []Relation
+			var more bool
+			var err error
+			if _, paged := graph.(PagedGraph); paged && maxMatches+1 > perNode {
+				perNode = maxMatches + 1
+				edges, more, err = readEdges(ctx, graph, last.ID, hop.Direction, hop.Label, perNode,
+					func() bool { return true })
+			} else {
+				edges, more, err = bounded.EdgesLimited(ctx, last.ID, hop.Direction, hop.Label, time.Time{}, perNode)
+			}
 			if err != nil {
 				return out, err
 			}
 
 			diagnostic.ReturnedEdges += len(edges)
-			if len(edges) > limits.MaxPerNode {
+			if len(edges) > perNode {
 				return out, errors.New("bounded graph exceeded per-node edge policy")
 			}
 			if more {
