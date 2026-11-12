@@ -35,7 +35,8 @@ func (o *orgGraph) org(id, name, legal, jurisdiction, reg string) string {
 }
 
 func (o *orgGraph) link(from, to, label string) {
-	o.g.links = append(o.g.links, Relation{ID: "e" + o.id(), FromID: from, ToID: to, Label: label})
+	o.g.links = append(o.g.links, Relation{ID: "e" + o.id(), FromID: from, ToID: to, Label: label,
+		Type: "SimpleRelation"})
 }
 
 func (o *orgGraph) ident(org, idtype, value string) {
