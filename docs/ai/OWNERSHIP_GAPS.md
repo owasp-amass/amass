@@ -138,6 +138,16 @@ reviewer and edge ID.
 No OAM relationship types are added: a proposal uses only relationships OAM
 already defines.
 
+An automatic write stays tied to its evidence. When an enumeration finishes
+in `auto` mode, the engine re-checks every relationship automatic
+attribution wrote: if a relationship its proposal's evidence was read from
+no longer exists (a contact's shared phone was corrected, a record was
+merged), the write is retracted and recorded with the reviewer
+`amass-ai (re-check)`. Unlike a person's retraction, this one does not stop
+the relationship from being written again: the next pass writes it if the
+remaining evidence still supports it. Re-check retractions are not training
+labels, and writes a person approved are never re-checked.
+
 ## Learning from reviews
 
 The scoring weights above are a starting point. Every approve, reject and

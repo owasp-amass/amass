@@ -28,7 +28,8 @@ const (
 // watchMerges finds duplicate organizations once the session's other work
 // has drained, records the merge proposals in the journal and, in auto
 // mode, applies the proposed merges. It also records contradicted legal
-// identities and each enumerated domain's departments for review. Merges also wait for the engine's other sessions to
+// identities and each enumerated domain's departments for review, and in
+// auto mode first retracts automatic ownership writes whose evidence is gone. Merges also wait for the engine's other sessions to
 // drain, and one merge pass runs at a time. Merging earlier could delete an
 // organization a plugin is still writing to. The watcher holds one unit of
 // background work, counted by its caller, so the session is not reported
@@ -108,6 +109,10 @@ func (t *tracker) mergeDuplicates() {
 	defer cancel()
 
 	adapter := oamrepo.Adapter{Repo: t.sess.DB(), Neo4jDatabase: oamrepo.Neo4jDatabaseName(t.sess.Config())}
+	if t.mode == config.AttributionAuto {
+		t.recheck(ctx, adapter)
+	}
+
 	report, err := ai.FindDuplicateOrganizations(ctx, adapter)
 	if err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI duplicate search: %v", err))
@@ -214,5 +219,20 @@ func (t *tracker) recordFamilies(ctx context.Context, adapter oamrepo.Adapter) {
 			t.sess.Log().Info(fmt.Sprintf("AI family of %s: %d department and %d merge proposal(s) waiting for "+
 				"review in %s", d, units, merges, t.journal.Path))
 		}
+	}
+}
+
+// recheck retracts the automatic ownership writes whose evidence is gone;
+// the next pass writes them again if what remains still supports them.
+func (t *tracker) recheck(ctx context.Context, adapter oamrepo.Adapter) {
+	res, err := ai.RecheckAttributions(ctx, adapter, adapter, t.journal)
+	if err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI attribution re-check: %v", err))
+		return
+	}
+
+	for _, p := range res.Retracted {
+		t.sess.Log().Info(fmt.Sprintf("AI attribution retracted %s %s as owned by %s: its evidence is gone "+
+			"(proposal %s)", p.AssetType, p.Asset, p.Owner, p.ID))
 	}
 }

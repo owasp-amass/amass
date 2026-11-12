@@ -121,8 +121,9 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 			return res, err
 		}
 		e, known := state[p.ID]
-		if known && e.Status != ProposalPending {
-			// Applied, rejected or retracted: a decision was made.
+		if known && !redecidable(e) {
+			// Applied, rejected or retracted by a person: a decision was
+			// made. A re-check's retraction only says the evidence was gone.
 			continue
 		}
 
