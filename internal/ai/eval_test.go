@@ -118,6 +118,9 @@ func institutionFamily() (Graph, SchemaCatalog) {
 	return vendorGraph{plannedGraph{fakeGraph: familyGraph()}}, vendorCatalog{testOAMCatalog}
 }
 
+// corporateGroup is a GLEIF-shaped corporate group.
+func corporateGroup() (Graph, SchemaCatalog) { return groupFixture(), vendorCatalog{testOAMCatalog} }
+
 // evalFixtures are the graphs offline evaluation cases name.
 var evalFixtures = map[string]func() (Graph, SchemaCatalog){
 	"campus":             campus,
@@ -128,6 +131,7 @@ var evalFixtures = map[string]func() (Graph, SchemaCatalog){
 	"campus-gaps":        campusGaps,
 	"campus-txt":         campusTXT,
 	"institution-family": institutionFamily,
+	"corporate-group":    corporateGroup,
 }
 
 // Every reported question runs here on each CI build.

@@ -61,6 +61,7 @@ meaning rather than by wording rules:
 | `table` | Organization or FQDN | table lens (rows of one controlled type, a chain of columns) |
 | `ownership_gaps` | Organization or FQDN | ownership gaps lens |
 | `family` | FQDN | organization family lens (`amass lens family`) |
+| `org_group` | Organization or FQDN | corporate group lens (`amass lens org-group`) |
 
 `validateAnswer` rejects a kind that does not fit the subject, targets or
 purpose (for example `controlled` with a type that the semantics table
@@ -130,6 +131,12 @@ are its institution, departments or affiliates with the evidence for each,
 the networks serving its names, and the other domains those networks serve.
 Questions such as "Which organizations make up jhu.edu's institution?" reach
 it through the planner's `family` answer kind. Nothing is written.
+
+`"lens": "org_group"` (subject an Organization, or an FQDN for its main
+organization) answers with the corporate group, as `amass lens org-group` does:
+the ultimate parent and every subsidiary and unit below it. Questions such as
+"Who owns Spotify USA Inc.?" reach it through the planner's `org_group` answer
+kind. Nothing is written.
 
 `"lens": "controlled"` (subject an Organization or FQDN) lists the assets
 attributed to the subject by that same footprint walk, optionally only those

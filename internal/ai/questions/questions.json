@@ -131,6 +131,14 @@
       "expect": {"answer": "family", "subject_type": "FQDN", "max_model_calls": 1},
       "offline": {"fixture": "institution-family", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"jhu.edu\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"family\",\"columns\":[]}"], "checks": {"results_include": ["same_institution johns hopkins university", "department hopkins information technology services", "affiliate the johns hopkins medical institutions", "related jhmi.edu"], "results_exclude": ["cloudhost", "hopkins & sons plumbing"], "answer_contains": ["Main organization: johns hopkins university"]}},
       "live": {"answer_contains": ["Main organization:"]}
+    },
+    {
+      "id": "spotify-usa-owner",
+      "question": "Who owns Spotify USA Inc.?",
+      "note": "The org_group answer kind: the climb to the ultimate parent through stored subsidiary relationships (as GLEIF records them) and the organizations below it, including a reviewed unit; a company that only shares a name word is not in the group.",
+      "expect": {"answer": "org_group", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "corporate-group", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Spotify USA Inc.\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"org_group\",\"columns\":[]}"], "checks": {"results_include": ["0 Spotify Technology S.A.", "1 Spotify AB", "2 Spotify USA Inc.", "2 Spotify Security"], "results_exclude": ["Fans Club"], "answer_contains": ["Ultimate parent: Spotify Technology S.A."], "complete": true}},
+      "live": {"answer_contains": ["Corporate group of"]}
     }
   ]
 }

@@ -16,6 +16,7 @@ evidence does and nothing is left behind to clean up.
 | --- | --- |
 | `amass lens family -d <domain>` | The organizations behind an enumerated domain, the networks and other registered domains that serve it |
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
+| `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
 | `amass review proposals` | Every proposal in the journal and its status |
@@ -91,6 +92,24 @@ Affiliates are only reported: OAM has no affiliate relationship, and the
 lens finds them again from the evidence whenever it is asked. The words, thresholds and
 sample sizes are in `internal/ai/semantics/family.json`, address spellings
 in `internal/ai/semantics/address_terms.json`.
+
+## Corporate group
+
+```bash
+amass lens org-group -org "Spotify USA Inc."
+amass lens org-group -d spotify.com
+```
+
+Climbs from an organization to the organizations with no stored parent above
+it, then lists every organization below them, as an indented tree with each
+one's jurisdiction and registration number. With `-d`, the organization is
+the domain's main organization as the family lens decides it. The links are
+the stored relationships the [relationship semantics](ai/RELATION_SEMANTICS.md)
+mark as one organization controlling another for corporate reasons: today
+`subsidiary`, which the GLEIF plugin records from GLEIF's parent and child
+records for organizations with an LEI, and `org_unit`, which reviewed
+department proposals add. When sources name different parents, the report
+lists each one. Nothing is written.
 
 ## Vendors
 
