@@ -92,6 +92,19 @@ func (r *txtHandler) process(e *et.Event, entities []*dbt.Entity) {
 	}
 }
 
+// IsVerificationRecord reports whether a TXT record starts with a site
+// verification prefix this plugin recognizes, and so is stored as a
+// verified_for relationship to the service's organization.
+func IsVerificationRecord(txt string) bool {
+	for prefix := range prefixes {
+		if strings.HasPrefix(txt, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
 var prefixes = map[string]*oamorg.Organization{
 	"adobe-idp-site-verification=":      {Name: "Adobe Inc.", Jurisdiction: "US-DE", RegistrationID: "2748129"},
 	"adobe-sign-verification=":          {Name: "Adobe Inc.", Jurisdiction: "US-DE", RegistrationID: "2748129"},

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"regexp"
 	"sort"
 	"strings"
@@ -48,6 +49,11 @@ type ThirdPartyReport struct {
 	Reads          int            `json:"reads"`
 	Truncated      bool           `json:"truncated"`
 	Reason         string         `json:"reason,omitempty"`
+	// UnrecognizedSPF and UnrecognizedTokens are set by the vendors lens: the
+	// domain's SPF includes no vendor entry matches, and the keys of its
+	// verification-like TXT records no DNS-SD prefix recognizes.
+	UnrecognizedSPF    []string `json:"unrecognized_spf,omitempty"`
+	UnrecognizedTokens []string `json:"unrecognized_tokens,omitempty"`
 }
 
 // vendorSet accumulates vendor uses keyed by vendor and kind.
@@ -110,15 +116,21 @@ func searchThirdParties(ctx context.Context, graph Graph, schema SchemaCatalog, 
 
 	report.Footprint = len(owned)
 	ownDomains := map[string]bool{}
+	var ownNets []netip.Prefix
 	for _, a := range owned {
 		report.FootprintTypes[a.Type]++
-		if a.Type == "FQDN" {
+		switch a.Type {
+		case "FQDN":
 			ownDomains[registeredDomain(fqdnName(a))] = true
+		case "Netblock":
+			if p, err := netip.ParsePrefix(contentString(a, "cidr")); err == nil {
+				ownNets = append(ownNets, p.Masked())
+			}
 		}
 	}
 
 	vendors := vendorSet{}
-	d := dependencyScan{w: w, owned: owned, ownDomains: ownDomains, vendors: vendors}
+	d := dependencyScan{w: w, owned: owned, ownDomains: ownDomains, ownNets: ownNets, vendors: vendors}
 	for _, id := range order {
 		if err := ctx.Err(); err != nil {
 			return report, err
@@ -171,7 +183,10 @@ type dependencyScan struct {
 	w          *lensWalker
 	owned      map[string]Asset
 	ownDomains map[string]bool
-	vendors    vendorSet
+	// ownNets are the footprint's netblocks: an address in one is
+	// controlled even when no stored relationship says so.
+	ownNets []netip.Prefix
+	vendors vendorSet
 	// self names the subject in table cells it controls.
 	self string
 }
@@ -310,13 +325,42 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 			best = v
 		}
 	}
-	if best.Type == "FQDN" {
+	switch best.Type {
+	case "FQDN":
 		domain := registeredDomain(fqdnName(best))
-		return domain, "", d.ownDomains[domain], best.ID, nil
+		if reverseZone(domain) {
+			// An address's pointer name says nothing about who operates it.
+			return "", "", false, best.ID, nil
+		}
+
+		return vendorNameOf(domain), "", d.ownDomains[domain], best.ID, nil
+	case "IPAddress":
+		addr, err := netip.ParseAddr(assetLabel(best))
+		if err != nil {
+			break
+		}
+		addr = addr.Unmap()
+		if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+			// Private and reserved addresses name no outside party.
+			return "", "", false, best.ID, nil
+		}
+		for _, p := range d.ownNets {
+			if p.Contains(addr) {
+				return "", "", true, best.ID, nil
+			}
+		}
+
+		// No network or organization is stored for the address, so who
+		// operates it is unknown; the addresses are reported together.
+		return unattributedAddresses, "", false, best.ID, nil
 	}
 
 	return assetLabel(best), best.ID, false, best.ID, nil
 }
+
+// unattributedAddresses names the party behind public addresses with no
+// stored network, autonomous system or organization.
+const unattributedAddresses = "IP addresses with no recorded network owner"
 
 // dependencyKind names a vendor group from the semantics table: the purpose
 // of the dependency relationship and the type of asset depended on, such as

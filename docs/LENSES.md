@@ -103,11 +103,30 @@ organization controls, depend on: registrars, DNS hosts, certificate
 authorities, hosting networks and service providers, from the stored
 relationships the [relationship semantics](ai/RELATION_SEMANTICS.md) mark as
 third-party dependencies. It adds the services the domain's DNS TXT records
-name: verification tokens (Google, Microsoft 365, Atlassian, DocuSign, Zoom
-and others) and the mail senders its SPF record authorizes (Google
-Workspace, Microsoft 365, SendGrid, Mailgun and others). The patterns are in
-`internal/ai/semantics/txt_vendors.json`. These are stored records, not
-verified contracts: a token or SPF include can outlive the service.
+name:
+
+- the organizations behind its verification tokens, from the `verified_for`
+  relationships the DNS-SD plugin stores. They are read by label, so they
+  appear even for a domain with more relationships than the lens reads;
+- the mail senders its SPF record authorizes, from
+  `internal/ai/semantics/txt_vendors.json`. Each entry is the include the
+  vendor's own documentation tells customers to publish, with that page as
+  its `source`.
+
+It then lists what nothing recognizes: SPF includes that match no entry
+(other than the domain's own), and TXT records that look like verification
+tokens but match no DNS-SD prefix. Confirm each against the vendor's
+documentation before adding it, so the catalog grows from enumerated data.
+
+A party with no stored organization is named by the registrable domain it was
+reached through. Reverse lookup names and private or reserved addresses are
+not reported, an address inside one of the organization's netblocks counts as
+its own, other bare addresses are grouped as having no recorded network owner,
+and providers whose names span many domains (such as Amazon Route 53's
+`awsdns-NN` name servers) are grouped by `internal/ai/semantics/vendor_names.json`.
+
+These are stored records, not verified contracts: a token or SPF include can
+outlive the service.
 
 ## Duplicates and merges
 
