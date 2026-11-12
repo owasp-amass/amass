@@ -50,6 +50,13 @@ func Neo4jDatabaseName(cfg *config.Config) string {
 // relationship element IDs touching one entity, newest first. Labels are
 // matched against the relationship type, which asset-db stores upper-cased.
 func neo4jBoundedEdgeQuery(entityID, direction string, since time.Time, limit int, labels []string) (string, map[string]any, error) {
+	return neo4jEdgeQuery(entityID, direction, since, nil, limit, labels)
+}
+
+// neo4jEdgeQuery builds the bounded query, starting after a keyset cursor
+// when one is given: the cursor's SortKey is the last edge's updated_at and
+// its EdgeID the relationship's element ID, in the query's own order.
+func neo4jEdgeQuery(entityID, direction string, since time.Time, after *dbt.EdgeCursor, limit int, labels []string) (string, map[string]any, error) {
 	if entityID == "" {
 		return "", nil, errors.New("missing entity ID")
 	}
@@ -92,6 +99,16 @@ func neo4jBoundedEdgeQuery(entityID, direction string, since time.Time, limit in
 
 		params["types"] = types
 		where = append(where, "type(r) IN $types")
+	}
+	if after != nil {
+		at, err := time.Parse(time.RFC3339Nano, after.SortKey)
+		if err != nil || after.EdgeID == "" {
+			return "", nil, errors.New("invalid edge cursor")
+		}
+
+		params["cursor_at"] = neo4jdb.LocalDateTime(at.UTC())
+		params["cursor_id"] = after.EdgeID
+		where = append(where, "(r.updated_at < $cursor_at OR (r.updated_at = $cursor_at AND elementId(r) < $cursor_id))")
 	}
 
 	query := "MATCH " + pattern
@@ -150,4 +167,59 @@ func neo4jEdgesLimited(ctx context.Context, repo *neo4jrepo.NeoRepository, datab
 	}
 
 	return out, more, nil
+}
+
+// neo4jEdgesPage reads one page of an entity's edges after a keyset cursor,
+// newest first, hydrating each relationship as neo4jEdgesLimited does.
+func neo4jEdgesPage(ctx context.Context, repo *neo4jrepo.NeoRepository, database string, entity *dbt.Entity, direction string, since time.Time, after *dbt.EdgeCursor, limit int, labels ...string) ([]*dbt.Edge, *dbt.EdgeCursor, error) {
+	if repo == nil || repo.DB == nil || entity == nil {
+		return nil, nil, errors.New("missing Neo4j repository or entity")
+	}
+
+	query, params, err := neo4jEdgeQuery(entity.ID, direction, since, after, limit, labels)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tctx, cancel := context.WithTimeout(ctx, neo4jEdgeTimeout)
+	defer cancel()
+	opts := []neo4jdb.ExecuteQueryConfigurationOption{}
+	if database != "" {
+		opts = append(opts, neo4jdb.ExecuteQueryWithDatabase(database))
+	}
+
+	result, err := neo4jdb.ExecuteQuery(tctx, repo.DB, query, params, neo4jdb.EagerResultTransformer, opts...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("paged Neo4j edge query: %w", err)
+	}
+
+	out := make([]*dbt.Edge, 0, min(len(result.Records), limit))
+	var lastAt time.Time
+	var lastID string
+	for _, record := range result.Records {
+		if len(out) >= limit {
+			return out, &dbt.EdgeCursor{UpdatedAt: lastAt, EdgeID: lastID,
+				SortKey: lastAt.Format(time.RFC3339Nano)}, nil
+		}
+
+		rid, isnil, err := neo4jdb.GetRecordValue[string](record, "rid")
+		if err != nil || isnil || rid == "" {
+			return nil, nil, errors.New("malformed Neo4j relationship ID")
+		}
+
+		updated, isnil, err := neo4jdb.GetRecordValue[neo4jdb.LocalDateTime](record, "updated")
+		if err != nil || isnil {
+			return nil, nil, errors.New("malformed Neo4j relationship update time")
+		}
+
+		edge, err := repo.FindEdgeById(tctx, rid)
+		if err != nil {
+			return nil, nil, fmt.Errorf("hydrate Neo4j edge %s: %w", rid, err)
+		}
+
+		lastAt, lastID = updated.Time(), rid
+		out = append(out, edge)
+	}
+
+	return out, nil, nil
 }

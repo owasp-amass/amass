@@ -153,4 +153,5 @@ func TestAdapterBoundedTraversalOnNeo4j(t *testing.T) {
 	if err != nil || len(none) != 0 || more {
 		t.Fatalf("label filter: len=%d more=%v err=%v", len(none), more, err)
 	}
+	assertAdapterPages(t, repo, adapter)
 }

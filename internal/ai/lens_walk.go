@@ -25,6 +25,11 @@ const (
 	lensMaxOwnerDepth = 5
 )
 
+// lensMaxPerLabel bounds how many edges with one label a lens reads from
+// one asset, a page at a time, when one read is not enough. It is a
+// variable so tests can lower it.
+var lensMaxPerLabel = 10 * MaxEdgeRead
+
 // purposeHierarchy marks same_subject edges that link a parent to a child
 // (the FQDN node hierarchy). Control descends them; ownership ascends them.
 const purposeHierarchy = "hierarchy"
@@ -257,14 +262,12 @@ func (w *lensWalker) neighborsByLabel(id, dir string) ([]Relation, error) {
 			break
 		}
 
-		w.report.Reads++
-		edges, more, err := w.bounded.EdgesLimited(w.ctx, id, dir, label, time.Time{}, lensMaxPerAsset)
+		edges, more, limit, err := w.readLabel(id, dir, label)
 		if err != nil {
 			return nil, err
 		}
 		if more {
-			w.truncate(fmt.Sprintf("more than %d %s %s edges on %s %s", lensMaxPerAsset, dir, label, a.Type,
-				assetLabel(a)))
+			w.truncate(fmt.Sprintf("more than %d %s %s edges on %s %s", limit, dir, label, a.Type, assetLabel(a)))
 		}
 		for _, e := range edges {
 			if !seen[e.ID] {
@@ -275,6 +278,43 @@ func (w *lensWalker) neighborsByLabel(id, dir string) ([]Relation, error) {
 	}
 
 	return out, nil
+}
+
+// readLabel reads the edges of id with one label in one direction. When the
+// graph can page, it reads up to lensMaxPerLabel edges a page at a time;
+// otherwise one bounded read. more reports edges left unread, beyond cap.
+func (w *lensWalker) readLabel(id, dir, label string) ([]Relation, bool, int, error) {
+	pager, ok := w.graph.(PagedGraph)
+	if !ok {
+		w.report.Reads++
+		edges, more, err := w.bounded.EdgesLimited(w.ctx, id, dir, label, time.Time{}, lensMaxPerAsset)
+		return edges, more, lensMaxPerAsset, err
+	}
+
+	var out []Relation
+	cursor := ""
+	for {
+		if w.report.Reads >= lensMaxReads {
+			w.truncate("database read limit")
+			return out, false, lensMaxPerLabel, nil
+		}
+
+		w.report.Reads++
+		edges, next, err := pager.EdgesPage(w.ctx, id, dir, label, time.Time{}, cursor,
+			min(lensMaxPerAsset, lensMaxPerLabel-len(out)))
+		if err != nil {
+			return nil, false, lensMaxPerLabel, err
+		}
+
+		out = append(out, edges...)
+		if next == "" {
+			return out, false, lensMaxPerLabel, nil
+		}
+		if len(out) >= lensMaxPerLabel {
+			return out, true, lensMaxPerLabel, nil
+		}
+		cursor = next
+	}
 }
 
 // labelsFor returns the relationship labels the schema allows for an asset

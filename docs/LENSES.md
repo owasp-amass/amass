@@ -136,6 +136,12 @@ with the domains the institution's dedicated networks also serve, are listed
 as affiliated. This matters most for a domain with no documented owner, whose
 own networks would otherwise appear as its largest vendor.
 
+Lenses read the database in bounded pages. One read returns at most 500 of an
+asset's relationships; when that is not enough, the lens reads each
+relationship label on its own, and pages through a label with more than 500
+relationships up to 5,000 per asset. A report that reached a bound says so and
+names the relationship that stayed partial.
+
 These are stored records, not verified contracts: a token or SPF include can
 outlive the service.
 

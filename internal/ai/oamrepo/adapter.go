@@ -369,6 +369,83 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 
 var _ ai.BoundedGraph = Adapter{}
 
+// EdgesPage reads the page of edges after cursor, newest first, so a lens
+// can read past the first EdgesLimited page. cursor is "" for the first
+// page; the returned cursor is "" after the last one. SQLite and PostgreSQL
+// page in asset-db (ReadEdgesPage); Neo4j pages here.
+func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, since time.Time, cursor string, limit int) ([]ai.Relation, string, error) {
+	if a.Repo == nil {
+		return nil, "", errors.New("missing repository")
+	}
+
+	var after *dbt.EdgeCursor
+	if cursor != "" {
+		after = &dbt.EdgeCursor{}
+		if err := json.Unmarshal([]byte(cursor), after); err != nil {
+			return nil, "", fmt.Errorf("invalid edge cursor: %w", err)
+		}
+	}
+
+	ent, err := a.Repo.FindEntityById(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+
+	pager, ok := a.Repo.(interface {
+		ReadEdgesPage(context.Context, *dbt.Entity, string, time.Time, *dbt.EdgeCursor, int, ...string) ([]*dbt.Edge, *dbt.EdgeCursor, error)
+	})
+	neo, isNeo := a.Repo.(*neo4jrepo.NeoRepository)
+
+	labels := storedLabels(label)
+	var edges []*dbt.Edge
+	var next *dbt.EdgeCursor
+	switch {
+	case ok:
+		edges, next, err = pager.ReadEdgesPage(ctx, ent, direction, since, after, limit, labels...)
+	case isNeo:
+		edges, next, err = neo4jEdgesPage(ctx, neo, a.Neo4jDatabase, ent, direction, since, after, limit, labels...)
+	default:
+		return nil, "", errors.New("asset-db version lacks paged edge reads; upgrade the repository dependency")
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if len(edges) > limit {
+		return nil, "", errors.New("repository violated bounded edge limit")
+	}
+
+	out := make([]ai.Relation, 0, len(edges))
+	for _, e := range edges {
+		if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
+			return nil, "", errors.New("malformed paged edge")
+		}
+		if label != "" && schemaLabel(e.Relation) != label {
+			continue
+		}
+
+		dir := "out"
+		if e.ToEntity.ID == id {
+			dir = "in"
+		}
+		out = append(out, ai.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID,
+			Label: schemaLabel(e.Relation), Type: string(e.Relation.RelationType()), Direction: dir,
+			Content: e.Relation, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen})
+	}
+
+	if next == nil {
+		return out, "", nil
+	}
+
+	raw, err := json.Marshal(next)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return out, string(raw), nil
+}
+
+var _ ai.PagedGraph = Adapter{}
+
 // LookupOrganizations performs bounded, typed lookups with a conservative
 // punctuation fallback. It never scans the repository, and never silently
 // selects among multiple plausible legal entities.

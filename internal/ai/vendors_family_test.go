@@ -6,9 +6,12 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A domain with no documented owner lists the institution's own networks
@@ -100,5 +103,92 @@ func TestThirdPartyLensReadsBusyAssetsByLabel(t *testing.T) {
 	}
 	if !r.Truncated || !strings.Contains(r.Reason, "out node edges on FQDN colgate.edu") {
 		t.Errorf("reason %q does not name the partial label", r.Reason)
+	}
+}
+
+// pagedVendorGraph adds paged edge reads to the vendor fixture; the cursor
+// is the offset of the next edge in stored order.
+type pagedVendorGraph struct {
+	vendorGraph
+	pages *int
+}
+
+func (g pagedVendorGraph) EdgesPage(ctx context.Context, id, dir, label string, since time.Time, cursor string,
+	limit int) ([]Relation, string, error) {
+	if limit < 1 || limit > MaxEdgeRead {
+		return nil, "", errors.New("edge limit must be 1..500")
+	}
+
+	edges, err := g.Edges(ctx, id, dir, label, since)
+	if err != nil {
+		return nil, "", err
+	}
+
+	start := 0
+	if cursor != "" {
+		if start, err = strconv.Atoi(cursor); err != nil {
+			return nil, "", err
+		}
+	}
+
+	*g.pages++
+	end := min(start+limit, len(edges))
+	if end < len(edges) {
+		return edges[start:end], strconv.Itoa(end), nil
+	}
+
+	return edges[start:end], "", nil
+}
+
+func busyColgate(n int) vendorGraph {
+	g := vendorFixture()
+	var nodes []Relation
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("h%d.colgate.edu", i)
+		g.assets[name] = Asset{ID: name, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+		nodes = append(nodes, Relation{ID: "node-" + name, FromID: "colgate.edu", ToID: name, Label: "node",
+			Type: "SimpleRelation"})
+	}
+	g.links = append(nodes, g.links...)
+
+	return g
+}
+
+// With paged reads, a label past one read is read in full.
+func TestThirdPartyLensPagesBusyLabels(t *testing.T) {
+	pages := 0
+	g := pagedVendorGraph{vendorGraph: busyColgate(MaxEdgeRead + 100), pages: &pages}
+
+	r, err := searchThirdParties(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Truncated {
+		t.Errorf("paged read still partial: %s", r.Reason)
+	}
+	if got := r.FootprintTypes["FQDN"]; got < MaxEdgeRead+100 {
+		t.Errorf("footprint has %d FQDNs, want all %d subdomains", got, MaxEdgeRead+100)
+	}
+	if pages == 0 {
+		t.Error("the lens never paged")
+	}
+}
+
+// Paging stops at lensMaxPerLabel, and the report says so.
+func TestThirdPartyLensCapsPagedLabels(t *testing.T) {
+	defer func(n int) { lensMaxPerLabel = n }(lensMaxPerLabel)
+	lensMaxPerLabel = 550
+
+	pages := 0
+	g := pagedVendorGraph{vendorGraph: busyColgate(MaxEdgeRead + 100), pages: &pages}
+	r, err := searchThirdParties(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Truncated || !strings.Contains(r.Reason, "more than 550 out node edges on FQDN colgate.edu") {
+		t.Errorf("reason %q does not name the capped label", r.Reason)
+	}
+	if got := vendorNames(&r)["pphosted.com"]; got != "DNS: FQDNs" {
+		t.Errorf("vendor behind the capped label missing: %v", vendorNames(&r))
 	}
 }
