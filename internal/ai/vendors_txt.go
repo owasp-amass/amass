@@ -184,12 +184,14 @@ func spfTargets(record string) []string {
 	return out
 }
 
-// spfSenderOf finds the vendor entry whose domain is target or a parent of
-// it.
+// spfSenderOf finds the vendor entry whose domain is target, a parent of
+// it, or has target as its registrable domain: customers often publish the
+// vendor's own domain (include:service-now.com) rather than the documented
+// one (_spfinc1.service-now.com), and it still names the vendor.
 func spfSenderOf(senders []spfSender, target string) (spfSender, bool) {
 	for _, s := range senders {
 		for _, d := range s.Domains {
-			if target == d || strings.HasSuffix(target, "."+d) {
+			if target == d || strings.HasSuffix(target, "."+d) || target == registeredDomain(d) {
 				return s, true
 			}
 		}
