@@ -120,7 +120,7 @@ Sources record one company several times: a certificate, an RDAP lookup and GLEI
 
 `shared_location`: supporting location signal, weight 0.15.
 
-**Finds:** Two organizations that share a stored address, directly or through their contact records.
+**Finds:** Two organizations that share an address, directly or through their contact records, either as one stored location or as the same street address written differently ('5801 Smith Avenue' and '5801 Smith Ave, Suite 3110B'; see semantics/address_terms.json).
 
 **Why it counts:** Two spellings of a company found in certificates or registrations usually carry the same street address. A shared address supports a name match, but on its own it describes a building, not a company.
 

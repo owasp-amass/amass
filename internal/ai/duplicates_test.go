@@ -148,6 +148,18 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 	g.contact("11437", "cr-goog2", "loc-goog")
 	g.link("270", "11437", "subsidiary")
 
+	// UAlbany as ARIN and WHOIS record it: two spellings of one street
+	// address, and initials only in the department's name.
+	g.org("38172", "university at albany, state university of new york", "", "", "")
+	g.org("28909", "university at albany its", "", "", "")
+	g.g.assets["loc-ua1"] = Asset{ID: "loc-ua1", Type: "Location", Key: "a1",
+		Content: map[string]any{"address": "1400 washington ave room itb102 albany ny 12222 united states"}}
+	g.g.assets["loc-ua2"] = Asset{ID: "loc-ua2", Type: "Location", Key: "a2",
+		Content: map[string]any{"address": "1400 washington av, albany, ny 12222-1000, usa"}}
+	g.contact("38172", "cr-ua1", "loc-ua1")
+	g.contact("28909", "cr-ua2", "loc-ua2")
+	g.ident("38172", "org_name", "University at Albany ITS")
+
 	// Privacy placeholders are never organizations to merge.
 	g.org("4585", "registration private", "", "", "")
 	g.org("4586", "registration private", "", "", "")
@@ -176,6 +188,8 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 			has: []string{"same_brand_name", "jurisdiction_conflict"}},
 		{name: "shared name and address against conflicting registrations", a: "270", b: "11437", decision: GapWeak,
 			has: []string{"same_brand_name", "shared_location", "jurisdiction_conflict", "conflicting_registry_identifier"}},
+		{name: "one street address spelled two ways", a: "38172", b: "28909", decision: GapReview,
+			has: []string{"shared_location", "same_brand_name"}},
 		{name: "one ARIN handle", a: "2565", b: "12527", decision: GapReview,
 			has: []string{"shared_network_handle"}},
 	}

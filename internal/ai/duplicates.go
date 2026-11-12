@@ -40,7 +40,9 @@ type orgProfile struct {
 	registration string
 	contacts     map[string]bool
 	locations    map[string]bool
-	related      map[string]bool
+	// addresses are the locations' normalized street addresses.
+	addresses map[string]bool
+	related   map[string]bool
 	// evidence counts the facts recorded for the organization, to choose
 	// which of two duplicates survives a merge.
 	evidence int
@@ -220,7 +222,8 @@ func (s *dupSearch) asset(id string) (Asset, error) {
 // addresses and corporate links.
 func (s *dupSearch) profile(o Asset) (*orgProfile, error) {
 	p := &orgProfile{asset: o, brands: map[string]bool{}, ids: map[string]map[string]bool{},
-		contacts: map[string]bool{}, locations: map[string]bool{}, related: map[string]bool{}}
+		contacts: map[string]bool{}, locations: map[string]bool{}, addresses: map[string]bool{},
+		related: map[string]bool{}}
 	p.addName(contentString(o, "name"))
 	p.addName(contentString(o, "legal_name"))
 	p.jurisdiction = strings.ToUpper(strings.TrimSpace(contentString(o, "jurisdiction")))
@@ -265,6 +268,16 @@ func (s *dupSearch) profile(o Asset) (*orgProfile, error) {
 		}
 		for _, l := range locs {
 			p.locations[l.ToID] = true
+		}
+	}
+
+	for id := range p.locations {
+		loc, err := s.asset(id)
+		if err != nil {
+			return nil, err
+		}
+		if k := locationAddressKey(loc); k != "" {
+			p.addresses[k] = true
 		}
 	}
 
@@ -507,6 +520,9 @@ func pairSignals(a, b *orgProfile) []GapSignal {
 		case matchSharedLocation:
 			if loc := firstShared(a.locations, b.locations); loc != "" {
 				add(def, "location "+loc)
+			} else if k := firstShared(a.addresses, b.addresses); k != "" {
+				street, _, _ := strings.Cut(k, "|")
+				add(def, "address "+street)
 			}
 		case matchAbbreviation:
 			if via := abbreviates(a, b, def.Params.StopWords, def.Params.MinLength); via != "" {
