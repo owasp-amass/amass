@@ -88,18 +88,26 @@ type identitySearch struct {
 	report IdentityReport
 }
 
+// edges reads an asset's edges completely within the check's read budget;
+// see dupSearch.edges.
 func (s *identitySearch) edges(id, dir, label string) ([]Relation, error) {
 	if s.report.Reads >= dupMaxReads {
 		return nil, errDupReadLimit
 	}
 
-	s.report.Reads++
-	if b, ok := s.graph.(BoundedGraph); ok {
-		edges, _, err := b.EdgesLimited(s.ctx, id, dir, label, time.Time{}, MaxEdgeRead)
-		return edges, err
+	spend := func() bool {
+		if s.report.Reads >= dupMaxReads {
+			return false
+		}
+		s.report.Reads++
+		return true
+	}
+	edges, more, err := readEdges(s.ctx, s.graph, id, dir, label, lensMaxPerLabel, spend)
+	if err == nil && more && !s.report.Truncated {
+		s.report.Truncated, s.report.Reason = true, partialRead(s.report.Reads >= dupMaxReads, id, dir, label)
 	}
 
-	return s.graph.Edges(s.ctx, id, dir, label, time.Time{})
+	return edges, err
 }
 
 func (s *identitySearch) asset(id string) (Asset, error) {

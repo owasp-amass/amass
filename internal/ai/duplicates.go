@@ -195,18 +195,49 @@ func (s *dupSearch) truncate(reason string) {
 	}
 }
 
+// edges reads an asset's edges completely, a page at a time, within the
+// search's read budget and lensMaxPerLabel edges. A read the budget or the
+// cap cut short marks the report partial rather than silently dropping
+// evidence.
 func (s *dupSearch) edges(id, dir, label string) ([]Relation, error) {
 	if s.report.Reads >= dupMaxReads {
 		return nil, errDupReadLimit
 	}
 
-	s.report.Reads++
+	edges, more, err := readEdges(s.ctx, s.graph, id, dir, label, lensMaxPerLabel, s.spend)
+	if err == nil && more {
+		s.truncate(partialRead(s.report.Reads >= dupMaxReads, id, dir, label))
+	}
+
+	return edges, err
+}
+
+// firstEdges reads at most limit edges in one bounded read, for samples
+// that are meant to be partial (a domain's names, a network's addresses).
+func (s *dupSearch) firstEdges(id, dir, label string, limit int) ([]Relation, error) {
+	if !s.spend() {
+		return nil, errDupReadLimit
+	}
 	if b, ok := s.graph.(BoundedGraph); ok {
-		edges, _, err := b.EdgesLimited(s.ctx, id, dir, label, time.Time{}, MaxEdgeRead)
+		edges, _, err := b.EdgesLimited(s.ctx, id, dir, label, time.Time{}, min(limit, MaxEdgeRead))
 		return edges, err
 	}
 
-	return s.graph.Edges(s.ctx, id, dir, label, time.Time{})
+	edges, err := s.graph.Edges(s.ctx, id, dir, label, time.Time{})
+	if len(edges) > limit {
+		edges = edges[:limit]
+	}
+	return edges, err
+}
+
+// spend counts one database read, or reports that the budget is spent.
+func (s *dupSearch) spend() bool {
+	if s.report.Reads >= dupMaxReads {
+		return false
+	}
+
+	s.report.Reads++
+	return true
 }
 
 func (s *dupSearch) asset(id string) (Asset, error) {
@@ -671,4 +702,16 @@ func FormatDuplicateReport(r DuplicateReport) string {
 	}
 
 	return b.String()
+}
+
+// partialRead names why an edge read was cut short.
+func partialRead(budget bool, id, dir, label string) string {
+	if budget {
+		return "database read limit"
+	}
+	if label == "" {
+		label = "any"
+	}
+
+	return fmt.Sprintf("more than %d %s %s edges on asset %s", lensMaxPerLabel, dir, label, id)
 }

@@ -308,7 +308,7 @@ func (s *familySearch) sampleDomain(root Asset) error {
 			return err
 		}
 
-		children, err := s.dup.edges(id, "out", "node")
+		children, err := s.dup.firstEdges(id, "out", "node", MaxEdgeRead)
 		if err != nil {
 			return err
 		}
@@ -543,17 +543,7 @@ func (s *familySearch) sampleNetwork(block string) (map[string]int, int, error) 
 	out := map[string]int{}
 	total := 0
 
-	var ips []Relation
-	var err error
-	if b, ok := s.dup.graph.(BoundedGraph); ok {
-		if s.dup.report.Reads >= dupMaxReads {
-			return out, 0, errDupReadLimit
-		}
-		s.dup.report.Reads++
-		ips, _, err = b.EdgesLimited(s.dup.ctx, block, "out", "contains", time.Time{}, s.rules.SampleNetwork)
-	} else {
-		ips, err = s.dup.edges(block, "out", "contains")
-	}
+	ips, err := s.dup.firstEdges(block, "out", "contains", s.rules.SampleNetwork)
 	if err != nil {
 		return out, 0, err
 	}

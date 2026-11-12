@@ -83,22 +83,17 @@ func RecheckAttributions(ctx context.Context, graph Graph, r OwnershipRetractor,
 }
 
 // missingWitness returns the first evidence relationship that no longer
-// exists, or "" when all do. A relationship that cannot be confirmed
-// because its source has too many edges to read counts as present.
+// exists, or "" when all do. The source's edges with the evidence label are
+// read a page at a time until the relationship is found or none are left,
+// up to lensMaxPerLabel edges; a relationship that still cannot be
+// confirmed counts as present, so evidence is never declared gone unread.
 func missingWitness(ctx context.Context, graph Graph, witness []WitnessEdge) (string, error) {
 	for _, w := range witness {
 		if w.FromID == "" || w.ToID == "" || w.Label == "" {
 			continue
 		}
 
-		var edges []Relation
-		var more bool
-		var err error
-		if b, ok := graph.(BoundedGraph); ok {
-			edges, more, err = b.EdgesLimited(ctx, w.FromID, "out", w.Label, time.Time{}, MaxEdgeRead)
-		} else {
-			edges, err = graph.Edges(ctx, w.FromID, "out", w.Label, time.Time{})
-		}
+		found, complete, err := findEdge(ctx, graph, w.FromID, w.Label, w.ToID)
 		if err != nil {
 			if _, gerr := graph.GetAsset(ctx, w.FromID); gerr != nil {
 				// The source asset is gone.
@@ -106,20 +101,58 @@ func missingWitness(ctx context.Context, graph Graph, witness []WitnessEdge) (st
 			}
 			return "", err
 		}
-
-		found := false
-		for _, e := range edges {
-			if e.ToID == w.ToID {
-				found = true
-				break
-			}
-		}
-		if !found && !more {
+		if !found && complete {
 			return fmt.Sprintf("%s %s --%s--> %s %s", w.FromType, w.From, w.Label, w.ToType, w.To), nil
 		}
 	}
 
 	return "", nil
+}
+
+// findEdge looks for an out edge from one asset to another with a label.
+// complete reports that every such edge of the source was read.
+func findEdge(ctx context.Context, graph Graph, from, label, to string) (bool, bool, error) {
+	pager, ok := graph.(PagedGraph)
+	if !ok {
+		var edges []Relation
+		var more bool
+		var err error
+		if b, ok := graph.(BoundedGraph); ok {
+			edges, more, err = b.EdgesLimited(ctx, from, "out", label, time.Time{}, MaxEdgeRead)
+		} else {
+			edges, err = graph.Edges(ctx, from, "out", label, time.Time{})
+		}
+		if err != nil {
+			return false, false, err
+		}
+		for _, e := range edges {
+			if e.ToID == to {
+				return true, true, nil
+			}
+		}
+		return false, !more, nil
+	}
+
+	cursor := ""
+	for read := 0; read < lensMaxPerLabel; {
+		edges, next, err := pager.EdgesPage(ctx, from, "out", label, time.Time{}, cursor, MaxEdgeRead)
+		if err != nil {
+			return false, false, err
+		}
+		for _, e := range edges {
+			if e.ToID == to {
+				return true, true, nil
+			}
+		}
+		if next == "" {
+			return false, true, nil
+		}
+
+		read += len(edges)
+		cursor = next
+	}
+
+	return false, false, nil
 }
 
 // redecidable reports whether a proposal's latest outcome still lets
