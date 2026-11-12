@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
+	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 	"github.com/owasp-amass/amass/v5/internal/ai/mcp"
@@ -359,7 +360,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	}
 
 	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
-	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}}
+	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{},
+		KnownVerification: dnssd.IsVerificationRecord}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
 	switch operation {

@@ -34,6 +34,7 @@ type Investigation struct {
 	ControlledReport   *ControlledReport         `json:"controlled_report,omitempty"`
 	TableReport        *TableReport              `json:"table_report,omitempty"`
 	GapReport          *OwnershipGapReport       `json:"ownership_gap_report,omitempty"`
+	FamilyReport       *FamilyReport             `json:"family_report,omitempty"`
 	Narrative          *Narrative                `json:"narrative,omitempty"`
 	Goal               *InvestigationGoal        `json:"goal,omitempty"`
 	Search             *GraphSearchResult        `json:"search,omitempty"`
