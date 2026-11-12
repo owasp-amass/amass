@@ -115,6 +115,22 @@
       "expect": {"answer": "ownership_gaps", "subject_type": "Organization", "max_model_calls": 1},
       "offline": {"fixture": "campus-gaps", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Colgate University\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"ownership_gaps\",\"columns\":[]}"], "checks": {"results_include": ["propose ContactRecord https://rdap.example/alumni", "review FQDN colgate-events.com", "weak FQDN raiders.example.net"], "results_exclude": ["hamilton"], "answer_contains": ["--organization--> Organization Colgate University", "Nothing has been written."], "complete": true}},
       "live": {"answer_excludes": ["No documented owner"]}
+    },
+    {
+      "id": "colgate-vendors-dns-txt",
+      "question": "Which third-party vendors are used by colgate.edu?",
+      "note": "The vendors lens from a domain: the organization behind a verification token (a verified_for relationship from the DNS-SD plugin), the mail senders its SPF record authorizes, and the SPF include and verification-like record nothing recognizes.",
+      "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 0},
+      "offline": {"fixture": "campus-txt", "checks": {"results_include": ["Google LLC", "Google Workspace", "FASTLY"], "answer_contains": ["SaaS: domain verification (DNS TXT)", "Email: authorized senders (SPF)", "SPF includes no vendor entry recognizes (1): spf.acme-mailer.example", "acme-domain-verification="]}},
+      "live": {"answer_contains": ["Email: authorized senders (SPF)"]}
+    },
+    {
+      "id": "jhu-institution-family",
+      "question": "Which organizations make up jhu.edu's institution?",
+      "note": "The family answer kind: the institution's name variants, its IT department (a registration contact), an affiliate holding a network that serves the domain, and the other domains that network serves; a provider and a similarly named company are not family.",
+      "expect": {"answer": "family", "subject_type": "FQDN", "max_model_calls": 1},
+      "offline": {"fixture": "institution-family", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"jhu.edu\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"family\",\"columns\":[]}"], "checks": {"results_include": ["same_institution johns hopkins university", "department hopkins information technology services", "affiliate the johns hopkins medical institutions", "related jhmi.edu"], "results_exclude": ["cloudhost", "hopkins & sons plumbing"], "answer_contains": ["Main organization: johns hopkins university"]}},
+      "live": {"answer_contains": ["Main organization:"]}
     }
   ]
 }
