@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 
+	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 )
@@ -31,7 +32,8 @@ func listVendors(ctx context.Context, graph familyGraph, domain, format string, 
 		return fmt.Errorf("%s is not a stored domain name", domain)
 	}
 
-	r, err := ai.FindVendors(ctx, graph, oamrepo.Catalog{}, res.Candidates[0].Asset)
+	r, err := ai.FindVendors(ctx, graph, oamrepo.Catalog{}, res.Candidates[0].Asset,
+		ai.VendorOptions{KnownVerification: dnssd.IsVerificationRecord})
 	if err != nil {
 		return err
 	}
