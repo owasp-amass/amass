@@ -165,6 +165,7 @@ func FindOrganizationFamily(ctx context.Context, graph Graph, root Asset) (Famil
 
 	s.members(domain, direct, dedicated)
 	s.relatedDomains(domain, dedicated, sampled)
+	s.providerNetworks()
 	return s.finish(), nil
 }
 
@@ -475,6 +476,23 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 	return dedicated, sampled, nil
 }
 
+// providerNetworks marks the networks whose holders turned out to be
+// providers rather than family: they are not the family's networks, however
+// many of their stored names are the domain's.
+func (s *familySearch) providerNetworks() {
+	other := map[string]bool{}
+	for _, m := range s.report.Members {
+		if m.Relation == FamilyOther {
+			other[m.Organization.ID] = true
+		}
+	}
+	for i, n := range s.report.Networks {
+		if n.Dedicated && other[n.HolderID] {
+			s.report.Networks[i].Dedicated = false
+		}
+	}
+}
+
 // relatedDomains lists the other registered domains on dedicated networks
 // held by the family's members.
 func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, sampled map[string]map[string]int) {
@@ -694,6 +712,9 @@ func (s *familySearch) sameInstitution(main string, ties map[string][]string) ma
 func (s *familySearch) sameAs(a, b *familyProfile) (sameReason, bool) {
 	for na := range a.brands {
 		for nb := range b.brands {
+			if na == nb {
+				return sameReason{why: fmt.Sprintf("same name as %s", AssetLabel(b.asset)), byName: true}, true
+			}
 			if nameVariant(na, nb, s.rules.GenericWords) || nameVariant(nb, na, s.rules.GenericWords) {
 				return sameReason{why: fmt.Sprintf("%q is a variant of %q (%s)", na, nb, AssetLabel(b.asset)),
 					byName: true}, true
@@ -702,7 +723,8 @@ func (s *familySearch) sameAs(a, b *familyProfile) (sameReason, bool) {
 	}
 	if k := firstShared(a.addresses, b.addresses); k != "" {
 		street, _, _ := strings.Cut(k, "|")
-		return sameReason{why: "same street address as " + AssetLabel(b.asset) + " (" + street + ")"}, true
+		return sameReason{why: "same street address as " + AssetLabel(b.asset) + " (" + street +
+			"); the address alone is not proposed for merging"}, true
 	}
 
 	return sameReason{}, false
@@ -857,9 +879,9 @@ func FormatFamilyReport(r FamilyReport) string {
 	if len(r.Networks) > 0 {
 		b.WriteString("\nNetworks serving its names:\n")
 		for _, n := range r.Networks {
-			kind := "hosting provider"
+			kind := "provider"
 			if n.Dedicated {
-				kind = "dedicated"
+				kind = "the family's"
 			}
 			holder := n.Holder
 			if holder == "" {
