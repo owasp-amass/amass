@@ -127,7 +127,14 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 		return out, errors.New("max expansions exceeds inventory policy")
 	}
 
+	// A name's children are read in one bounded read, or a page at a time
+	// up to the inventory's own limit when the graph pages, so a domain with
+	// more direct subdomains than one read returns is still listed in full.
 	perNode := min(maxMatches+1, MaxEdgeRead)
+	_, paged := graph.(PagedGraph)
+	if paged {
+		perNode = maxMatches + 1
+	}
 	maxEdges := 4 * (maxMatches + 1)
 
 	type queued struct {
@@ -157,7 +164,15 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 		}
 
 		out.ExpandedPaths++
-		edges, more, err := bounded.EdgesLimited(ctx, current.asset.ID, "out", "node", time.Time{}, perNode)
+		var edges []Relation
+		var more bool
+		var err error
+		if paged {
+			edges, more, err = readEdges(ctx, graph, current.asset.ID, "out", "node", perNode,
+				func() bool { return true })
+		} else {
+			edges, more, err = bounded.EdgesLimited(ctx, current.asset.ID, "out", "node", time.Time{}, perNode)
+		}
 		if err != nil {
 			return out, err
 		}
