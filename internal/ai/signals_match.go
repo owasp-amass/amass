@@ -191,32 +191,7 @@ func (g *gapSearch) txtRecords(a Asset) ([]string, error) {
 		return nil, nil
 	}
 
-	evidence, err := g.w.graph.Evidence(g.w.ctx, a.ID, 100)
-	if err != nil {
-		return nil, err
-	}
-
-	var out []string
-	for _, e := range evidence {
-		data, err := json.Marshal(e.Property)
-		if err != nil {
-			continue
-		}
-
-		var p struct {
-			Name   string `json:"property_name"`
-			Header struct {
-				RRType int `json:"rr_type"`
-			} `json:"header"`
-			Data string `json:"data"`
-		}
-		if json.Unmarshal(data, &p) == nil && p.Name == dnsRecordProperty && p.Header.RRType == rrTypeTXT &&
-			p.Data != "" {
-			out = append(out, strings.Trim(p.Data, `"`))
-		}
-	}
-
-	return out, nil
+	return txtValues(g.w.ctx, g.w.graph, a.ID)
 }
 
 // matched is a witness for two assets that carry the same value. It is
