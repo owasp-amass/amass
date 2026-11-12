@@ -163,6 +163,14 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, c.Decision+" "+c.Type+" "+c.Asset)
 		}
 	}
+	if r := inv.FamilyReport; r != nil {
+		for _, m := range r.Members {
+			out = append(out, m.Relation+" "+assetLabel(m.Organization))
+		}
+		for _, d := range r.RelatedDomains {
+			out = append(out, "related "+d.Domain)
+		}
+	}
 
 	return out
 }

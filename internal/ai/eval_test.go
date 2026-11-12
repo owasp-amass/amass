@@ -91,14 +91,43 @@ func sunyitServices() (Graph, SchemaCatalog) {
 	return sunyitServicesFixture(), vendorCatalog{testOAMCatalog}
 }
 
+// campusTXT adds what colgate.edu's DNS TXT records show to the campus
+// fixture: an SPF record naming Google Workspace and a sender no catalog
+// entry knows, a verification token the DNS-SD plugin stored as a
+// verified_for relationship to Google, and one it did not recognize.
+func campusTXT() (Graph, SchemaCatalog) {
+	g := vendorFixture()
+	g.assets["google"] = Asset{ID: "google", Type: "Organization", Key: "Google LLC",
+		Content: map[string]any{"name": "Google LLC"}}
+	g.links = append(g.links, Relation{ID: "colgate.edu-verified_for-google", FromID: "colgate.edu",
+		ToID: "google", Label: "verified_for", Type: "SimpleRelation"})
+	txt := func(id, data string) Evidence {
+		return Evidence{ID: id, SubjectID: "colgate.edu", Kind: "property", Property: map[string]any{
+			"property_name": dnsRecordProperty, "header": map[string]any{"rr_type": rrTypeTXT}, "data": data}}
+	}
+	g.evidence = map[string][]Evidence{"colgate.edu": {
+		txt("t1", "v=spf1 include:_spf.google.com include:spf.acme-mailer.example -all"),
+		txt("t2", "acme-domain-verification=1"),
+	}}
+
+	return g, vendorCatalog{testOAMCatalog}
+}
+
+// institutionFamily is the Johns Hopkins shaped family fixture.
+func institutionFamily() (Graph, SchemaCatalog) {
+	return vendorGraph{plannedGraph{fakeGraph: familyGraph()}}, vendorCatalog{testOAMCatalog}
+}
+
 // evalFixtures are the graphs offline evaluation cases name.
 var evalFixtures = map[string]func() (Graph, SchemaCatalog){
-	"campus":            campus,
-	"campus-web":        campusWeb,
-	"campus-dns":        campusDNS,
-	"owasp-certificate": owaspCerts,
-	"sunyit-services":   sunyitServices,
-	"campus-gaps":       campusGaps,
+	"campus":             campus,
+	"campus-web":         campusWeb,
+	"campus-dns":         campusDNS,
+	"owasp-certificate":  owaspCerts,
+	"sunyit-services":    sunyitServices,
+	"campus-gaps":        campusGaps,
+	"campus-txt":         campusTXT,
+	"institution-family": institutionFamily,
 }
 
 // Every reported question runs here on each CI build.
