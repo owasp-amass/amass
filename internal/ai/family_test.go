@@ -176,7 +176,7 @@ func TestFindOrganizationFamily(t *testing.T) {
 		dedicated[n.CIDR] = n.Dedicated
 	}
 	if !dedicated["128.220.0.0/16"] || !dedicated["162.129.0.0/16"] || dedicated["52.0.0.0/8"] ||
-		!dedicated["10.20.0.0/16"] {
+		!dedicated["10.20.0.0/16"] || dedicated["50.128.0.0/9"] {
 		t.Errorf("networks = %+v", r.Networks)
 	}
 
@@ -203,7 +203,7 @@ func TestFindOrganizationFamily(t *testing.T) {
 
 	text := FormatFamilyReport(r)
 	for _, want := range []string{"Main organization: johns hopkins university", "Affiliates:",
-		"hosting provider", "jhsph.edu", "Other organizations on its assets"} {
+		"provider", "jhsph.edu", "Other organizations on its assets", "not proposed for merging"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("report lacks %q:\n%s", want, text)
 		}
