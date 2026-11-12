@@ -18,7 +18,12 @@ import (
 
 // listVendors prints the outside parties a domain and its organization's
 // assets depend on. It reads only.
-func listVendors(ctx context.Context, graph familyGraph, domain, format string, explicit bool, out io.Writer) error {
+func listVendors(ctx context.Context, graph familyGraph, domain string, limits ai.LensLimits, format string,
+	explicit bool, out io.Writer) error {
+	if err := limits.Validate(); err != nil {
+		return err
+	}
+
 	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
 	if domain == "" {
 		return errors.New("-domain required")
@@ -33,7 +38,7 @@ func listVendors(ctx context.Context, graph familyGraph, domain, format string, 
 	}
 
 	r, err := ai.FindVendors(ctx, graph, oamrepo.Catalog{}, res.Candidates[0].Asset,
-		ai.VendorOptions{KnownVerification: dnssd.IsVerificationRecord})
+		ai.VendorOptions{KnownVerification: dnssd.IsVerificationRecord, Limits: limits})
 	if err != nil {
 		return err
 	}

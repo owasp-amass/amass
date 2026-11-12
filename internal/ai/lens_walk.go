@@ -18,12 +18,52 @@ const (
 	lensMaxFootprint = 2000
 	lensMaxPerAsset  = MaxEdgeRead
 	lensMaxReads     = 20000
-	lensMaxExamples  = 3
+	// LensMaxAssetsLimit and LensMaxReadsLimit bound what a caller may ask
+	// for in LensLimits.
+	LensMaxAssetsLimit = 100000
+	LensMaxReadsLimit  = 1000000
+	lensMaxExamples    = 3
 	// lensMaxOwnerPops bounds the controller search from one asset.
 	lensMaxOwnerPops = 40
 	// lensMaxOwnerDepth bounds the search for the subject's own owner.
 	lensMaxOwnerDepth = 5
 )
+
+// LensLimits bound one lens run: how many controlled assets it follows and
+// how many database reads it makes. Zero means the default (2,000 assets
+// and 20,000 reads).
+type LensLimits struct {
+	MaxAssets int `json:"max_assets,omitempty"`
+	MaxReads  int `json:"max_reads,omitempty"`
+}
+
+// Validate rejects limits outside what a lens run allows.
+func (l LensLimits) Validate() error {
+	if l.MaxAssets < 0 || l.MaxAssets > LensMaxAssetsLimit {
+		return fmt.Errorf("max assets must be 1..%d", LensMaxAssetsLimit)
+	}
+	if l.MaxReads < 0 || l.MaxReads > LensMaxReadsLimit {
+		return fmt.Errorf("max reads must be 1..%d", LensMaxReadsLimit)
+	}
+
+	return nil
+}
+
+func (l LensLimits) assets() int {
+	if l.MaxAssets > 0 {
+		return l.MaxAssets
+	}
+
+	return lensMaxFootprint
+}
+
+func (l LensLimits) reads() int {
+	if l.MaxReads > 0 {
+		return l.MaxReads
+	}
+
+	return lensMaxReads
+}
 
 // lensMaxPerLabel bounds how many edges with one label a lens reads from
 // one asset, a page at a time, when one read is not enough. It is a
@@ -176,6 +216,9 @@ type lensWalker struct {
 	ownerDist map[string]int
 	// controllers caches controllerOf results by asset ID.
 	controllers map[string]controller
+	// maxAssets and maxReads bound this run (see LensLimits).
+	maxAssets int
+	maxReads  int
 }
 
 func newLensWalker(ctx context.Context, graph Graph, bounded BoundedGraph, meaning meaningFunc, relations []RelationshipSchema, root Asset, report *ThirdPartyReport) *lensWalker {
@@ -190,6 +233,8 @@ func newLensWalker(ctx context.Context, graph Graph, bounded BoundedGraph, meani
 		report:      report,
 		ownerDist:   distanceTo(typeMoves(relations, meaning, ownerPass), "Organization"),
 		controllers: map[string]controller{},
+		maxAssets:   lensMaxFootprint,
+		maxReads:    lensMaxReads,
 	}
 }
 
@@ -222,7 +267,7 @@ func (w *lensWalker) neighbors(id string) ([]Relation, error) {
 
 	var all []Relation
 	for _, dir := range []string{"out", "in"} {
-		if w.report.Reads >= lensMaxReads {
+		if w.report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			break
 		}
@@ -257,7 +302,7 @@ func (w *lensWalker) neighborsByLabel(id, dir string) ([]Relation, error) {
 	seen := map[string]bool{}
 	var out []Relation
 	for _, label := range w.labelsFor(a.Type, dir) {
-		if w.report.Reads >= lensMaxReads {
+		if w.report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			break
 		}
@@ -294,7 +339,7 @@ func (w *lensWalker) readLabel(id, dir, label string) ([]Relation, bool, int, er
 	var out []Relation
 	cursor := ""
 	for {
-		if w.report.Reads >= lensMaxReads {
+		if w.report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			return out, false, lensMaxPerLabel, nil
 		}
@@ -407,7 +452,7 @@ func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []str
 		if err := w.ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		if w.report.Reads >= lensMaxReads {
+		if w.report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			break
 		}
@@ -427,7 +472,7 @@ func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []str
 				(s.other.Type == "Organization" && s.attr != attrControls) {
 				continue
 			}
-			if len(owned) >= lensMaxFootprint {
+			if len(owned) >= w.maxAssets {
 				w.truncate("controlled asset limit")
 				break
 			}

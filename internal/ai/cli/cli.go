@@ -56,6 +56,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
+	var lensAssets, lensReads int
 	var queryPath, evalPath, proposalID, reviewer, modelOutput string
 	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince, domainName string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
@@ -117,6 +118,10 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.BoolVar(&classifierReview, "classifier-review", true,
 		"Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer, or proposals to review")
+	fs.IntVar(&lensAssets, "max-assets", 0, fmt.Sprintf("Maximum controlled assets the vendors lens follows "+
+		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", ai.LensMaxAssetsLimit))
+	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one vendors lens run "+
+		"(default 20000, up to %d)", ai.LensMaxReadsLimit))
 	fs.IntVar(&maxTokens, "max-tokens", 0,
 		"Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
 	fs.StringVar(&temperatureFlag, "temperature", "",
@@ -379,7 +384,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	case "identity-conflicts":
 		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "vendors":
-		return listVendors(ctx, graph, domainName, outputFormat, explicitFlags["format"], out)
+		return listVendors(ctx, graph, domainName, ai.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads},
+			outputFormat, explicitFlags["format"], out)
 	case "family":
 		return listFamily(ctx, graph, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	}

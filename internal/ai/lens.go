@@ -126,8 +126,16 @@ func (v vendorSet) add(name, id, kind, via string, user Asset, witness []Witness
 	}
 }
 
-// searchThirdParties runs the third-party lens from root.
+// searchThirdParties runs the third-party lens from root within the
+// default limits.
 func searchThirdParties(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset) (ThirdPartyReport, error) {
+	return searchThirdPartiesWithin(ctx, graph, schema, root, LensLimits{})
+}
+
+// searchThirdPartiesWithin runs the third-party lens from root within
+// limits.
+func searchThirdPartiesWithin(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset,
+	limits LensLimits) (ThirdPartyReport, error) {
 	report := ThirdPartyReport{Root: root, FootprintTypes: map[string]int{}, Vendors: []VendorUse{}}
 	meaning := meaningsOf(schema)
 	if schema == nil || meaning == nil {
@@ -139,7 +147,12 @@ func searchThirdParties(ctx context.Context, graph Graph, schema SchemaCatalog, 
 		return report, errors.New("bounded graph reader required")
 	}
 
+	if err := limits.Validate(); err != nil {
+		return report, err
+	}
+
 	w := newLensWalker(ctx, graph, bounded, meaning, schema.Relations(), root, &report)
+	w.maxAssets, w.maxReads = limits.assets(), limits.reads()
 	roots := []Asset{root}
 	owners, err := w.owningOrganizations(root)
 	if err != nil {
@@ -177,7 +190,7 @@ func searchThirdParties(ctx context.Context, graph Graph, schema SchemaCatalog, 
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
-		if report.Reads >= lensMaxReads {
+		if report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			break
 		}

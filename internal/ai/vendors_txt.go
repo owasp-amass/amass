@@ -234,6 +234,8 @@ type VendorOptions struct {
 	// the DNS-SD plugin recognizes. Records it rejects are reported as
 	// unrecognized; when nil, every verification-like record is.
 	KnownVerification func(record string) bool
+	// Limits bound the third-party walk; zero values use the defaults.
+	Limits LensLimits
 }
 
 // FindVendors lists the outside parties a domain and its organization's
@@ -248,7 +250,7 @@ func FindVendors(ctx context.Context, graph Graph, schema SchemaCatalog, root As
 		return ThirdPartyReport{}, errors.New("the vendors lens starts from a domain name")
 	}
 
-	r, err := searchThirdParties(ctx, graph, schema, root)
+	r, err := searchThirdPartiesWithin(ctx, graph, schema, root, opts.Limits)
 	if err != nil {
 		return r, err
 	}
@@ -352,6 +354,12 @@ func FormatVendorReport(r ThirdPartyReport) string {
 	var b strings.Builder
 	b.WriteString(thirdPartyAnswer(groupVendorKinds(r)))
 	b.WriteString("\n")
+	switch r.Reason {
+	case "controlled asset limit":
+		b.WriteString("Raise -max-assets to follow more of the controlled assets.\n")
+	case "database read limit":
+		b.WriteString("Raise -max-reads to read more of the database.\n")
+	}
 	b.WriteString(familyLines(r))
 	if len(r.UnrecognizedSPF) > 0 {
 		fmt.Fprintf(&b, "\nSPF includes no vendor entry recognizes (%d): %s\n", len(r.UnrecognizedSPF),

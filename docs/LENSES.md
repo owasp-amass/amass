@@ -142,6 +142,16 @@ relationship label on its own, and pages through a label with more than 500
 relationships up to 5,000 per asset. A report that reached a bound says so and
 names the relationship that stayed partial.
 
+The vendors lens follows at most 2,000 controlled assets and makes at most
+20,000 database reads per run. A large institution can reach either; raise
+them for one run with `-max-assets` (up to 100,000) and `-max-reads` (up to
+1,000,000). A larger run takes longer and may need a longer
+`-investigation-timeout` (8 minutes by default, up to 30):
+
+```bash
+amass lens vendors -d jhu.edu -max-assets 10000 -max-reads 100000 -investigation-timeout 20m
+```
+
 These are stored records, not verified contracts: a token or SPF include can
 outlive the service.
 
