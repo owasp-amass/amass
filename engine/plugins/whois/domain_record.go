@@ -181,6 +181,34 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 	}
 }
 
+// contactOrganization decides which WHOIS contact field names the
+// organization, and returns it with the street address to store and whether
+// the contact's name is a separate person. Some registries put the first
+// line of the street address in the organization field; the address parser
+// shows that when the organization is not the building it parses. Only then
+// is the contact's name taken as the organization. When the address cannot
+// be parsed, including when the parser is unavailable, the organization is
+// kept as the record gives it: replacing it with the contact's name would
+// record a person (an EDUCAUSE admin contact) as an organization.
+func contactOrganization(wc *whoisparser.Contact, parse func(string) *contact.Location) (string, string, bool) {
+	orgName := strings.TrimSpace(wc.Organization)
+	rest := fmt.Sprintf("%s %s %s %s %s", wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
+	if orgName == "" {
+		return "", rest, true
+	}
+
+	loc := parse(orgName + " " + rest)
+	switch {
+	case loc == nil:
+		return orgName, rest, true
+	case strings.HasPrefix(loc.Building, strings.ToLower(orgName)):
+		return orgName, rest, true
+	default:
+		// the organization field begins the street address
+		return wc.Name, orgName + " " + rest, false
+	}
+}
+
 type domrecContact struct {
 	WhoisContact *whoisparser.Contact
 	RelationName string
@@ -196,19 +224,9 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 		return
 	}
 
-	var found bool
 	wc := c.WhoisContact
-	// test if the address begins in the organization field
-	addr := fmt.Sprintf("%s %s %s %s %s %s",
-		wc.Organization, wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
-	if loc := support.StreetAddressToLocation(addr); loc != nil &&
-		strings.HasPrefix(loc.Building, strings.ToLower(wc.Organization)) {
-		found = true
-		addr = fmt.Sprintf("%s %s %s %s %s",
-			wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
-	} else {
-		wc.Organization = wc.Name
-	}
+	orgName, addr, found := contactOrganization(wc, support.StreetAddressToLocation)
+	wc.Organization = orgName
 
 	if found {
 		if p := support.FullNameToPerson(wc.Name); p != nil && m.IsMatch(string(oam.Person)) {
@@ -265,7 +283,7 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 
 	// the organization must come last due to a potential chicken-and-egg problem
-	if m.IsMatch(string(oam.Organization)) {
+	if m.IsMatch(string(oam.Organization)) && wc.Organization != "" {
 		orgent, err := org.CreateOrgAsset(e.Session, cr,
 			&general.SimpleRelation{Name: "organization"},
 			&oamorg.Organization{Name: wc.Organization}, r.plugin.source)
