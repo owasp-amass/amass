@@ -12,7 +12,7 @@ evidence. Arguments:
 | Field | Meaning |
 | --- | --- |
 | `subject` | The starting asset: an indexed selector (`{"type":"FQDN","field":"name","value":"example.com"}`) or an Organization name |
-| `answer` | `hierarchy`, `controlled`, `third_party`, `table`, `route` or `paths` |
+| `answer` | `hierarchy`, `controlled`, `third_party`, `table`, `ownership_gaps`, `family`, `route` or `paths` |
 | `target_types` | Asset types to list; a table's single row type; a route's last hop type |
 | `columns` | Table columns: `{"type":"IPAddress","role":""}`, `{"type":"Organization","role":"controller"}` |
 | `hops` | Route hops: `{"direction","label","relation_type","destination_type"}`, up to 3 |
@@ -26,7 +26,7 @@ runs without one.
 The result holds `investigation_id`, the query description, the answer
 kind, the computed answer, `evidence` (`E1: FQDN www.example.com
 --dns_record--> IPAddress 192.0.2.1 (sources: ...)`, up to 200 items),
-`incomplete`, and the structured vendors or table rows.
+`incomplete`, and the structured vendors, family members or table rows.
 
 ## verify_citations
 

@@ -548,7 +548,16 @@ func (a Agent) AskAdaptive(ctx context.Context, question string, opts AdaptiveOp
 // thirdPartyLens answers a third_party lens query from root.
 func (a Agent) thirdPartyLens(ctx context.Context, root Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	report, err := searchThirdParties(ctx, a.Runner.Graph, a.Runner.Catalog, root)
+	var report ThirdPartyReport
+	var err error
+	if root.Type == "FQDN" {
+		// A domain gets the full vendors lens: the services its TXT records
+		// name, and its institution and affiliates set apart.
+		report, err = FindVendors(ctx, a.Runner.Graph, a.Runner.Catalog, root,
+			VendorOptions{KnownVerification: a.Runner.KnownVerification})
+	} else {
+		report, err = searchThirdParties(ctx, a.Runner.Graph, a.Runner.Catalog, root)
+	}
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "third_party_lens", OutputPaths: len(report.Vendors),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {
@@ -560,6 +569,9 @@ func (a Agent) thirdPartyLens(ctx context.Context, root Asset, out Investigation
 	out.ThirdPartyReport = &report
 	out.Incomplete = report.Truncated
 	out.Answer = thirdPartyAnswer(report)
+	if root.Type == "FQDN" {
+		out.Answer = strings.TrimRight(FormatVendorReport(report), "\n")
+	}
 	return out, nil
 }
 
@@ -692,6 +704,8 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		return a.tableLens(ctx, root, q, opts, out)
 	case LensOwnershipGaps:
 		return a.gapLens(ctx, root, out)
+	case LensFamily:
+		return a.familyLens(ctx, root, out)
 	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {

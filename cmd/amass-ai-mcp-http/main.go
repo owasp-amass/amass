@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
+	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
@@ -53,6 +54,8 @@ func run() error {
 		Graph:   oamrepo.Adapter{Repo: repo, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)},
 		Catalog: oamrepo.Catalog{},
 		Limits:  ai.DefaultLimits(),
+		// The vendors lens reports TXT tokens the DNS-SD plugin does not know.
+		KnownVerification: dnssd.IsVerificationRecord,
 	}, token)
 	httpServer := &http.Server{
 		Addr:              *addr,

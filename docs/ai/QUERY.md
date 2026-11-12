@@ -57,8 +57,10 @@ meaning rather than by wording rules:
 | `paths` (default) | any | explore traversal and model path selection |
 | `hierarchy` | FQDN | hierarchy traversal |
 | `controlled` | Organization or FQDN | controlled lens |
-| `third_party` | Organization or FQDN | third-party lens |
+| `third_party` | Organization or FQDN | third-party lens; from an FQDN, the full vendors lens (`amass lens vendors`) |
 | `table` | Organization or FQDN | table lens (rows of one controlled type, a chain of columns) |
+| `ownership_gaps` | Organization or FQDN | ownership gaps lens |
+| `family` | FQDN | organization family lens (`amass lens family`) |
 
 `validateAnswer` rejects a kind that does not fit the subject, targets or
 purpose (for example `controlled` with a type that the semantics table
@@ -115,6 +117,19 @@ University?" compile to this lens directly; other wordings reach it through
 the planner's `third_party` answer kind. When nothing is documented
 as controlled by the subject, the answer says so rather than listing
 unrelated connections.
+
+From an FQDN subject the answer is the vendors lens described in
+[LENSES.md](../LENSES.md#vendors): it adds the organizations behind the
+domain's verification tokens and the mail senders in its SPF record, sets
+the institution and its affiliates apart using the family lens, and lists
+the SPF includes and verification-like records nothing recognizes.
+
+`"lens": "family"` (subject an FQDN) answers with the organization family
+of an enumerated domain, as `amass lens family` does: the organizations that
+are its institution, departments or affiliates with the evidence for each,
+the networks serving its names, and the other domains those networks serve.
+Questions such as "Which organizations make up jhu.edu's institution?" reach
+it through the planner's `family` answer kind. Nothing is written.
 
 `"lens": "controlled"` (subject an Organization or FQDN) lists the assets
 attributed to the subject by that same footprint walk, optionally only those

@@ -37,6 +37,9 @@ type ToolRunner struct {
 	Graph   Graph
 	Limits  Limits
 	Catalog SchemaCatalog
+	// KnownVerification reports whether a TXT record is a verification token
+	// the DNS-SD plugin recognizes, for the vendors lens (see VendorOptions).
+	KnownVerification func(record string) bool
 }
 
 func objectSchema(required []string, properties map[string]any) map[string]any {

@@ -98,6 +98,20 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
+		Name: LensFamily,
+		Description: "Show the organization family of an enumerated domain: the organizations that are its " +
+			"institution (name variants and departments) or affiliates, each with the evidence tying it to the " +
+			"domain, the networks serving the domain's names, and other registered domains those networks serve. " +
+			"Read-only; nothing is written.",
+		Subjects: []string{"FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"Which organizations make up <domain>'s institution?",
+			"What departments and affiliates does <domain> have?",
+			"Which other domains belong to the same institution as <domain>?",
+		},
+	},
+	{
 		Name: LensOwnershipGaps,
 		Description: "Find assets with no documented owner that share identity (contact details), hosting (resolving " +
 			"into its networks) or certificate signals with what the subject controls, each scored, with the OAM " +
@@ -187,7 +201,7 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
 				strings.Join(ownedTypes(schema), ", "), AnswerPaths)
 		}
-	case LensThirdParty, LensOwnershipGaps:
+	case LensThirdParty, LensOwnershipGaps, LensFamily:
 		if meaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -229,9 +243,9 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 			Lens: LensControlled, Source: SourceModelGoal}
 	case LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-	case LensOwnershipGaps:
+	case LensOwnershipGaps, LensFamily:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-		q.Lens = LensOwnershipGaps
+		q.Lens = goal.Answer
 	case LensTable:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
@@ -477,7 +491,7 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
 	case LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case LensThirdParty, LensOwnershipGaps:
+	case LensThirdParty, LensOwnershipGaps, LensFamily:
 		props["target_types"] = none
 	case LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)

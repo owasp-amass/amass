@@ -288,6 +288,19 @@ func investigateResult(id string, q Query, inv Investigation, b EvidenceBundle) 
 
 		out["vendors"] = vendors
 	}
+	if r := inv.FamilyReport; r != nil {
+		members := make([]map[string]any, 0, len(r.Members))
+		for _, m := range r.Members {
+			members = append(members, map[string]any{"organization": assetLabel(m.Organization),
+				"relation": m.Relation, "evidence": m.Evidence})
+		}
+
+		family := map[string]any{"members": members, "related_domains": r.RelatedDomains}
+		if r.Main != nil {
+			family["main"] = assetLabel(*r.Main)
+		}
+		out["family"] = family
+	}
 	if r := inv.TableReport; r != nil {
 		rows := r.Rows
 		if len(rows) > investigateMaxRows {

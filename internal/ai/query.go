@@ -117,6 +117,8 @@ func (q Query) Describe() string {
 		return fmt.Sprintf("List the %s assets controlled by %s.", targets, subject)
 	case LensOwnershipGaps:
 		return fmt.Sprintf("Find unattributed assets that share signals with the assets %s controls.", subject)
+	case LensFamily:
+		return fmt.Sprintf("Show the organizations, networks and related domains in the family of %s.", subject)
 	case LensTable:
 		cols := make([]string, 0, len(q.Columns))
 		for _, c := range q.Columns {
@@ -242,9 +244,12 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	}
 	switch q.Lens {
 	case "":
-	case LensThirdParty, LensControlled, LensTable, LensOwnershipGaps:
+	case LensThirdParty, LensControlled, LensTable, LensOwnershipGaps, LensFamily:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
+		}
+		if q.Lens == LensFamily && q.Subject.Type != "FQDN" {
+			return errors.New("the family lens starts from an enumerated domain (FQDN)")
 		}
 		if q.Subject.Type != "Organization" && q.Subject.Type != "FQDN" {
 			return fmt.Errorf("the %s lens starts from an Organization or FQDN", q.Lens)
