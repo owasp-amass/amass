@@ -37,7 +37,7 @@ const Description = "Ask questions with a language model, MCP tools, and model-a
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
 	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
-	"identity-conflicts", "family", "vendors"}
+	"identity-conflicts", "family", "vendors", "org-group"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {

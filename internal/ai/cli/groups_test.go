@@ -7,6 +7,7 @@ package cli
 import (
 	"bytes"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -66,5 +67,17 @@ func TestLensAndReviewCommands(t *testing.T) {
 	}
 	if !strings.Contains(errout.String(), "amass ai duplicate-signals is now amass review duplicate-signals") {
 		t.Errorf("deprecation note: %q", errout.String())
+	}
+}
+
+// Every amass lens and amass review name must run a known operation; a name
+// missing from operations fails only when it is used.
+func TestGroupNamesRunKnownOperations(t *testing.T) {
+	for group, ops := range map[string]map[string]string{"lens": lensOps, "review": reviewOps} {
+		for name, op := range ops {
+			if !slices.Contains(operations, op) {
+				t.Errorf("amass %s %s runs %q, which is not a known operation", group, name, op)
+			}
+		}
 	}
 }

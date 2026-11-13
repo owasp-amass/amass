@@ -120,9 +120,10 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 
 		return nil
 	}
+	// asset-db reports an entity with no matching edges as an error.
 	if direction == "in" || direction == "both" {
 		edges, err := a.Repo.IncomingEdges(ctx, ent, since, labels...)
-		if err != nil {
+		if err != nil && !emptyEdgeLookup(err) {
 			return nil, err
 		}
 		if err := convertEdges(edges, "in"); err != nil {
@@ -131,7 +132,7 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 	}
 	if direction == "out" || direction == "both" {
 		edges, err := a.Repo.OutgoingEdges(ctx, ent, since, labels...)
-		if err != nil {
+		if err != nil && !emptyEdgeLookup(err) {
 			return nil, err
 		}
 		if err := convertEdges(edges, "out"); err != nil {
