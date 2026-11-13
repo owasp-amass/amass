@@ -6,7 +6,9 @@ package ai
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"unicode"
 )
 
 // applyFamily takes the domain's own institution out of the vendor list
@@ -38,6 +40,7 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 		}
 	}
 
+	words := familyNameWords(f)
 	related := map[string]bool{}
 	for _, d := range f.RelatedDomains {
 		related[registeredDomain(d.Domain)] = true
@@ -50,7 +53,7 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 		}
 
 		switch {
-		case in(own):
+		case in(own) || ownLabel(v.Vendor, words) || (domainName.MatchString(v.Vendor) && familyDomain(f, v.Vendor)):
 			r.InstitutionOwn = append(r.InstitutionOwn, v)
 		case in(affiliates) || (domainName.MatchString(v.Vendor) && related[registeredDomain(v.Vendor)]):
 			r.Affiliates = append(r.Affiliates, v)
@@ -60,6 +63,107 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 	}
 
 	r.Vendors = kept
+}
+
+// familyNameWords are the distinctive words, of four letters or more, in
+// the names of the main organization and the members whose names are
+// variants of it.
+func familyNameWords(f FamilyReport) map[string]bool {
+	generic := loadFamilyRules().GenericWords
+	out := map[string]bool{}
+	add := func(a Asset) {
+		for _, name := range []string{contentString(a, "name"), contentString(a, "legal_name"), assetLabel(a)} {
+			for _, w := range addressWords(name) {
+				if len(w) >= 4 && !slices.Contains(generic, w) {
+					out[w] = true
+				}
+			}
+		}
+	}
+
+	if f.Main != nil {
+		add(*f.Main)
+	}
+	for _, m := range f.Members {
+		if m.Relation == FamilySame && m.ByName {
+			add(m.Organization)
+		}
+	}
+	return out
+}
+
+// ownLabel reports whether a party's name is a registry label of the
+// institution's: one word with no spaces, such as a network name
+// (GRUMMAN1, UK_NORTHROP), one of whose letter runs is a distinctive word
+// of the institution's name. An organization's name has spaces or is a word
+// on its own, so it is never taken for a label.
+func ownLabel(name string, words map[string]bool) bool {
+	if name == "" || strings.ContainsAny(name, " \t") || domainName.MatchString(name) {
+		return false
+	}
+
+	runs := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return !unicode.IsLetter(r) })
+	if len(runs) == 1 && runs[0] == strings.ToLower(name) {
+		// A plain word is an organization's name, not a label.
+		return false
+	}
+	for _, r := range runs {
+		if words[r] {
+			return true
+		}
+	}
+	return false
+}
+
+// familyDomain reports whether a domain is the institution's: one whose
+// label spells the name of the main organization or of a member counted as
+// the institution (automattic.com for Automattic), by the family lens's
+// nameMatchesLabel.
+func familyDomain(f FamilyReport, domain string) bool {
+	return familyDomainOf(f, domain, false)
+}
+
+// relatedDomain reports whether a domain is the institution's or an
+// affiliate's: familyDomain, a domain the family's dedicated networks also
+// serve, or one whose label spells an affiliate's name.
+func relatedDomain(f FamilyReport, domain string) bool {
+	rd := registeredDomain(strings.ToLower(domain))
+	for _, d := range f.RelatedDomains {
+		if registeredDomain(d.Domain) == rd {
+			return true
+		}
+	}
+	return familyDomainOf(f, domain, true)
+}
+
+func familyDomainOf(f FamilyReport, domain string, affiliates bool) bool {
+	label := domainLabel(strings.ToLower(domain))
+	if label == "" || f.Main == nil {
+		return false
+	}
+
+	rules := loadFamilyRules()
+	stop := abbreviationStopWords()
+	match := func(a Asset) bool {
+		for _, name := range []string{contentString(a, "name"), contentString(a, "legal_name"), assetLabel(a)} {
+			if name != "" && nameMatchesLabel(addressWords(name), label, rules.GenericWords, stop) {
+				return true
+			}
+		}
+		return false
+	}
+
+	if match(*f.Main) {
+		return true
+	}
+	for _, m := range f.Members {
+		member := m.Relation == FamilySame || m.Relation == FamilyDepartment ||
+			(affiliates && m.Relation == FamilyAffiliate)
+		if member && match(m.Organization) {
+			return true
+		}
+	}
+	return false
 }
 
 // familyKey compares an organization's names across sources, where one

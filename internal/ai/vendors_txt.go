@@ -271,9 +271,11 @@ func FindVendors(ctx context.Context, graph Graph, schema SchemaCatalog, root As
 		return r, err
 	}
 
-	if family, err := FindOrganizationFamily(ctx, graph, root); err != nil {
+	family, err := FindOrganizationFamily(ctx, graph, root)
+	if err != nil {
 		r.FamilyNote = fmt.Sprintf("The family lens could not run (%v), so the institution's own organizations may "+
 			"be listed as vendors.", err)
+		family = FamilyReport{}
 	} else {
 		applyFamily(&r, family)
 	}
@@ -291,7 +293,14 @@ func FindVendors(ctx context.Context, graph Graph, schema SchemaCatalog, root As
 
 	scan := scanTXT(records, fqdnName(root))
 	r.Vendors = append(r.Vendors, scan.senders...)
-	r.UnrecognizedSPF = scan.unknownSPF
+	// An include in one of the institution's or an affiliate's domains
+	// (tumblr.com's _spf.automattic.com) is the family's own mail, not an
+	// unknown sender.
+	for _, inc := range scan.unknownSPF {
+		if !relatedDomain(family, inc) {
+			r.UnrecognizedSPF = append(r.UnrecognizedSPF, inc)
+		}
+	}
 	keys := map[string]bool{}
 	for _, rec := range scan.tokens {
 		if opts.KnownVerification != nil && opts.KnownVerification(rec) {

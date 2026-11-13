@@ -343,3 +343,118 @@ func TestThirdPartyLensSkipsAnonymousContacts(t *testing.T) {
 		t.Errorf("the provider's domain does not name it: %v", got)
 	}
 }
+
+// descentCounter counts the paged reads of one asset's outgoing node edges.
+type descentCounter struct {
+	pagedVendorGraph
+	id    string
+	reads *int
+}
+
+func (g descentCounter) EdgesPage(ctx context.Context, id, dir, label string, since time.Time, cursor string,
+	limit int) ([]Relation, string, error) {
+	if id == g.id && dir == "out" && label == "node" {
+		*g.reads++
+	}
+	return g.pagedVendorGraph.EdgesPage(ctx, id, dir, label, since, cursor, limit)
+}
+
+// A provider's domain with more names than one read (amazonaws.com) is
+// reached only to find who controls the name the subject uses: its
+// descendants are never paged, and the report is not partial for them.
+func TestThirdPartyLensDoesNotDescendOutsideTheFootprint(t *testing.T) {
+	defer func(n int) { lensMaxPerLabel = n }(lensMaxPerLabel)
+	lensMaxPerLabel = 550
+
+	g := vendorFixture()
+	add := func(name string) {
+		g.assets[name] = Asset{ID: name, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+	}
+	add("pphosted.com")
+	links := []Relation{{ID: "node-mx1", FromID: "pphosted.com", ToID: "mx1.pphosted.com", Label: "node",
+		Type: "SimpleRelation"}}
+	for i := 0; i < MaxEdgeRead+100; i++ {
+		name := fmt.Sprintf("mx%d.customer%d.pphosted.com", i, i)
+		add(name)
+		links = append(links, Relation{ID: "node-" + name, FromID: "pphosted.com", ToID: name, Label: "node",
+			Type: "SimpleRelation"})
+	}
+	g.links = append(links, g.links...)
+
+	reads := 0
+	pg := descentCounter{pagedVendorGraph: pagedVendorGraph{vendorGraph: g, pages: new(int)}, id: "pphosted.com",
+		reads: &reads}
+	r, err := searchThirdParties(context.Background(), pg, vendorCatalog{testOAMCatalog}, g.assets["colgate.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Truncated {
+		t.Errorf("partial for a provider's names: %s", r.Reason)
+	}
+	if reads != 0 {
+		t.Errorf("paged pphosted.com's descendants %d time(s)", reads)
+	}
+	if _, ok := vendorNames(&r)["pphosted.com"]; !ok {
+		t.Errorf("mail provider missing: %v", vendorNames(&r))
+	}
+}
+
+func TestOwnLabel(t *testing.T) {
+	words := map[string]bool{"northrop": true, "grumman": true}
+	for _, c := range []struct {
+		name string
+		want bool
+	}{
+		{"GRUMMAN1", true},
+		{"UK_NORTHROP", true},
+		{"NORTHROP-GRUMMAN-NET", true},
+		{"northrop", false},
+		{"northrop grumman systems", false},
+		{"AS22903", false},
+		{"northrop.example", false},
+		{"AKAMAI-AS", false},
+	} {
+		if got := ownLabel(c.name, words); got != c.want {
+			t.Errorf("ownLabel(%q) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Network labels carrying the institution's name and domains its name
+// spells are its own; an SPF include in an affiliate's domain is related.
+func TestApplyFamilyOwnLabelsAndDomains(t *testing.T) {
+	org := func(id, name string) Asset {
+		return Asset{ID: id, Type: "Organization", Content: map[string]any{"name": name}}
+	}
+	ngc, auto := org("o1", "northrop grumman corporation"), org("o2", "automattic")
+	r := ThirdPartyReport{Vendors: []VendorUse{
+		{Vendor: "GRUMMAN1", VendorID: "rec1", Kind: "DNS: IP addresses", Assets: 4},
+		{Vendor: "UK_NORTHROP", VendorID: "rec2", Kind: "DNS: IP addresses", Assets: 1},
+		{Vendor: "ngc.com", Kind: "DNS: FQDNs", Assets: 2},
+		{Vendor: "AS22903", VendorID: "as", Kind: "Network: services", Assets: 1},
+		{Vendor: "akamai technologies", VendorID: "o9", Kind: "DNS: IP addresses", Assets: 9},
+	}}
+	f := FamilyReport{Domain: "northgrum.com", Main: &ngc, Members: []FamilyMember{
+		{Organization: ngc, Relation: FamilySame, ByName: true},
+		{Organization: auto, Relation: FamilyAffiliate},
+	}}
+
+	applyFamily(&r, f)
+	var own, vendors []string
+	for _, v := range r.InstitutionOwn {
+		own = append(own, v.Vendor)
+	}
+	for _, v := range r.Vendors {
+		vendors = append(vendors, v.Vendor)
+	}
+	if got := strings.Join(own, ","); got != "GRUMMAN1,UK_NORTHROP,ngc.com" {
+		t.Errorf("institution's own = %s", got)
+	}
+	if got := strings.Join(vendors, ","); got != "AS22903,akamai technologies" {
+		t.Errorf("vendors = %s", got)
+	}
+	if !relatedDomain(f, "_spf.automattic.com") || familyDomain(f, "_spf.automattic.com") ||
+		relatedDomain(f, "spf.protection.outlook.com") {
+		t.Error("SPF include classification is wrong")
+	}
+}
