@@ -1,6 +1,6 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "Organization names that identify no one: registration redaction placeholders and template text from WHOIS, RDAP and certificate records. Amass does not create an Organization from such a name, and never compares one for duplicates. A name matches when, ignoring case, surrounding punctuation and repeated spaces, it equals one of names or contains one of phrases. Phrases must not occur in a real company's name; use names for anything shorter or more general. Add values here, not in Go code.",
+  "_about": "Organization names that identify no one: registration redaction placeholders, template text from WHOIS, RDAP and certificate records, and the default subject organizations of certificate tools (mod_ssl's SomeOrganization, OpenSSL's Internet Widgits Pty Ltd, Red Hat's Default Company Ltd, Go's Acme Co). Amass does not create an Organization from such a name, and never compares one for duplicates. A name matches when, ignoring case, surrounding punctuation and repeated spaces, it equals one of names or contains one of phrases. Phrases must not occur in a real company's name; use names for anything shorter or more general. Add values here, not in Go code.",
   "names": [
     "registration private",
     "private registration",
@@ -28,7 +28,19 @@
     "unspecified",
     "not specified",
     "not applicable",
-    "-"
+    "-",
+    "someorganization",
+    "some-organization",
+    "some organization",
+    "someorganizationalunit",
+    "internet widgits pty ltd",
+    "default company ltd",
+    "acme co",
+    "my company",
+    "company name",
+    "organization name",
+    "organisation name",
+    "your company"
   ],
   "phrases": [
     "redacted for privacy",

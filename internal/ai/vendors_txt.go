@@ -176,12 +176,28 @@ func spfTargets(record string) []string {
 		default:
 			continue
 		}
-		if target = strings.TrimSuffix(target, "."); target != "" {
+		if target = spfMacroFree(strings.TrimSuffix(target, ".")); target != "" {
 			out = append(out, target)
 		}
 	}
 
 	return out
+}
+
+// spfMacroFree drops the leading labels of an SPF domain spec that hold
+// macros (RFC 7208 section 7): %{ir}.%{v}.%{d}.spf.has.pphosted.com is
+// built from each message's sender, and its fixed part,
+// spf.has.pphosted.com, names the provider. A spec with no fixed part
+// yields "".
+func spfMacroFree(target string) string {
+	labels := strings.Split(target, ".")
+	for i, l := range labels {
+		if !strings.Contains(l, "%") {
+			return strings.Join(labels[i:], ".")
+		}
+	}
+
+	return ""
 }
 
 // spfSenderOf finds the vendor entry whose domain is target, a parent of
