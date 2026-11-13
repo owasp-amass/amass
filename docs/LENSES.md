@@ -47,19 +47,34 @@ domains. The family lens finds the organizations tied to the domain:
   its names;
 - a registration contact for the domain that uses an address in it, such as
   an IT department;
+- an organization named like the domain that holds a network serving its
+  names: the domain's label spells the leading words of its name
+  (`automattic`), begins with them (`nationalgridus` for National Grid USA
+  Service Company), or is their initials (`nasa`, `ngc` for Northrop Grumman
+  Corporation);
 - the holders of networks dedicated to the domain. The lens samples where
   the domain's names resolve. A network is dedicated when an organization
-  tied in one of the ways above holds it, or when most of the names stored
-  for it are the domain's; otherwise it is a hosting provider.
+  tied in one of the ways above holds it, or an organization whose name is a
+  variant of the domain's registrant's or of one named like the domain, or
+  when most of the names stored for it are the domain's or the other domains
+  those organizations registered (a company's network serving northgrum.com,
+  ngc.com and northropgrumman.com); otherwise it is a hosting provider.
+
+The organization with the most ties is the main one. A registration and a
+name like the domain's each weigh as much as five certificates, so a platform
+vendor named on a few certificates for the domain's names, such as a hosted
+portal's, does not outweigh the company it serves.
 
 It classifies each organization against the one with the most ties:
 
 - **same institution** when its name is a variant of another's (all its
   words appear in the other, with initials allowed, as in SUNY for State
   University of New York) or their street addresses match after
-  normalization (`5801 Smith Avenue` and `5801 Smith Ave, Suite 3110B`);
+  normalization (`5801 Smith Avenue` and `5801 Smith Ave, Suite 3110B`), or
+  the names have the same distinctive words and differ only in words such as
+  college and university, as after Utica College became Utica University;
 - **department** when its name carries a department or role word (IT
-  services, hostmaster, school of);
+  services, hostmaster, school of, research center, laboratory);
 - **affiliate** when its name shares a distinctive word with the
   institution's (generic words such as university or college do not count)
   or it registered the domain, for example the Johns Hopkins Medical
@@ -70,9 +85,10 @@ It classifies each organization against the one with the most ties:
   network can look dedicated to the domain; without the institution's name
   or registration its holder is listed here, not as family.
 
-A shared street address alone puts an organization with the same
+A shared street address or a rename puts an organization with the same
 institution in the report, but only a name variant is proposed for merging:
-a registrant who is a person can share the institution's address.
+a registrant who is a person can share the institution's address, and a
+renamed institution's records may be worth keeping apart.
 
 The report also lists the networks serving the domain and the other
 registered domains on dedicated networks the family holds.

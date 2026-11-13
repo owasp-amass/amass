@@ -1,6 +1,6 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "How the organization family lens decides which organizations belong to an enumerated domain's institution and how. An organization is tied to the domain when it registered the domain, is named on certificates for the domain's names, is a registration contact for the domain using an address in it, or holds a network dedicated to the domain. A network is dedicated when an organization tied in one of the other ways holds it, or when at least dedicated_share of the names stored for it belong to the domain. Stored names reflect what was enumerated, so a large provider network can look dedicated; its holder is therefore family only by name or registration. Tied organizations are classified against the organization with the most ties: the same institution when a name is a variant of its name (proposed for merging) or the street address matches (reported only); a department when the name carries one of department_words and either shares a distinctive word with the institution's names or is a registration contact for the domain; an affiliate when the name shares a distinctive word (not one of generic_words) with the institution's names or it registered the domain; otherwise another organization on the domain's assets, such as a hosting provider or a vendor named on a certificate. The word lists cover companies, government bodies, hospitals and universities: department_words name organizational units, and generic_words are words too common in organization names to tie two of them together. Nothing the lens finds is written to the Asset Database. Add values here, not in Go code.",
+  "_about": "How the organization family lens decides which organizations belong to an enumerated domain's institution and how. An organization is tied to the domain when it registered the domain, is named like the domain (the domain's label spells the leading words of its name, begins with them, or is their initials) and holds a network serving its names, is named on certificates for the domain's names, is a registration contact for the domain using an address in it, or holds a network dedicated to the domain. A network is dedicated when an organization tied in one of the other ways holds it, or an organization whose name is a variant of the domain's registrant's or of one named like the domain, or when at least dedicated_share of the names stored for it belong to the domain and the other domains those organizations registered. Stored names reflect what was enumerated, so a large provider network can look dedicated; its holder is therefore family only by name or registration. Tied organizations are classified against the organization with the most ties, where a registration and a name like the domain's each weigh as much as five certificates: the same institution when a name is a variant of its name (proposed for merging) or the names have the same distinctive words and differ only in rename_words, as after a college becomes a university, or the street address matches (the last two reported only); a department when the name carries one of department_words and either shares a distinctive word with the institution's names or is a registration contact for the domain; an affiliate when the name shares a distinctive word (not one of generic_words) with the institution's names or it registered the domain; otherwise another organization on the domain's assets, such as a hosting provider or a vendor named on a certificate. The word lists cover companies, government bodies, hospitals and universities: department_words name organizational units, and generic_words are words too common in organization names to tie two of them together. Nothing the lens finds is written to the Asset Database. Add values here, not in Go code.",
   "department_words": [
     "its",
     "it",
@@ -59,7 +59,13 @@
     "human resources",
     "legal department",
     "finance department",
-    "procurement"
+    "procurement",
+    "research center",
+    "space center",
+    "flight center",
+    "laboratory",
+    "laboratories",
+    "observatory"
   ],
   "generic_words": [
     "university",
@@ -142,6 +148,14 @@
     "bank",
     "financial",
     "insurance"
+  ],
+  "rename_words": [
+    "university",
+    "college",
+    "institute",
+    "polytechnic",
+    "academy",
+    "seminary"
   ],
   "sample_names": 500,
   "sample_network": 200,

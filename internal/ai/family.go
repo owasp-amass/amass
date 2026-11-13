@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 )
@@ -28,9 +29,14 @@ type familyRules struct {
 	GenericWords    []string `json:"generic_words"`
 	SampleNames     int      `json:"sample_names"`
 	SampleNetwork   int      `json:"sample_network"`
+	RenameWords     []string `json:"rename_words"`
 	MinHostedNames  int      `json:"min_hosted_names"`
 	DedicatedShare  float64  `json:"dedicated_share"`
 }
+
+// familyStrongTie is the weight of a registration, or of a name that is the
+// domain's, when choosing the domain's main organization.
+const familyStrongTie = 5
 
 var loadFamilyRules = sync.OnceValue(func() familyRules {
 	var r familyRules
@@ -422,7 +428,122 @@ func (s *familySearch) directTies(domain string) map[string][]string {
 		}
 	}
 
+	// An organization named like the domain (Automattic for automattic.com,
+	// NASA for nasa.gov) is tied when it is tied some other way, or when it
+	// holds a network serving the domain's names: a company whose networks
+	// serve several of its brands has no network mostly serving any one.
+	label := domainLabel(domain)
+	for id, p := range s.profiles {
+		if !s.namedLike(p, label) {
+			continue
+		}
+		if len(ties[id]) > 0 {
+			ties[id] = append(ties[id], fmt.Sprintf("named like %s", domain))
+			continue
+		}
+		for _, b := range s.servingBlocks() {
+			if slices.Contains(s.holders[b], id) {
+				ties[id] = append(ties[id], fmt.Sprintf("named like %s and holds %s, which serves %d of the sampled "+
+					"names", domain, s.cidrs[b], s.netNames[b]))
+				break
+			}
+		}
+	}
+
 	return ties
+}
+
+// servingBlocks lists the networks serving enough of the domain's sampled
+// names to be classified, most names first.
+func (s *familySearch) servingBlocks() []string {
+	blocks := make([]string, 0, len(s.netNames))
+	for b, n := range s.netNames {
+		if n >= s.rules.MinHostedNames {
+			blocks = append(blocks, b)
+		}
+	}
+	sort.Slice(blocks, func(i, j int) bool {
+		if s.netNames[blocks[i]] != s.netNames[blocks[j]] {
+			return s.netNames[blocks[i]] > s.netNames[blocks[j]]
+		}
+		return blocks[i] < blocks[j]
+	})
+
+	return blocks
+}
+
+// domainLabel is the label of a domain's registered name before its public
+// suffix: nationalgridus for www.nationalgridus.com.
+func domainLabel(domain string) string {
+	label, _, _ := strings.Cut(registeredDomain(domain), ".")
+	return label
+}
+
+// namedLike reports whether one of an organization's names is the domain
+// label's (nameMatchesLabel).
+func (s *familySearch) namedLike(p *familyProfile, label string) bool {
+	stop := abbreviationStopWords()
+	for b := range p.brands {
+		if nameMatchesLabel(strings.Fields(b), label, s.rules.GenericWords, stop) {
+			return true
+		}
+	}
+	for _, n := range p.names {
+		if nameMatchesLabel(addressWords(n), label, s.rules.GenericWords, stop) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// nameMatchesLabel reports whether a domain label spells an organization's
+// name: the leading words of the name written together are the label
+// (automattic, uticauniversity) or begin it (national grid in
+// nationalgridus), or the label is their initials (nasa for National
+// Aeronautics and Space Administration, ngc for Northrop Grumman
+// Corporation). The leading words must include a word that is not generic,
+// a label it begins must be at least five letters long, and initials at
+// least three.
+func nameMatchesLabel(words []string, label string, generic, stop []string) bool {
+	if label == "" {
+		return false
+	}
+
+	var compact, all, skipped strings.Builder
+	distinctive := false
+	for k, w := range words {
+		w = strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				return r
+			}
+			return -1
+		}, w)
+		if w == "" {
+			continue
+		}
+		if !slices.Contains(generic, w) {
+			distinctive = true
+		}
+		compact.WriteString(w)
+		all.WriteByte(w[0])
+		if !slices.Contains(stop, w) {
+			skipped.WriteByte(w[0])
+		}
+		if !distinctive {
+			continue
+		}
+
+		c := compact.String()
+		if c == label || (len(c) >= 5 && strings.HasPrefix(label, c)) {
+			return true
+		}
+		if k > 0 && len(label) >= 3 && (all.String() == label || skipped.String() == label) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // classifyNetworks decides which networks serving enough of the domain's
@@ -434,34 +555,32 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 	map[string]map[string]int, error) {
 	dedicated := map[string]bool{}
 	sampled := map[string]map[string]int{}
-	blocks := make([]string, 0, len(s.netNames))
-	for b, n := range s.netNames {
-		if n >= s.rules.MinHostedNames {
-			blocks = append(blocks, b)
-		}
-	}
-	sort.Slice(blocks, func(i, j int) bool { return s.netNames[blocks[i]] > s.netNames[blocks[j]] })
-
-	for _, b := range blocks {
-		domains, total, err := s.sampleNetwork(b)
+	kin, domains := s.kin(domain, direct)
+	for _, b := range s.servingBlocks() {
+		d, total, err := s.sampleNetwork(b)
 		if err != nil {
 			return dedicated, sampled, err
 		}
-		sampled[b] = domains
+		sampled[b] = d
 
-		share := 0.0
+		share, familyShare := 0.0, 0.0
 		if total > 0 {
-			share = float64(domains[domain]) / float64(total)
+			share = float64(d[domain]) / float64(total)
+			n := 0
+			for dom := range domains {
+				n += d[dom]
+			}
+			familyShare = float64(n) / float64(total)
 		}
 		held := false
 		for _, h := range s.holders[b] {
-			if len(direct[h]) > 0 {
+			if len(direct[h]) > 0 || kin[h] {
 				held = true
 			}
 		}
 
 		net := FamilyNetwork{CIDR: s.cidrs[b], Names: s.netNames[b], Share: share,
-			Dedicated: held || share >= s.rules.DedicatedShare}
+			Dedicated: held || share >= s.rules.DedicatedShare || familyShare >= s.rules.DedicatedShare}
 		if hs := s.holders[b]; len(hs) > 0 {
 			if p, ok := s.profiles[hs[0]]; ok {
 				net.Holder, net.HolderID = AssetLabel(p.asset), p.asset.ID
@@ -474,6 +593,62 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 	}
 
 	return dedicated, sampled, nil
+}
+
+// kin returns the organizations whose networks are the domain's although
+// they are not tied to it directly, and the registered domains whose names
+// count with the domain's on a network. The seeds are the domain's
+// registrants and the organizations named like it; kin are the
+// organizations whose names are variants of a seed's (Northrop Grumman
+// Systems Corporation for Northrop Grumman Corporation), and the domains are
+// the ones the seeds and kin registered (ngc.com and northropgrumman.com
+// for northgrum.com). A company's network serving several of its domains
+// then counts as dedicated, though no one domain has most of its names.
+func (s *familySearch) kin(domain string, direct map[string][]string) (map[string]bool, map[string]bool) {
+	label := domainLabel(domain)
+	seeds := map[string]bool{}
+	for id := range direct {
+		if p := s.profiles[id]; p.registers[domain] || s.namedLike(p, label) {
+			seeds[id] = true
+		}
+	}
+
+	kin := map[string]bool{}
+	for id, p := range s.profiles {
+		if seeds[id] {
+			kin[id] = true
+			continue
+		}
+		for seed := range seeds {
+			if s.variantOf(p, s.profiles[seed]) {
+				kin[id] = true
+				break
+			}
+		}
+	}
+
+	domains := map[string]bool{domain: true}
+	for id := range kin {
+		for d := range s.profiles[id].registers {
+			domains[registeredDomain(d)] = true
+		}
+	}
+
+	return kin, domains
+}
+
+// variantOf reports whether one organization's name is the other's or a
+// variant of it, in either direction.
+func (s *familySearch) variantOf(a, b *familyProfile) bool {
+	for na := range a.brands {
+		for nb := range b.brands {
+			if na == nb || nameVariant(na, nb, s.rules.GenericWords) || nameVariant(nb, na, s.rules.GenericWords) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // providerNetworks marks the networks whose holders turned out to be
@@ -575,6 +750,7 @@ func (s *familySearch) sampleNetwork(block string) (map[string]int, int, error) 
 // members classifies the organizations tied to the domain against the one
 // with the most ties.
 func (s *familySearch) members(domain string, direct map[string][]string, dedicated map[string]bool) {
+	label := domainLabel(domain)
 	ties := map[string][]string{}
 	weight := map[string]int{}
 	for id, why := range direct {
@@ -582,7 +758,10 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 		p := s.profiles[id]
 		weight[id] += p.certified[domain]
 		if p.registers[domain] {
-			weight[id] += 5
+			weight[id] += familyStrongTie
+		}
+		if s.namedLike(p, label) {
+			weight[id] += familyStrongTie
 		}
 		if p.contactFor[domain] {
 			weight[id]++
@@ -711,6 +890,14 @@ func (s *familySearch) sameAs(a, b *familyProfile) (sameReason, bool) {
 			}
 		}
 	}
+	for na := range a.brands {
+		for nb := range b.brands {
+			if s.renamed(na, nb) {
+				return sameReason{why: fmt.Sprintf("%q and %q (%s) differ only in words such as university or "+
+					"college, as after a rename; not proposed for merging", na, nb, AssetLabel(b.asset))}, true
+			}
+		}
+	}
 	if k := firstShared(a.addresses, b.addresses); k != "" {
 		street, _, _ := strings.Cut(k, "|")
 		return sameReason{why: "same street address as " + AssetLabel(b.asset) + " (" + street +
@@ -718,6 +905,53 @@ func (s *familySearch) sameAs(a, b *familyProfile) (sameReason, bool) {
 	}
 
 	return sameReason{}, false
+}
+
+// renamed reports whether two names have the same distinctive words and
+// differ only in rename_words (and joining words), as Utica College and
+// Utica University do after the college became a university. Hopkins
+// University and Hopkins Hospital differ in a word that is not a rename
+// word, so they stay apart.
+func (s *familySearch) renamed(a, b string) bool {
+	wa, wb := strings.Fields(a), strings.Fields(b)
+	stop := abbreviationStopWords()
+	distinct := func(ws []string) map[string]bool {
+		out := map[string]bool{}
+		for _, w := range ws {
+			if !slices.Contains(s.rules.GenericWords, w) {
+				out[w] = true
+			}
+		}
+		return out
+	}
+
+	da, db := distinct(wa), distinct(wb)
+	if len(da) == 0 || len(da) != len(db) {
+		return false
+	}
+	for w := range da {
+		if !db[w] {
+			return false
+		}
+	}
+
+	rename := false
+	for _, pair := range [][2][]string{{wa, wb}, {wb, wa}} {
+		for _, w := range pair[0] {
+			if slices.Contains(pair[1], w) {
+				continue
+			}
+			switch {
+			case slices.Contains(s.rules.RenameWords, w):
+				rename = true
+			case slices.Contains(stop, w):
+			default:
+				return false
+			}
+		}
+	}
+
+	return rename
 }
 
 // familyWords are the distinctive words of the main organization's and
