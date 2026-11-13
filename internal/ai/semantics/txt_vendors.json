@@ -46,6 +46,10 @@
     {"vendor": "Fraudmarc Universal SPF", "domains": ["universalspf.org"],
       "source": "https://fm-static.pages.dev/universal-spf"},
     {"vendor": "Greenhouse", "domains": ["mg-spf.greenhouse.io"],
-      "source": "https://support.greenhouse.io/hc/en-us/articles/24674627688475"}
+      "source": "https://support.greenhouse.io/hc/en-us/articles/24674627688475"},
+    {"vendor": "Proofpoint", "domains": ["pphosted.com"],
+      "source": "https://dstreefkerk.github.io/2025-11-fingerprinting-services-behind-proofpoint-hosted-spf"},
+    {"vendor": "Mailchimp", "domains": ["servers.mcsv.net"],
+      "source": "https://dmarcian.com/spf_mailchimp_problems/"}
   ]
 }

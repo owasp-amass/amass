@@ -11,6 +11,8 @@ func TestIsVerificationRecord(t *testing.T) {
 		"autodesk-domain-verification=Zx81",
 		"e2ma-verification=1f2e3d",
 		"jamf-site-verification=AbC123",
+		"perplexity-ai-domain-verification-j105av=xyz",
+		"sitecore-domain-verification=s1",
 		"google-site-verification=abc123",
 	} {
 		if !IsVerificationRecord(rec) {
