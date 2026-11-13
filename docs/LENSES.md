@@ -217,7 +217,10 @@ enough on its own, because organizations in different jurisdictions often
 share a name and are different companies. Approving a merge moves the
 duplicate's relationships and properties onto the organization with more
 evidence, fills that organization's empty fields and deletes the duplicate.
-Retracting restores the duplicate and removes what the merge added. During
+Retracting restores the duplicate and removes what the merge added. When
+more than two organizations are linked as one (NASA stored five times), each
+is proposed for merging into the one with the most evidence, not into every
+other: four proposals instead of ten. During
 an enumeration with `AMASS_AI_ATTRIBUTION=auto`, proposed merges are applied
 once the engine's enumerations have finished their work.
 

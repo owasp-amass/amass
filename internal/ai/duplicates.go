@@ -56,6 +56,10 @@ type DuplicateCandidate struct {
 	Signals   []GapSignal `json:"signals"`
 	Score     float64     `json:"score"`
 	Decision  string      `json:"decision"`
+	// Group is the number of organizations linked into one group with this
+	// pair when there are more than two: each is proposed for merging into
+	// the group's one survivor rather than into every other.
+	Group int `json:"group,omitempty"`
 }
 
 // DuplicateReport is the result of a duplicate-organization search.
@@ -134,6 +138,7 @@ func FindDuplicateOrganizations(ctx context.Context, graph Graph) (DuplicateRepo
 			Duplicate: dup.asset, Signals: signals, Score: score, Decision: decision})
 	}
 
+	s.report.Candidates = s.groupCandidates(s.report.Candidates)
 	sort.SliceStable(s.report.Candidates, func(i, j int) bool {
 		ci, cj := s.report.Candidates[i], s.report.Candidates[j]
 		if decisionRank(ci.Decision) != decisionRank(cj.Decision) {
@@ -146,6 +151,98 @@ func FindDuplicateOrganizations(ctx context.Context, graph Graph) (DuplicateRepo
 	})
 
 	return s.report, nil
+}
+
+// groupCandidates collapses organizations stored several times into one
+// group each. Pairs that are proposed or sent to review link their
+// organizations; in a group of more than two, the organization
+// chooseSurvivor ranks first survives, and only the pairs with it are kept,
+// so five records of NASA become four proposals instead of ten. A member
+// with no pair of its own with the survivor keeps its strongest pair.
+// Pairs too weak to propose are left as they are.
+func (s *dupSearch) groupCandidates(cands []DuplicateCandidate) []DuplicateCandidate {
+	parent := map[string]string{}
+	var find func(string) string
+	find = func(id string) string {
+		if p, ok := parent[id]; ok && p != id {
+			r := find(p)
+			parent[id] = r
+			return r
+		}
+		parent[id] = id
+		return id
+	}
+
+	linked := func(c DuplicateCandidate) bool { return c.Decision != GapWeak }
+	for _, c := range cands {
+		if linked(c) {
+			parent[find(c.Survivor.ID)] = find(c.Duplicate.ID)
+		}
+	}
+
+	members := map[string][]string{}
+	for id := range parent {
+		r := find(id)
+		members[r] = append(members[r], id)
+	}
+	survivor := map[string]string{}
+	for r, ids := range members {
+		if len(ids) < 3 {
+			continue
+		}
+		sort.Strings(ids)
+		best := s.profiles[ids[0]]
+		for _, id := range ids[1:] {
+			best, _ = chooseSurvivor(best, s.profiles[id])
+		}
+		survivor[r] = best.asset.ID
+	}
+
+	// Each non-survivor keeps its pair with the survivor, or else its
+	// strongest pair.
+	keep := map[int]bool{}
+	chosen := map[string]int{}
+	for i, c := range cands {
+		if !linked(c) {
+			keep[i] = true
+			continue
+		}
+		r := find(c.Survivor.ID)
+		top, grouped := survivor[r]
+		if !grouped {
+			keep[i] = true
+			continue
+		}
+
+		dup := c.Duplicate.ID
+		withTop := c.Survivor.ID == top
+		prev, seen := chosen[dup]
+		switch {
+		case !seen:
+			chosen[dup] = i
+		case withTop && cands[prev].Survivor.ID != top:
+			chosen[dup] = i
+		case withTop == (cands[prev].Survivor.ID == top) && c.Score > cands[prev].Score:
+			chosen[dup] = i
+		}
+	}
+	for dup, i := range chosen {
+		if dup != survivor[find(dup)] {
+			keep[i] = true
+		}
+	}
+
+	out := make([]DuplicateCandidate, 0, len(keep))
+	for i, c := range cands {
+		if !keep[i] {
+			continue
+		}
+		if _, grouped := survivor[find(c.Survivor.ID)]; grouped && linked(c) {
+			c.Group = len(members[find(c.Survivor.ID)])
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 func decisionRank(d string) int {
@@ -691,6 +788,10 @@ func FormatDuplicateReport(r DuplicateReport) string {
 			AssetLabel(c.Survivor), c.Survivor.ID, AssetLabel(c.Duplicate), c.Duplicate.ID, c.Score)
 		fmt.Fprintf(&b, "  keep %s [%s], merge %s [%s] into it\n", AssetLabel(c.Survivor), c.Survivor.ID,
 			AssetLabel(c.Duplicate), c.Duplicate.ID)
+		if c.Group > 2 {
+			fmt.Fprintf(&b, "  one of %d organizations linked as the same, proposed for merging into one\n",
+				c.Group)
+		}
 		for _, s := range c.Signals {
 			def, _ := duplicateSignal(s.Signal)
 			mark := "+"
