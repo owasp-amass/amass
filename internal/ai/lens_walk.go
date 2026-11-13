@@ -219,6 +219,10 @@ type lensWalker struct {
 	// maxAssets and maxReads bound this run (see LensLimits).
 	maxAssets int
 	maxReads  int
+	// footprint is the controlled footprint once it is being collected.
+	// Outside it the walker only looks for who controls an asset, so it
+	// never pages through an asset's descendants (amazonaws.com's names).
+	footprint map[string]Asset
 }
 
 func newLensWalker(ctx context.Context, graph Graph, bounded BoundedGraph, meaning meaningFunc, relations []RelationshipSchema, root Asset, report *ThirdPartyReport) *lensWalker {
@@ -299,9 +303,14 @@ func (w *lensWalker) neighbors(id string) ([]Relation, error) {
 // partial, and the report names it.
 func (w *lensWalker) neighborsByLabel(id, dir string) ([]Relation, error) {
 	a := w.assets[id]
+	labels := w.labelsFor(a.Type, dir)
+	if _, mine := w.footprint[id]; dir == "out" && w.footprint != nil && !mine {
+		labels = w.withoutDescent(a.Type, labels)
+	}
+
 	seen := map[string]bool{}
 	var out []Relation
-	for _, label := range w.labelsFor(a.Type, dir) {
+	for _, label := range labels {
 		if w.report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			break
@@ -383,6 +392,36 @@ func (w *lensWalker) labelsFor(kind, dir string) []string {
 	return out
 }
 
+// withoutDescent drops the outgoing labels that only lead down a hierarchy
+// from an asset type (an FQDN's node children): the search for an asset's
+// controller moves up a hierarchy, never down.
+func (w *lensWalker) withoutDescent(kind string, labels []string) []string {
+	descent := map[string]bool{}
+	other := map[string]bool{}
+	for _, r := range w.relations {
+		if r.SourceType != kind {
+			continue
+		}
+		m, ok := w.meaning(r.SourceType, r.Label, r.RelationType, r.DestinationType)
+		if !ok {
+			continue
+		}
+		if m.Attribution == attrSameSubject && m.Purpose == purposeHierarchy {
+			descent[r.Label] = true
+		} else {
+			other[r.Label] = true
+		}
+	}
+
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		if !descent[l] || other[l] {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 // step is one stored edge seen from the asset being expanded, with its
 // semantics.
 type step struct {
@@ -439,6 +478,7 @@ func (w *lensWalker) steps(cur Asset) ([]step, error) {
 // contact cannot merge two footprints.
 func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []string, error) {
 	owned := map[string]Asset{}
+	w.footprint = owned
 	var order, queue []string
 	admit := func(a Asset, parent string, via Relation) {
 		owned[a.ID] = a

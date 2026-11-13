@@ -154,7 +154,8 @@ tokens but match no DNS-SD prefix. Confirm each against the vendor's
 documentation before adding it, so the catalog grows from enumerated data.
 
 A party with no stored organization is named by the registrable domain it was
-reached through. Reverse lookup names and private or reserved addresses are
+reached through, or an autonomous system by its number (`AS22903`). Reverse
+lookup names and private or reserved addresses are
 not reported, an address inside one of the organization's netblocks counts as
 its own, other bare addresses are grouped as having no recorded network owner,
 and providers whose names span many domains (such as Amazon Route 53's
@@ -171,14 +172,20 @@ The lens also runs the family lens for the domain. Organizations the family
 lens counts as the institution itself (the same institution or a department)
 are listed as the institution's own instead of as vendors, and affiliates,
 with the domains the institution's dedicated networks also serve, are listed
-as affiliated. This matters most for a domain with no documented owner, whose
+as affiliated. So are a registry label carrying a distinctive word of the
+institution's name, such as the network names `GRUMMAN1` and `UK_NORTHROP`,
+and a domain whose label spells the institution's name (`ngc.com` for
+Northrop Grumman Corporation). An SPF include in the institution's or an
+affiliate's domain is not listed as unrecognized. This matters most for a domain with no documented owner, whose
 own networks would otherwise appear as its largest vendor.
 
 Lenses read the database in bounded pages. One read returns at most 500 of an
 asset's relationships; when that is not enough, the lens reads each
 relationship label on its own, and pages through a label with more than 500
 relationships up to 5,000 per asset. A report that reached a bound says so and
-names the relationship that stayed partial.
+names the relationship that stayed partial. Outside the controlled footprint
+the lens only looks for who controls an asset, so it never pages down a
+provider's hierarchy, such as the names under amazonaws.com.
 
 The vendors lens follows at most 2,000 controlled assets and makes at most
 20,000 database reads per run. URLs are followed last, after every name,

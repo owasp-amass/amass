@@ -434,6 +434,12 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 		}
 
 		return vendorNameOf(domain), "", d.ownDomains[domain], best.ID, nil
+	case "AutonomousSystem":
+		// An autonomous system with no stored registration or organization is
+		// named by its number in the form people write it.
+		if n := assetLabel(best); n != "" && !strings.HasPrefix(strings.ToUpper(n), "AS") {
+			return "AS" + n, best.ID, false, best.ID, nil
+		}
 	case "IPAddress":
 		addr, err := netip.ParseAddr(assetLabel(best))
 		if err != nil {
