@@ -134,6 +134,9 @@ type familySearch struct {
 	holders  map[string][]string
 	cidrs    map[string]string
 	netNames map[string]int
+	// heldNames counts, for each organization holding a network, the
+	// sampled names resolving into any network it holds.
+	heldNames map[string]map[string]bool
 }
 
 // FindOrganizationFamily finds the organizations tied to an enumerated
@@ -155,7 +158,7 @@ func FindOrganizationFamily(ctx context.Context, graph Graph, root Asset) (Famil
 	s := &familySearch{dup: &dupSearch{ctx: ctx, graph: graph, profiles: map[string]*orgProfile{}},
 		rules: loadFamilyRules(), table: table, report: FamilyReport{Domain: domain},
 		profiles: map[string]*familyProfile{}, holders: map[string][]string{}, cidrs: map[string]string{},
-		netNames: map[string]int{}}
+		netNames: map[string]int{}, heldNames: map[string]map[string]bool{}}
 	if err := s.profileAll(); err != nil {
 		return s.finish(), err
 	}
@@ -170,6 +173,7 @@ func FindOrganizationFamily(ctx context.Context, graph Graph, root Asset) (Famil
 	}
 
 	s.members(domain, direct, dedicated)
+	s.memberNetworks(domain, dedicated)
 	s.relatedDomains(domain, dedicated, sampled)
 	s.providerNetworks()
 	return s.finish(), nil
@@ -357,6 +361,12 @@ func (s *familySearch) resolveName(id string, counts map[string]int) error {
 			return err
 		}
 		counts[b]++
+		for _, h := range s.holders[b] {
+			if s.heldNames[h] == nil {
+				s.heldNames[h] = map[string]bool{}
+			}
+			s.heldNames[h][id] = true
+		}
 	}
 
 	return nil
@@ -441,12 +451,12 @@ func (s *familySearch) directTies(domain string) map[string][]string {
 			ties[id] = append(ties[id], fmt.Sprintf("named like %s", domain))
 			continue
 		}
-		for _, b := range s.servingBlocks() {
-			if slices.Contains(s.holders[b], id) {
-				ties[id] = append(ties[id], fmt.Sprintf("named like %s and holds %s, which serves %d of the sampled "+
-					"names", domain, s.cidrs[b], s.netNames[b]))
-				break
-			}
+		// Its networks count together: a company's names spread over many
+		// small networks (Automattic's /24s) have no one network serving
+		// enough of them.
+		if n := len(s.heldNames[id]); n >= s.rules.MinHostedNames {
+			ties[id] = append(ties[id], fmt.Sprintf("named like %s, and %d of the sampled names resolve into its "+
+				"networks", domain, n))
 		}
 	}
 
@@ -502,9 +512,10 @@ func (s *familySearch) namedLike(p *familyProfile, label string) bool {
 // (automattic, uticauniversity) or begin it (national grid in
 // nationalgridus), or the label is their initials (nasa for National
 // Aeronautics and Space Administration, ngc for Northrop Grumman
-// Corporation). The leading words must include a word that is not generic,
-// a label it begins must be at least five letters long, and initials at
-// least three.
+// Corporation), or their initials followed by a last word in full (ngrid
+// for National Grid). The leading words must include a word that is not
+// generic, a label it begins must be at least five letters long, and
+// initials at least three.
 func nameMatchesLabel(words []string, label string, generic, stop []string) bool {
 	if label == "" {
 		return false
@@ -524,6 +535,11 @@ func nameMatchesLabel(words []string, label string, generic, stop []string) bool
 		}
 		if !slices.Contains(generic, w) {
 			distinctive = true
+			// The leading words' initials and this word in full: ngrid for
+			// National Grid.
+			if k > 0 && len(w) >= 4 && (all.String()+w == label || skipped.String()+w == label) {
+				return true
+			}
 		}
 		compact.WriteString(w)
 		all.WriteByte(w[0])
@@ -649,6 +665,41 @@ func (s *familySearch) variantOf(a, b *familyProfile) bool {
 	}
 
 	return false
+}
+
+// memberNetworks marks the networks held by the institution itself (a
+// same-institution member or a department) as the family's, however few of
+// the names stored for them are the domain's: Northrop Grumman's network
+// serving northgrum.com and its other domains is not a provider's.
+func (s *familySearch) memberNetworks(domain string, dedicated map[string]bool) {
+	own := map[string]int{}
+	for i, m := range s.report.Members {
+		if m.Relation == FamilySame || m.Relation == FamilyDepartment {
+			own[m.Organization.ID] = i
+		}
+	}
+
+	for i, n := range s.report.Networks {
+		if n.Dedicated {
+			continue
+		}
+		for b, cidr := range s.cidrs {
+			if cidr != n.CIDR || s.netNames[b] != n.Names {
+				continue
+			}
+			for _, h := range s.holders[b] {
+				m, ok := own[h]
+				if !ok {
+					continue
+				}
+				s.report.Networks[i].Dedicated = true
+				dedicated[b] = true
+				s.report.Members[m].Evidence = append(s.report.Members[m].Evidence, fmt.Sprintf(
+					"holds %s, which serves %d of the sampled %s names", cidr, n.Names, domain))
+				break
+			}
+		}
+	}
 }
 
 // providerNetworks marks the networks whose holders turned out to be
@@ -809,6 +860,23 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 			member.Relation = FamilyOther
 		}
 		s.report.Members = append(s.report.Members, member)
+	}
+
+	// A unit recorded under a shorter name (Jet Propulsion Laboratory for
+	// NASA Jet Propulsion Laboratory) is the same department.
+	for i, m := range s.report.Members {
+		p := s.profiles[m.Organization.ID]
+		if m.Relation != FamilyOther || !s.hasUnitWord(p) {
+			continue
+		}
+		for _, d := range s.report.Members {
+			if d.Relation == FamilyDepartment && s.variantOf(p, s.profiles[d.Organization.ID]) {
+				s.report.Members[i].Relation = FamilyDepartment
+				s.report.Members[i].Evidence = append(s.report.Members[i].Evidence,
+					"another name of the department "+AssetLabel(d.Organization))
+				break
+			}
+		}
 	}
 
 	sort.Slice(s.report.Members, func(i, j int) bool {

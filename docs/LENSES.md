@@ -47,11 +47,11 @@ domains. The family lens finds the organizations tied to the domain:
   its names;
 - a registration contact for the domain that uses an address in it, such as
   an IT department;
-- an organization named like the domain that holds a network serving its
-  names: the domain's label spells the leading words of its name
-  (`automattic`), begins with them (`nationalgridus` for National Grid USA
-  Service Company), or is their initials (`nasa`, `ngc` for Northrop Grumman
-  Corporation);
+- an organization named like the domain whose networks, together, serve
+  enough of its names: the domain's label spells the leading words of its
+  name (`automattic`), begins with them (`nationalgridus` for National Grid
+  USA Service Company), is their initials (`nasa`, `ngc` for Northrop Grumman
+  Corporation), or their initials and a last word (`ngrid`);
 - the holders of networks dedicated to the domain. The lens samples where
   the domain's names resolve. A network is dedicated when an organization
   tied in one of the ways above holds it, or an organization whose name is a
@@ -74,7 +74,9 @@ It classifies each organization against the one with the most ties:
   the names have the same distinctive words and differ only in words such as
   college and university, as after Utica College became Utica University;
 - **department** when its name carries a department or role word (IT
-  services, hostmaster, school of, research center, laboratory);
+  services, hostmaster, school of, research center, laboratory), or it is a
+  shorter name of a department (Jet Propulsion Laboratory for NASA Jet
+  Propulsion Laboratory);
 - **affiliate** when its name shares a distinctive word with the
   institution's (generic words such as university or college do not count)
   or it registered the domain, for example the Johns Hopkins Medical
@@ -91,7 +93,9 @@ a registrant who is a person can share the institution's address, and a
 renamed institution's records may be worth keeping apart.
 
 The report also lists the networks serving the domain and the other
-registered domains on dedicated networks the family holds.
+registered domains on dedicated networks the family holds. A network the
+institution itself holds is the family's, however few of the names stored for
+it are the domain's.
 
 The lens records two kinds of proposal in the review journal, and the
 engine records the same ones for each enumerated domain when an
@@ -174,7 +178,11 @@ The lens also runs the family lens for the domain. Organizations the family
 lens counts as the institution itself (the same institution or a department)
 are listed as the institution's own instead of as vendors, and affiliates,
 with the domains the institution's dedicated networks also serve, are listed
-as affiliated. So are a registry label carrying a distinctive word of the
+as affiliated. Another name of the institution (National Grid for National
+Grid USA Service Company, or a name the domain spells) is its own, and a
+system whose initials are a word of its name (the State University of New
+York for SUNY Mohawk Valley Community College) is affiliated. So are a
+registry label carrying a distinctive word of the
 institution's name, such as the network names `GRUMMAN1` and `UK_NORTHROP`,
 and a domain whose label spells the institution's name (`ngc.com` for
 Northrop Grumman Corporation). An SPF include in the institution's or an

@@ -308,6 +308,8 @@ func TestNameMatchesLabel(t *testing.T) {
 		// A short name only matches a label it equals.
 		{"ngs", "ngsolutions", false},
 		{"rochester institute of technology", "rit", true},
+		{"national grid", "ngrid", true},
+		{"national grid", "grid", false},
 	} {
 		if got := nameMatchesLabel(strings.Fields(c.name), c.label, rules.GenericWords, stop); got != c.want {
 			t.Errorf("nameMatchesLabel(%q, %q) = %v, want %v", c.name, c.label, got, c.want)
@@ -532,5 +534,51 @@ func TestRenamed(t *testing.T) {
 		if got := s.renamed(c.a, c.b); got != c.want {
 			t.Errorf("renamed(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+// automattic.com's names spread over the company's small networks, none
+// serving enough of them alone: together they tie the company.
+func TestFamilyNamedLikeAcrossSmallNetworks(t *testing.T) {
+	g := newBrandGraph()
+	g.org("auto", "automattic", "", "", "")
+	for i := 1; i <= 3; i++ {
+		block := fmt.Sprintf("nb-%d", i)
+		g.network(block, fmt.Sprintf("10.%d.0.0/24", i), "auto")
+		g.serve("automattic.com", block, fmt.Sprintf("n%d-", i), 2, i)
+	}
+
+	r, rel, _ := familyOf(t, g.g, "automattic.com")
+	if r.Main == nil || r.Main.ID != "auto" || rel["auto"] != FamilySame {
+		t.Fatalf("main = %+v, members = %v", r.Main, rel)
+	}
+}
+
+// A unit stored under a shorter name is the department its longer name is;
+// a network the institution holds is the family's however few of its
+// stored names are the domain's.
+func TestFamilyUnitVariantsAndMemberNetworks(t *testing.T) {
+	g := newBrandGraph()
+	g.org("nasa", "nasa", "", "", "")
+	g.org("njpl", "nasa jet propulsion laboratory", "", "", "")
+	g.org("jpl", "jet propulsion laboratory", "", "", "")
+	g.fqdn("nasa.gov")
+	for i := 0; i < 3; i++ {
+		g.cert(fmt.Sprintf("n%d", i), fmt.Sprintf("www%d.nasa.gov", i), "nasa")
+	}
+	g.cert("nj", "jpl.nasa.gov", "njpl")
+	g.cert("j0", "a.jpl.nasa.gov", "jpl")
+	g.cert("j1", "b.jpl.nasa.gov", "jpl")
+	// A NASA network mostly serving other names.
+	g.network("nb-shared", "10.5.0.0/16", "nasa")
+	g.serve("nasa.gov", "nb-shared", "s", 5, 5)
+	g.serve("science.example", "nb-shared", "x", 40, 6)
+
+	_, rel, dedicated := familyOf(t, g.g, "nasa.gov")
+	if rel["jpl"] != FamilyDepartment || rel["njpl"] != FamilyDepartment {
+		t.Errorf("members = %v", rel)
+	}
+	if !dedicated["10.5.0.0/16"] {
+		t.Error("the institution's own network is listed as a provider's")
 	}
 }

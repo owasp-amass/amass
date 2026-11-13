@@ -302,9 +302,10 @@ func TestThirdPartyLensNamesContactsByEmail(t *testing.T) {
 	if got["acmehosting.com"] == "" {
 		t.Errorf("outside contact not named by its email domain: %v", got)
 	}
-	// A contact with nothing to name it by keeps its record's name.
-	if got["https://rdap.arin.net/registry/entity/NONE-ARIN"] == "" {
-		t.Errorf("contact without an email was dropped: %v", got)
+	// A contact with nothing to name it by names no party: its record's key
+	// is an RDAP URL, not a vendor.
+	if _, ok := got["https://rdap.arin.net/registry/entity/NONE-ARIN"]; ok {
+		t.Errorf("contact without an email named by its record: %v", got)
 	}
 }
 
@@ -456,5 +457,35 @@ func TestApplyFamilyOwnLabelsAndDomains(t *testing.T) {
 	if !relatedDomain(f, "_spf.automattic.com") || familyDomain(f, "_spf.automattic.com") ||
 		relatedDomain(f, "spf.protection.outlook.com") {
 		t.Error("SPF include classification is wrong")
+	}
+}
+
+// Other names of the institution are its own; a system whose initials are a
+// word of the institution's name is affiliated.
+func TestApplyFamilyInstitutionNames(t *testing.T) {
+	org := func(id, name string) Asset {
+		return Asset{ID: id, Type: "Organization", Content: map[string]any{"name": name}}
+	}
+	main := org("o1", "national grid usa service company")
+	r := ThirdPartyReport{Vendors: []VendorUse{
+		{Vendor: "national grid", VendorID: "o2", Kind: "Network: services", Assets: 1},
+		{Vendor: "nationalgridus", VendorID: "o3", Kind: "DNS: IP addresses", Assets: 1},
+		{Vendor: "salesforce", VendorID: "o4", Kind: "DNS: IP addresses", Assets: 2},
+	}}
+	f := FamilyReport{Domain: "nationalgridus.com", Main: &main,
+		Members: []FamilyMember{{Organization: main, Relation: FamilySame, ByName: true}}}
+	applyFamily(&r, f)
+	if len(r.InstitutionOwn) != 2 || len(r.Vendors) != 1 || r.Vendors[0].Vendor != "salesforce" {
+		t.Errorf("own %+v, vendors %+v", r.InstitutionOwn, r.Vendors)
+	}
+
+	mvcc := org("m", "suny - mohawk valley community college")
+	r = ThirdPartyReport{Vendors: []VendorUse{
+		{Vendor: "state university of new york", VendorID: "s", Kind: "DNS: FQDNs", Assets: 7},
+	}}
+	applyFamily(&r, FamilyReport{Domain: "mvcc.edu", Main: &mvcc,
+		Members: []FamilyMember{{Organization: mvcc, Relation: FamilySame, ByName: true}}})
+	if len(r.Affiliates) != 1 || len(r.Vendors) != 0 {
+		t.Errorf("affiliates %+v, vendors %+v", r.Affiliates, r.Vendors)
 	}
 }

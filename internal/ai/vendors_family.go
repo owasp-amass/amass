@@ -52,10 +52,13 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 			return (v.VendorID != "" && set["id:"+v.VendorID]) || set["name:"+familyKey(v.Vendor)]
 		}
 
+		isDomain := domainName.MatchString(v.Vendor)
 		switch {
-		case in(own) || ownLabel(v.Vendor, words) || (domainName.MatchString(v.Vendor) && familyDomain(f, v.Vendor)):
+		case in(own) || ownLabel(v.Vendor, words) || (isDomain && familyDomain(f, v.Vendor)) ||
+			(!isDomain && institutionName(f, v.Vendor)):
 			r.InstitutionOwn = append(r.InstitutionOwn, v)
-		case in(affiliates) || (domainName.MatchString(v.Vendor) && related[registeredDomain(v.Vendor)]):
+		case in(affiliates) || (isDomain && related[registeredDomain(v.Vendor)]) ||
+			(!isDomain && initialsOfFamilyWord(v.Vendor, words)):
 			r.Affiliates = append(r.Affiliates, v)
 		default:
 			kept = append(kept, v)
@@ -164,6 +167,51 @@ func familyDomainOf(f FamilyReport, domain string, affiliates bool) bool {
 		}
 	}
 	return false
+}
+
+// institutionName reports whether a party's name is another name of the
+// institution: the domain's label spells it (tumblr for tumblr.com), or it
+// is a variant of the main organization's or a same-institution member's
+// name (National Grid for National Grid USA Service Company), as the family
+// lens compares names.
+func institutionName(f FamilyReport, name string) bool {
+	rules := loadFamilyRules()
+	stop := abbreviationStopWords()
+	b := brandName(name)
+	if b == "" {
+		return false
+	}
+	if label := domainLabel(f.Domain); label != "" && nameMatchesLabel(strings.Fields(b), label,
+		rules.GenericWords, stop) {
+		return true
+	}
+
+	match := func(a Asset) bool {
+		for _, n := range []string{contentString(a, "name"), contentString(a, "legal_name"), assetLabel(a)} {
+			if o := brandName(n); o != "" && (o == b || nameVariant(b, o, rules.GenericWords) ||
+				nameVariant(o, b, rules.GenericWords)) {
+				return true
+			}
+		}
+		return false
+	}
+	if f.Main != nil && match(*f.Main) {
+		return true
+	}
+	for _, m := range f.Members {
+		if m.Relation == FamilySame && m.ByName && match(m.Organization) {
+			return true
+		}
+	}
+	return false
+}
+
+// initialsOfFamilyWord reports whether a party's initials are a word of the
+// institution's name: the State University of New York for SUNY - Mohawk
+// Valley Community College, a system the institution belongs to.
+func initialsOfFamilyWord(name string, words map[string]bool) bool {
+	a := abbreviation(brandName(name), abbreviationStopWords())
+	return len(a) >= 3 && words[a]
 }
 
 // familyKey compares an organization's names across sources, where one

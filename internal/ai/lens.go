@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -380,6 +381,11 @@ func namedOrganization(orgs []Asset) (Asset, bool) {
 // it registers). FQDNs are named by their registrable domain, and a domain
 // of the footprint counts as controlled.
 func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, string, error) {
+	// An organization reached here was skipped as a placeholder (legal
+	// department, someorganization); it never names the party.
+	visited = slices.DeleteFunc(slices.Clone(visited), func(a Asset) bool {
+		return a.Type == "Organization" && semantics.IsPlaceholderOrganization(assetLabel(a))
+	})
 	if len(visited) == 0 {
 		return "", "", false, "", nil
 	}
@@ -422,6 +428,8 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 		if len(rest) > 0 {
 			return d.fallbackName(rest)
 		}
+		// Only the contact record's internal key would name it.
+		return "", "", false, best.ID, nil
 	case "DomainRecord":
 		if name := contentString(best, "domain"); name != "" {
 			domain := registeredDomain(name)
