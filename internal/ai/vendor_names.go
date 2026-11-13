@@ -26,10 +26,11 @@ type vendorNameGroup struct {
 }
 
 type vendorNameRules struct {
-	License      string            `json:"_license"`
-	About        string            `json:"_about"`
-	ReverseZones []string          `json:"reverse_zones"`
-	NameGroups   []vendorNameGroup `json:"name_groups"`
+	License       string            `json:"_license"`
+	About         string            `json:"_about"`
+	ReverseZones  []string          `json:"reverse_zones"`
+	ReservedZones []string          `json:"reserved_zones"`
+	NameGroups    []vendorNameGroup `json:"name_groups"`
 }
 
 var loadVendorNames = sync.OnceValues(func() (vendorNameRules, error) {
@@ -67,6 +68,19 @@ func vendorNameCatalog() vendorNameRules {
 func reverseZone(domain string) bool {
 	for _, z := range vendorNameCatalog().ReverseZones {
 		if domain == z || strings.HasSuffix(domain, "."+z) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// reservedName reports whether a name is in a special-use top-level domain
+// that reaches no one (msv1.invalid).
+func reservedName(name string) bool {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	for _, z := range vendorNameCatalog().ReservedZones {
+		if name == z || strings.HasSuffix(name, "."+z) {
 			return true
 		}
 	}

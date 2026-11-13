@@ -892,3 +892,12 @@ func TestRelationDetailShowsPorts(t *testing.T) {
 		t.Errorf("evidence line lacks the port: %s", line)
 	}
 }
+
+func TestReservedName(t *testing.T) {
+	for name, want := range map[string]bool{"msv1.invalid": true, "host.test.": true, "localhost": true,
+		"www.example": true, "example.com": false, "invalidate.net": false} {
+		if got := reservedName(name); got != want {
+			t.Errorf("reservedName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

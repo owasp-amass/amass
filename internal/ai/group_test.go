@@ -119,7 +119,8 @@ func TestCorporateGroupEdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.Truncated || !strings.Contains(r.Reason, "cycle") || len(r.Members) == 0 {
+	if !r.Truncated || !strings.Contains(r.Reason, "cycle: ") || !strings.Contains(r.Reason, "which is below it") ||
+		len(r.Members) == 0 {
 		t.Errorf("cycle: %+v", r)
 	}
 
