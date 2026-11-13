@@ -44,6 +44,8 @@
     {"vendor": "OCLC (ILLiad)", "domains": ["illiad.oclc.org"],
       "source": "https://help.oclc.org/Resource_Sharing/ILLiad/Troubleshooting/What_should_we_add_to_our_SPF_record_for_emails_coming_from_OCLC"},
     {"vendor": "Fraudmarc Universal SPF", "domains": ["universalspf.org"],
-      "source": "https://fm-static.pages.dev/universal-spf"}
+      "source": "https://fm-static.pages.dev/universal-spf"},
+    {"vendor": "Greenhouse", "domains": ["mg-spf.greenhouse.io"],
+      "source": "https://support.greenhouse.io/hc/en-us/articles/24674627688475"}
   ]
 }
