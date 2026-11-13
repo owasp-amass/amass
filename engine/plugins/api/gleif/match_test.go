@@ -88,6 +88,39 @@ func TestChooseLEIRecord(t *testing.T) {
 			want: "STRIPE, INC.",
 		},
 		{
+			name:   "a retirement plan at the company's address is not the company",
+			brands: []string{"microsoft corporation", "microsoft"},
+			ev:     evidence([]string{"98052"}, []string{"US"}),
+			cands: []leiCandidate{{name: "microsoft corporation savings plus 401(k) plan",
+				rec: leiRecord("MICROSOFT CORPORATION SAVINGS PLUS 401(K) PLAN", "US-WA", "US", "98052"), sim: 0.8,
+				unique: true}},
+		},
+		{
+			name:   "a subsidiary at the parent's address is not the parent",
+			brands: []string{"google"},
+			ev:     evidence([]string{"94043"}, []string{"US"}),
+			cands: []leiCandidate{{name: "google energy llc", rec: leiRecord("GOOGLE ENERGY LLC", "US-DE", "US", "94043"),
+				sim: 0.7, unique: true}},
+		},
+		{
+			name:   "a fund is never the organization",
+			brands: []string{"example holdings"},
+			ev:     evidence([]string{"10001"}, []string{"US"}),
+			cands: []leiCandidate{{name: "example holdings", rec: func() *LEIRecord {
+				r := leiRecord("EXAMPLE HOLDINGS", "US-NY", "US", "10001")
+				r.Attributes.Entity.Category = "FUND"
+				return r
+			}(), exact: true, sim: 1, unique: true}},
+		},
+		{
+			name:   "a leading article does not change the name",
+			brands: []string{"johns hopkins university"},
+			ev:     evidence(nil, []string{"US"}),
+			cands: []leiCandidate{{name: "the johns hopkins university",
+				rec: leiRecord("THE JOHNS HOPKINS UNIVERSITY", "US-MD", "US", "21218"), sim: 0.95, unique: true}},
+			want: "THE JOHNS HOPKINS UNIVERSITY",
+		},
+		{
 			name:   "a postal match does not override a country conflict",
 			brands: []string{"example"},
 			ev:     evidence([]string{"1000"}, []string{"US"}),

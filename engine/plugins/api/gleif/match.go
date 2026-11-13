@@ -18,9 +18,13 @@ import (
 )
 
 // Scores for an LEI record found by a name search. A record is accepted
-// only with a postal code match, or with an equivalent name and an
-// agreeing country; a record in a country the organization's own
-// locations contradict is never accepted.
+// only when its name is the organization's (after legal forms and a
+// leading article are removed) and a postal code or the country agrees. A
+// postal code alone is not enough: a company's subsidiaries and retirement
+// plans are registered at its own address under longer names (Google
+// Energy LLC, Microsoft Corporation Savings Plus 401(k) Plan). A record in
+// a country the organization's own locations contradict, or a fund, is
+// never accepted.
 const (
 	nameScore     = 30
 	uniqueScore   = 30
@@ -57,6 +61,11 @@ func chooseLEIRecord(brands []string, ev locEvidence, cands []leiCandidate) (*LE
 			continue
 		}
 
+		if strings.EqualFold(c.rec.Attributes.Entity.Category, "FUND") {
+			// A fund or plan is never the organization itself.
+			continue
+		}
+
 		countries := recordCountries(c.rec)
 		if len(ev.countries) > 0 && !intersects(ev.countries, countries) {
 			// The organization's own locations place it elsewhere.
@@ -66,7 +75,7 @@ func chooseLEIRecord(brands []string, ev locEvidence, cands []leiCandidate) (*LE
 		postal := intersects(ev.postal, recordPostalCodes(c.rec))
 		country := intersects(ev.countries, countries)
 		equivalent := c.exact || sameBrand(brands, c.name)
-		if !postal && !(equivalent && country) {
+		if !equivalent || (!postal && !country) {
 			continue
 		}
 
@@ -96,7 +105,8 @@ func chooseLEIRecord(brands []string, ev locEvidence, cands []leiCandidate) (*LE
 // a legal form suffix or trailing punctuation.
 func brandForm(name string) string {
 	b := org.ExtractBrandName(strings.ToLower(strings.TrimSpace(name)))
-	return strings.TrimRight(strings.TrimSpace(b), ".,")
+	b = strings.TrimRight(strings.TrimSpace(b), ".,")
+	return strings.TrimSpace(strings.TrimPrefix(b, "the "))
 }
 
 func sameBrand(brands []string, name string) bool {

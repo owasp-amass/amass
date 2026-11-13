@@ -69,7 +69,10 @@ var acronyms []string = []string{
 
 // ExtractBrandName extracts the brand name from a given organization name.
 func ExtractBrandName(name string) string {
-	start := `([a-zA-Z0-9]{1}[\sa-zA-Z0-9.\-']+)([,\s]{1,3})`
+	// The name may hold any character (AT&T, Société Générale); anchoring at
+	// the start keeps a character outside a narrower class from cutting the
+	// name short ("at&t enterprises, llc" once became "t enterprises").
+	start := `^([^\s,].*?)([,\s]{1,3})`
 	exp := start + "(" + strings.Join(acronyms, "|") + `)?([.,\s]{0,3})$`
 	re := regexp.MustCompile(exp)
 

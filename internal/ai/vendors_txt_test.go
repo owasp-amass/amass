@@ -258,3 +258,20 @@ func TestNamedOrganizationSkipsPlaceholders(t *testing.T) {
 		t.Error("a placeholder organization named the party")
 	}
 }
+
+func TestSPFMacroFree(t *testing.T) {
+	for in, want := range map[string]string{
+		"%{ir}.%{v}.%{d}.spf.has.pphosted.com": "spf.has.pphosted.com",
+		"_spf.google.com":                      "_spf.google.com",
+		"%{d}":                                 "",
+	} {
+		if got := spfMacroFree(in); got != want {
+			t.Errorf("spfMacroFree(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	scan := scanTXT([]string{"v=spf1 include:%{ir}.%{v}.%{d}.spf.has.example.net -all"}, "example.org")
+	if !reflect.DeepEqual(scan.unknownSPF, []string{"spf.has.example.net"}) {
+		t.Errorf("macro include reported as %v", scan.unknownSPF)
+	}
+}
