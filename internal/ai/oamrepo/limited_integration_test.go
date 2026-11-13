@@ -234,3 +234,28 @@ func TestResolveFQDNAndURLOnSQLite(t *testing.T) {
 		t.Fatal("invalid selector field accepted")
 	}
 }
+
+// asset-db reports an entity with no matching edges as an error; the
+// adapter reports no edges.
+func TestAdapterEdgesWithNoneOnSQLite(t *testing.T) {
+	repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "no-edges.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = repo.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	lone, err := repo.CreateAsset(ctx, &oamdns.FQDN{Name: "lone.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dir := range []string{"out", "in", "both"} {
+		edges, err := (Adapter{Repo: repo}).Edges(ctx, lone.ID, dir, "verified_for", time.Time{})
+		if err != nil || len(edges) != 0 {
+			t.Errorf("%s: %d edges, err %v; want none and no error", dir, len(edges), err)
+		}
+	}
+}
