@@ -1,9 +1,22 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "How the third-party lens names a party that has no stored Organization. Such a party is named by the registrable domain of the name it was reached through, so a provider that spreads its service across many registrable domains shows up once per domain. A name group gives those domains one vendor name: pattern is a regular expression matched against the whole registrable domain, and source is the provider's own documentation of the names it uses. reverse_zones are the DNS zones of reverse lookups; a name in them is an address's pointer, not a vendor. Add groups here, not in Go code.",
-  "reverse_zones": ["in-addr.arpa", "ip6.arpa"],
+  "_about": "How the third-party lens names a party that has no stored Organization. Such a party is named by the registrable domain of the name it was reached through, so a provider that spreads its service across many registrable domains shows up once per domain. A name group gives those domains one vendor name: pattern is a regular expression matched against the whole registrable domain, and source is the provider's own documentation of the names it uses. reverse_zones are the DNS zones of reverse lookups; a name in them is an address's pointer, not a vendor. Add groups here, not in Go code. reserved_zones are special-use top-level domains (RFC 2606, RFC 6761, RFC 6762) whose names reach no one, such as msv1.invalid; a party is never named by one.",
+  "reverse_zones": [
+    "in-addr.arpa",
+    "ip6.arpa"
+  ],
+  "reserved_zones": [
+    "invalid",
+    "test",
+    "example",
+    "localhost",
+    "local"
+  ],
   "name_groups": [
-    {"vendor": "Amazon Route 53", "pattern": "^awsdns-[0-9]+\\.(com|net|org|co\\.uk)$",
-      "source": "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/SOA-NSrecords.html"}
+    {
+      "vendor": "Amazon Route 53",
+      "pattern": "^awsdns-[0-9]+\\.(com|net|org|co\\.uk)$",
+      "source": "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/SOA-NSrecords.html"
+    }
   ]
 }

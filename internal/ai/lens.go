@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -428,12 +429,26 @@ func (d dependencyScan) fallbackName(visited []Asset) (string, string, bool, str
 		}
 	case "FQDN":
 		domain := registeredDomain(fqdnName(best))
-		if reverseZone(domain) {
-			// An address's pointer name says nothing about who operates it.
+		if reverseZone(domain) || reservedName(fqdnName(best)) {
+			// An address's pointer name says nothing about who operates it,
+			// and a reserved name reaches no one.
 			return "", "", false, best.ID, nil
 		}
 
 		return vendorNameOf(domain), "", d.ownDomains[domain], best.ID, nil
+	case "URL":
+		// A URL is named by its host's registrable domain, like an FQDN: a
+		// link back to one of the subject's own sites is its own.
+		if u, err := url.Parse(assetLabel(best)); err == nil && u.Hostname() != "" {
+			host := strings.ToLower(u.Hostname())
+			if _, err := netip.ParseAddr(host); err != nil {
+				if reservedName(host) {
+					return "", "", false, best.ID, nil
+				}
+				domain := registeredDomain(host)
+				return vendorNameOf(domain), "", d.ownDomains[domain], best.ID, nil
+			}
+		}
 	case "AutonomousSystem":
 		// An autonomous system with no stored registration or organization is
 		// named by its number in the form people write it.

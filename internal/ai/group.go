@@ -84,6 +84,8 @@ type groupSearch struct {
 	labels []string
 	report GroupReport
 	assets map[string]Asset
+	// cycle names the first stored parent found to be below its child.
+	cycle string
 }
 
 func (s *groupSearch) spend() bool {
@@ -196,7 +198,11 @@ func FindCorporateGroup(ctx context.Context, graph Graph, root Asset) (GroupRepo
 		// Every organization above the subject has a parent: the stored
 		// relationships form a cycle.
 		tops = []Asset{subject}
-		s.truncate("the stored corporate relationships form a cycle")
+		reason := "the stored corporate relationships form a cycle"
+		if s.cycle != "" {
+			reason += ": " + s.cycle
+		}
+		s.truncate(reason)
 	}
 
 	s.report.Tops = tops
@@ -239,6 +245,9 @@ func (s *groupSearch) climb(subject Asset) ([]Asset, error) {
 				if !seen[e.FromID] {
 					seen[e.FromID] = true
 					next = append(next, e.FromID)
+				} else if s.cycle == "" {
+					s.cycle = fmt.Sprintf("%s is stored as a %s of %s, which is below it",
+						assetLabel(s.assets[id]), e.Label, assetLabel(s.assets[e.FromID]))
 				}
 			}
 		}

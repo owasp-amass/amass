@@ -125,7 +125,8 @@ mark as one organization controlling another for corporate reasons: today
 `subsidiary`, which the GLEIF plugin records from GLEIF's parent and child
 records for organizations with an LEI, and `org_unit`, which reviewed
 department proposals add. When sources name different parents, the report
-lists each one. Nothing is written.
+lists each one, and when the stored relationships form a cycle it names the
+relationship that closes it. Nothing is written.
 
 ## Vendors
 
@@ -154,8 +155,9 @@ tokens but match no DNS-SD prefix. Confirm each against the vendor's
 documentation before adding it, so the catalog grows from enumerated data.
 
 A party with no stored organization is named by the registrable domain it was
-reached through, or an autonomous system by its number (`AS22903`). Reverse
-lookup names and private or reserved addresses are
+reached through (a URL by its host's), or an autonomous system by its number
+(`AS22903`). Reverse lookup names, names in special-use domains such as
+`.invalid`, and private or reserved addresses are
 not reported, an address inside one of the organization's netblocks counts as
 its own, other bare addresses are grouped as having no recorded network owner,
 and providers whose names span many domains (such as Amazon Route 53's
