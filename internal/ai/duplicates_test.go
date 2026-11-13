@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -111,10 +112,11 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 	g.contact("1673", "cr-gts1", "loc-gts")
 	g.contact("1758", "cr-gts2", "loc-gts")
 
-	// Ithaka Harbors from a certificate and from ARIN: only the name.
-	g.org("7001", "ithaka harbors", "", "", "")
-	g.org("7002", "ithaka harbors", "", "", "")
-	g.ident("7002", "org_name", "Ithaka Harbors, Inc.")
+	// One organization from a certificate and from ARIN: only the name. (A
+	// name shared with the ARIN pair below would join them into one group.)
+	g.org("7001", "hamilton harbors", "", "", "")
+	g.org("7002", "hamilton harbors", "", "", "")
+	g.ident("7002", "org_name", "Hamilton Harbors, Inc.")
 
 	// ISRG and its full name, at one address.
 	g.org("2053", "isrg", "", "", "")
@@ -283,5 +285,39 @@ func TestDuplicatesDocIsCurrent(t *testing.T) {
 	if string(got) != want {
 		t.Error("docs/ai/DUPLICATES.md is out of date; regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run " +
 			"TestDuplicatesDocIsCurrent ./internal/ai/")
+	}
+}
+
+// One organization stored five times under one name gives four proposals
+// into one survivor, not ten pairs.
+func TestDuplicateGroupsHaveOneSurvivor(t *testing.T) {
+	g := newOrgGraph()
+	for i := 1; i <= 5; i++ {
+		g.org(fmt.Sprintf("%d", i), "national aeronautics and space administration", "", "", "")
+	}
+	// The third record has the most evidence.
+	g.contact("3", "cr-a", "")
+	g.contact("3", "cr-b", "")
+	g.org("9", "unrelated widgets", "", "", "")
+
+	r, err := FindDuplicateOrganizations(context.Background(), g.g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Candidates) != 4 {
+		t.Fatalf("%d candidates, want 4: %+v", len(r.Candidates), r.Candidates)
+	}
+	dups := map[string]bool{}
+	for _, c := range r.Candidates {
+		if c.Survivor.ID != "3" || c.Group != 5 {
+			t.Errorf("survivor %s, group %d; want 3 and 5", c.Survivor.ID, c.Group)
+		}
+		dups[c.Duplicate.ID] = true
+	}
+	if len(dups) != 4 || dups["3"] {
+		t.Errorf("duplicates = %v", dups)
+	}
+	if text := FormatDuplicateReport(r); !strings.Contains(text, "one of 5 organizations") {
+		t.Errorf("report does not name the group:\n%s", text)
 	}
 }
