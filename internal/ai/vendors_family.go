@@ -41,9 +41,12 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 	}
 
 	words := familyNameWords(f)
-	related := map[string]bool{}
+	related, ownRelated := map[string]bool{}, map[string]bool{}
 	for _, d := range f.RelatedDomains {
 		related[registeredDomain(d.Domain)] = true
+		if d.Own {
+			ownRelated[registeredDomain(d.Domain)] = true
+		}
 	}
 
 	kept := make([]VendorUse, 0, len(r.Vendors))
@@ -55,6 +58,7 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 		isDomain := domainName.MatchString(v.Vendor)
 		switch {
 		case in(own) || ownLabel(v.Vendor, words) || (isDomain && familyDomain(f, v.Vendor)) ||
+			(isDomain && ownRelated[registeredDomain(v.Vendor)]) ||
 			(!isDomain && institutionName(f, v.Vendor)):
 			r.InstitutionOwn = append(r.InstitutionOwn, v)
 		case in(affiliates) || (isDomain && related[registeredDomain(v.Vendor)]) ||

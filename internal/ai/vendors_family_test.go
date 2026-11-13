@@ -489,3 +489,20 @@ func TestApplyFamilyInstitutionNames(t *testing.T) {
 		t.Errorf("affiliates %+v, vendors %+v", r.Affiliates, r.Vendors)
 	}
 }
+
+// A domain on a network the institution itself holds is its own; one on an
+// affiliate's network is affiliated.
+func TestApplyFamilyOwnRelatedDomains(t *testing.T) {
+	main := Asset{ID: "o1", Type: "Organization", Content: map[string]any{"name": "northrop grumman corp."}}
+	r := ThirdPartyReport{Vendors: []VendorUse{
+		{Vendor: "northgrum.com", Kind: "DNS: FQDNs", Assets: 1},
+		{Vendor: "jhmi.edu", Kind: "DNS: FQDNs", Assets: 1},
+	}}
+	applyFamily(&r, FamilyReport{Domain: "ngc.com", Main: &main,
+		Members:        []FamilyMember{{Organization: main, Relation: FamilySame, ByName: true}},
+		RelatedDomains: []RelatedDomain{{Domain: "northgrum.com", Own: true}, {Domain: "jhmi.edu"}}})
+	if len(r.InstitutionOwn) != 1 || r.InstitutionOwn[0].Vendor != "northgrum.com" ||
+		len(r.Affiliates) != 1 || r.Affiliates[0].Vendor != "jhmi.edu" {
+		t.Errorf("own %+v, affiliates %+v", r.InstitutionOwn, r.Affiliates)
+	}
+}

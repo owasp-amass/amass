@@ -93,6 +93,9 @@ type RelatedDomain struct {
 	Domain string `json:"domain"`
 	Names  int    `json:"names"`
 	CIDR   string `json:"cidr"`
+	// Own reports that the institution itself (not an affiliate) holds the
+	// network.
+	Own bool `json:"own,omitempty"`
 }
 
 // FamilyReport is the result of the organization family lens.
@@ -482,6 +485,52 @@ func (s *familySearch) servingBlocks() []string {
 	return blocks
 }
 
+// familySmallBlocks bounds the small networks classified for one
+// organization whose names are spread over them.
+const familySmallBlocks = 10
+
+// blocksToClassify returns the networks serving enough of the domain's
+// names, and, for a directly tied organization none of whose networks does
+// (a company whose names are spread over small networks), up to
+// familySmallBlocks of its networks, so the other domains they serve are
+// found too.
+func (s *familySearch) blocksToClassify(direct map[string][]string) []string {
+	blocks := s.servingBlocks()
+	serving := map[string]bool{}
+	for _, b := range blocks {
+		for _, h := range s.holders[b] {
+			serving[h] = true
+		}
+	}
+
+	byNames := make([]string, 0, len(s.netNames))
+	for b := range s.netNames {
+		byNames = append(byNames, b)
+	}
+	sort.Slice(byNames, func(i, j int) bool {
+		if s.netNames[byNames[i]] != s.netNames[byNames[j]] {
+			return s.netNames[byNames[i]] > s.netNames[byNames[j]]
+		}
+		return byNames[i] < byNames[j]
+	})
+
+	added := map[string]int{}
+	for _, b := range byNames {
+		if s.netNames[b] >= s.rules.MinHostedNames {
+			continue
+		}
+		for _, h := range s.holders[b] {
+			if len(direct[h]) > 0 && !serving[h] && added[h] < familySmallBlocks {
+				added[h]++
+				blocks = append(blocks, b)
+				break
+			}
+		}
+	}
+
+	return blocks
+}
+
 // domainLabel is the label of a domain's registered name before its public
 // suffix: nationalgridus for www.nationalgridus.com.
 func domainLabel(domain string) string {
@@ -572,7 +621,7 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 	dedicated := map[string]bool{}
 	sampled := map[string]map[string]int{}
 	kin, domains := s.kin(domain, direct)
-	for _, b := range s.servingBlocks() {
+	for _, b := range s.blocksToClassify(direct) {
 		d, total, err := s.sampleNetwork(b)
 		if err != nil {
 			return dedicated, sampled, err
@@ -722,20 +771,22 @@ func (s *familySearch) providerNetworks() {
 // relatedDomains lists the other registered domains on dedicated networks
 // held by the family's members.
 func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, sampled map[string]map[string]int) {
-	family := map[string]bool{}
+	family, own := map[string]bool{}, map[string]bool{}
 	for _, m := range s.report.Members {
 		if m.Relation != FamilyOther {
 			family[m.Organization.ID] = true
+		}
+		if m.Relation == FamilySame || m.Relation == FamilyDepartment {
+			own[m.Organization.ID] = true
 		}
 	}
 
 	related := map[string]*RelatedDomain{}
 	for b := range dedicated {
-		held := false
+		held, mine := false, false
 		for _, h := range s.holders[b] {
-			if family[h] {
-				held = true
-			}
+			held = held || family[h]
+			mine = mine || own[h]
 		}
 		if !held {
 			continue
@@ -745,8 +796,11 @@ func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, 
 			if d == domain {
 				continue
 			}
-			if r, ok := related[d]; !ok || n > r.Names {
-				related[d] = &RelatedDomain{Domain: d, Names: n, CIDR: s.cidrs[b]}
+			r, ok := related[d]
+			if !ok || n > r.Names {
+				related[d] = &RelatedDomain{Domain: d, Names: n, CIDR: s.cidrs[b], Own: mine || (ok && r.Own)}
+			} else if mine {
+				r.Own = true
 			}
 		}
 	}
@@ -1200,7 +1254,11 @@ func FormatFamilyReport(r FamilyReport) string {
 	if len(r.RelatedDomains) > 0 {
 		b.WriteString("\nOther registered domains on the family's networks:\n")
 		for _, d := range r.RelatedDomains {
-			fmt.Fprintf(&b, "  %s (%d names, %s)\n", d.Domain, d.Names, d.CIDR)
+			whose := ""
+			if d.Own {
+				whose = ", the institution's own network"
+			}
+			fmt.Fprintf(&b, "  %s (%d names, %s%s)\n", d.Domain, d.Names, d.CIDR, whose)
 		}
 	}
 

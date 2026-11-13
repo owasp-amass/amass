@@ -548,9 +548,21 @@ func TestFamilyNamedLikeAcrossSmallNetworks(t *testing.T) {
 		g.serve("automattic.com", block, fmt.Sprintf("n%d-", i), 2, i)
 	}
 
+	// One of the small networks also serves the company's other brand.
+	g.serve("wordpress.com", "nb-1", "w", 3, 7)
+
 	r, rel, _ := familyOf(t, g.g, "automattic.com")
 	if r.Main == nil || r.Main.ID != "auto" || rel["auto"] != FamilySame {
 		t.Fatalf("main = %+v, members = %v", r.Main, rel)
+	}
+	found := false
+	for _, d := range r.RelatedDomains {
+		if d.Domain == "wordpress.com" && d.Own {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("related domains = %+v", r.RelatedDomains)
 	}
 }
 
