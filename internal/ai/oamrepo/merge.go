@@ -131,7 +131,15 @@ func (a Adapter) fillEmptyFields(ctx context.Context, surv, dup *dbt.Entity, rec
 		return nil
 	}
 
-	if _, err := a.Repo.CreateAsset(ctx, &merged); err != nil {
+	// Replace the stored content where the repository can: storing the
+	// asset again updates it in the SQL repositories but not in Neo4j.
+	var err error
+	if r, ok := a.Repo.(assetReplacer); ok {
+		_, err = r.ReplaceAsset(ctx, &merged)
+	} else {
+		_, err = a.Repo.CreateAsset(ctx, &merged)
+	}
+	if err != nil {
 		rec.FilledFields = nil
 		return err
 	}
