@@ -143,6 +143,8 @@ type familySearch struct {
 	holders  map[string][]string
 	cidrs    map[string]string
 	netNames map[string]int
+	// skipped are organizations reached but not profiled (placeholders).
+	skipped map[string]bool
 	// tied are the organizations tied to the domain, set once members are
 	// classified.
 	tied map[string]bool
@@ -170,8 +172,10 @@ func FindOrganizationFamily(ctx context.Context, graph Graph, root Asset) (Famil
 	s := &familySearch{dup: &dupSearch{ctx: ctx, graph: graph, profiles: map[string]*orgProfile{}},
 		rules: loadFamilyRules(), table: table, report: FamilyReport{Domain: domain},
 		profiles: map[string]*familyProfile{}, holders: map[string][]string{}, cidrs: map[string]string{},
-		netNames: map[string]int{}, heldNames: map[string]map[string]bool{}}
-	if err := s.profileAll(); err != nil {
+		netNames: map[string]int{}, heldNames: map[string]map[string]bool{}, skipped: map[string]bool{}}
+	if err := s.discoverRegistrants(root); errors.Is(err, errDupReadLimit) {
+		s.truncate(err.Error())
+	} else if err != nil {
 		return s.finish(), err
 	}
 	if err := s.sampleDomain(root); err != nil && !errors.Is(err, errDupReadLimit) {
@@ -207,42 +211,132 @@ func (s *familySearch) truncate(reason string) {
 	}
 }
 
-// profileAll profiles every organization and what it controls.
-func (s *familySearch) profileAll() error {
-	orgs, err := s.dup.graph.FindAssets(s.dup.ctx, "Organization", time.Time{}, dupMaxOrganizations+1)
+// The search reads outward from the domain: its registration contacts,
+// the subjects of certificates for its sampled names and the holders of
+// the networks those names resolve into. Only the organizations reached
+// are profiled, so the cost follows the domain's records, not the number
+// of organizations stored.
+
+// discoverRegistrants profiles the organizations named by the domain's
+// registration records.
+func (s *familySearch) discoverRegistrants(root Asset) error {
+	regs, err := s.dup.edges(root.ID, "out", "registration")
 	if err != nil {
 		return err
 	}
-	if len(orgs) > dupMaxOrganizations {
-		orgs = orgs[:dupMaxOrganizations]
-		s.truncate(fmt.Sprintf("more than %d organizations", dupMaxOrganizations))
+	for _, r := range regs {
+		orgs, err := s.recordOrganizations(r.ToID, false)
+		if err != nil {
+			return err
+		}
+		for _, id := range orgs {
+			if err := s.profileOrganization(id); err != nil {
+				return err
+			}
+		}
 	}
 
-	for _, o := range orgs {
-		if isPlaceholder(o) || semantics.IsPlaceholderOrganization(contentString(o, "name")) {
+	return nil
+}
+
+// discoverCertificates profiles the subjects of the certificates whose
+// common name is the given name.
+func (s *familySearch) discoverCertificates(nameID string) error {
+	certs, err := s.dup.edges(nameID, "in", "common_name")
+	if err != nil {
+		return err
+	}
+	for _, c := range certs {
+		orgs, err := s.recordOrganizations(c.FromID, true)
+		if err != nil {
+			return err
+		}
+		for _, id := range orgs {
+			if err := s.profileOrganization(id); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// recordOrganizations returns the organizations named by the contact
+// records a record (a domain, network, AS or certificate record) points
+// at; with controllers set, only the contacts the semantics table marks as
+// controlling it.
+func (s *familySearch) recordOrganizations(recID string, controllers bool) ([]string, error) {
+	rec, err := s.dup.asset(recID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := s.dup.edges(recID, "out", "")
+	if err != nil {
+		return nil, err
+	}
+
+	var orgs []string
+	for _, e := range out {
+		cr, err := s.dup.asset(e.ToID)
+		if err != nil {
+			return nil, err
+		}
+		if cr.Type != "ContactRecord" {
 			continue
 		}
-
-		p, err := s.dup.profile(o)
-		if errors.Is(err, errDupReadLimit) {
-			s.truncate(err.Error())
-			return nil
-		} else if err != nil {
-			return err
+		if controllers {
+			m, ok := s.table.Lookup(rec.Type, e.Label, e.Type, cr.Type)
+			if !ok || m.Attribution != semantics.Controller {
+				continue
+			}
 		}
 
-		fp := &familyProfile{orgProfile: p, registers: map[string]bool{}, contactFor: map[string]bool{},
-			certified: map[string]int{}, emails: map[string]bool{}, netRecs: map[string]bool{}, autnums: map[string]bool{}}
-		if err := s.controls(fp); errors.Is(err, errDupReadLimit) {
-			s.truncate(err.Error())
-			return nil
-		} else if err != nil {
-			return err
+		named, err := s.dup.edges(cr.ID, "out", "organization")
+		if err != nil {
+			return nil, err
 		}
-
-		s.profiles[o.ID] = fp
+		for _, n := range named {
+			if !slices.Contains(orgs, n.ToID) {
+				orgs = append(orgs, n.ToID)
+			}
+		}
 	}
 
+	return orgs, nil
+}
+
+// profileOrganization profiles an organization reached from the domain, and
+// what it controls, once. Placeholders are skipped.
+func (s *familySearch) profileOrganization(id string) error {
+	if _, ok := s.profiles[id]; ok || s.skipped[id] {
+		return nil
+	}
+	if len(s.profiles) >= dupMaxOrganizations {
+		s.truncate(fmt.Sprintf("more than %d organizations reached", dupMaxOrganizations))
+		s.skipped[id] = true
+		return nil
+	}
+
+	o, err := s.dup.asset(id)
+	if err != nil {
+		return err
+	}
+	if o.Type != "Organization" || isPlaceholder(o) || semantics.IsPlaceholderOrganization(contentString(o, "name")) {
+		s.skipped[id] = true
+		return nil
+	}
+
+	p, err := s.dup.profile(o)
+	if err != nil {
+		return err
+	}
+	fp := &familyProfile{orgProfile: p, registers: map[string]bool{}, contactFor: map[string]bool{},
+		certified: map[string]int{}, emails: map[string]bool{}, netRecs: map[string]bool{}, autnums: map[string]bool{}}
+	if err := s.controls(fp); err != nil {
+		return err
+	}
+
+	s.profiles[id] = fp
 	return nil
 }
 
@@ -326,6 +420,9 @@ func (s *familySearch) sampleDomain(root Asset) error {
 		queue = queue[1:]
 		s.report.SampledNames++
 
+		if err := s.discoverCertificates(id); err != nil {
+			return err
+		}
 		if err := s.resolveName(id, s.netNames); err != nil {
 			return err
 		}
@@ -384,6 +481,25 @@ func (s *familySearch) resolveName(id string, counts map[string]int) error {
 	return nil
 }
 
+// addHolders records the organizations a network or AS registration
+// record names as controlling it as holders of the block.
+func (s *familySearch) addHolders(block, recID string) error {
+	orgs, err := s.recordOrganizations(recID, true)
+	if err != nil {
+		return err
+	}
+	for _, id := range orgs {
+		if err := s.profileOrganization(id); err != nil {
+			return err
+		}
+		if _, ok := s.profiles[id]; ok && !slices.Contains(s.holders[block], id) {
+			s.holders[block] = append(s.holders[block], id)
+		}
+	}
+
+	return nil
+}
+
 // holdersOf records who holds a netblock: the registrants of its network
 // records, or of the AS numbers announcing it.
 func (s *familySearch) holdersOf(block string) error {
@@ -402,10 +518,8 @@ func (s *familySearch) holdersOf(block string) error {
 		return err
 	}
 	for _, r := range regs {
-		for id, p := range s.profiles {
-			if p.netRecs[r.ToID] && !slices.Contains(s.holders[block], id) {
-				s.holders[block] = append(s.holders[block], id)
-			}
+		if err := s.addHolders(block, r.ToID); err != nil {
+			return err
 		}
 	}
 	if len(s.holders[block]) > 0 {
@@ -422,10 +536,8 @@ func (s *familySearch) holdersOf(block string) error {
 			return err
 		}
 		for _, r := range recs {
-			for id, p := range s.profiles {
-				if p.autnums[r.ToID] && !slices.Contains(s.holders[block], id) {
-					s.holders[block] = append(s.holders[block], id)
-				}
+			if err := s.addHolders(block, r.ToID); err != nil {
+				return err
 			}
 		}
 	}
