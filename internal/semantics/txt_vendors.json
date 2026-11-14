@@ -1,7 +1,7 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
   "_about": "Services a domain's DNS TXT records show it uses, beyond the verification tokens the DNS-SD plugin already records as verified_for relationships. A mail sender must be named in the domain's SPF record, so an SPF domain matches an include: or redirect= mechanism of a v=spf1 record when the mechanism's domain is that domain, ends with it, or is its registrable domain (customers often publish the vendor's own domain, such as include:service-now.com). Every SPF domain is the value the vendor's own documentation tells customers to publish, cited in source; an entry that cannot be confirmed there does not belong here. verification_markers find TXT records that look like a service's verification token (the text before the first '=' or ':' contains a marker); those no DNS-SD prefix recognizes, and SPF includes no entry here matches, are reported as unrecognized so this file and the DNS-SD prefixes can grow from enumerated data. A token or include can outlive the service, so these are evidence of use, not proof of a current contract. Add vendors here, not in Go code.",
-  "verification_markers": ["verification", "verify", "validate", "domain-delegation"],
+  "verification_markers": ["verification", "verify", "validate", "validation", "domain-delegation"],
   "spf_senders": [
     {"vendor": "Google Workspace", "domains": ["_spf.google.com"],
       "source": "https://knowledge.workspace.google.com/admin/security/set-up-spf"},
@@ -50,6 +50,10 @@
     {"vendor": "Proofpoint", "domains": ["pphosted.com"],
       "source": "https://dstreefkerk.github.io/2025-11-fingerprinting-services-behind-proofpoint-hosted-spf"},
     {"vendor": "Mailchimp", "domains": ["servers.mcsv.net"],
-      "source": "https://dmarcian.com/spf_mailchimp_problems/"}
+      "source": "https://dmarcian.com/spf_mailchimp_problems/"},
+    {"vendor": "Adobe Marketo Engage", "domains": ["mktomail.com"],
+      "source": "https://experienceleague.adobe.com/docs/marketo/using/product-docs/email-marketing/deliverability/set-up-spf-and-dkim-for-your-email-deliverability.html"},
+    {"vendor": "SparkPost", "domains": ["_spf.sparkpostmail.com", "_spf.eu.sparkpostmail.com"],
+      "source": "https://support.sparkpost.com/docs/faq/sender-id-spf-failures"}
   ]
 }
