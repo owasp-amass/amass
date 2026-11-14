@@ -17,6 +17,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens family -d <domain>` | The organizations behind an enumerated domain, the networks and other registered domains that serve it |
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
+| `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
 | `amass review proposals` | Every proposal in the journal and its status |
@@ -141,6 +142,25 @@ records for organizations with an LEI, and `org_unit`, which reviewed
 department proposals add. When sources name different parents, the report
 lists each one, and when the stored relationships form a cycle it names the
 relationship that closes it. Nothing is written.
+
+## Vendors across a corporate group
+
+```bash
+amass lens group-vendors -org "Spotify AB"
+amass lens group-vendors -d spotify.com
+```
+
+Runs the vendors walk for each organization of the corporate group the
+org-group lens finds, and, with `-d`, for the domain, then merges the outside
+parties: each is listed once, with how many of the group's organizations use
+it, which ones, and for what. The most widely used come first. Each
+organization is scanned on its own (a parent's scan does not follow its
+subsidiaries), and an asset two organizations reach is counted once, for the
+first. A party that is itself one of the group's organizations, such as a
+subsidiary hosting another's services, is listed apart from outside parties.
+The `-max-reads` budget (20,000 by default) is shared across the group; a
+report that ran out says how many organizations were not scanned. Up to 50
+organizations are scanned.
 
 ## Vendors
 

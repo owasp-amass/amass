@@ -37,7 +37,7 @@ const Description = "Ask questions with a language model, MCP tools, and model-a
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
 	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
-	"identity-conflicts", "family", "vendors", "org-group"}
+	"identity-conflicts", "family", "vendors", "org-group", "group-vendors"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -79,7 +79,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.StringVar(&question, "question", "", "Natural-language question")
 	fs.StringVar(&domainName, "domain", "", "Enumerated domain for the family and vendors lenses")
 	fs.StringVar(&domainName, "d", "", "Enumerated domain for the family and vendors lenses (same as -domain)")
-	fs.StringVar(&orgName, "org", "", "Organization name for the org-group lens (or use -d for a domain's organization)")
+	fs.StringVar(&orgName, "org", "", "Organization name for the org-group and group-vendors lenses (or use -d for a domain's organization)")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
@@ -394,6 +394,9 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		return listFamily(ctx, graph, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "org-group":
 		return listGroup(ctx, graph, domainName, orgName, outputFormat, explicitFlags["format"], out)
+	case "group-vendors":
+		return listGroupVendors(ctx, graph, domainName, orgName,
+			ai.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.

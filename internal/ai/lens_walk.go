@@ -223,6 +223,10 @@ type lensWalker struct {
 	// Outside it the walker only looks for who controls an asset, so it
 	// never pages through an asset's descendants (amazonaws.com's names).
 	footprint map[string]Asset
+	// stopAt are organizations whose assets are not followed through a
+	// controls edge: a group rollup scans each group organization on its
+	// own, so a parent's scan leaves its subsidiaries to theirs.
+	stopAt map[string]bool
 }
 
 func newLensWalker(ctx context.Context, graph Graph, bounded BoundedGraph, meaning meaningFunc, relations []RelationshipSchema, root Asset, report *ThirdPartyReport) *lensWalker {
@@ -543,7 +547,7 @@ func (w *lensWalker) controlledFootprint(roots []Asset) (map[string]Asset, []str
 		}
 		for _, s := range steps {
 			if _, seen := owned[s.other.ID]; seen || s.other.Type == "Person" || !footprintPass(s) ||
-				(s.other.Type == "Organization" && s.attr != attrControls) {
+				(s.other.Type == "Organization" && (s.attr != attrControls || w.stopAt[s.other.ID])) {
 				continue
 			}
 			if last[s.other.Type] {

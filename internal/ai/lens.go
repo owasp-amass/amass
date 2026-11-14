@@ -140,6 +140,15 @@ func searchThirdParties(ctx context.Context, graph Graph, schema SchemaCatalog, 
 // limits.
 func searchThirdPartiesWithin(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset,
 	limits LensLimits) (ThirdPartyReport, error) {
+	return searchThirdPartiesScoped(ctx, graph, schema, root, limits, nil, nil)
+}
+
+// searchThirdPartiesScoped is searchThirdPartiesWithin that does not follow
+// controls edges into the organizations in stopAt, and does not scan the
+// dependencies of controlled assets already in scanned (another scope's),
+// adding its own to it.
+func searchThirdPartiesScoped(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset,
+	limits LensLimits, stopAt, scanned map[string]bool) (ThirdPartyReport, error) {
 	report := ThirdPartyReport{Root: root, FootprintTypes: map[string]int{}, Vendors: []VendorUse{}}
 	meaning := meaningsOf(schema)
 	if schema == nil || meaning == nil {
@@ -157,12 +166,17 @@ func searchThirdPartiesWithin(ctx context.Context, graph Graph, schema SchemaCat
 
 	w := newLensWalker(ctx, graph, bounded, meaning, schema.Relations(), root, &report)
 	w.maxAssets, w.maxReads = limits.assets(), limits.reads()
+	w.stopAt = stopAt
 	roots := []Asset{root}
 	owners, err := w.owningOrganizations(root)
 	if err != nil {
 		return report, err
 	}
 	for _, o := range owners {
+		if stopAt[o.ID] {
+			// Scanned on its own in a group rollup.
+			continue
+		}
 		report.Owners = append(report.Owners, assetLabel(o))
 		roots = append(roots, o)
 	}
@@ -197,6 +211,12 @@ func searchThirdPartiesWithin(ctx context.Context, graph Graph, schema SchemaCat
 		if report.Reads >= w.maxReads {
 			w.truncate("database read limit")
 			break
+		}
+		if scanned != nil {
+			if scanned[id] {
+				continue
+			}
+			scanned[id] = true
 		}
 		if err := d.scan(owned[id]); err != nil {
 			return report, err

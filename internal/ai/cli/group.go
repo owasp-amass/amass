@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 )
 
 type groupGraph interface {
@@ -23,42 +24,9 @@ type groupGraph interface {
 // or found as a domain's main organization with -d. It reads only.
 func listGroup(ctx context.Context, graph groupGraph, domain, org, format string, explicit bool,
 	out io.Writer) error {
-	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
-	org = strings.TrimSpace(org)
-
-	var root ai.Asset
-	switch {
-	case domain != "" && org != "":
-		return errors.New("use -org or -domain, not both")
-	case domain != "":
-		res, err := graph.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
-		if err != nil {
-			return err
-		}
-		if len(res.Candidates) != 1 {
-			return fmt.Errorf("%s is not a stored domain name", domain)
-		}
-		root = res.Candidates[0].Asset
-	case org != "":
-		res, err := graph.ResolveOrganizations(ctx, ai.OrganizationQuery{Name: org}, 10)
-		if err != nil {
-			return err
-		}
-		switch len(res.Candidates) {
-		case 0:
-			return fmt.Errorf("no stored organization is named %q", org)
-		case 1:
-			root = res.Candidates[0].Asset
-		default:
-			names := make([]string, 0, len(res.Candidates))
-			for _, c := range res.Candidates {
-				names = append(names, fmt.Sprintf("%s [%s]", ai.AssetLabel(c.Asset), c.Asset.ID))
-			}
-			return fmt.Errorf("%q names %d organizations; be more specific: %s", org, len(names),
-				strings.Join(names, "; "))
-		}
-	default:
-		return errors.New("-org or -domain required")
+	root, err := groupRoot(ctx, graph, domain, org)
+	if err != nil {
+		return err
 	}
 
 	r, err := ai.FindCorporateGroup(ctx, graph, root)
@@ -75,4 +43,73 @@ func listGroup(ctx context.Context, graph groupGraph, domain, org, format string
 	}
 
 	return fmt.Errorf("org-group format %q: use text or json", format)
+}
+
+// listGroupVendors prints the outside parties a corporate group depends on,
+// across its organizations. It reads only.
+func listGroupVendors(ctx context.Context, graph groupGraph, domain, org string, limits ai.LensLimits,
+	format string, explicit bool, out io.Writer) error {
+	root, err := groupRoot(ctx, graph, domain, org)
+	if err != nil {
+		return err
+	}
+
+	r, err := ai.FindGroupVendors(ctx, graph, oamrepo.Catalog{}, root, limits)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case !explicit || format == "text":
+		_, err := fmt.Fprint(out, ai.FormatGroupVendorReport(r))
+		return err
+	case format == "json":
+		return writeJSON(out, r)
+	}
+
+	return fmt.Errorf("group-vendors format %q: use text or json", format)
+}
+
+// groupRoot finds the organization named with -org, or the domain named with
+// -d.
+func groupRoot(ctx context.Context, graph groupGraph, domain, org string) (ai.Asset, error) {
+	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
+	org = strings.TrimSpace(org)
+
+	var root ai.Asset
+	switch {
+	case domain != "" && org != "":
+		return root, errors.New("use -org or -domain, not both")
+	case domain != "":
+		res, err := graph.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
+		if err != nil {
+			return root, err
+		}
+		if len(res.Candidates) != 1 {
+			return root, fmt.Errorf("%s is not a stored domain name", domain)
+		}
+		root = res.Candidates[0].Asset
+	case org != "":
+		res, err := graph.ResolveOrganizations(ctx, ai.OrganizationQuery{Name: org}, 10)
+		if err != nil {
+			return root, err
+		}
+		switch len(res.Candidates) {
+		case 0:
+			return root, fmt.Errorf("no stored organization is named %q", org)
+		case 1:
+			root = res.Candidates[0].Asset
+		default:
+			names := make([]string, 0, len(res.Candidates))
+			for _, c := range res.Candidates {
+				names = append(names, fmt.Sprintf("%s [%s]", ai.AssetLabel(c.Asset), c.Asset.ID))
+			}
+			return root, fmt.Errorf("%q names %d organizations; be more specific: %s", org, len(names),
+				strings.Join(names, "; "))
+		}
+	default:
+		return root, errors.New("-org or -domain required")
+	}
+
+	return root, nil
 }
