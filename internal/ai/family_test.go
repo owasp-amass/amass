@@ -548,21 +548,28 @@ func TestFamilyNamedLikeAcrossSmallNetworks(t *testing.T) {
 		g.serve("automattic.com", block, fmt.Sprintf("n%d-", i), 2, i)
 	}
 
-	// One of the small networks also serves the company's other brand.
+	// One of the small networks also serves the company's other brand, which
+	// it registered, and a customer's site, which it did not.
 	g.serve("wordpress.com", "nb-1", "w", 3, 7)
+	g.registers("auto", "wordpress.com")
+	g.serve("customer.example", "nb-2", "c", 3, 8)
 
 	r, rel, _ := familyOf(t, g.g, "automattic.com")
 	if r.Main == nil || r.Main.ID != "auto" || rel["auto"] != FamilySame {
 		t.Fatalf("main = %+v, members = %v", r.Main, rel)
 	}
-	found := false
+	got := map[string]RelatedDomain{}
 	for _, d := range r.RelatedDomains {
-		if d.Domain == "wordpress.com" && d.Own {
-			found = true
-		}
+		got[d.Domain] = d
 	}
-	if !found {
-		t.Errorf("related domains = %+v", r.RelatedDomains)
+	if d := got["wordpress.com"]; !d.Own || !d.OwnNetwork {
+		t.Errorf("the company's registered brand: %+v", d)
+	}
+	if d := got["customer.example"]; d.Own || !d.OwnNetwork {
+		t.Errorf("a hosted customer counted as the company's own: %+v", d)
+	}
+	if text := FormatFamilyReport(r); !strings.Contains(text, "customer.example (3 names, 10.2.0.0/24, hosted on") {
+		t.Errorf("report does not set the hosted domain apart:\n%s", text)
 	}
 }
 

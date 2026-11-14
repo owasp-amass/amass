@@ -94,9 +94,14 @@ type RelatedDomain struct {
 	Domain string `json:"domain"`
 	Names  int    `json:"names"`
 	CIDR   string `json:"cidr"`
-	// Own reports that the institution itself (not an affiliate) holds the
-	// network.
-	Own bool `json:"own,omitempty"`
+	// OwnNetwork reports that the institution itself (not an affiliate)
+	// holds the network. Own reports that the domain is also the
+	// institution's by evidence of control: one of its organizations
+	// registered it, or the domain's label spells one of their names. A
+	// domain on the institution's network without that evidence is only
+	// hosted there, as a hosting company's customers are.
+	OwnNetwork bool `json:"own_network,omitempty"`
+	Own        bool `json:"own,omitempty"`
 }
 
 // FamilyReport is the result of the organization family lens.
@@ -802,13 +807,27 @@ func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, 
 			}
 			r, ok := related[d]
 			if !ok || n > r.Names {
-				related[d] = &RelatedDomain{Domain: d, Names: n, CIDR: s.cidrs[b], Own: mine || (ok && r.Own)}
+				related[d] = &RelatedDomain{Domain: d, Names: n, CIDR: s.cidrs[b],
+					OwnNetwork: mine || (ok && r.OwnNetwork)}
 			} else if mine {
-				r.Own = true
+				r.OwnNetwork = true
 			}
 		}
 	}
 
+	for d, r := range related {
+		if !r.OwnNetwork {
+			continue
+		}
+		label := domainLabel(d)
+		for id := range own {
+			p := s.profiles[id]
+			if p.registers[d] || s.namedLike(p, label) {
+				r.Own = true
+				break
+			}
+		}
+	}
 	for _, r := range related {
 		s.report.RelatedDomains = append(s.report.RelatedDomains, *r)
 	}
@@ -1326,8 +1345,11 @@ func FormatFamilyReport(r FamilyReport) string {
 		b.WriteString("\nOther registered domains on the family's networks:\n")
 		for _, d := range r.RelatedDomains {
 			whose := ""
-			if d.Own {
-				whose = ", the institution's own network"
+			switch {
+			case d.Own:
+				whose = ", the institution's own"
+			case d.OwnNetwork:
+				whose = ", hosted on the institution's network"
 			}
 			fmt.Fprintf(&b, "  %s (%d names, %s%s)\n", d.Domain, d.Names, d.CIDR, whose)
 		}

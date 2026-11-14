@@ -497,12 +497,18 @@ func TestApplyFamilyOwnRelatedDomains(t *testing.T) {
 	r := ThirdPartyReport{Vendors: []VendorUse{
 		{Vendor: "northgrum.com", Kind: "DNS: FQDNs", Assets: 1},
 		{Vendor: "jhmi.edu", Kind: "DNS: FQDNs", Assets: 1},
+		{Vendor: "customer.example", Kind: "DNS: FQDNs", Assets: 1},
 	}}
 	applyFamily(&r, FamilyReport{Domain: "ngc.com", Main: &main,
-		Members:        []FamilyMember{{Organization: main, Relation: FamilySame, ByName: true}},
-		RelatedDomains: []RelatedDomain{{Domain: "northgrum.com", Own: true}, {Domain: "jhmi.edu"}}})
+		Members: []FamilyMember{{Organization: main, Relation: FamilySame, ByName: true}},
+		RelatedDomains: []RelatedDomain{{Domain: "northgrum.com", Own: true, OwnNetwork: true},
+			{Domain: "jhmi.edu"}, {Domain: "customer.example", OwnNetwork: true}}})
 	if len(r.InstitutionOwn) != 1 || r.InstitutionOwn[0].Vendor != "northgrum.com" ||
-		len(r.Affiliates) != 1 || r.Affiliates[0].Vendor != "jhmi.edu" {
-		t.Errorf("own %+v, affiliates %+v", r.InstitutionOwn, r.Affiliates)
+		len(r.Affiliates) != 1 || r.Affiliates[0].Vendor != "jhmi.edu" ||
+		len(r.Hosted) != 1 || r.Hosted[0].Vendor != "customer.example" {
+		t.Errorf("own %+v, affiliates %+v, hosted %+v", r.InstitutionOwn, r.Affiliates, r.Hosted)
+	}
+	if text := familyLines(r); !strings.Contains(text, "Domains hosted on the institution's networks") {
+		t.Errorf("hosted domains not listed:\n%s", text)
 	}
 }

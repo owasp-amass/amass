@@ -94,8 +94,10 @@ a registrant who is a person can share the institution's address, and a
 renamed institution's records may be worth keeping apart.
 
 The report also lists the networks serving the domain and the other
-registered domains on dedicated networks the family holds, marking those on
-the institution's own networks. A network the institution itself holds is the
+registered domains on dedicated networks the family holds. A domain on one
+of the institution's own networks is its own only when one of its
+organizations registered it or the domain spells its name; otherwise it is
+listed as hosted there, as a hosting company's customers are. A network the institution itself holds is the
 family's, however few of the names stored for it are the domain's, and when
 its names are spread over networks too small to count alone, up to ten of
 them are sampled for the other domains they serve.
@@ -182,7 +184,8 @@ lens counts as the institution itself (the same institution or a department)
 are listed as the institution's own instead of as vendors, and affiliates,
 with the domains the institution's dedicated networks also serve, are listed
 as affiliated, except that a domain on a network the institution itself
-holds is its own. Another name of the institution (National Grid for National
+holds is listed as its own when the family lens found it registered by or
+named for the institution, and as hosted on its networks otherwise. Another name of the institution (National Grid for National
 Grid USA Service Company, or a name the domain spells) is its own, and a
 system whose initials are a word of its name (the State University of New
 York for SUNY Mohawk Valley Community College) is affiliated. So are a
