@@ -16,7 +16,7 @@ var FQDNInventoryCatalog = PlanCatalog{
 	{SourceType: "FQDN", Label: "dns_record", RelationType: "BasicDNSRelation", DestinationType: "IPAddress"},
 }
 
-// largeFQDNInventoryFixture models a campus namespace: 150 direct
+// LargeFQDNInventoryFixture models a campus namespace: 150 direct
 // subdomains plus 50 under cslab, more than the model-context node,
 // per-node and find limits allow.
 func LargeFQDNInventoryFixture() PlannedGraph {

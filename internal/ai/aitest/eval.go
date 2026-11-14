@@ -8,7 +8,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// campusWebFixture adds websites to the campus: the organization's website
+// CampusWebFixture adds websites to the campus: the organization's website
 // on a CDN and a portal on its own network.
 func CampusWebFixture() VendorGraph {
 	g := VendorFixture()

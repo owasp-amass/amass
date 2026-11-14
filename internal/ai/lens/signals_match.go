@@ -448,7 +448,7 @@ func (g *gapSearch) privateChain(cert graph.Asset, public []string) (bool, error
 	return issued, nil
 }
 
-// publicIssuer reports whether an issuer common name names a public
+// PublicIssuer reports whether an issuer common name names a public
 // certificate authority. Entries of three characters or fewer (Let's
 // Encrypt's R3, E5) must match the whole name; longer ones match anywhere.
 func PublicIssuer(issuer string, public []string) bool {
@@ -470,7 +470,7 @@ func PublicIssuer(issuer string, public []string) bool {
 	return false
 }
 
-// hostWithin reports whether host is domain or a name below it.
+// HostWithin reports whether host is domain or a name below it.
 func HostWithin(host, domain string) bool {
 	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
 	domain = strings.ToLower(domain)

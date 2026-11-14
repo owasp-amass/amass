@@ -11,7 +11,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// familyGraph builds the shape the 11 Nov Johns Hopkins data had: the
+// FamilyGraph builds the shape the 11 Nov Johns Hopkins data had: the
 // university on certificates and holding 128.220.0.0/16, its domain
 // registered by the same institution under another name, JHMI holding a
 // network that mostly serves jhu.edu, an IT department as a registration
@@ -171,7 +171,7 @@ func (g brandGraph) FQDN(name string) {
 	}
 }
 
-// network creates a netblock held through an ARIN record by org.
+// Network creates a netblock held through an ARIN record by org.
 func (g brandGraph) Network(block, cidr, org string) {
 	g.asset(block, "Netblock", map[string]any{"cidr": cidr})
 	rec := "rec-" + block
@@ -183,7 +183,7 @@ func (g brandGraph) Network(block, cidr, org string) {
 	g.Link(cr, org, "organization")
 }
 
-// serve stores n names of domain resolving into block, under the domain.
+// Serve stores n names of domain resolving into block, under the domain.
 func (g brandGraph) Serve(domain, block, prefix string, n int, octet int) {
 	g.FQDN(domain)
 	for i := 0; i < n; i++ {
@@ -199,7 +199,7 @@ func (g brandGraph) Serve(domain, block, prefix string, n int, octet int) {
 	}
 }
 
-// cert stores a certificate naming org for cn, linked to cn as the engine
+// Cert stores a certificate naming org for cn, linked to cn as the engine
 // links it, with cn stored under its registered domain when that is stored.
 func (g brandGraph) Cert(id, cn, org string) {
 	g.asset(id, "TLSCertificate", map[string]any{"subject_common_name": cn})
@@ -219,7 +219,7 @@ func (g brandGraph) Cert(id, cn, org string) {
 	g.Link(id, name, "common_name")
 }
 
-// registers stores a registration record of each domain naming org as its
+// Registers stores a registration record of each domain naming org as its
 // registrant, linked from the domain.
 func (g brandGraph) Registers(org string, domains ...string) {
 	for _, d := range domains {

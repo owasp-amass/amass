@@ -72,7 +72,7 @@ const (
 	KindSPF          = "Email: authorized senders (SPF)"
 )
 
-// verifiedForLabel is the relationship the DNS-SD plugin stores from a
+// VerifiedForLabel is the relationship the DNS-SD plugin stores from a
 // domain to the organization behind a verification token it recognizes.
 const VerifiedForLabel = "verified_for"
 

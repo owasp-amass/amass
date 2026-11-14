@@ -14,7 +14,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// ownedTypes lists, from the semantics table, the asset types an owner can
+// OwnedTypes lists, from the semantics table, the asset types an owner can
 // control: the valid targets of the controlled and table answers.
 func OwnedTypes(schema graph.SchemaCatalog) []string {
 	if schema == nil || graph.MeaningsOf(schema) == nil {
@@ -70,7 +70,7 @@ func footprintExpansionTypes(relations []graph.RelationshipSchema, meaning graph
 	return expand
 }
 
-// controlledReachable reports whether a controlled walk from an
+// ControlledReachable reports whether a controlled walk from an
 // Organization can reach every target type.
 func ControlledReachable(schema graph.SchemaCatalog, targets []string) bool {
 	meaning := graph.MeaningsOf(schema)
@@ -107,7 +107,7 @@ func (w *lensWalker) path(id string, owned map[string]graph.Asset) graph.PlanMat
 	return m
 }
 
-// searchControlled runs the controlled-assets lens from root.
+// SearchControlled runs the controlled-assets lens from root.
 func SearchControlled(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset, targets []string, limit int) (ControlledReport, error) {
 	report := ControlledReport{Root: root, TargetTypes: targets, FootprintTypes: map[string]int{},
 		Matches: []graph.PlanMatch{}}
@@ -176,7 +176,7 @@ func SearchControlled(ctx context.Context, g graph.Graph, schema graph.SchemaCat
 	return report, nil
 }
 
-// witnessChain renders a path as "a --label--> b <--label-- c".
+// WitnessChain renders a path as "a --label--> b <--label-- c".
 func WitnessChain(p graph.PlanMatch) string {
 	var b strings.Builder
 	for i, n := range p.Nodes {
@@ -195,7 +195,7 @@ func WitnessChain(p graph.PlanMatch) string {
 	return b.String()
 }
 
-// controlledAnswer renders a ControlledReport as plain text.
+// ControlledAnswer renders a ControlledReport as plain text.
 func ControlledAnswer(r ControlledReport) string {
 	subject := graph.AssetLabel(r.Root) + " (" + r.Root.Type + ")"
 	what := "asset(s)"

@@ -30,7 +30,7 @@ func AssetLabel(a Asset) string {
 	return a.Key
 }
 
-// contentString returns the first non-empty string or number content field.
+// ContentString returns the first non-empty string or number content field.
 func ContentString(a Asset, keys ...string) string {
 	data, err := json.Marshal(a.Content)
 	if err != nil {
@@ -70,7 +70,7 @@ func FQDNName(a Asset) string {
 	return strings.ToLower(strings.TrimSuffix(name, "."))
 }
 
-// registeredDomain approximates the registrable domain of name: the last two
+// RegisteredDomain approximates the registrable domain of name: the last two
 // labels, or three under a two-letter country code with a generic second
 // level (example.co.uk).
 func RegisteredDomain(name string) string {

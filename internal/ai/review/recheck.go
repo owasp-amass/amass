@@ -158,7 +158,7 @@ func findEdge(ctx context.Context, g graph.Graph, from, label, to string) (bool,
 	return false, false, nil
 }
 
-// redecidable reports whether a proposal's latest outcome still lets
+// Redecidable reports whether a proposal's latest outcome still lets
 // automatic attribution act on it: pending, or retracted by a re-check.
 func Redecidable(e *OwnershipEntry) bool {
 	return e.Status == ProposalPending ||

@@ -145,7 +145,7 @@ type gapSearch struct {
 	valueReads int
 }
 
-// searchOwnershipGaps runs the ownership-gap lens from root, an
+// SearchOwnershipGaps runs the ownership-gap lens from root, an
 // Organization or an asset whose documented owner is used.
 func SearchOwnershipGaps(ctx context.Context, gr graph.Graph, schema graph.SchemaCatalog, root graph.Asset) (OwnershipGapReport, error) {
 	report := OwnershipGapReport{Root: root, Candidates: []GapCandidate{}}
@@ -496,7 +496,7 @@ func (g *gapSearch) finish(c *GapCandidate) error {
 	return nil
 }
 
-// scoreGap rates a candidate's signals by their catalog strength and
+// ScoreGap rates a candidate's signals by their catalog strength and
 // weight. A strong signal (shared registrant details, a shared verification
 // token) points to one owner; a supporting one (hosting, co-listing) is
 // consistent with many; a tiebreaker (a name token, a TLS fingerprint)
@@ -629,7 +629,7 @@ func (g *gapSearch) gains(v graph.Asset) ([]graph.Asset, error) {
 	return out, nil
 }
 
-// gapAnswer renders an OwnershipGapReport as plain text.
+// GapAnswer renders an OwnershipGapReport as plain text.
 func GapAnswer(r OwnershipGapReport) string {
 	subject := graph.AssetLabel(r.Root) + " (" + r.Root.Type + ")"
 	if r.Owner.ID == "" {

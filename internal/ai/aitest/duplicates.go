@@ -45,7 +45,7 @@ func (o *orgGraph) Ident(org, idtype, value string) {
 	o.Link(org, key, "id")
 }
 
-// contact adds a contact record naming org, at location loc when given.
+// Contact adds a contact record naming org, at location loc when given.
 func (o *orgGraph) Contact(org, cr, loc string) {
 	if _, ok := o.Graph.Assets[cr]; !ok {
 		o.Graph.Assets[cr] = graph.Asset{ID: cr, Type: "ContactRecord", Key: cr}

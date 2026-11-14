@@ -8,7 +8,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// campusGapsFixture adds unattributed assets to the campus: a registrant
+// CampusGapsFixture adds unattributed assets to the campus: a registrant
 // contact sharing Colgate's phone and address (identity), a name resolving
 // into Colgate's netblock (hosting), a name on Colgate's certificate that
 // also resolves there (co-listing and hosting), and a Hamilton College name

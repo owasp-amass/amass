@@ -61,7 +61,7 @@ type TableReport struct {
 	Reason    string                `json:"reason,omitempty"`
 }
 
-// validateColumns checks a column chain against the asset types in the
+// ValidateColumns checks a column chain against the asset types in the
 // catalog.
 func ValidateColumns(columns []TableColumn, types map[string]bool) error {
 	if len(columns) == 0 || len(columns) > TableMaxColumns {
@@ -148,7 +148,7 @@ func (w *lensWalker) reach(a graph.Asset, kind string) ([]graph.Asset, map[strin
 	return nil, nil, nil
 }
 
-// searchTable runs the table lens from root.
+// SearchTable runs the table lens from root.
 func SearchTable(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset, rowType string, columns []TableColumn, limit int) (TableReport, error) {
 	report := TableReport{Root: root, RowType: rowType, Headers: []string{typePlural(rowType)}, Rows: [][]string{}}
 	meaning := graph.MeaningsOf(schema)
@@ -295,7 +295,7 @@ func (d dependencyScan) tableRow(row graph.Asset, columns []TableColumn) ([]stri
 	return cells, witness, nil
 }
 
-// tableAnswer renders a TableReport as a plain-text table.
+// TableAnswer renders a TableReport as a plain-text table.
 func TableAnswer(r TableReport) string {
 	var b strings.Builder
 	subject := graph.AssetLabel(r.Root) + " (" + r.Root.Type + ")"
@@ -353,7 +353,7 @@ func collapseRepeatedColumns(columns []TableColumn) []TableColumn {
 	return out
 }
 
-// repairColumns normalizes a planned column chain before validation. A
+// RepairColumns normalizes a planned column chain before validation. A
 // controller column naming a type other than Organization is read as a
 // column of that type, because the type is what the question named ("the
 // services they map to" planned as a Service controller); then repeated

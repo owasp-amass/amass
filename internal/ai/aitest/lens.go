@@ -116,7 +116,7 @@ var oamSemantics = map[string]graph.RelationMeaning{
 	"URL|port|PortRelation|Service":                                    {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 }
 
-// vendorCatalog is the full OAM semantics table with selectors.
+// VendorCatalog is the full OAM semantics table with selectors.
 type VendorCatalog struct{ PlanCatalog }
 
 func (VendorCatalog) Attribution(src, label, rt, dst string) (string, bool) {
@@ -140,7 +140,7 @@ func (VendorCatalog) Relations() []graph.RelationshipSchema {
 	return out
 }
 
-// vendorGraph resolves Colgate University and colgate.edu.
+// VendorGraph resolves Colgate University and colgate.edu.
 type VendorGraph struct{ PlannedGraph }
 
 func (g VendorGraph) ResolveOrganizations(_ context.Context, q graph.OrganizationQuery, _ int) (graph.OrganizationResolution, error) {
@@ -153,7 +153,7 @@ func (g VendorGraph) ResolveOrganizations(_ context.Context, q graph.Organizatio
 	return result, nil
 }
 
-// vendorFixture models a university: its registrant contact ties the
+// VendorFixture models a university: its registrant contact ties the
 // organization to colgate.edu and its own netblock. Outside parties are a
 // registrar, a DNS host, a mail provider (MX), a CDN network and a
 // certificate authority. A person shared with another college's contact

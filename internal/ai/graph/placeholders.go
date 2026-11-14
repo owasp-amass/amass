@@ -33,7 +33,7 @@ var placeholderPhrases = sync.OnceValue(func() []string {
 	return out
 })
 
-// isPlaceholder reports whether an attribute value is a redaction or
+// IsPlaceholder reports whether an attribute value is a redaction or
 // privacy-service placeholder that identifies no one.
 func IsPlaceholder(a Asset) bool {
 	for _, s := range []string{strings.ToLower(AssetLabel(a)), strings.ToLower(a.Key)} {

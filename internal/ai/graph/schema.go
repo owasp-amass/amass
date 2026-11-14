@@ -11,7 +11,7 @@ import (
 	"io"
 )
 
-// catalogTypes returns every asset type in the catalog.
+// CatalogTypes returns every asset type in the catalog.
 func CatalogTypes(catalog []RelationshipSchema, selectors []AssetSearchSchema) map[string]bool {
 	types := map[string]bool{}
 	for _, s := range selectors {

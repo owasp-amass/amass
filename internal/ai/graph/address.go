@@ -67,7 +67,7 @@ func addressKey(address, postal string) string {
 	return ""
 }
 
-// addressWords lowercases an address and splits it into words without
+// AddressWords lowercases an address and splits it into words without
 // punctuation.
 func AddressWords(s string) []string {
 	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
@@ -130,7 +130,7 @@ func isPostalCode(w string) bool {
 	return true
 }
 
-// locationAddressKey is addressKey for a stored Location asset.
+// LocationAddressKey is addressKey for a stored Location asset.
 func LocationAddressKey(a Asset) string {
 	if a.Type != "Location" {
 		return ""

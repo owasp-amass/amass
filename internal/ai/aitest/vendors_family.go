@@ -14,7 +14,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// pagedVendorGraph adds paged edge reads to the vendor fixture; the cursor
+// PagedVendorGraph adds paged edge reads to the vendor fixture; the cursor
 // is the offset of the next edge in stored order.
 type PagedVendorGraph struct {
 	VendorGraph

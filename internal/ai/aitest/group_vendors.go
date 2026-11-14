@@ -8,7 +8,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// groupVendorFixture puts Colgate and Hamilton under one parent. Both use
+// GroupVendorFixture puts Colgate and Hamilton under one parent. Both use
 // EDUCAUSE as registrar; Hamilton's registration also names Colgate, a
 // group organization, as a contact.
 func GroupVendorFixture() VendorGraph {

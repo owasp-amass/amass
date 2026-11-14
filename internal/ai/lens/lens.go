@@ -130,13 +130,13 @@ func (v vendorSet) add(name, id, kind, via string, user graph.Asset, witness []g
 	}
 }
 
-// searchThirdParties runs the third-party lens from root within the
+// SearchThirdParties runs the third-party lens from root within the
 // default limits.
 func SearchThirdParties(ctx context.Context, graph graph.Graph, schema graph.SchemaCatalog, root graph.Asset) (ThirdPartyReport, error) {
 	return SearchThirdPartiesWithin(ctx, graph, schema, root, LensLimits{})
 }
 
-// searchThirdPartiesWithin runs the third-party lens from root within
+// SearchThirdPartiesWithin runs the third-party lens from root within
 // limits.
 func SearchThirdPartiesWithin(ctx context.Context, graph graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 	limits LensLimits) (ThirdPartyReport, error) {
@@ -536,7 +536,7 @@ func (d dependencyScan) contactEmailDomains(cr graph.Asset) ([]string, error) {
 	return out, nil
 }
 
-// unattributedAddresses names the party behind public addresses with no
+// UnattributedAddresses names the party behind public addresses with no
 // stored network, autonomous system or organization.
 const UnattributedAddresses = "IP addresses with no recorded network owner"
 
@@ -582,7 +582,7 @@ func typePlural(kind string) string {
 	return strings.Join(words, " ")
 }
 
-// thirdPartyAnswer renders a ThirdPartyReport as plain text.
+// ThirdPartyAnswer renders a ThirdPartyReport as plain text.
 func ThirdPartyAnswer(r ThirdPartyReport) string {
 	var b strings.Builder
 	subject := graph.AssetLabel(r.Root) + " (" + r.Root.Type + ")"
@@ -632,7 +632,7 @@ func ThirdPartyAnswer(r ThirdPartyReport) string {
 	return b.String()
 }
 
-// vendorQuestion matches explicit vendor questions such as "Which
+// VendorQuestion matches explicit vendor questions such as "Which
 // third-party vendors are being used by the Colgate University
 // organization?" or "List the vendors of example.com". The subject is the
 // captured name.

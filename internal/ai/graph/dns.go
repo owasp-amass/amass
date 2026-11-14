@@ -19,7 +19,7 @@ const (
 	RRTypeTXT = 16
 )
 
-// txtValues returns the TXT record values stored for an asset.
+// TXTValues returns the TXT record values stored for an asset.
 func TXTValues(ctx context.Context, graph Graph, id string) ([]string, error) {
 	evidence, err := graph.Evidence(ctx, id, 100)
 	if err != nil {

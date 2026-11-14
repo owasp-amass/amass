@@ -8,7 +8,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-// servicesFixture adds what the HTTP and SSH probes store to the vendor
+// ServicesFixture adds what the HTTP and SSH probes store to the vendor
 // fixture: a web service on www.colgate.edu with a server header, an
 // expired certificate and a product, and an SSH service on an unusual port
 // of portal.colgate.edu presenting a self-issued certificate.

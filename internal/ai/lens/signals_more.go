@@ -83,7 +83,7 @@ func serviceHeaders(svc graph.Asset) map[string][]string {
 	return out
 }
 
-// contentValue returns the raw value of one field of an asset's content.
+// ContentValue returns the raw value of one field of an asset's content.
 func ContentValue(a graph.Asset, key string) any {
 	data, err := json.Marshal(a.Content)
 	if err != nil {

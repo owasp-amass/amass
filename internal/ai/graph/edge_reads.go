@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// readEdges reads the edges of one asset in one direction with one label
+// ReadEdges reads the edges of one asset in one direction with one label
 // ("" for any), as completely as the graph and the caller's budget allow:
 // page by page when the graph pages, otherwise one bounded read, otherwise
 // an unbounded read. spend is called before each database read and returns

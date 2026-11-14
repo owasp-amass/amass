@@ -67,7 +67,7 @@ func (l LensLimits) reads() int {
 	return lensMaxReads
 }
 
-// lensMaxPerLabel bounds how many edges with one label a lens reads from
+// LensMaxPerLabel bounds how many edges with one label a lens reads from
 // one asset, a page at a time, when one read is not enough. It is a
 // variable so tests can lower it.
 var LensMaxPerLabel = 10 * graph.MaxEdgeRead
@@ -536,7 +536,7 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 	return owned, order, nil
 }
 
-// witnessOf orients a stored edge between a and b as it is stored.
+// WitnessOf orients a stored edge between a and b as it is stored.
 func WitnessOf(e graph.Relation, a, b graph.Asset) graph.WitnessEdge {
 	from, to := a, b
 	if e.FromID == b.ID {
@@ -547,7 +547,7 @@ func WitnessOf(e graph.Relation, a, b graph.Asset) graph.WitnessEdge {
 		From: graph.AssetLabel(from), ToID: to.ID, ToType: to.Type, To: graph.AssetLabel(to), Detail: RelationDetail(e)}
 }
 
-// relationDetail summarizes the fields a stored relation carries beyond
+// RelationDetail summarizes the fields a stored relation carries beyond
 // its label, such as a port number and protocol ("443/tcp").
 func RelationDetail(e graph.Relation) string {
 	data, err := json.Marshal(e.Content)
@@ -573,7 +573,7 @@ func RelationDetail(e graph.Relation) string {
 	return ""
 }
 
-// pathWitness returns the edges of a witnessed path.
+// PathWitness returns the edges of a witnessed path.
 func PathWitness(p graph.PlanMatch) []graph.WitnessEdge {
 	out := make([]graph.WitnessEdge, 0, len(p.Edges))
 	for i, e := range p.Edges {

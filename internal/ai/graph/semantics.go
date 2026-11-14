@@ -22,7 +22,7 @@ type SemanticsCatalog interface {
 
 type MeaningFunc func(source, label, relationType, destination string) (RelationMeaning, bool)
 
-// meaningsOf returns the semantics lookup of cat: the full table when cat
+// MeaningsOf returns the semantics lookup of cat: the full table when cat
 // is a SemanticsCatalog, otherwise attribution only (no purpose, every
 // third party treated as a vendor). It returns nil without attribution.
 func MeaningsOf(cat any) MeaningFunc {

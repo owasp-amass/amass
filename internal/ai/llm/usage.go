@@ -19,7 +19,7 @@ type ModelUsage struct {
 	ModelMS      int64 `json:"model_ms"`
 }
 
-// meteredModel records usage for every request through the wrapped model,
+// MeteredModel records usage for every request through the wrapped model,
 // including failed ones, and keeps structured generation available when the
 // wrapped provider supports it.
 type MeteredModel struct {

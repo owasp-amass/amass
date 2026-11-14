@@ -29,7 +29,7 @@ func (g namedOrgGraph) ResolveOrganizations(_ context.Context, q graph.Organizat
 	return result, nil
 }
 
-// groupFixture is shaped like a GLEIF-recorded group: a Luxembourg parent,
+// GroupFixture is shaped like a GLEIF-recorded group: a Luxembourg parent,
 // its Swedish subsidiary, two subsidiaries of that, and a reviewed unit; an
 // unrelated company shares a name word.
 func GroupFixture() namedOrgGraph {
