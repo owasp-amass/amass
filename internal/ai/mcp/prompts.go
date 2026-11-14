@@ -24,7 +24,8 @@ How to answer questions:
 1. Prefer the investigate tool. Pass a subject (a domain as {"type":"FQDN","field":"name","value":"example.com"}, or an organization as {"type":"Organization","name":"Example Inc"}) and the answer kind that fits the question; its description lists every kind. It returns the computed answer with numbered evidence items E1, E2, ...
 2. Use the graph tools (resolve_asset, resolve_organization, find_assets, walk_relations and the others) to find the exact name of a subject, or to look at specific assets and relationships the answer kinds do not cover.
 3. Cite evidence items like [E1] for every claim, and run verify_citations on your final prose with the investigation_id before presenting it.
-4. Report only what the database stores. Results come from past enumerations, not live scans; say so, and say when a result is partial because a read limit was reached.
+4. To show how a domain's or organization's assets connect, call visualize and put its mermaid text in a mermaid code block; give the user its interactive link when there is one.
+5. Report only what the database stores. Results come from past enumerations, not live scans; say so, and say when a result is partial because a read limit was reached.
 The server never writes to the database and never starts an enumeration.`
 
 // promptPrefix names the server's prompts so they group together in

@@ -61,6 +61,16 @@ expands into the investigate calls to make. Clients that show MCP prompts
 as commands (Claude Code, VS Code, Gemini CLI and others) list them by
 name.
 
+## visualize
+
+`{"subject": "example.com"}` (or an organization's name) draws what the
+subject controls, from the controlled-assets lens: a Mermaid diagram of
+asset types with counts and the relations between them, every asset as
+well when there are at most 40, and, from the HTTP server when
+`AMASS_AI_MCP_PUBLIC_URL` is set, a link to an interactive D3 graph and a
+GEXF file for Gephi (valid for an hour, served on localhost). Drawings
+cover up to 3,000 assets.
+
 ## Operator mode
 
 A server started with an operator configuration also offers tools that act:

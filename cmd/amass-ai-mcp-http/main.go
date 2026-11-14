@@ -60,6 +60,11 @@ func run() error {
 		KnownVerification: dnssd.IsVerificationRecord,
 	}, token)
 
+	// Interactive drawings are served at links the visualize tool returns.
+	if public := os.Getenv("AMASS_AI_MCP_PUBLIC_URL"); public != "" {
+		server.Viz = &mcp.VizLinks{BaseURL: public, Runner: server.Runner}
+	}
+
 	// Operator mode: a second, different token unlocks the tools that start
 	// enumerations, review proposals and manage data sources.
 	if opToken := os.Getenv("AMASS_AI_MCP_OPERATOR_TOKEN"); opToken != "" {

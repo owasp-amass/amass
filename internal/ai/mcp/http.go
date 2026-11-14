@@ -35,6 +35,8 @@ type HTTPServer struct {
 	// OperatorToken and Operator enable operator mode; see Operator.
 	OperatorToken string
 	Operator      *Operator
+	// Viz, when set, serves the interactive drawings visualize links to.
+	Viz *VizLinks
 	// SessionTTL is how long an idle session stays valid; MaxSessions caps
 	// concurrent sessions (the least recently used is evicted first).
 	SessionTTL  time.Duration
@@ -149,6 +151,9 @@ func (s *HTTPServer) Handler() http.Handler {
 	if s.Operator != nil && s.Operator.KeyLinks != nil {
 		mux.Handle(keyLinkPrefix, s.Operator.KeyLinks)
 	}
+	if s.Viz != nil {
+		mux.Handle(vizLinkPrefix, s.Viz)
+	}
 	return mux
 }
 
@@ -262,13 +267,13 @@ func (s *HTTPServer) sdkHandler(operator bool) http.Handler {
 
 		store := s.Evidence
 		s.mu.Unlock()
-		reader := newSDKServer(s.Runner, s.Model, store, nil)
+		reader := newSDKServer(s.Runner, s.Model, store, nil, s.Viz)
 		s.sdk = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return reader },
 			&mcp.StreamableHTTPOptions{JSONResponse: true, SessionTimeout: s.ttl()})
 		if s.Operator != nil {
 			// Event streams let the server ask the user to approve an action
 			// in the middle of a tool call (MCP elicitation).
-			op := newSDKServer(s.Runner, s.Model, store, s.Operator)
+			op := newSDKServer(s.Runner, s.Model, store, s.Operator, s.Viz)
 			s.sdkOperator = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return op },
 				&mcp.StreamableHTTPOptions{SessionTimeout: s.ttl()})
 		}

@@ -44,7 +44,7 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		s.Evidence = ai.NewEvidenceStore()
 	}
 
-	server := newSDKServer(s.Runner, s.Model, s.Evidence, s.Operator)
+	server := newSDKServer(s.Runner, s.Model, s.Evidence, s.Operator, nil)
 	reader := &eofReader{Reader: in}
 	err := server.Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(reader), Writer: nopWriteCloser{out}})
 	if err != nil && reader.closed() && ctx.Err() == nil {
@@ -87,7 +87,8 @@ func (nopWriteCloser) Close() error { return nil }
 
 // newSDKServer builds an MCP server with every read-only tool: the graph
 // tools and the investigation tools.
-func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, op *Operator) *mcp.Server {
+func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, op *Operator,
+	links *VizLinks) *mcp.Server {
 	instructions := serverInstructions
 	if op != nil {
 		instructions += operatorInstructions
@@ -123,6 +124,7 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 	if runner.Catalog != nil {
 		// The prompts ask for the investigate tool, which needs the catalog.
 		addPrompts(server)
+		addVisualizeTool(server, runner, links)
 	}
 	if op != nil {
 		addOperatorTools(server, op, runner)
