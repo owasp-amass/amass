@@ -315,7 +315,7 @@ func (a Adapter) survivorEdge(ctx context.Context, surv, other *dbt.Entity, rel 
 		from, to = other, surv
 	}
 
-	edge, err := a.Repo.CreateEdge(ctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
+	edge, err := a.createEdge(ctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
 	if err != nil {
 		return nil, false, err
 	} else if edge == nil {
@@ -447,7 +447,7 @@ func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (
 			from, to = other, dup
 		}
 
-		edge, err := a.Repo.CreateEdge(wctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
+		edge, err := a.createEdge(wctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
 		if err != nil {
 			res.RestoredID = dup.ID
 			return res, err

@@ -62,7 +62,7 @@ func (a Adapter) ApplyOwnership(ctx context.Context, e ai.ProposedEdge, confiden
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 
-	edge, err := a.Repo.CreateEdge(wctx, &dbt.Edge{
+	edge, err := a.createEdge(wctx, &dbt.Edge{
 		Relation:   &general.SimpleRelation{Name: e.Label},
 		FromEntity: from,
 		ToEntity:   to,

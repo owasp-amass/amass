@@ -184,7 +184,7 @@ func (a Adapter) restoreIdentityEdges(ctx context.Context, rec ai.IdentityRecord
 			if !ce.Outgoing {
 				from, to = other, org
 			}
-			if edge, err = a.Repo.CreateEdge(ctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to}); err != nil {
+			if edge, err = a.createEdge(ctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to}); err != nil {
 				return err
 			}
 		} else if edge, err = a.Repo.FindEdgeById(ctx, ce.ID); err != nil || edge == nil {

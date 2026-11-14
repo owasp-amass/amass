@@ -210,11 +210,31 @@ func emptyTagLookup(err error) bool {
 	case "no tags found for edge", // sqlite
 		"no tags found for entity", // postgres (edge-tag reader)
 		"no edge tags found",       // neo4j
+		"no entity tags found",     // neo4j
 		"zero tags found":          // neo4j
 		return true
 	}
 
 	return false
+}
+
+// createEdge stores an edge between two entities. An entity read as the far
+// end of another edge can carry only its ID; the Neo4j repository needs each
+// end's asset to check the relationship, so such an end is read first.
+func (a Adapter) createEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, error) {
+	for _, end := range []**dbt.Entity{&edge.FromEntity, &edge.ToEntity} {
+		if *end == nil || (*end).Asset != nil {
+			continue
+		}
+
+		full, err := a.Repo.FindEntityById(ctx, (*end).ID)
+		if err != nil {
+			return nil, fmt.Errorf("entity %s: %w", (*end).ID, err)
+		}
+		*end = full
+	}
+
+	return a.Repo.CreateEdge(ctx, edge)
 }
 
 // EdgeEvidence always queries the relation namespace. Entity and edge

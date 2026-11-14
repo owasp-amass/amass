@@ -159,7 +159,7 @@ func (a Adapter) RestoreOrganization(ctx context.Context, rec ai.OrganizationRem
 		if !m.Outgoing {
 			from, to = other, ent
 		}
-		edge, err := a.Repo.CreateEdge(wctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
+		edge, err := a.createEdge(wctx, &dbt.Edge{Relation: rel, FromEntity: from, ToEntity: to})
 		if err != nil {
 			return ent.ID, err
 		}
