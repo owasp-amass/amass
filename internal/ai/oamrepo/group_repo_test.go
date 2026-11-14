@@ -6,13 +6,11 @@ package oamrepo
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
-	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/asset-db/repository/sqlite3"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
@@ -21,11 +19,11 @@ import (
 // The group lens reads stored subsidiary relationships, as the GLEIF plugin
 // writes them (parent --subsidiary--> child), through the adapter.
 func TestCorporateGroupOnSQLite(t *testing.T) {
-	repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "group.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = repo.Close() }()
+	checkCorporateGroup(t, openSQLite(t, "group.db"))
+}
+
+func checkCorporateGroup(t *testing.T, repo repository.Repository) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

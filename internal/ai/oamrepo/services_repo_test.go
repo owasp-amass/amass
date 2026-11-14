@@ -6,14 +6,12 @@ package oamrepo
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
-	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/asset-db/repository/sqlite3"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -25,11 +23,11 @@ import (
 // returns them: the port relation's number and protocol, the response
 // headers and the certificate.
 func TestServicesOnSQLite(t *testing.T) {
-	repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "services.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = repo.Close() }()
+	checkServices(t, openSQLite(t, "services.db"))
+}
+
+func checkServices(t *testing.T, repo repository.Repository) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

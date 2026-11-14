@@ -8,13 +8,11 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
-	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/asset-db/repository/sqlite3"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -27,11 +25,11 @@ import (
 // The family lens reads stored OAM assets: FQDN names, DNS record types,
 // netblock CIDRs, network registrations and certificate subjects.
 func TestOrganizationFamilyOnSQLite(t *testing.T) {
-	repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "family.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = repo.Close() }()
+	checkOrganizationFamily(t, openSQLite(t, "family.db"))
+}
+
+func checkOrganizationFamily(t *testing.T, repo repository.Repository) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

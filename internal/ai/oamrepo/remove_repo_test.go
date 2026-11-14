@@ -6,13 +6,11 @@ package oamrepo
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
-	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/asset-db/repository/sqlite3"
+	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
@@ -22,11 +20,11 @@ import (
 // A person-named organization is found, removed with its relationship and
 // source, and restored with them by the retraction.
 func TestRemoveAndRestorePersonNamedOrganization(t *testing.T) {
-	repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "person.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = repo.Close() }()
+	checkPersonNamedRemoval(t, openSQLite(t, "person.db"))
+}
+
+func checkPersonNamedRemoval(t *testing.T, repo repository.Repository) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
