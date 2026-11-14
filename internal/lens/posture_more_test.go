@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,22 @@ func TestFindExposure(t *testing.T) {
 	g.Links = append(g.Links, graph.Relation{ID: "url-domain", FromID: url, ToID: "portal.colgate.edu",
 		Label: "domain", Type: "SimpleRelation"})
 
+	// A web service whose stored page title is a sign-in page, and a URL
+	// with a password in it.
+	if g.EvidenceByID == nil {
+		g.EvidenceByID = map[string][]graph.Evidence{}
+	}
+	g.EvidenceByID["svc-web"] = append(g.EvidenceByID["svc-web"], graph.Evidence{ID: "t1", SubjectID: "svc-web",
+		Kind: "SimpleProperty", Property: map[string]any{"property_name": "http_title",
+			"property_value": "Sign in to your account"}})
+	g.EvidenceByID["portal.colgate.edu"] = append(g.EvidenceByID["portal.colgate.edu"],
+		graphtest.TXTRecord("heritage=external-dns,external-dns/owner=prod,external-dns/resource=ingress/hr/portal"))
+	secret := "https://ops:hunter2@files.colgate.edu/share"
+	g.Assets[secret] = graph.Asset{ID: secret, Type: "URL", Key: secret, Content: map[string]any{"url": secret,
+		"username": "ops", "password": "hunter2"}}
+	g.Links = append(g.Links, graph.Relation{ID: "secret-domain", FromID: secret, ToID: "portal.colgate.edu",
+		Label: "domain", Type: "SimpleRelation"})
+
 	r, err := FindExposure(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -39,8 +56,16 @@ func TestFindExposure(t *testing.T) {
 	if c := classes["remote_access"]; c.Count != 2 {
 		t.Errorf("remote access = %+v (want the SSH and RDP services)", c)
 	}
-	if c := classes["login_pages"]; c.Count != 1 || c.Examples[0] != url {
-		t.Errorf("login pages = %+v", c)
+	if c := classes["login_pages"]; c.Count != 2 || !slices.Contains(c.Examples, url) ||
+		!slices.ContainsFunc(c.Examples, func(e string) bool { return strings.Contains(e, `"Sign in to your account"`) }) {
+		t.Errorf("login pages = %+v (want the URL and the titled service)", c)
+	}
+	if c := classes["url_credentials"]; c.Count != 1 || strings.Contains(r.Text(), "hunter2") ||
+		!strings.Contains(c.Examples[0], "ops:xxxxx@files.colgate.edu") {
+		t.Errorf("URL credentials = %+v; the password must be masked", c)
+	}
+	if c := classes["internal_details_in_dns"]; c.Count != 1 || !strings.Contains(c.Examples[0], "ingress/hr/portal") {
+		t.Errorf("internal details = %+v", c)
 	}
 	if classes[ExposureUnusualPort].Count != 1 || classes[ExposureBadCert].Count != 2 {
 		t.Errorf("classes = %+v", r.Classes)

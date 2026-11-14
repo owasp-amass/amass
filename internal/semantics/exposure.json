@@ -1,9 +1,10 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "How the exposure lens groups what a footprint exposes to the internet. It reads the services the services lens finds and the URLs of the footprint, and puts each in the first class whose ports (the port numbers the IANA registry assigns the protocol), service_types or url_patterns (regular expressions over the URL) match. Each class says why reaching it from the internet matters. Services on unusual ports and certificates that expired or were self-issued are reported from the services lens as well. Add classes and values here, not in Go code.",
+  "_about": "How the exposure lens groups what a footprint exposes to the internet. It reads the services the services lens finds and the URLs of the footprint, and puts each in the first class whose ports (the port numbers the IANA registry assigns the protocol), service_types, title_patterns (regular expressions over the page title a probe stored for the service as its title_property property), url_fields (URL content fields that are not empty, such as a password written into the URL), url_patterns (regular expressions over the URL) or txt_patterns (regular expressions over the DNS TXT records stored for a controlled name, read only when a class has them) match. A URL is always shown with any password in it masked. Each class says why reaching it from the internet matters. Services on unusual ports and certificates that expired or were self-issued are reported from the services lens as well. Add classes and values here, not in Go code.",
   "port_source": "https://www.iana.org/assignments/service-names-port-numbers",
   "url_types": ["URL"],
   "url_field": "url",
+  "title_property": "http_title",
   "classes": [
     {
       "name": "remote_access",
@@ -34,10 +35,27 @@
       "rationale": "device, container and cluster management interfaces give control of the systems behind them"
     },
     {
+      "name": "url_credentials",
+      "title": "URLs with an embedded password",
+      "url_fields": ["password"],
+      "rationale": "a password written into a URL is kept in browser history, server and proxy logs and wherever the link is shared, so treat it as disclosed and change it"
+    },
+    {
+      "name": "internal_details_in_dns",
+      "title": "TXT records that disclose internal details",
+      "txt_patterns": ["(?i)^heritage=external-dns,"],
+      "rationale": "Kubernetes ExternalDNS ownership records name the cluster owner and the namespaces and resources behind public names",
+      "source": "https://kubernetes-sigs.github.io/external-dns/latest/docs/registry/txt/"
+    },
+    {
       "name": "login_pages",
       "title": "Login and administration pages",
       "url_patterns": ["(?i)/(admin|administrator|wp-admin|wp-login\\.php|phpmyadmin|login|signin|sso|manager/html|console|jenkins|webmail|owa)(/|\\?|$)"],
-      "rationale": "login and administration pages are targeted by credential stuffing and are often left unprotected by mistake"
+      "title_patterns": [
+        "(?i)\\b(sign[ -]?in|log[ -]?in|log[ -]?on|single sign[ -]?on|sso|authentication|admin|administration|administrator|control panel|management console|webmail|outlook web app|remote desktop|vpn)\\b",
+        "(?i)\\b(phpmyadmin|jenkins|grafana|kibana|globalprotect|citrix gateway|netscaler gateway|pulse secure|fortigate|cpanel|plesk|webmin|roundcube|zimbra)\\b"
+      ],
+      "rationale": "login and administration pages, found by their path or page title, are targeted by credential stuffing and are often left unprotected by mistake"
     }
   ]
 }

@@ -7,6 +7,7 @@ package lens
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -64,17 +65,25 @@ type exposureClassRule struct {
 	Ports        []int    `json:"ports"`
 	ServiceTypes []string `json:"service_types"`
 	URLPatterns  []string `json:"url_patterns"`
+	URLFields    []string `json:"url_fields"`
+	TitlePattern []string `json:"title_patterns"`
+	TXTPatterns  []string `json:"txt_patterns"`
 	Rationale    string   `json:"rationale"`
+	Source       string   `json:"source"`
 	res          []*regexp.Regexp
+	titles       []*regexp.Regexp
+	txts         []*regexp.Regexp
 }
 
 type exposureRules struct {
-	License    string              `json:"_license"`
-	About      string              `json:"_about"`
-	PortSource string              `json:"port_source"`
-	URLTypes   []string            `json:"url_types"`
-	URLField   string              `json:"url_field"`
-	Classes    []exposureClassRule `json:"classes"`
+	License    string   `json:"_license"`
+	About      string   `json:"_about"`
+	PortSource string   `json:"port_source"`
+	URLTypes   []string `json:"url_types"`
+	URLField   string   `json:"url_field"`
+	// TitleProperty is the property a probe stores a service's page title as.
+	TitleProperty string              `json:"title_property"`
+	Classes       []exposureClassRule `json:"classes"`
 }
 
 var loadExposureRules = sync.OnceValue(func() exposureRules {
@@ -90,6 +99,12 @@ var loadExposureRules = sync.OnceValue(func() exposureRules {
 		for _, p := range c.URLPatterns {
 			c.res = append(c.res, regexp.MustCompile(p))
 		}
+		for _, p := range c.TitlePattern {
+			c.titles = append(c.titles, regexp.MustCompile(p))
+		}
+		for _, p := range c.TXTPatterns {
+			c.txts = append(c.txts, regexp.MustCompile(p))
+		}
 	}
 
 	return r
@@ -99,9 +114,9 @@ const exposureExamples = 5
 
 // FindExposure reports what a domain or organization exposes that
 // deserves attention, grouped by kind: the services the services lens
-// finds, classed by port and type, its login and administration URLs, and
-// the unusual ports and certificate problems the services lens reports. It
-// reads only.
+// finds, classed by port, type and page title, its login and administration
+// URLs and URLs with a password in them (masked), and the unusual ports and
+// certificate problems the services lens reports. It reads only.
 func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 	limits LensLimits) (ExposureReport, error) {
 	var out ExposureReport
@@ -126,9 +141,25 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		}
 	}
 
+	// URLs and page titles come from the controlled footprint the services
+	// lens walked.
+	s, err := newScope(ctx, g, schema, root, limits, "exposure")
+	if err != nil {
+		return out, err
+	}
 	for _, svc := range services.Services {
 		label := serviceLabel(svc)
-		if i := classOfService(rules, svc); i >= 0 {
+		i := classOfService(rules, svc)
+		if i < 0 {
+			var title string
+			if i, title, err = s.classOfTitle(rules, svc.Service); err != nil {
+				return out, err
+			}
+			if i >= 0 {
+				label += fmt.Sprintf(" %q", title)
+			}
+		}
+		if i >= 0 {
 			note(&classes[i], label)
 		}
 		if len(svc.UnusualPorts) > 0 {
@@ -144,13 +175,14 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		}
 	}
 
-	// URLs come from the controlled footprint the services lens walked.
-	s, err := newScope(ctx, g, schema, root, limits, "exposure")
-	if err != nil {
-		return out, err
-	}
+	readTXT := slices.ContainsFunc(rules.Classes, func(c exposureClassRule) bool { return len(c.txts) > 0 })
 	for _, id := range s.order {
 		a := s.owned[id]
+		if a.Type == "FQDN" && readTXT {
+			if err := s.classifyTXT(rules, a, func(i int, example string) { note(&classes[i], example) }); err != nil {
+				return out, err
+			}
+		}
 		if !slices.Contains(rules.URLTypes, a.Type) {
 			continue
 		}
@@ -160,8 +192,9 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 			u = a.Key
 		}
 		for i, c := range rules.Classes {
-			if slices.ContainsFunc(c.res, func(re *regexp.Regexp) bool { return re.MatchString(u) }) {
-				note(&classes[i], u)
+			if slices.ContainsFunc(c.URLFields, func(f string) bool { return graph.ContentString(a, f) != "" }) ||
+				slices.ContainsFunc(c.res, func(re *regexp.Regexp) bool { return re.MatchString(u) }) {
+				note(&classes[i], maskURL(u))
 				break
 			}
 		}
@@ -195,6 +228,68 @@ func classOfService(rules exposureRules, svc ExposedService) int {
 		}
 	}
 	return -1
+}
+
+// classOfTitle returns the index of the first class whose title patterns
+// match a page title stored for svc, and the title, or -1. It reads svc's
+// properties only when a class has title patterns and reads remain.
+func (s *scope) classOfTitle(rules exposureRules, svc graph.Asset) (int, string, error) {
+	if rules.TitleProperty == "" || !slices.ContainsFunc(rules.Classes, func(c exposureClassRule) bool {
+		return len(c.titles) > 0
+	}) || s.spent() {
+		return -1, "", nil
+	}
+
+	s.report.Reads++
+	evidence, err := s.w.graph.Evidence(s.w.ctx, svc.ID, 100)
+	if err != nil {
+		return -1, "", err
+	}
+	for _, title := range propertyValues(evidence, rules.TitleProperty) {
+		for i, c := range rules.Classes {
+			if slices.ContainsFunc(c.titles, func(re *regexp.Regexp) bool { return re.MatchString(title) }) {
+				return i, title, nil
+			}
+		}
+	}
+	return -1, "", nil
+}
+
+// classifyTXT notes the TXT records stored for name that a class's TXT
+// patterns match, while reads remain.
+func (s *scope) classifyTXT(rules exposureRules, name graph.Asset, note func(int, string)) error {
+	if s.spent() {
+		return nil
+	}
+
+	s.report.Reads++
+	records, err := graph.TXTValues(s.w.ctx, s.w.graph, name.ID)
+	if err != nil {
+		return err
+	}
+	for _, rec := range records {
+		for i, c := range rules.Classes {
+			if slices.ContainsFunc(c.txts, func(re *regexp.Regexp) bool { return re.MatchString(rec) }) {
+				note(i, fmt.Sprintf("%s: %s", graph.FQDNName(name), rec))
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// maskURL hides a password written into a URL.
+func maskURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		if at := strings.LastIndex(raw, "@"); at >= 0 {
+			if scheme := strings.Index(raw, "://"); scheme >= 0 && scheme < at {
+				return raw[:scheme+3] + "xxxxx" + raw[at:]
+			}
+		}
+		return raw
+	}
+	return u.Redacted()
 }
 
 func serviceLabel(svc ExposedService) string {

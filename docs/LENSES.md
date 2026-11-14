@@ -316,11 +316,14 @@ amass lens exposure -d colgate.edu
 
 Groups what the domain or organization exposes into classes that deserve
 attention: remote access and shells (SSH, RDP, Telnet, VNC), databases,
-file sharing, infrastructure management interfaces, login and
-administration pages, services on unusual ports and services with expired
-or self-issued certificates. Each class says why it matters and lists
-examples. The classes, ports and URL patterns are in
-`internal/semantics/exposure.json`.
+file sharing, infrastructure management interfaces, URLs with a password
+written into them (shown masked), login and administration pages (found by
+URL path or by the page title a probe stored for a web service), TXT
+records that disclose internal details (Kubernetes ExternalDNS ownership
+records), services on unusual ports and services with expired or
+self-issued certificates.
+Each class says why it matters and lists examples. The classes, ports, URL,
+title and TXT patterns are in `internal/semantics/exposure.json`.
 
 ## Provider concentration
 
