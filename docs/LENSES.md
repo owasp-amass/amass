@@ -166,8 +166,9 @@ usually use, and certificates that have expired, expire within 30 days or were
 issued by their own subject. Services are what the HTTP, SSH and banner probes
 stored during past active enumerations, not a live scan. The Banner-Probes
 engine plugin connects to in-scope addresses on the SMTP, FTP, POP3 and IMAP
-ports and stores the greeting the server sends first; it reads only and never
-sends a command or credential. Its ports and greeting patterns, each citing the
+ports, including the implicit TLS ports 465, 993 and 995, and stores the
+greeting the server sends first, with the certificate a TLS port presented; it
+never sends a command or credential. Its ports and greeting patterns, each citing the
 protocol's RFC, are in
 `engine/plugins/service_discovery/banner_probes/protocols.json`. The header names, expected
 ports and warning period are in `internal/ai/semantics/services.json`.

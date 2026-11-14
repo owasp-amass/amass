@@ -7,6 +7,8 @@ package banner_probes
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -33,8 +35,10 @@ const (
 type protocol struct {
 	ServiceType string `json:"service_type"`
 	Ports       []int  `json:"ports"`
+	TLSPorts    []int  `json:"tls_ports,omitempty"`
 	Greeting    string `json:"greeting"`
 	Source      string `json:"source"`
+	TLSSource   string `json:"tls_source,omitempty"`
 	re          *regexp.Regexp
 }
 
@@ -47,10 +51,13 @@ type catalog struct {
 func (c catalog) validate() error {
 	seen := map[int]string{}
 	for i, p := range c.Protocols {
-		if p.ServiceType == "" || len(p.Ports) == 0 || !strings.HasPrefix(p.Source, "https://") {
+		if p.ServiceType == "" || len(p.Ports)+len(p.TLSPorts) == 0 || !strings.HasPrefix(p.Source, "https://") {
 			return fmt.Errorf("protocol %d: service_type, ports and a source are required", i)
 		}
-		for _, port := range p.Ports {
+		if len(p.TLSPorts) > 0 && !strings.HasPrefix(p.TLSSource, "https://") {
+			return fmt.Errorf("protocol %s: tls_ports need a tls_source", p.ServiceType)
+		}
+		for _, port := range append(slices.Clone(p.Ports), p.TLSPorts...) {
 			if port < 1 || port > 65535 {
 				return fmt.Errorf("protocol %s: port %d is out of range", p.ServiceType, port)
 			}
@@ -89,16 +96,28 @@ func (c catalog) probedPorts() []int {
 	var out []int
 	for _, p := range c.Protocols {
 		out = append(out, p.Ports...)
+		out = append(out, p.TLSPorts...)
 	}
 	slices.Sort(out)
 	return out
+}
+
+// tlsPort reports whether the server on port expects a TLS handshake first.
+func (c catalog) tlsPort(port int) bool {
+	for _, p := range c.Protocols {
+		if slices.Contains(p.TLSPorts, port) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // classify returns the protocol listed for port whose greeting the line
 // matches.
 func (c catalog) classify(port int, line string) (protocol, bool) {
 	for _, p := range c.Protocols {
-		if slices.Contains(p.Ports, port) && p.re.MatchString(line) {
+		if (slices.Contains(p.Ports, port) || slices.Contains(p.TLSPorts, port)) && p.re.MatchString(line) {
 			return p, true
 		}
 	}
@@ -113,16 +132,34 @@ type dialFunc func(ctx context.Context, network, address string) (net.Conn, erro
 var errNoGreeting = errors.New("no greeting")
 
 // readGreeting connects to addr and returns the first line the server
-// sends. It writes nothing to the connection.
-func readGreeting(ctx context.Context, dial dialFunc, addr string) (string, error) {
+// sends. With useTLS it completes a TLS handshake first and also returns the
+// certificates the server presented; they are recorded, not verified. It
+// writes nothing to the connection beyond the handshake.
+func readGreeting(ctx context.Context, dial dialFunc, addr string, useTLS bool) (string, []*x509.Certificate, error) {
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
 	conn, err := dial(dctx, "tcp", addr)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer func() { _ = conn.Close() }()
+
+	var certs []*x509.Certificate
+	if useTLS {
+		// The probe records whatever certificate is presented, as the HTTP
+		// probe does; it never trusts the connection.
+		tc := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+		hctx, hcancel := context.WithTimeout(ctx, readTimeout)
+		err := tc.HandshakeContext(hctx)
+		hcancel()
+		if err != nil {
+			return "", nil, err
+		}
+
+		certs = tc.ConnectionState().PeerCertificates
+		conn = tc
+	}
 
 	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 	line, err := bufio.NewReader(io.LimitReader(conn, maxGreeting)).ReadString('\n')
@@ -135,8 +172,8 @@ func readGreeting(ctx context.Context, dial dialFunc, addr string) (string, erro
 		if errors.As(err, &ne) && ne.Timeout() {
 			err = errNoGreeting
 		}
-		return "", err
+		return "", certs, err
 	}
 
-	return strings.ToValidUTF8(line, ""), nil
+	return strings.ToValidUTF8(line, ""), certs, nil
 }

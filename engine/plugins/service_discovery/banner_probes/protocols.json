@@ -1,14 +1,17 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "The protocols the banner probe recognizes from the greeting a server sends first, on connection, before the client says anything. For each, ports are the ports probed on in-scope addresses during active enumeration and greeting is a regular expression the first line must match; a match is stored as a Service of service_type with the line as its output. The probe only reads the greeting and closes the connection: it never sends a command or a credential. Each protocol cites the standard that defines its greeting. SSH (port 22) is probed by the SSH-Probes plugin. Add values here, not in Go code.",
+  "_about": "The protocols the banner probe recognizes from the greeting a server sends first, on connection, before the client says anything. For each, ports are the ports probed on in-scope addresses during active enumeration, tls_ports those where the server expects a TLS handshake before its greeting (implicit TLS), and greeting is a regular expression the first line must match; a match is stored as a Service of service_type with the line as its output, and on a TLS port with the certificate the server presented. The handshake does not verify the certificate: the probe records what is presented, it does not trust it. The probe only reads the greeting and closes the connection: it never sends a command or a credential. Each protocol cites the standard that defines its greeting. SSH (port 22) is probed by the SSH-Probes plugin. Add values here, not in Go code.",
   "protocols": [
-    {"service_type": "smtp", "ports": [25, 587], "greeting": "^220[ -]",
-      "source": "https://datatracker.ietf.org/doc/html/rfc5321#section-4.2"},
+    {"service_type": "smtp", "ports": [25, 587], "tls_ports": [465], "greeting": "^220[ -]",
+      "source": "https://datatracker.ietf.org/doc/html/rfc5321#section-4.2",
+      "tls_source": "https://datatracker.ietf.org/doc/html/rfc8314#section-3"},
     {"service_type": "ftp", "ports": [21], "greeting": "^220[ -]",
       "source": "https://datatracker.ietf.org/doc/html/rfc959"},
-    {"service_type": "pop3", "ports": [110], "greeting": "^\\+OK",
-      "source": "https://datatracker.ietf.org/doc/html/rfc1939#section-4"},
-    {"service_type": "imap", "ports": [143], "greeting": "^\\* (OK|PREAUTH)",
-      "source": "https://datatracker.ietf.org/doc/html/rfc9051#section-7.1"}
+    {"service_type": "pop3", "ports": [110], "tls_ports": [995], "greeting": "^\\+OK",
+      "source": "https://datatracker.ietf.org/doc/html/rfc1939#section-4",
+      "tls_source": "https://datatracker.ietf.org/doc/html/rfc8314#section-3"},
+    {"service_type": "imap", "ports": [143], "tls_ports": [993], "greeting": "^\\* (OK|PREAUTH)",
+      "source": "https://datatracker.ietf.org/doc/html/rfc9051#section-7.1",
+      "tls_source": "https://datatracker.ietf.org/doc/html/rfc8314#section-3"}
   ]
 }

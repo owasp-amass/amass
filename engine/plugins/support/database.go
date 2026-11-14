@@ -6,6 +6,7 @@ package support
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -211,4 +212,49 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		ToEntity:   match,
 	})
 	return match, err
+}
+
+// CreateCertificateChain stores the certificates a server presented, leaf
+// first, and returns the leaf's entity and certificate with the findings
+// that link each certificate to its issuer's.
+func CreateCertificateChain(sess et.Session, certs []*x509.Certificate) (*dbt.Entity, *x509.Certificate, []*Finding) {
+	if len(certs) == 0 {
+		return nil, nil, nil
+	}
+
+	dur := time.Duration(len(certs)*3) * time.Second
+	ctx, cancel := context.WithTimeout(sess.Ctx(), dur)
+	defer cancel()
+
+	var findings []*Finding
+	var prev, firstAsset *dbt.Entity
+	var firstCert *x509.Certificate
+	for _, cert := range certs {
+		c := X509ToOAMTLSCertificate(cert)
+		if c == nil {
+			break
+		}
+
+		a, err := sess.DB().CreateAsset(ctx, c)
+		if err != nil {
+			break
+		}
+
+		if prev == nil {
+			firstAsset = a
+			firstCert = cert
+		} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
+			findings = append(findings, &Finding{
+				From:     prev,
+				FromName: tls.SerialNumber,
+				To:       a,
+				ToName:   c.SerialNumber,
+				ToMeta:   cert,
+				Rel:      &oamgen.SimpleRelation{Name: "issuing_certificate"},
+			})
+		}
+		prev = a
+	}
+
+	return firstAsset, firstCert, findings
 }

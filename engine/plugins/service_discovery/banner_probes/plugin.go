@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package banner_probes records the services in-scope addresses announce in
-// the greeting a server sends on connection (SMTP, FTP, POP3, IMAP) during
-// active enumeration. It reads the greeting and closes the connection: no
-// command or credential is ever sent.
+// the greeting a server sends on connection (SMTP, FTP, POP3, IMAP), over TLS
+// on the implicit TLS ports, during active enumeration. It reads the
+// greeting and closes the connection: no command or credential is ever sent.
 package banner_probes
 
 import (
@@ -20,6 +20,7 @@ import (
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
 )
@@ -97,9 +98,7 @@ func (bp *bannerProbing) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	for _, port := range bp.cat.probedPorts() {
-		if f := bp.probe(e, e.Entity, ip, port); f != nil {
-			findings = append(findings, f)
-		}
+		findings = append(findings, bp.probe(e, e.Entity, ip, port)...)
 	}
 
 	support.MarkAssetMonitored(e.Session, e.Entity, bp.source)
@@ -110,16 +109,16 @@ func (bp *bannerProbing) check(e *et.Event) error {
 }
 
 // probe reads the greeting on ip's port and records the service it
-// announces.
-func (bp *bannerProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddress, port int) *support.Finding {
+// announces, with the certificate it presented on a TLS port.
+func (bp *bannerProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddress, port int) []*support.Finding {
 	dial := amassnet.NewDialContext(dialTimeout)
 	addr := net.JoinHostPort(ip.Address.String(), strconv.Itoa(port))
-	line, err := readGreeting(e.Session.Ctx(), func(ctx context.Context, network, address string) (net.Conn, error) {
+	line, certs, err := readGreeting(e.Session.Ctx(), func(ctx context.Context, network, address string) (net.Conn, error) {
 		e.Session.NetSem().Acquire()
 		defer e.Session.NetSem().Release()
 
 		return dial(ctx, network, address)
-	}, addr)
+	}, addr, bp.cat.tlsPort(port))
 	if err != nil {
 		return nil
 	}
@@ -136,11 +135,22 @@ func (bp *bannerProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAd
 	serv.OutputLen = len(line)
 	portrel := &oamgen.PortRelation{Name: "tcp_port_" + strconv.Itoa(port), PortNumber: port, Protocol: "TCP"}
 
-	svc, err := support.CreateServiceAsset(e.Session, entity, portrel, serv, nil)
-	if err != nil || svc == nil {
-		return nil
+	leaf, leafCert, findings := support.CreateCertificateChain(e.Session, certs)
+	var cert *oamcert.TLSCertificate
+	if leaf != nil {
+		cert, _ = leaf.Asset.(*oamcert.TLSCertificate)
 	}
 
-	return &support.Finding{From: entity, FromName: entity.Asset.Key(), To: svc, ToName: "Service: " + serv.ID,
-		Rel: portrel}
+	svc, err := support.CreateServiceAsset(e.Session, entity, portrel, serv, cert)
+	if err != nil || svc == nil {
+		return findings
+	}
+
+	findings = append(findings, &support.Finding{From: entity, FromName: entity.Asset.Key(), To: svc,
+		ToName: "Service: " + serv.ID, Rel: portrel})
+	if cert != nil {
+		findings = append(findings, &support.Finding{From: svc, FromName: "Service: " + serv.ID, To: leaf,
+			ToName: cert.SerialNumber, ToMeta: leafCert, Rel: &oamgen.SimpleRelation{Name: "certificate"}})
+	}
+	return findings
 }

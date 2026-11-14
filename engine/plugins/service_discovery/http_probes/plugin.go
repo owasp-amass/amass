@@ -191,51 +191,9 @@ func (hp *httpProbing) storeFingerprints(e *et.Event, svc *dbt.Entity, resp *ama
 }
 
 func (hp *httpProbing) createCertificates(sess et.Session, resp *amasshttp.Response) (*dbt.Entity, *x509.Certificate, []*support.Finding) {
-	var findings []*support.Finding
-
 	if resp.TLS == nil || !resp.TLS.HandshakeComplete {
-		return nil, nil, findings
+		return nil, nil, nil
 	}
 
-	count := len(resp.TLS.PeerCertificates)
-	if count == 0 {
-		return nil, nil, findings
-	}
-
-	dur := time.Duration(count*3) * time.Second
-	ctx, cancel := context.WithTimeout(sess.Ctx(), dur)
-	defer cancel()
-
-	var prev *dbt.Entity
-	var firstAsset *dbt.Entity
-	var firstCert *x509.Certificate
-	// traverse the certificate chain
-	for _, cert := range resp.TLS.PeerCertificates {
-		c := support.X509ToOAMTLSCertificate(cert)
-		if c == nil {
-			break
-		}
-
-		a, err := sess.DB().CreateAsset(ctx, c)
-		if err != nil {
-			break
-		}
-
-		if prev == nil {
-			firstAsset = a
-			firstCert = cert
-		} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
-			findings = append(findings, &support.Finding{
-				From:     prev,
-				FromName: tls.SerialNumber,
-				To:       a,
-				ToName:   c.SerialNumber,
-				ToMeta:   cert,
-				Rel:      &oamgen.SimpleRelation{Name: "issuing_certificate"},
-			})
-		}
-		prev = a
-	}
-
-	return firstAsset, firstCert, findings
+	return support.CreateCertificateChain(sess, resp.TLS.PeerCertificates)
 }

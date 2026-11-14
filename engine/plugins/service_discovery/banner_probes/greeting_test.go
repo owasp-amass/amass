@@ -6,7 +6,14 @@ package banner_probes
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
+	"math/big"
 	"net"
 	"testing"
 	"time"
@@ -48,6 +55,8 @@ func TestClassify(t *testing.T) {
 		{21, "220 (vsFTPd 3.0.5)", "ftp"},
 		{110, "+OK Dovecot ready.", "pop3"},
 		{143, "* OK [CAPABILITY IMAP4rev1] Dovecot ready.", "imap"},
+		{993, "* OK [CAPABILITY IMAP4rev1] Dovecot ready.", "imap"},
+		{465, "220 mx.example.com ESMTP Postfix", "smtp"},
 		// A greeting is read only as the protocol its port is listed for.
 		{110, "220 mx.example.com ESMTP", ""},
 		{25, "HTTP/1.1 400 Bad Request", ""},
@@ -93,7 +102,7 @@ func TestReadGreeting(t *testing.T) {
 		}
 	})
 
-	line, err := readGreeting(context.Background(), d.DialContext, addr)
+	line, _, err := readGreeting(context.Background(), d.DialContext, addr, false)
 	if err != nil || line != "220 mx.example.com ESMTP Exim 4.97 Sat, 14 Nov 2026 00:00:00 +0000" {
 		t.Errorf("greeting %q, %v", line, err)
 	}
@@ -107,7 +116,45 @@ func TestReadGreetingFromSilentServer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*readTimeout)
 	defer cancel()
-	if _, err := readGreeting(ctx, d.DialContext, addr); !errors.Is(err, errNoGreeting) {
+	if _, _, err := readGreeting(ctx, d.DialContext, addr, false); !errors.Is(err, errNoGreeting) {
 		t.Errorf("silent server: %v, want errNoGreeting", err)
+	}
+}
+
+// On an implicit TLS port the probe completes the handshake, records the
+// certificate presented (self-signed here, so never verified) and reads the
+// greeting inside the tunnel.
+func TestReadGreetingOverTLS(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{SerialNumber: big.NewInt(993), Subject: pkix.Name{CommonName: "imap.example.com"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
+
+	var d net.Dialer
+	addr := listen(t, func(c net.Conn) {
+		tc := tls.Server(c, cfg)
+		if err := tc.Handshake(); err != nil {
+			return
+		}
+		_, _ = tc.Write([]byte("* OK [CAPABILITY IMAP4rev1] Dovecot ready.\r\n"))
+		_ = tc.SetReadDeadline(time.Now().Add(time.Second))
+		if n, _ := tc.Read(make([]byte, 1)); n > 0 {
+			t.Error("the probe sent data inside the tunnel")
+		}
+	})
+
+	line, certs, err := readGreeting(context.Background(), d.DialContext, addr, true)
+	if err != nil || line != "* OK [CAPABILITY IMAP4rev1] Dovecot ready." {
+		t.Fatalf("greeting %q, %v", line, err)
+	}
+	if len(certs) != 1 || certs[0].Subject.CommonName != "imap.example.com" {
+		t.Errorf("certificates = %v", certs)
 	}
 }
