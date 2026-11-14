@@ -41,11 +41,16 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 	}
 
 	words := familyNameWords(f)
-	related, ownRelated := map[string]bool{}, map[string]bool{}
+	related, ownRelated, hosted := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, d := range f.RelatedDomains {
-		related[registeredDomain(d.Domain)] = true
-		if d.Own {
-			ownRelated[registeredDomain(d.Domain)] = true
+		rd := registeredDomain(d.Domain)
+		switch {
+		case d.Own:
+			ownRelated[rd] = true
+		case d.OwnNetwork:
+			hosted[rd] = true
+		default:
+			related[rd] = true
 		}
 	}
 
@@ -61,6 +66,10 @@ func applyFamily(r *ThirdPartyReport, f FamilyReport) {
 			(isDomain && ownRelated[registeredDomain(v.Vendor)]) ||
 			(!isDomain && institutionName(f, v.Vendor)):
 			r.InstitutionOwn = append(r.InstitutionOwn, v)
+		case isDomain && hosted[registeredDomain(v.Vendor)]:
+			// The institution's networks serve the domain, but nothing shows it
+			// controls it: a hosting company's customer is not its own.
+			r.Hosted = append(r.Hosted, v)
 		case in(affiliates) || (isDomain && related[registeredDomain(v.Vendor)]) ||
 			(!isDomain && initialsOfFamilyWord(v.Vendor, words)):
 			r.Affiliates = append(r.Affiliates, v)
@@ -259,5 +268,6 @@ func familyLines(r ThirdPartyReport) string {
 
 	list("The institution's own", r.InstitutionOwn)
 	list("Affiliated organizations and domains", r.Affiliates)
+	list("Domains hosted on the institution's networks (not shown to be its own)", r.Hosted)
 	return b.String()
 }
