@@ -26,6 +26,7 @@ type familyRules struct {
 	License         string   `json:"_license"`
 	About           string   `json:"_about"`
 	DepartmentWords []string `json:"department_words"`
+	UnitNouns       []string `json:"unit_nouns"`
 	GenericWords    []string `json:"generic_words"`
 	SampleNames     int      `json:"sample_names"`
 	SampleNetwork   int      `json:"sample_network"`
@@ -137,6 +138,9 @@ type familySearch struct {
 	holders  map[string][]string
 	cidrs    map[string]string
 	netNames map[string]int
+	// tied are the organizations tied to the domain, set once members are
+	// classified.
+	tied map[string]bool
 	// heldNames counts, for each organization holding a network, the
 	// sampled names resolving into any network it holds.
 	heldNames map[string]map[string]bool
@@ -882,6 +886,10 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 	if len(ties) == 0 {
 		return
 	}
+	s.tied = map[string]bool{}
+	for id := range ties {
+		s.tied[id] = true
+	}
 
 	main := ""
 	for id := range ties {
@@ -920,7 +928,7 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 	// NASA Jet Propulsion Laboratory) is the same department.
 	for i, m := range s.report.Members {
 		p := s.profiles[m.Organization.ID]
-		if m.Relation != FamilyOther || !s.hasUnitWord(p) {
+		if m.Relation != FamilyOther || (!s.hasUnitWord(p) && !s.endsInUnitNoun(p)) {
 			continue
 		}
 		for _, d := range s.report.Members {
@@ -969,7 +977,7 @@ type sameReason struct {
 func (s *familySearch) sameInstitution(main string, ties map[string][]string) map[string]sameReason {
 	ids := make([]string, 0, len(ties))
 	for id := range ties {
-		if !s.hasUnitWord(s.profiles[id]) {
+		if !s.isUnit(s.profiles[id]) {
 			ids = append(ids, id)
 		}
 	}
@@ -1185,7 +1193,70 @@ func (s *familySearch) isDepartment(p *familyProfile, domain string, words map[s
 		return false
 	}
 
-	return s.hasUnitWord(p)
+	return s.isUnit(p)
+}
+
+// isUnit reports whether an organization is a unit: its name carries one of
+// department_words, or extends another tied organization's name with words
+// ending in one of unit_nouns (unitOf).
+func (s *familySearch) isUnit(p *familyProfile) bool {
+	if s.hasUnitWord(p) {
+		return true
+	}
+	for id := range s.tied {
+		if q := s.profiles[id]; q != p && s.unitOf(p, q) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// unitOf reports whether p's name is q's name followed by a unit: all of
+// q's words are in p's name, and p adds words, the last of them one of
+// unit_nouns that q's name does not end with (a university's name and a
+// medical center, an agency's name and a research center). An institution
+// whose own name ends in a unit noun is not a unit of itself, because its
+// other spellings add no such word.
+func (s *familySearch) unitOf(p, q *familyProfile) bool {
+	stop := abbreviationStopWords()
+	for bp := range p.brands {
+		wp := strings.Fields(bp)
+		if len(wp) < 2 || !slices.Contains(s.rules.UnitNouns, wp[len(wp)-1]) {
+			continue
+		}
+		for bq := range q.brands {
+			wq := strings.Fields(bq)
+			if bq == bp || len(wq) == 0 || wq[len(wq)-1] == wp[len(wp)-1] ||
+				!nameVariant(bq, bp, s.rules.GenericWords) {
+				continue
+			}
+
+			extra := 0
+			for _, w := range wp {
+				if !slices.Contains(wq, w) && !slices.Contains(stop, w) {
+					extra++
+				}
+			}
+			if extra > 0 {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// endsInUnitNoun reports whether one of an organization's names ends in
+// one of unit_nouns.
+func (s *familySearch) endsInUnitNoun(p *familyProfile) bool {
+	for b := range p.brands {
+		if w := strings.Fields(b); len(w) > 1 && slices.Contains(s.rules.UnitNouns, w[len(w)-1]) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // hasUnitWord reports whether an organization's name carries one of

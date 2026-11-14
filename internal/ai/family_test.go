@@ -594,3 +594,35 @@ func TestFamilyUnitVariantsAndMemberNetworks(t *testing.T) {
 		t.Error("the institution's own network is listed as a provider's")
 	}
 }
+
+// A name that is the institution's followed by a unit is a department, and
+// an institution whose own name ends in a unit noun is still itself.
+func TestFamilyUnitsByName(t *testing.T) {
+	g := newBrandGraph()
+	g.org("ur", "university of rochester", "", "", "")
+	g.org("urmc", "university of rochester medical center", "", "", "")
+	g.fqdn("rochester.edu")
+	for i := 0; i < 3; i++ {
+		g.cert(fmt.Sprintf("u%d", i), fmt.Sprintf("www%d.rochester.edu", i), "ur")
+	}
+	g.cert("m0", "med.rochester.edu", "urmc")
+
+	_, rel, _ := familyOf(t, g.g, "rochester.edu")
+	if rel["urmc"] != FamilyDepartment {
+		t.Errorf("members = %v", rel)
+	}
+
+	c := newBrandGraph()
+	c.org("a", "memorial cancer center", "", "", "")
+	c.org("b", "memorial cancer center", "memorial cancer center, inc.", "", "")
+	c.fqdn("mcc.example")
+	for i := 0; i < 3; i++ {
+		c.cert(fmt.Sprintf("a%d", i), fmt.Sprintf("www%d.mcc.example", i), "a")
+	}
+	c.cert("b0", "portal.mcc.example", "b")
+
+	_, rel, _ = familyOf(t, c.g, "mcc.example")
+	if rel["b"] != FamilySame {
+		t.Errorf("an institution named like a unit was split from itself: %v", rel)
+	}
+}

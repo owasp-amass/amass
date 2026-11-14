@@ -74,9 +74,10 @@ It classifies each organization against the one with the most ties:
   the names have the same distinctive words and differ only in words such as
   college and university, as after Utica College became Utica University;
 - **department** when its name carries a department or role word (IT
-  services, hostmaster, school of, research center, laboratory), or it is a
-  shorter name of a department (Jet Propulsion Laboratory for NASA Jet
-  Propulsion Laboratory);
+  services, hostmaster, school of), or is another tied organization's name
+  followed by a unit such as a center, laboratory or hospital (University of
+  Rochester Medical Center for the University of Rochester), or is a shorter
+  name of a department that ends in such a word;
 - **affiliate** when its name shares a distinctive word with the
   institution's (generic words such as university or college do not count)
   or it registered the domain, for example the Johns Hopkins Medical
