@@ -54,13 +54,19 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 	if err != nil {
 		return err
 	}
+
+	people, err := j.PersonNamedEntries()
+	if err != nil {
+		return err
+	}
 	// Text unless JSON is asked for: -format defaults to json for search.
 	if explicit && format == "json" {
 		return writeJSON(out, struct {
-			Ownership  []ai.OwnershipEntry `json:"ownership"`
-			Merges     []ai.DuplicateEntry `json:"merges"`
-			Identities []ai.IdentityEntry  `json:"identities"`
-		}{entries, merges, identities})
+			Ownership   []ai.OwnershipEntry   `json:"ownership"`
+			Merges      []ai.DuplicateEntry   `json:"merges"`
+			Identities  []ai.IdentityEntry    `json:"identities"`
+			PersonNamed []ai.PersonNamedEntry `json:"person_named"`
+		}{entries, merges, identities, people})
 	}
 
 	_, err = fmt.Fprintln(out, ai.FormatOwnershipEntries(entries))
@@ -69,6 +75,10 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 	}
 	if err == nil && len(identities) > 0 {
 		_, err = fmt.Fprint(out, "\nIdentity corrections:\n\n"+ai.FormatIdentityEntries(identities))
+	}
+	if err == nil && len(people) > 0 {
+		_, err = fmt.Fprint(out, "\nOrganizations recorded under a person's name:\n\n"+
+			ai.FormatPersonNamedEntries(people))
 	}
 	return err
 }
@@ -107,6 +117,9 @@ func rejectProposal(journalPath, id, reviewer string, out io.Writer) error {
 	}
 	if isIdentityProposal(id) {
 		return rejectIdentity(journalPath, id, reviewer, out)
+	}
+	if isPersonNamedProposal(id) {
+		return rejectPersonNamed(journalPath, id, reviewer, out)
 	}
 
 	j := &ai.Journal{Path: journalPath}

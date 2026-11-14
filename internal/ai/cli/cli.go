@@ -37,7 +37,7 @@ const Description = "Ask questions with a language model, MCP tools, and model-a
 // attribution during enumeration runs in the engine.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
 	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
-	"identity-conflicts", "family", "vendors", "org-group", "group-vendors", "services"}
+	"identity-conflicts", "family", "vendors", "org-group", "group-vendors", "services", "person-named"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -368,6 +368,9 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	defer cancel()
 	switch operation {
 	case "approve":
+		if isPersonNamedProposal(proposalID) {
+			return approvePersonNamed(ctx, graph, journalPath, proposalID, reviewer, out)
+		}
 		if isIdentityProposal(proposalID) {
 			return approveIdentity(ctx, graph, journalPath, proposalID, reviewer, out)
 		}
@@ -376,6 +379,9 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		}
 		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
 	case "retract":
+		if isPersonNamedProposal(proposalID) {
+			return retractPersonNamed(ctx, graph, journalPath, proposalID, reviewer, out)
+		}
 		if isIdentityProposal(proposalID) {
 			return retractIdentity(ctx, graph, journalPath, proposalID, reviewer, out)
 		}
@@ -387,6 +393,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		return listDuplicates(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "identity-conflicts":
 		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+	case "person-named":
+		return listPersonNamed(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "vendors":
 		return listVendors(ctx, graph, domainName, ai.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads},
 			outputFormat, explicitFlags["format"], out)

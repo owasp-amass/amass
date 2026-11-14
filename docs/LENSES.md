@@ -21,6 +21,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
+| `amass lens person-named` | Organizations recorded under a person's name, recorded as removal proposals |
 | `amass review proposals` | Every proposal in the journal and its status |
 | `amass review approve -proposal <id> -reviewer <name>` | Apply a proposal |
 | `amass review reject -proposal <id> -reviewer <name>` | Decline a proposal; it is never applied automatically |
@@ -311,6 +312,24 @@ what only the enrichment source recorded and clears the legal fields;
 retracting restores them. Corrections are never applied automatically,
 because companies do rename and relocate. The enrichment sources and what
 they record are in `internal/ai/semantics/identity_checks.json`.
+
+## Organizations recorded under a person's name
+
+```bash
+amass lens person-named
+amass review approve -proposal pno-<id> -reviewer jeff
+amass review retract -proposal pno-<id> -reviewer jeff
+```
+
+A WHOIS contact with no organization was once stored with the person's name
+as an organization. The lens flags an organization only on evidence of that,
+not from how its name looks: one of its own contact records also names a Person
+with the same full name (in any word order), it has no legal name,
+jurisdiction or registration, and only domain registration records name it. A
+network registry or certificate naming it is evidence that it is an
+organization, so it is left alone. Approving deletes the organization and its
+relationships, keeping the person; retracting recreates it with its
+relationships and their sources. Removals are never applied automatically.
 
 ## Earlier command names
 
