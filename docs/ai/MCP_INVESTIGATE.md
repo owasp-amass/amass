@@ -94,13 +94,22 @@ whoever can start the process. Operator sessions use event streams so the
 server can ask for approval in the middle of a tool call.
 
 Approval: `start_enumeration` and the writing `review_proposal` decisions
-ask the user in the client's own dialog (MCP elicitation: an
-input-required result on protocol 2026-07-28, an `elicitation/create`
-request on earlier versions). A client that cannot show the dialog falls
-back to its own tool-call approval, helped by the tool annotations, unless
-`AMASS_AI_MCP_REQUIRE_CONFIRMATION=true`, which refuses instead. The dialog
-is a safeguard against a model acting on its own; the operator token is
-what authorizes a client. Each run records who approved it and how.
+ask the user first, in order of preference:
+
+1. the client's own dialog (MCP elicitation: an input-required result on
+   protocol 2026-07-28, an `elicitation/create` request on earlier
+   versions);
+2. from the HTTP server with `AMASS_AI_MCP_PUBLIC_URL` set, a one-time local
+   approval link (15 minutes) the assistant gives the user: the page shows
+   the action and carries it out only when the user presses Approve, a form
+   POST a model fetching the page cannot make;
+3. otherwise (stdio) the client's own tool-call approval, helped by the
+   tool annotations, unless `AMASS_AI_MCP_REQUIRE_CONFIRMATION=true`, which
+   refuses instead.
+
+These are safeguards against a model acting on its own; the operator token
+is what authorizes a client. Each run and decision records who approved it
+and how.
 
 Enumerations (`internal/collect`) are confined to the approved scope with
 no expansion. Active mode adds brute forcing, name alterations, zone

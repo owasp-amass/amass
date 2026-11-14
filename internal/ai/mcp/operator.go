@@ -27,8 +27,9 @@ import (
 // when it has an Operator, and the HTTP server only to clients that present
 // the operator token. Every tool that starts collection or writes to the
 // Asset Database asks the user to approve it in the client (MCP
-// elicitation) when the client can show such a dialog; clients that cannot
-// rely on their own tool-call approval, unless RequireConfirmation is set.
+// elicitation) when the client can show such a dialog, and otherwise at a
+// local approval link (HTTP) or through the client's own tool-call approval
+// (stdio), unless RequireConfirmation is set.
 type Operator struct {
 	Collect *collect.Manager
 	// Graph writes approved proposals; reads go through the runner.
@@ -37,9 +38,11 @@ type Operator struct {
 	Journal string
 	// DataSources is the datasources file credentials are stored in.
 	DataSources string
-	// KeyLinks serves one-time pages for entering credentials; nil when the
-	// server cannot serve pages (stdio).
-	KeyLinks *KeyLinks
+	// KeyLinks serves one-time pages for entering credentials, and
+	// Approvals pages for approving actions in a browser; both are nil when
+	// the server cannot serve pages (stdio).
+	KeyLinks  *KeyLinks
+	Approvals *ApprovalLinks
 	// RequireConfirmation refuses actions when the client cannot show an
 	// approval dialog.
 	RequireConfirmation bool
@@ -60,7 +63,7 @@ const (
 const operatorInstructions = `
 
 Operator mode: this connection may also act.
-- To collect data about a target that is missing or stale, call plan_enumeration (a domain, IP address, CIDR or AS number, and mode passive or active), show the user the plan's scope and effects, then call start_enumeration with the plan_id. The user is asked to approve it. Prefer passive; active contacts the target's hosts and needs the user's authorization to test them.
+- To collect data about a target that is missing or stale, call plan_enumeration (a domain, IP address, CIDR or AS number, and mode passive or active), show the user the plan's scope and effects, then call start_enumeration with the plan_id. The user is asked to approve it, in a dialog or at an approval_url you must give them. Prefer passive; active contacts the target's hosts and needs the user's authorization to test them.
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run.
 - list_proposals shows the ownership, merge, identity and person-named proposals awaiting review; review_proposal approves, rejects or retracts one (approving and retracting write to the database and ask the user first).
 - data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.`
@@ -143,16 +146,16 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 					"and show the user the new plan")
 			}
 			msg := fmt.Sprintf("Start a %s?\n\n%s", plan.Summary(), plan.Effects)
-			res, via := op.approve(req, msg)
-			if res != nil {
-				return res, nil
-			}
-			run, err := op.Collect.Start(ctx, plan, approver(req, via))
-			if err != nil {
-				return nil, err
-			}
-			return jsonResult(map[string]any{"run": run,
-				"next": "Check progress with enumeration_status; runs end on their own when the work is done."}), nil
+			return op.gate(req, msg, func(via string) (*mcp.CallToolResult, error) {
+				sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+				defer cancel()
+				run, err := op.Collect.Start(sctx, plan, approver(req, via))
+				if err != nil {
+					return nil, err
+				}
+				return jsonResult(map[string]any{"run": run,
+					"next": "Check progress with enumeration_status; runs end on their own when the work is done."}), nil
+			})
 		})
 
 	add(ToolEnumerationStatus, "Amass enumeration status",
@@ -240,20 +243,21 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Journal == "" {
 				return nil, errors.New("no review journal is configured")
 			}
-			via := "no write"
-			if a.Decision != lenscli.DecisionReject {
-				msg := fmt.Sprintf("%s proposal %s? This changes the Asset Database.",
-					strings.ToUpper(a.Decision[:1])+a.Decision[1:], a.ProposalID)
-				var res *mcp.CallToolResult
-				if res, via = op.approve(req, msg); res != nil {
-					return res, nil
+			decide := func(via string) (*mcp.CallToolResult, error) {
+				dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+				defer cancel()
+				text, err := lenscli.Decide(dctx, op.Graph, op.Journal, a.Decision, a.ProposalID, approver(req, via))
+				if err != nil {
+					return nil, err
 				}
+				return textResult(text), nil
 			}
-			text, err := lenscli.Decide(ctx, op.Graph, op.Journal, a.Decision, a.ProposalID, approver(req, via))
-			if err != nil {
-				return nil, err
+			if a.Decision == lenscli.DecisionReject || a.Decision == "" {
+				return decide("no write")
 			}
-			return textResult(text), nil
+			msg := fmt.Sprintf("%s proposal %s? This changes the Asset Database.",
+				strings.ToUpper(a.Decision[:1])+a.Decision[1:], a.ProposalID)
+			return op.gate(req, msg, decide)
 		})
 
 	add(ToolDataSources, "Amass data sources",
@@ -307,17 +311,20 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 // confirmKey names the approval input request.
 const confirmKey = "amass_approval"
 
-// approve asks the user to approve an action. It returns a result to send
-// instead of acting (a request for the user's input, or a refusal), or nil
-// and how the action was approved.
-func (op *Operator) approve(req *mcp.CallToolRequest, message string) (*mcp.CallToolResult, string) {
+// gate asks the user to approve an action and carries it out once they do.
+// In order of preference: the client's approval dialog (MCP elicitation), a
+// local approval link the user opens in a browser, or, when the server has
+// neither and does not require confirmation, the client's own tool-call
+// approval. act receives how the action was approved.
+func (op *Operator) gate(req *mcp.CallToolRequest, message string,
+	act func(via string) (*mcp.CallToolResult, error)) (*mcp.CallToolResult, error) {
 	if req.Params != nil {
 		if resp, ok := req.Params.InputResponses[confirmKey]; ok {
 			r, _ := resp.(*mcp.ElicitResult)
 			if r != nil && r.Action == "accept" && r.Content["approve"] == true {
-				return nil, "approval dialog"
+				return act("approval dialog")
 			}
-			return errorResult(errors.New("the user did not approve this action; nothing was done")), ""
+			return nil, errors.New("the user did not approve this action; nothing was done")
 		}
 	}
 
@@ -328,13 +335,41 @@ func (op *Operator) approve(req *mcp.CallToolRequest, message string) (*mcp.Call
 			RequestedSchema: map[string]any{"type": "object", "required": []string{"approve"},
 				"properties": map[string]any{"approve": map[string]any{"type": "boolean", "title": "Approve",
 					"description": "Check to approve this action", "default": false}}},
-		}}}, ""
+		}}}, nil
+	}
+	if op.Approvals != nil {
+		link, expires, err := op.Approvals.New(message, func() (string, error) {
+			res, err := act("approval link")
+			if err != nil {
+				return "", err
+			}
+			return resultText(res), nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return jsonResult(map[string]any{"status": "awaiting_approval", "approval_url": link,
+			"expires": expires.Format(time.RFC3339),
+			"next": "Nothing has happened yet. Ask the user to open approval_url in a browser on the computer " +
+				"running Amass and press Approve; then check the result (enumeration_status for an enumeration)."}), nil
 	}
 	if op.RequireConfirmation {
-		return errorResult(errors.New("this client cannot show an approval dialog (MCP elicitation), and the " +
-			"server requires one for this action; use a client that supports it")), ""
+		return nil, errors.New("this client cannot show an approval dialog (MCP elicitation), and the " +
+			"server requires one for this action; use a client that supports it")
 	}
-	return nil, "client tool approval"
+	return act("client tool approval")
+}
+
+func resultText(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	if res != nil {
+		for _, c := range res.Content {
+			if t, ok := c.(*mcp.TextContent); ok {
+				b.WriteString(t.Text)
+			}
+		}
+	}
+	return b.String()
 }
 
 func elicitable(req *mcp.CallToolRequest) bool {

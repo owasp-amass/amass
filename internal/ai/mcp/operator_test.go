@@ -97,7 +97,10 @@ func newOperatorFixture(t *testing.T) *operatorFixture {
 		KeyLinks: &KeyLinks{Path: sources}}
 	svc := NewHTTPServer(ai.ToolRunner{Limits: graph.DefaultLimits()}, readerToken)
 	svc.OperatorToken, svc.Operator = operatorToken, op
-	server := httptest.NewServer(svc.Handler())
+	// The mux is built per request so a test can add pages after start.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svc.Handler().ServeHTTP(w, r)
+	}))
 	t.Cleanup(server.Close)
 	op.KeyLinks.BaseURL = server.URL
 	return &operatorFixture{url: server.URL, engine: f, sources: sources, op: op}
@@ -447,5 +450,59 @@ func TestPlanForReadsTargets(t *testing.T) {
 	}
 	if p := planFor("example.com", "loud"); p.Status != collect.StatusUnsupported {
 		t.Errorf("unknown mode planned: %+v", p)
+	}
+}
+
+// Without an approval dialog, an HTTP server hands the assistant a link the
+// user opens to approve; nothing happens before they do.
+func TestApprovalLinks(t *testing.T) {
+	fx := newOperatorFixture(t)
+	fx.op.Approvals = &ApprovalLinks{BaseURL: fx.url}
+	cs := connect(t, fx.url, operatorToken, nil)
+	start := func() string {
+		id := planID(t, cs, "example.net", "passive")
+		text, isErr := call(t, cs, ToolStartEnumeration, map[string]any{"target": "example.net", "plan_id": id})
+		var out struct {
+			Status string
+			URL    string `json:"approval_url"`
+		}
+		if isErr || json.Unmarshal([]byte(text), &out) != nil || out.Status != "awaiting_approval" ||
+			!strings.HasPrefix(out.URL, fx.url+approvalPrefix) {
+			t.Fatalf("start = %s", text)
+		}
+		return out.URL
+	}
+
+	link := start()
+	if fx.engine.count() != 0 {
+		t.Fatal("an enumeration started before approval")
+	}
+	page, err := http.Get(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(page.Body)
+	_ = page.Body.Close()
+	if !strings.Contains(string(body), "PASSIVE enumeration of domain example.net") || fx.engine.count() != 0 {
+		t.Fatalf("approval page: %s", body)
+	}
+	if resp, err := http.PostForm(link, url.Values{"decision": {"decline"}}); err != nil || fx.engine.count() != 0 {
+		t.Fatalf("decline: %v", err)
+	} else {
+		_ = resp.Body.Close()
+	}
+
+	link = start()
+	resp, err := http.PostForm(link, url.Values{"decision": {"approve"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if fx.engine.count() != 1 || !strings.Contains(string(body), "approval link") {
+		t.Fatalf("approve: %s", body)
+	}
+	if resp, _ := http.PostForm(link, url.Values{"decision": {"approve"}}); resp.StatusCode != 404 || fx.engine.count() != 1 {
+		t.Error("an approval link worked twice")
 	}
 }

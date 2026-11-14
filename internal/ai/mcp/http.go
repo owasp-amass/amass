@@ -151,6 +151,9 @@ func (s *HTTPServer) Handler() http.Handler {
 	if s.Operator != nil && s.Operator.KeyLinks != nil {
 		mux.Handle(keyLinkPrefix, s.Operator.KeyLinks)
 	}
+	if s.Operator != nil && s.Operator.Approvals != nil {
+		mux.Handle(approvalPrefix, s.Operator.Approvals)
+	}
 	if s.Viz != nil {
 		mux.Handle(vizLinkPrefix, s.Viz)
 	}

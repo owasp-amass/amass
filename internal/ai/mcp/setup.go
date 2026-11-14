@@ -71,6 +71,9 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 	}()
 
 	op := &Operator{Collect: m, Graph: g, Journal: journal, RequireConfirmation: opts.RequireConfirmation}
+	if opts.PublicURL != "" {
+		op.Approvals = &ApprovalLinks{BaseURL: opts.PublicURL}
+	}
 	if path, err := collect.DataSourcesPath(cfg); err == nil {
 		op.DataSources = path
 		if opts.PublicURL != "" {
