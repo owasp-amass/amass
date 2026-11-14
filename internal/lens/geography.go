@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
@@ -48,6 +49,9 @@ type geographyRules struct {
 	CountryField  string   `json:"country_field"`
 	CityField     string   `json:"city_field"`
 	Unknown       string   `json:"unknown"`
+	// PartyLocationPaths are the steps ("in organization") tried, in order,
+	// from a hosting party with no location of its own.
+	PartyLocationPaths [][]string `json:"party_location_paths"`
 }
 
 var loadGeographyRules = sync.OnceValue(func() geographyRules {
@@ -57,6 +61,13 @@ var loadGeographyRules = sync.OnceValue(func() geographyRules {
 	}
 	if len(r.LocationTypes) == 0 || r.CountryField == "" || r.Unknown == "" {
 		panic("geography.json: location_types, country_field and unknown are required")
+	}
+	for _, path := range r.PartyLocationPaths {
+		for _, step := range path {
+			if dir, label, ok := strings.Cut(step, " "); !ok || (dir != "in" && dir != "out") || label == "" {
+				panic("geography.json: a party location step is a direction (in or out) and a label: " + step)
+			}
+		}
 	}
 
 	return r
@@ -110,6 +121,9 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 				if locs, err := s.locations(party, rules); err == nil && len(locs) > 0 {
 					c = country(locs[0], rules)
 				}
+				if c == rules.Unknown {
+					c = s.partyCountry(party, rules)
+				}
 			}
 		}
 		grp, ok := hosting[c]
@@ -150,6 +164,54 @@ func (s *scope) locations(a graph.Asset, rules geographyRules) ([]graph.Asset, e
 		}
 	}
 	return out, nil
+}
+
+// partyLocationEdges bounds the edges read at each step of a party location
+// path.
+const partyLocationEdges = 20
+
+// partyCountry follows the party location paths from a party and returns
+// the country of the first location reached that has one.
+func (s *scope) partyCountry(party graph.Asset, rules geographyRules) string {
+	bounded, ok := s.w.graph.(graph.BoundedGraph)
+	if !ok {
+		return rules.Unknown
+	}
+	for _, path := range rules.PartyLocationPaths {
+		frontier := []string{party.ID}
+		for _, step := range path {
+			dir, label, _ := strings.Cut(step, " ")
+			var next []string
+			for _, id := range frontier {
+				if s.spent() {
+					return rules.Unknown
+				}
+				s.report.Reads++
+				edges, _, err := bounded.EdgesLimited(s.w.ctx, id, dir, label, time.Time{}, partyLocationEdges)
+				if err != nil {
+					break
+				}
+				for _, e := range edges {
+					if dir == "out" {
+						next = append(next, e.ToID)
+					} else {
+						next = append(next, e.FromID)
+					}
+				}
+			}
+			frontier = next
+		}
+		for _, id := range frontier {
+			s.report.Reads++
+			l, err := s.w.graph.GetAsset(s.w.ctx, id)
+			if err == nil && slices.Contains(rules.LocationTypes, l.Type) {
+				if c := country(l, rules); c != rules.Unknown {
+					return c
+				}
+			}
+		}
+	}
+	return rules.Unknown
 }
 
 func country(l graph.Asset, rules geographyRules) string {

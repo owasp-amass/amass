@@ -167,6 +167,26 @@ func TestFindGeography(t *testing.T) {
 	if hosted["its own networks"] != 1 {
 		t.Errorf("hosting = %+v", r.Hosting)
 	}
+
+	// A hosting party with no location of its own is placed by its
+	// registration's registrant.
+	g.Assets["cr-cdn"] = graph.Asset{ID: "cr-cdn", Type: "ContactRecord", Key: "cr-cdn"}
+	g.Assets["loc-cdn"] = graph.Asset{ID: "loc-cdn", Type: "Location", Key: "1 Market St",
+		Content: map[string]any{"address": "1 Market St", "city": "San Francisco", "country": "us"}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "cdn-reg", FromID: "autnum-cdn", ToID: "cr-cdn", Label: "registrant", Type: "SimpleRelation"},
+		graph.Relation{ID: "cdn-loc", FromID: "cr-cdn", ToID: "loc-cdn", Label: "location", Type: "SimpleRelation"})
+	r, err = FindGeography(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosted = map[string]int{}
+	for _, h := range r.Hosting {
+		hosted[h.Key] = h.Count
+	}
+	if hosted["US"] != 1 || hosted["unknown"] != 0 {
+		t.Errorf("hosting after registrant = %+v", r.Hosting)
+	}
 }
 
 func TestFindShared(t *testing.T) {
