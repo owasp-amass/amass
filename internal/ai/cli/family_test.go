@@ -55,15 +55,19 @@ func TestFamilyDepartmentProposal(t *testing.T) {
 
 	ua := create(&oamorg.Organization{ID: "ua:1", Name: "university at albany"})
 	its := create(&oamorg.Organization{ID: "ua:2", Name: "ualbany its enterprise infrastructure"})
-	create(&oamdns.FQDN{Name: "albany.edu"})
+	apex := create(&oamdns.FQDN{Name: "albany.edu"})
+	www := create(&oamdns.FQDN{Name: "www.albany.edu"})
+	link(apex, www, "node")
 
 	cert := create(&oamcert.TLSCertificate{Version: "3", SerialNumber: "1", SubjectCommonName: "www.albany.edu",
 		IssuerCommonName: "R11", NotBefore: "2026-01-01T00:00:00Z", NotAfter: "2027-01-01T00:00:00Z"})
+	link(cert, www, "common_name")
 	crCert := create(&contact.ContactRecord{DiscoveredAt: "cert"})
 	link(cert, crCert, "subject_contact")
 	link(crCert, ua, "organization")
 
 	dr := create(&oamreg.DomainRecord{Domain: "albany.edu", Name: "albany.edu", ID: "albany.edu"})
+	link(apex, dr, "registration")
 	crITS := create(&contact.ContactRecord{DiscoveredAt: "whois"})
 	link(dr, crITS, "technical_contact")
 	link(crITS, its, "organization")

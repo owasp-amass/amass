@@ -59,11 +59,16 @@ func familyGraph() fakeGraph {
 		a("cr-"+cert, "ContactRecord", nil)
 		g.link(cert, "cr-"+cert, "subject_contact")
 		g.link("cr-"+cert, "jhu", "organization")
+		name := fmt.Sprintf("www%d.jhu.edu", i)
+		fqdn(name)
+		g.link("jhu.edu", name, "node")
+		g.link(cert, name, "common_name")
 	}
 
 	// The IT department is the domain's technical contact, with a jhu.edu
 	// address.
 	a("dr-jhu", "DomainRecord", map[string]any{"domain": "jhu.edu"})
+	g.link("jhu.edu", "dr-jhu", "registration")
 	a("cr-its", "ContactRecord", nil)
 	g.link("dr-jhu", "cr-its", "technical_contact")
 	g.link("cr-its", "its", "organization")
@@ -85,6 +90,7 @@ func familyGraph() fakeGraph {
 	// address; and a placeholder certificate subject.
 	g.org("person", "eric torgersen", "", "", "")
 	a("dr-reg", "DomainRecord", map[string]any{"domain": "jhu.edu"})
+	g.link("jhu.edu", "dr-reg", "registration")
 	a("cr-person", "ContactRecord", nil)
 	g.link("dr-reg", "cr-person", "registrant_contact")
 	g.link("cr-person", "person", "organization")
@@ -93,6 +99,9 @@ func familyGraph() fakeGraph {
 	g.link("cr-person", "loc-1", "location")
 	g.org("unspecified", "unspecified", "", "", "")
 	a("cert-u", "TLSCertificate", map[string]any{"subject_common_name": "x.jhu.edu"})
+	fqdn("x.jhu.edu")
+	g.link("jhu.edu", "x.jhu.edu", "node")
+	g.link("cert-u", "x.jhu.edu", "common_name")
 	a("cr-cert-u", "ContactRecord", nil)
 	g.link("cert-u", "cr-cert-u", "subject_contact")
 	g.link("cr-cert-u", "unspecified", "organization")
@@ -243,6 +252,11 @@ func TestFindOrganizationFamilyOfCompany(t *testing.T) {
 		a("cr-"+id, "ContactRecord", nil)
 		g.link(id, "cr-"+id, "subject_contact")
 		g.link("cr-"+id, org, "organization")
+		if _, ok := g.g.assets[cn]; !ok {
+			a(cn, "FQDN", map[string]any{"name": cn})
+			g.link("acme.example", cn, "node")
+		}
+		g.link(id, cn, "common_name")
 	}
 
 	g.org("acme", "acme robotics holdings", "acme robotics holdings, inc.", "US-DE", "7")
@@ -261,6 +275,7 @@ func TestFindOrganizationFamilyOfCompany(t *testing.T) {
 	cert("cg", "shop.acme.example", "generic")
 
 	a("dr", "DomainRecord", map[string]any{"domain": "acme.example"})
+	g.link("acme.example", "dr", "registration")
 	a("cr-sec", "ContactRecord", nil)
 	g.link("dr", "cr-sec", "technical_contact")
 	g.link("cr-sec", "secops", "organization")
@@ -366,16 +381,33 @@ func (g brandGraph) serve(domain, block, prefix string, n int, octet int) {
 	}
 }
 
+// cert stores a certificate naming org for cn, linked to cn as the engine
+// links it, with cn stored under its registered domain when that is stored.
 func (g brandGraph) cert(id, cn, org string) {
 	g.asset(id, "TLSCertificate", map[string]any{"subject_common_name": cn})
 	g.asset("cr-"+id, "ContactRecord", nil)
 	g.link(id, "cr-"+id, "subject_contact")
 	g.link("cr-"+id, org, "organization")
+
+	name := strings.TrimPrefix(cn, "*.")
+	if _, ok := g.g.assets[name]; !ok {
+		g.fqdn(name)
+		if root := registeredDomain(name); root != name {
+			if _, ok := g.g.assets[root]; ok {
+				g.link(root, name, "node")
+			}
+		}
+	}
+	g.link(id, name, "common_name")
 }
 
+// registers stores a registration record of each domain naming org as its
+// registrant, linked from the domain.
 func (g brandGraph) registers(org string, domains ...string) {
 	for _, d := range domains {
+		g.fqdn(d)
 		g.asset("dr-"+d, "DomainRecord", map[string]any{"domain": d})
+		g.link(d, "dr-"+d, "registration")
 		g.asset("cr-dr-"+d, "ContactRecord", nil)
 		g.link("dr-"+d, "cr-dr-"+d, "registrant_contact")
 		g.link("cr-dr-"+d, org, "organization")
@@ -631,5 +663,34 @@ func TestFamilyUnitsByName(t *testing.T) {
 	_, rel, _ = familyOf(t, c.g, "mcc.example")
 	if rel["b"] != FamilySame {
 		t.Errorf("an institution named like a unit was split from itself: %v", rel)
+	}
+}
+
+// The lens reads outward from the domain, so organizations that have
+// nothing to do with it cost no reads, however many are stored.
+func TestFamilyReadsDoNotGrowWithUnrelatedOrganizations(t *testing.T) {
+	reads := func(unrelated int) int {
+		g := newBrandGraph()
+		g.org("acme", "acme widgets", "", "", "")
+		g.registers("acme", "acme.example")
+		for i := 0; i < 3; i++ {
+			g.cert(fmt.Sprintf("a%d", i), fmt.Sprintf("www%d.acme.example", i), "acme")
+		}
+		for i := 0; i < unrelated; i++ {
+			id := fmt.Sprintf("other%d", i)
+			g.org(id, fmt.Sprintf("other company %d", i), "", "", "")
+			g.registers(id, fmt.Sprintf("other%d.example", i))
+			g.cert("c-"+id, fmt.Sprintf("www.other%d.example", i), id)
+		}
+
+		r, rel, _ := familyOf(t, g.g, "acme.example")
+		if r.Main == nil || r.Main.ID != "acme" || len(rel) != 1 {
+			t.Fatalf("main = %+v, members = %v", r.Main, rel)
+		}
+		return r.Reads
+	}
+
+	if few, many := reads(10), reads(1000); few != many {
+		t.Errorf("reads grew with unrelated organizations: %d with 10, %d with 1000", few, many)
 	}
 }

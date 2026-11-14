@@ -93,6 +93,11 @@ institution in the report, but only a name variant is proposed for merging:
 a registrant who is a person can share the institution's address, and a
 renamed institution's records may be worth keeping apart.
 
+The lens reads outward from the domain: its registration records, the
+certificates for its sampled names and the records of the networks those
+names resolve into. Only the organizations reached that way are compared, so
+a run costs the same however many other organizations the database holds.
+
 The report also lists the networks serving the domain and the other
 registered domains on dedicated networks the family holds. A domain on one
 of the institution's own networks is its own only when one of its

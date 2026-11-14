@@ -56,6 +56,9 @@ func TestOrganizationFamilyOnSQLite(t *testing.T) {
 	f.edge(crNet, arin, "organization", "RDAP")
 
 	apex := f.asset(&oamdns.FQDN{Name: "clarkson.edu"})
+	www := f.asset(&oamdns.FQDN{Name: "www.clarkson.edu"})
+	f.edge(apex, www, "node", "DNS")
+	f.edge(cert, www, "common_name", "TLSCertificate")
 	for i := 0; i < 6; i++ {
 		name := f.asset(&oamdns.FQDN{Name: fmt.Sprintf("h%d.clarkson.edu", i)})
 		f.edge(apex, name, "node", "DNS")
