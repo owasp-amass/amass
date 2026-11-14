@@ -32,6 +32,9 @@ type Server struct {
 	Runner   ai.ToolRunner
 	Model    llm.Model
 	Evidence *ai.EvidenceStore
+	// Operator, when set, adds the tools that start enumerations, review
+	// proposals and manage data sources.
+	Operator *Operator
 }
 
 // Serve runs one MCP session over in and out until the client disconnects
@@ -41,7 +44,7 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		s.Evidence = ai.NewEvidenceStore()
 	}
 
-	server := newSDKServer(s.Runner, s.Model, s.Evidence)
+	server := newSDKServer(s.Runner, s.Model, s.Evidence, s.Operator)
 	reader := &eofReader{Reader: in}
 	err := server.Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(reader), Writer: nopWriteCloser{out}})
 	if err != nil && reader.closed() && ctx.Err() == nil {
@@ -84,9 +87,13 @@ func (nopWriteCloser) Close() error { return nil }
 
 // newSDKServer builds an MCP server with every read-only tool: the graph
 // tools and the investigation tools.
-func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore) *mcp.Server {
+func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, op *Operator) *mcp.Server {
+	instructions := serverInstructions
+	if op != nil {
+		instructions += operatorInstructions
+	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
-		&mcp.ServerOptions{GetSessionID: newSessionID, Instructions: serverInstructions})
+		&mcp.ServerOptions{GetSessionID: newSessionID, Instructions: instructions})
 	for _, spec := range toolSpecs(runner) {
 		name := spec.Name
 		server.AddTool(&mcp.Tool{Name: name, Description: spec.Description, InputSchema: spec.Parameters},
@@ -116,6 +123,9 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 	if runner.Catalog != nil {
 		// The prompts ask for the investigate tool, which needs the catalog.
 		addPrompts(server)
+	}
+	if op != nil {
+		addOperatorTools(server, op, runner)
 	}
 	return server
 }

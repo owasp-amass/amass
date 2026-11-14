@@ -19,17 +19,22 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
-// HTTPServer serves read-only MCP over Streamable HTTP (JSON responses)
-// with the MCP Go SDK, behind Amass's checks: a bearer token is required
-// even when Docker publishes only on loopback, browser origins must be
-// local, request bodies are bounded, and sessions expire when idle and are
-// capped. Sessions are in memory and never authorize writes.
+// HTTPServer serves MCP over Streamable HTTP with the MCP Go SDK, behind
+// Amass's checks: a bearer token is required even when Docker publishes only
+// on loopback, browser origins must be local, request bodies are bounded,
+// and sessions expire when idle and are capped. Clients presenting Token get
+// the read-only tools (JSON responses); clients presenting OperatorToken,
+// when an Operator is configured, also get the operator tools, served with
+// event streams so the server can ask the user to approve an action.
 type HTTPServer struct {
 	Runner ai.ToolRunner
 	// Model is optional; see Server.
 	Model    llm.Model
 	Evidence *ai.EvidenceStore
 	Token    string
+	// OperatorToken and Operator enable operator mode; see Operator.
+	OperatorToken string
+	Operator      *Operator
 	// SessionTTL is how long an idle session stays valid; MaxSessions caps
 	// concurrent sessions (the least recently used is evicted first).
 	SessionTTL  time.Duration
@@ -39,10 +44,12 @@ type HTTPServer struct {
 	sessions    map[string]*mcpSession
 	once        sync.Once
 	sdk         http.Handler
+	sdkOperator http.Handler
 }
 
 type mcpSession struct {
 	lastSeen time.Time
+	operator bool
 }
 
 // Session defaults bound memory held for authenticated clients that never
@@ -76,7 +83,7 @@ func (s *HTTPServer) ttl() time.Duration {
 // addSession registers id, first dropping expired sessions and, at the cap,
 // the least recently used one, and returns the dropped IDs. The caller holds
 // s.mu.
-func (s *HTTPServer) addSession(id string) []string {
+func (s *HTTPServer) addSession(id string, operator bool) []string {
 	var dropped []string
 	now := s.clock()
 	for key, sess := range s.sessions {
@@ -102,7 +109,7 @@ func (s *HTTPServer) addSession(id string) []string {
 		dropped = append(dropped, oldest)
 	}
 
-	s.sessions[id] = &mcpSession{lastSeen: now}
+	s.sessions[id] = &mcpSession{lastSeen: now, operator: operator}
 	return dropped
 }
 
@@ -135,9 +142,13 @@ func (s *HTTPServer) Handler() http.Handler {
 			return
 		}
 
-		mcpJSON(w, 200, map[string]any{"status": "ready", "transport": "streamable-http", "access": "read_only"})
+		mcpJSON(w, 200, map[string]any{"status": "ready", "transport": "streamable-http", "access": "read_only",
+			"operator": s.Operator != nil && len(s.OperatorToken) >= 32})
 	})
 	mux.HandleFunc("/mcp", s.handleMCP)
+	if s.Operator != nil && s.Operator.KeyLinks != nil {
+		mux.Handle(keyLinkPrefix, s.Operator.KeyLinks)
+	}
 	return mux
 }
 
@@ -176,8 +187,11 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expected := "Bearer " + s.Token
-	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(expected)) != 1 {
+	got := []byte(r.Header.Get("Authorization"))
+	reader := subtle.ConstantTimeCompare(got, []byte("Bearer "+s.Token)) == 1
+	operator := s.Operator != nil && len(s.OperatorToken) >= 32 &&
+		subtle.ConstantTimeCompare(got, []byte("Bearer "+s.OperatorToken)) == 1
+	if !reader && !operator {
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -194,14 +208,18 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	session := r.Header.Get("Mcp-Session-Id")
 	if session != "" {
 		s.mu.Lock()
-		live := s.touchSession(session) != nil
+		sess := s.touchSession(session)
+		// A session belongs to the token that opened it.
+		live := sess != nil && sess.operator == operator
 		if live && r.Method == http.MethodDelete {
 			delete(s.sessions, session)
 		}
 
 		s.mu.Unlock()
 		if !live {
-			s.closeSDKSession(session)
+			if sess == nil {
+				s.closeSDKSession(session)
+			}
 			http.Error(w, "MCP session missing or expired", http.StatusNotFound)
 			return
 		}
@@ -211,27 +229,31 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	handler := s.sdkHandler(operator)
 	if session != "" {
-		s.sdkHandler().ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 		return
 	}
 
 	// A request without a session can only be initialize; admit the session
 	// the SDK creates, evicting the least recently used one at the cap.
-	rec := &sessionRecorder{ResponseWriter: w}
-	s.sdkHandler().ServeHTTP(rec, r)
-	if id := rec.Header().Get("Mcp-Session-Id"); id != "" && rec.status < 300 {
+	// The session is admitted as its headers go out, before the client can
+	// read the reply and send its next request.
+	var evicted []string
+	rec := &sessionRecorder{ResponseWriter: w, admit: func(id string) {
 		s.mu.Lock()
-		evicted := s.addSession(id)
+		evicted = s.addSession(id, operator)
 		s.mu.Unlock()
-		for _, old := range evicted {
-			s.closeSDKSession(old)
-		}
+	}}
+	handler.ServeHTTP(rec, r)
+	for _, old := range evicted {
+		s.closeSDKSession(old)
 	}
 }
 
-// sdkHandler returns the SDK's Streamable HTTP handler, built once.
-func (s *HTTPServer) sdkHandler() http.Handler {
+// sdkHandler returns the SDK's Streamable HTTP handler for the read-only or
+// the operator tools, both built once.
+func (s *HTTPServer) sdkHandler(operator bool) http.Handler {
 	s.once.Do(func() {
 		s.mu.Lock()
 		if s.Evidence == nil {
@@ -240,43 +262,66 @@ func (s *HTTPServer) sdkHandler() http.Handler {
 
 		store := s.Evidence
 		s.mu.Unlock()
-		server := newSDKServer(s.Runner, s.Model, store)
-		s.sdk = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
+		reader := newSDKServer(s.Runner, s.Model, store, nil)
+		s.sdk = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return reader },
 			&mcp.StreamableHTTPOptions{JSONResponse: true, SessionTimeout: s.ttl()})
+		if s.Operator != nil {
+			// Event streams let the server ask the user to approve an action
+			// in the middle of a tool call (MCP elicitation).
+			op := newSDKServer(s.Runner, s.Model, store, s.Operator)
+			s.sdkOperator = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return op },
+				&mcp.StreamableHTTPOptions{SessionTimeout: s.ttl()})
+		}
 	})
 
+	if operator && s.sdkOperator != nil {
+		return s.sdkOperator
+	}
 	return s.sdk
 }
 
 // closeSDKSession ends a session in the SDK after Amass expires or evicts it.
+// The session ID is unique, so it is closed in whichever handler holds it.
 func (s *HTTPServer) closeSDKSession(id string) {
 	if id == "" {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, "/mcp", nil)
-	if err != nil {
-		return
-	}
+	for _, operator := range []bool{false, true} {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, "/mcp", nil)
+		if err != nil {
+			return
+		}
 
-	req.Header.Set("Mcp-Session-Id", id)
-	s.sdkHandler().ServeHTTP(discardResponse{header: http.Header{}}, req)
+		req.Header.Set("Mcp-Session-Id", id)
+		s.sdkHandler(operator).ServeHTTP(discardResponse{header: http.Header{}}, req)
+		if s.sdkOperator == nil {
+			return
+		}
+	}
 }
 
-// sessionRecorder notes the status the SDK writes.
+// sessionRecorder notes the status the SDK writes and admits a new session
+// when a successful reply names one.
 type sessionRecorder struct {
 	http.ResponseWriter
 	status int
+	admit  func(id string)
 }
 
 func (r *sessionRecorder) WriteHeader(code int) {
-	r.status = code
+	if r.status == 0 {
+		r.status = code
+		if id := r.Header().Get("Mcp-Session-Id"); id != "" && code < 300 && r.admit != nil {
+			r.admit(id)
+		}
+	}
 	r.ResponseWriter.WriteHeader(code)
 }
 
 func (r *sessionRecorder) Write(b []byte) (int, error) {
 	if r.status == 0 {
-		r.status = http.StatusOK
+		r.WriteHeader(http.StatusOK)
 	}
 
 	return r.ResponseWriter.Write(b)

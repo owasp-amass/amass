@@ -51,13 +51,36 @@ func run() error {
 	}
 
 	defer func() { _ = repo.Close() }()
+	g := oamrepo.Adapter{Repo: repo, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
 	server := mcp.NewHTTPServer(ai.ToolRunner{
-		Graph:   oamrepo.Adapter{Repo: repo, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)},
+		Graph:   g,
 		Catalog: oamrepo.Catalog{},
 		Limits:  graph.DefaultLimits(),
 		// The vendors lens reports TXT tokens the DNS-SD plugin does not know.
 		KnownVerification: dnssd.IsVerificationRecord,
 	}, token)
+
+	// Operator mode: a second, different token unlocks the tools that start
+	// enumerations, review proposals and manage data sources.
+	if opToken := os.Getenv("AMASS_AI_MCP_OPERATOR_TOKEN"); opToken != "" {
+		if len(opToken) < 32 || opToken == token {
+			return errors.New("AMASS_AI_MCP_OPERATOR_TOKEN must be a strong random secret (at least 32 " +
+				"characters) different from AMASS_AI_MCP_TOKEN")
+		}
+		op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{
+			ConfigFile:          *cfgFile,
+			RunJournal:          os.Getenv("AMASS_AI_MCP_RUN_JOURNAL"),
+			PublicURL:           os.Getenv("AMASS_AI_MCP_PUBLIC_URL"),
+			RequireConfirmation: os.Getenv("AMASS_AI_MCP_REQUIRE_CONFIRMATION") == "true",
+		})
+		if err != nil {
+			return fmt.Errorf("operator mode: %w", err)
+		}
+		defer release()
+		server.OperatorToken, server.Operator = opToken, op
+		fmt.Fprintln(os.Stderr, "mcp: operator mode enabled for the operator token")
+	}
+
 	httpServer := &http.Server{
 		Addr:              *addr,
 		Handler:           server.Handler(),

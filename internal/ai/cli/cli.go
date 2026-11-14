@@ -78,7 +78,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	var modelTimeout, investigationTimeout time.Duration
 	var maxTokens, contextTokens int
 	var temperatureFlag string
-	var think, showTrace, narrate bool
+	var think, showTrace, narrate, mcpOperator bool
 	var classifierReview, allowHTTP bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
@@ -137,6 +137,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.IntVar(&contextTokens, "context-tokens", 0, "Ollama context window in tokens (0 = 8192)")
 	fs.BoolVar(&think, "think", false, "Let an Ollama reasoning model think before answering (slower; off by default)")
 	fs.BoolVar(&showTrace, "trace", false, "Print stage timings and model usage to stderr after ask")
+	fs.BoolVar(&mcpOperator, "operator", false,
+		"mcp: also offer the operator tools (start enumerations, review proposals, manage data sources)")
 	fs.BoolVar(&narrate, "narrate", false,
 		"After ask, have the model write a short cited summary, verified against the answer's evidence")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute,
@@ -363,7 +365,19 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
 		cancel()
-		return (mcp.Server{Runner: runner}).Serve(context.Background(), in, out)
+		server := mcp.Server{Runner: runner}
+		if mcpOperator {
+			// Whoever can start this process may act: stdio has no token.
+			op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{Dir: dir, ConfigFile: configPath,
+				RunJournal:          os.Getenv("AMASS_AI_MCP_RUN_JOURNAL"),
+				RequireConfirmation: os.Getenv("AMASS_AI_MCP_REQUIRE_CONFIRMATION") == "true"})
+			if err != nil {
+				return fmt.Errorf("operator mode: %w", err)
+			}
+			defer release()
+			server.Operator = op
+		}
+		return server.Serve(context.Background(), in, out)
 	}
 	if operation == "eval" {
 		if provider == nil {

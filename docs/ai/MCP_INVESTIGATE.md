@@ -61,6 +61,46 @@ expands into the investigate calls to make. Clients that show MCP prompts
 as commands (Claude Code, VS Code, Gemini CLI and others) list them by
 name.
 
+## Operator mode
+
+A server started with an operator configuration also offers tools that act:
+
+| Tool | What it does |
+| --- | --- |
+| `plan_enumeration` | Shows what enumerating one exact target (domain, IP, CIDR or AS number) would do, passive or active: scope, methods, effects and the `plan_id`. Starts nothing. |
+| `start_enumeration` | Starts the planned enumeration after the user approves it. |
+| `enumeration_status` | Lists runs, or shows one with its progress and, once finished, what the changes lens finds since it started. |
+| `stop_enumeration` | Ends a run and its engine session. |
+| `list_proposals` | Lists ownership, merge, identity and person-named proposals. |
+| `review_proposal` | Approves, rejects or retracts a proposal; approving and retracting write to the Asset Database after the user approves. |
+| `data_sources` | Lists which data sources have credentials, never the credentials. |
+| `data_source_key_link` | Gives the user a one-time local link (15 minutes, single use) to a form that writes a data source's credentials to the datasources file; the key never passes through the assistant. |
+
+Over HTTP the operator tools are offered only to clients that present
+`AMASS_AI_MCP_OPERATOR_TOKEN`, which must differ from the read-only token;
+a session belongs to the token that opened it. Over stdio,
+`amass ai -operator mcp` (or `amass-ai-mcp -operator`) enables them for
+whoever can start the process. Operator sessions use event streams so the
+server can ask for approval in the middle of a tool call.
+
+Approval: `start_enumeration` and the writing `review_proposal` decisions
+ask the user in the client's own dialog (MCP elicitation: an
+input-required result on protocol 2026-07-28, an `elicitation/create`
+request on earlier versions). A client that cannot show the dialog falls
+back to its own tool-call approval, helped by the tool annotations, unless
+`AMASS_AI_MCP_REQUIRE_CONFIRMATION=true`, which refuses instead. The dialog
+is a safeguard against a model acting on its own; the operator token is
+what authorizes a client. Each run records who approved it and how.
+
+Enumerations (`internal/collect`) are confined to the approved scope with
+no expansion. Active mode adds brute forcing, name alterations, zone
+transfer attempts and certificate and service probes on the configured
+ports, and covers at most a /16 IPv4 or /48 IPv6 range. Two runs may run
+at once; a run ends when its work settles, after 30 minutes without
+progress, or after 24 hours. Runs are recorded in
+`AMASS_AI_MCP_RUN_JOURNAL` and resumed after a restart while the engine
+still has them.
+
 Connecting an assistant to the Compose environment is covered by
 `scripts/ai-connect.sh` in amass-docker-compose (see its `AI.md`).
 
