@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // GraphSearchRequest asks for witnessed paths through stored OAM relationships.
@@ -45,8 +47,8 @@ type GraphHopDiagnostic struct {
 }
 
 type GraphSearchResult struct {
-	Root                    Asset                `json:"root"`
-	Matches                 []PlanMatch          `json:"matches"`
+	Root                    graph.Asset          `json:"root"`
+	Matches                 []graph.PlanMatch    `json:"matches"`
 	VisitedNodes            int                  `json:"visited_nodes"`
 	VisitedEdges            int                  `json:"visited_edges"`
 	SchemaRejected          int                  `json:"schema_rejected"`
@@ -61,8 +63,8 @@ type GraphSearchResult struct {
 }
 
 type graphSearchStep struct {
-	asset Asset
-	path  PlanMatch
+	asset graph.Asset
+	path  graph.PlanMatch
 	depth int
 }
 
@@ -70,16 +72,16 @@ type graphSearchStep struct {
 // Edge queries are limited inside asset-db; every accepted transition is
 // checked against the authoritative OAM catalog. Paths represent stored edges,
 // never ownership claims or new AI-inferred relationships.
-func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits Limits, req GraphSearchRequest) (GraphSearchResult, error) {
-	out := GraphSearchResult{Matches: []PlanMatch{}}
+func SearchGraph(ctx context.Context, g graph.Graph, catalog graph.SchemaCatalog, limits graph.Limits, req GraphSearchRequest) (GraphSearchResult, error) {
+	out := GraphSearchResult{Matches: []graph.PlanMatch{}}
 	if err := limits.Validate(); err != nil {
 		return out, err
 	}
-	if graph == nil || catalog == nil {
+	if g == nil || catalog == nil {
 		return out, errors.New("graph and OAM schema catalog are required")
 	}
 
-	bounded, ok := graph.(BoundedGraph)
+	bounded, ok := g.(graph.BoundedGraph)
 	if !ok {
 		return out, errors.New("graph repository lacks bounded edge queries")
 	}
@@ -109,12 +111,12 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 		return out, errors.New("max_matches exceeds policy")
 	}
 
-	since, err := DateSince(req.Since)
+	since, err := graph.DateSince(req.Since)
 	if err != nil {
 		return out, err
 	}
 
-	root, err := graph.GetAsset(ctx, req.StartID)
+	root, err := g.GetAsset(ctx, req.StartID)
 	if err != nil {
 		return out, err
 	}
@@ -150,10 +152,10 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 		targets[typ] = true
 	}
 
-	queue := []graphSearchStep{{asset: root, path: PlanMatch{Nodes: []Asset{root}}}}
+	queue := []graphSearchStep{{asset: root, path: graph.PlanMatch{Nodes: []graph.Asset{root}}}}
 	visited := map[string]bool{root.ID: true}
 	edgeIDs := map[string]bool{}
-	assets := map[string]Asset{root.ID: root}
+	assets := map[string]graph.Asset{root.ID: root}
 	for len(queue) > 0 {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -212,7 +214,7 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 					return out, nil
 				}
 
-				next, err = graph.GetAsset(ctx, nextID)
+				next, err = g.GetAsset(ctx, nextID)
 				if err != nil {
 					return out, err
 				}
@@ -239,8 +241,8 @@ func SearchGraph(ctx context.Context, graph Graph, catalog SchemaCatalog, limits
 
 			visited[nextID] = true
 			out.VisitedNodes++
-			path := PlanMatch{Nodes: append(append([]Asset{}, current.path.Nodes...), next),
-				Edges: append(append([]Relation{}, current.path.Edges...), edge)}
+			path := graph.PlanMatch{Nodes: append(append([]graph.Asset{}, current.path.Nodes...), next),
+				Edges: append(append([]graph.Relation{}, current.path.Edges...), edge)}
 			if len(targets) == 0 || targets[next.Type] {
 				out.Matches = append(out.Matches, path)
 				if len(out.Matches) >= req.MaxMatches {

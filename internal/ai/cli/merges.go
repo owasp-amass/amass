@@ -11,32 +11,32 @@ import (
 	"io"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // isMergeProposal reports whether id names a merge proposal rather than an
 // ownership proposal.
 func isMergeProposal(id string) bool {
-	return strings.HasPrefix(id, ai.DuplicatePrefix)
+	return strings.HasPrefix(id, review.DuplicatePrefix)
 }
 
 // pendingMerge finds a merge proposal that has not been reviewed.
-func pendingMerge(j *ai.Journal, id, reviewer string) (ai.DuplicateProposal, error) {
+func pendingMerge(j *review.Journal, id, reviewer string) (review.DuplicateProposal, error) {
 	if id == "" || reviewer == "" {
-		return ai.DuplicateProposal{}, errors.New("-proposal and -reviewer required")
+		return review.DuplicateProposal{}, errors.New("-proposal and -reviewer required")
 	}
 
 	state, err := j.DuplicateState()
 	if err != nil {
-		return ai.DuplicateProposal{}, err
+		return review.DuplicateProposal{}, err
 	}
 
 	e, ok := state[id]
 	if !ok {
-		return ai.DuplicateProposal{}, fmt.Errorf("no merge proposal %s in the journal", id)
+		return review.DuplicateProposal{}, fmt.Errorf("no merge proposal %s in the journal", id)
 	}
-	if e.Status != ai.ProposalPending {
-		return ai.DuplicateProposal{}, fmt.Errorf("proposal %s is already %s", id, e.Status)
+	if e.Status != review.ProposalPending {
+		return review.DuplicateProposal{}, fmt.Errorf("proposal %s is already %s", id, e.Status)
 	}
 
 	return e.Proposal, nil
@@ -45,11 +45,11 @@ func pendingMerge(j *ai.Journal, id, reviewer string) (ai.DuplicateProposal, err
 // rejectMerge records a reviewer's rejection; nothing is written to the
 // Asset Database.
 func rejectMerge(journalPath, id, reviewer string, out io.Writer) error {
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	if _, err := pendingMerge(j, id, reviewer); err != nil {
 		return err
 	}
-	if err := j.RecordDuplicate(ai.DuplicateOutcome{ProposalID: id, Status: ai.ProposalRejected,
+	if err := j.RecordDuplicate(review.DuplicateOutcome{ProposalID: id, Status: review.ProposalRejected,
 		Reviewer: reviewer}); err != nil {
 		return err
 	}
@@ -60,19 +60,19 @@ func rejectMerge(journalPath, id, reviewer string, out io.Writer) error {
 
 // approveMerge merges a pending proposal's duplicate into its survivor and
 // records everything the merge changed in the journal.
-func approveMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id, reviewer string,
+func approveMerge(ctx context.Context, m review.OrganizationMerger, journalPath, id, reviewer string,
 	out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	p, err := pendingMerge(j, id, reviewer)
 	if err != nil {
 		return err
 	}
 
-	rec, err := ai.ApplyMerge(ctx, m, j, p, reviewer)
+	rec, err := review.ApplyMerge(ctx, m, j, p, reviewer)
 	if err != nil {
 		return err
 	}
@@ -86,13 +86,13 @@ func approveMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id,
 
 	_, err = fmt.Fprintf(out, "Merged %s [%s] into %s [%s]: %d relationship(s) moved (source %s, confidence %d). "+
 		"Undo with `amass review retract -proposal %s`.\n", p.Duplicate, p.DuplicateID, p.Survivor, p.SurvivorID, moved,
-		ai.InferenceSource, ai.MergeConfidence(p), id)
+		review.InferenceSource, review.MergeConfidence(p), id)
 	return err
 }
 
 // retractMerge undoes an applied merge: the duplicate is restored with its
 // relationships, and the survivor loses only what the merge added.
-func retractMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id, reviewer string,
+func retractMerge(ctx context.Context, m review.OrganizationMerger, journalPath, id, reviewer string,
 	out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
@@ -101,7 +101,7 @@ func retractMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id,
 		return errors.New("-proposal and -reviewer required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	state, err := j.DuplicateState()
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func retractMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id,
 	if !ok {
 		return fmt.Errorf("no merge proposal %s in the journal", id)
 	}
-	if e.Status != ai.ProposalApplied || e.Outcome == nil || e.Outcome.Merge == nil {
+	if e.Status != review.ProposalApplied || e.Outcome == nil || e.Outcome.Merge == nil {
 		return fmt.Errorf("proposal %s is %s, not applied", id, e.Status)
 	}
 
@@ -119,7 +119,7 @@ func retractMerge(ctx context.Context, m ai.OrganizationMerger, journalPath, id,
 	if err != nil {
 		return fmt.Errorf("undo merge %s: %w", id, err)
 	}
-	if err := j.RecordDuplicate(ai.DuplicateOutcome{ProposalID: id, Status: ai.ProposalRetracted,
+	if err := j.RecordDuplicate(review.DuplicateOutcome{ProposalID: id, Status: review.ProposalRetracted,
 		Reviewer: reviewer, RestoredID: res.RestoredID, KeptFields: res.KeptFields}); err != nil {
 		return fmt.Errorf("%s was restored as %s but the journal was not updated: %w", e.Proposal.Duplicate,
 			res.RestoredID, err)

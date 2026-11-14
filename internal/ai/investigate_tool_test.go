@@ -9,13 +9,18 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 func investigate(t *testing.T, store *EvidenceStore, args string) map[string]any {
 	t.Helper()
 
-	g, cat := campusWeb()
-	raw, err := RunInvestigationTool(context.Background(), ToolRunner{Graph: g, Catalog: cat, Limits: DefaultLimits()},
+	g, cat := aitest.CampusWeb()
+	raw, err := RunInvestigationTool(context.Background(), ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()},
 		nil, store, ToolInvestigate, json.RawMessage(args))
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +53,7 @@ func TestInvestigateThenVerifyCitations(t *testing.T) {
 	store := NewEvidenceStore()
 	out := investigate(t, store,
 		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"answer":"third_party"}`)
-	if out["answer_kind"] != LensThirdParty || len(out["evidence"].([]any)) == 0 {
+	if out["answer_kind"] != lens.LensThirdParty || len(out["evidence"].([]any)) == 0 {
 		t.Fatalf("unexpected result: %v", out)
 	}
 
@@ -79,8 +84,8 @@ func TestInvestigateTable(t *testing.T) {
 }
 
 func TestInvestigateRejectsBadRequests(t *testing.T) {
-	g, cat := campusWeb()
-	runner := ToolRunner{Graph: g, Catalog: cat, Limits: DefaultLimits()}
+	g, cat := aitest.CampusWeb()
+	runner := ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()}
 	for args, want := range map[string]string{
 		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"answer":"paths","target_types":["Organization"]}`: "needs a model",
 		`{"subject":{"type":"Organization","name":"Colgate University"},"answer":"table","target_types":["Phone"],` +
@@ -98,7 +103,7 @@ func TestInvestigateRejectsBadRequests(t *testing.T) {
 }
 
 func TestInvestigationSpecsEnumerateAnswerKinds(t *testing.T) {
-	specs := InvestigationSpecs(vendorCatalog{testOAMCatalog})
+	specs := InvestigationSpecs(aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog})
 	if len(specs) != 2 || specs[0].Name != ToolInvestigate {
 		t.Fatalf("specs = %+v", specs)
 	}
@@ -114,9 +119,9 @@ func TestInvestigationSpecsEnumerateAnswerKinds(t *testing.T) {
 
 func TestEvidenceStoreIsBounded(t *testing.T) {
 	s := NewEvidenceStore()
-	first, _ := s.put(EvidenceBundle{})
+	first, _ := s.put(review.EvidenceBundle{})
 	for i := 0; i < evidenceStoreEntries; i++ {
-		_, _ = s.put(EvidenceBundle{})
+		_, _ = s.put(review.EvidenceBundle{})
 	}
 	if _, ok := s.get(first); ok {
 		t.Error("oldest investigation was not evicted")

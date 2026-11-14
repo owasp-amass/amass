@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 type graphSearchOptions struct {
@@ -30,10 +31,10 @@ type graphSearchOptions struct {
 }
 
 type graphSearchResponse struct {
-	Status     string                `json:"status"`
-	Resolution *ai.AssetResolution   `json:"asset_resolution,omitempty"`
-	Search     *ai.GraphSearchResult `json:"search,omitempty"`
-	Collection *ai.CollectionPlan    `json:"collection,omitempty"`
+	Status     string                 `json:"status"`
+	Resolution *graph.AssetResolution `json:"asset_resolution,omitempty"`
+	Search     *ai.GraphSearchResult  `json:"search,omitempty"`
+	Collection *ai.CollectionPlan     `json:"collection,omitempty"`
 }
 
 // graphSearch is a model-free path inspector. Its output is a useful
@@ -56,10 +57,10 @@ func graphSearch(ctx context.Context, runner ai.ToolRunner, opt graphSearchOptio
 	response := graphSearchResponse{Status: "unresolved"}
 	if id == "" {
 		args, err := json.Marshal(struct {
-			ai.AssetSelector
+			graph.AssetSelector
 			Limit int `json:"limit"`
 		}{
-			AssetSelector: ai.AssetSelector{Type: opt.SubjectType, Field: opt.SubjectField, Value: opt.SubjectValue},
+			AssetSelector: graph.AssetSelector{Type: opt.SubjectType, Field: opt.SubjectField, Value: opt.SubjectValue},
 			Limit:         10,
 		})
 		if err != nil {
@@ -71,7 +72,7 @@ func graphSearch(ctx context.Context, runner ai.ToolRunner, opt graphSearchOptio
 			return fmt.Errorf("resolve subject: %w", err)
 		}
 
-		var resolution ai.AssetResolution
+		var resolution graph.AssetResolution
 		if err := json.Unmarshal(raw, &resolution); err != nil {
 			return err
 		}
@@ -80,7 +81,7 @@ func graphSearch(ctx context.Context, runner ai.ToolRunner, opt graphSearchOptio
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			response.Status = resolution.Status
 			if resolution.Status == "not_found" {
-				plan := ai.PlanCollection(ai.AssetSelector{
+				plan := ai.PlanCollection(graph.AssetSelector{
 					Type:  opt.SubjectType,
 					Field: opt.SubjectField,
 					Value: opt.SubjectValue,
@@ -186,8 +187,8 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 			return fmt.Errorf("cannot render %s result as Mermaid", response.Status)
 		}
 
-		nodes := map[string]ai.Asset{response.Search.Root.ID: response.Search.Root}
-		edges := map[string]ai.Relation{}
+		nodes := map[string]graph.Asset{response.Search.Root.ID: response.Search.Root}
+		edges := map[string]graph.Relation{}
 		for _, p := range response.Search.Matches {
 			for _, n := range p.Nodes {
 				nodes[n.ID] = n
@@ -208,7 +209,7 @@ func writeGraphSearchResponse(out io.Writer, format string, response graphSearch
 
 		sort.Strings(nodeIDs)
 		sort.Strings(edgeIDs)
-		walk := ai.WalkResult{Truncated: response.Search.Truncated}
+		walk := graph.WalkResult{Truncated: response.Search.Truncated}
 		for _, id := range nodeIDs {
 			walk.Nodes = append(walk.Nodes, nodes[id])
 		}

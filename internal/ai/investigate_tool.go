@@ -14,6 +14,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // Investigation tools let an MCP client, which is itself the model, use the
@@ -34,16 +39,16 @@ const (
 // client can have its prose verified later. It is bounded and in memory.
 type EvidenceStore struct {
 	mu      sync.Mutex
-	bundles map[string]EvidenceBundle
+	bundles map[string]review.EvidenceBundle
 	order   []string
 }
 
 // NewEvidenceStore returns an empty store.
 func NewEvidenceStore() *EvidenceStore {
-	return &EvidenceStore{bundles: map[string]EvidenceBundle{}}
+	return &EvidenceStore{bundles: map[string]review.EvidenceBundle{}}
 }
 
-func (s *EvidenceStore) put(b EvidenceBundle) (string, error) {
+func (s *EvidenceStore) put(b review.EvidenceBundle) (string, error) {
 	raw := make([]byte, 12)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
@@ -63,7 +68,7 @@ func (s *EvidenceStore) put(b EvidenceBundle) (string, error) {
 	return id, nil
 }
 
-func (s *EvidenceStore) get(id string) (EvidenceBundle, bool) {
+func (s *EvidenceStore) get(id string) (review.EvidenceBundle, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -87,38 +92,38 @@ func ToolTimeout(name string) time.Duration {
 
 // InvestigationSpecs describes the investigation tools, with enums
 // generated from the catalog, the answer kinds and the semantics table.
-func InvestigationSpecs(schema SchemaCatalog) []ToolSpec {
+func InvestigationSpecs(schema graph.SchemaCatalog) []llm.ToolSpec {
 	if schema == nil {
 		return nil
 	}
 
-	var selectors []AssetSearchSchema
+	var selectors []graph.AssetSearchSchema
 	if sc, ok := schema.(AssetSearchCatalog); ok {
 		selectors = sc.SearchFields()
 	}
 
 	goal := goalJSONSchema(schema.Relations(), selectors).Schema["properties"].(map[string]any)
 	kinds := append(answerKindNames(), TraversalRoute)
-	hop := objectSchema([]string{"direction", "label", "relation_type", "destination_type"}, map[string]any{
+	hop := llm.ObjectSchema([]string{"direction", "label", "relation_type", "destination_type"}, map[string]any{
 		"direction":        map[string]any{"type": "string", "enum": []string{"out", "in"}},
-		"label":            stringProp("Exact OAM relation label"),
-		"relation_type":    stringProp("Exact OAM relation type, e.g. SimpleRelation"),
-		"destination_type": stringProp("OAM asset type reached by the hop"),
+		"label":            llm.StringProp("Exact OAM relation label"),
+		"relation_type":    llm.StringProp("Exact OAM relation type, e.g. SimpleRelation"),
+		"destination_type": llm.StringProp("OAM asset type reached by the hop"),
 	})
 
 	var kindText strings.Builder
-	for _, line := range strings.Split(strings.TrimSpace(answerKindCatalog(ownedTypes(schema))), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(answerKindCatalog(lens.OwnedTypes(schema))), "\n") {
 		kindText.WriteString(line + "\n")
 	}
 
-	return []ToolSpec{
+	return []llm.ToolSpec{
 		{
 			Name: ToolInvestigate,
 			Description: "Answer a structured question from the Amass Asset Database and return the computed answer " +
 				"with numbered evidence (E1, E2, ...) to cite. Choose answer:\n" + kindText.String() +
 				"- route (target_types: the last hop's type): follow exactly the listed hops from the subject.\n" +
 				"The paths answer needs a model configured on the Amass side; the others do not.",
-			Parameters: objectSchema([]string{"subject", "answer"}, map[string]any{
+			Parameters: llm.ObjectSchema([]string{"subject", "answer"}, map[string]any{
 				"subject":      goal["subject"],
 				"answer":       map[string]any{"type": "string", "enum": kinds},
 				"target_types": goal["target_types"],
@@ -132,27 +137,27 @@ func InvestigationSpecs(schema SchemaCatalog) []ToolSpec {
 			Description: "Check prose against the evidence of an earlier investigate call: every sentence must cite " +
 				"evidence items like [E1], every cited item must exist, assets named in a sentence must appear in " +
 				"its cited items, and hostnames or IP addresses must come from the evidence.",
-			Parameters: objectSchema([]string{"investigation_id", "text"}, map[string]any{
-				"investigation_id": stringProp("The investigation_id returned by investigate"),
-				"text":             stringProp("The prose to verify"),
+			Parameters: llm.ObjectSchema([]string{"investigation_id", "text"}, map[string]any{
+				"investigation_id": llm.StringProp("The investigation_id returned by investigate"),
+				"text":             llm.StringProp("The prose to verify"),
 			}),
 		},
 	}
 }
 
 type investigateArgs struct {
-	Subject     PlanSubject   `json:"subject"`
-	Answer      string        `json:"answer"`
-	TargetTypes []string      `json:"target_types"`
-	Columns     []TableColumn `json:"columns"`
-	Purpose     string        `json:"purpose"`
-	Hops        []PlanHop     `json:"hops"`
+	Subject     PlanSubject        `json:"subject"`
+	Answer      string             `json:"answer"`
+	TargetTypes []string           `json:"target_types"`
+	Columns     []lens.TableColumn `json:"columns"`
+	Purpose     string             `json:"purpose"`
+	Hops        []PlanHop          `json:"hops"`
 }
 
 // queryFromArgs builds and validates the Query an investigate call asks
 // for.
-func queryFromArgs(a investigateArgs, schema SchemaCatalog) (Query, error) {
-	var selectors []AssetSearchSchema
+func queryFromArgs(a investigateArgs, schema graph.SchemaCatalog) (Query, error) {
+	var selectors []graph.AssetSearchSchema
 	if sc, ok := schema.(AssetSearchCatalog); ok {
 		selectors = sc.SearchFields()
 	}
@@ -197,14 +202,14 @@ func queryFromArgs(a investigateArgs, schema SchemaCatalog) (Query, error) {
 
 // RunInvestigationTool serves investigate and verify_citations. model may
 // be nil; the paths answer then fails with advice to choose another kind.
-func RunInvestigationTool(ctx context.Context, runner ToolRunner, model Model, store *EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
+func RunInvestigationTool(ctx context.Context, runner ToolRunner, model llm.Model, store *EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
 	if store == nil {
 		return nil, errors.New("evidence store not configured")
 	}
 	switch name {
 	case ToolInvestigate:
 		var a investigateArgs
-		if err := decodeStrict(args, &a); err != nil {
+		if err := graph.DecodeStrict(args, &a); err != nil {
 			return nil, fmt.Errorf("invalid investigate arguments: %w", err)
 		}
 		if runner.Catalog == nil {
@@ -237,7 +242,7 @@ func RunInvestigationTool(ctx context.Context, runner ToolRunner, model Model, s
 			InvestigationID string `json:"investigation_id"`
 			Text            string `json:"text"`
 		}
-		if err := decodeStrict(args, &a); err != nil {
+		if err := graph.DecodeStrict(args, &a); err != nil {
 			return nil, fmt.Errorf("invalid verify_citations arguments: %w", err)
 		}
 
@@ -259,7 +264,7 @@ func RunInvestigationTool(ctx context.Context, runner ToolRunner, model Model, s
 }
 
 // investigateResult is the client-facing summary of an investigation.
-func investigateResult(id string, q Query, inv Investigation, b EvidenceBundle) map[string]any {
+func investigateResult(id string, q Query, inv Investigation, b review.EvidenceBundle) map[string]any {
 	evidence := make([]string, 0, len(b.Items))
 	for _, i := range b.Items {
 		evidence = append(evidence, i.Line())
@@ -280,7 +285,7 @@ func investigateResult(id string, q Query, inv Investigation, b EvidenceBundle) 
 		"evidence_truncated": b.Truncated,
 	}
 	if r := inv.ThirdPartyReport; r != nil {
-		vendors := make([]VendorUse, 0, len(r.Vendors))
+		vendors := make([]lens.VendorUse, 0, len(r.Vendors))
 		for _, v := range r.Vendors {
 			v.Witness = nil // the evidence list carries the edges
 			vendors = append(vendors, v)
@@ -291,20 +296,20 @@ func investigateResult(id string, q Query, inv Investigation, b EvidenceBundle) 
 	if r := inv.FamilyReport; r != nil {
 		members := make([]map[string]any, 0, len(r.Members))
 		for _, m := range r.Members {
-			members = append(members, map[string]any{"organization": assetLabel(m.Organization),
+			members = append(members, map[string]any{"organization": graph.AssetLabel(m.Organization),
 				"relation": m.Relation, "evidence": m.Evidence})
 		}
 
 		family := map[string]any{"members": members, "related_domains": r.RelatedDomains}
 		if r.Main != nil {
-			family["main"] = assetLabel(*r.Main)
+			family["main"] = graph.AssetLabel(*r.Main)
 		}
 		out["family"] = family
 	}
 	if r := inv.OrgGroupReport; r != nil {
 		members := make([]map[string]any, 0, len(r.Members))
 		for _, m := range r.Members {
-			members = append(members, map[string]any{"organization": assetLabel(m.Organization),
+			members = append(members, map[string]any{"organization": graph.AssetLabel(m.Organization),
 				"parent_id": m.ParentID, "relationship": m.Label, "depth": m.Depth,
 				"jurisdiction": m.Jurisdiction, "registration_id": m.RegistrationID})
 		}

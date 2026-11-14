@@ -13,8 +13,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/config"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
@@ -128,18 +129,18 @@ func TestDuplicatesAreMergedWhenTheEnumerationDrains(t *testing.T) {
 		}
 	}
 
-	entries, err := (&ai.Journal{Path: journal}).DuplicateEntries()
+	entries, err := (&review.Journal{Path: journal}).DuplicateEntries()
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("journal = %+v, %v", entries, err)
 	}
 	for _, e := range entries {
 		switch e.Proposal.Decision {
-		case ai.GapPropose:
-			if e.Status != ai.ProposalApplied || e.Outcome.Reviewer != ai.AutomaticReviewer || e.Outcome.Merge == nil {
+		case lens.GapPropose:
+			if e.Status != review.ProposalApplied || e.Outcome.Reviewer != review.AutomaticReviewer || e.Outcome.Merge == nil {
 				t.Errorf("proposed merge: %+v", e)
 			}
 		default:
-			if e.Status != ai.ProposalPending {
+			if e.Status != review.ProposalPending {
 				t.Errorf("review merge was %s, want pending", e.Status)
 			}
 		}
@@ -155,12 +156,12 @@ func TestDuplicatesAreOnlyRecordedInJournalMode(t *testing.T) {
 		}
 	}
 
-	entries, err := (&ai.Journal{Path: journal}).DuplicateEntries()
+	entries, err := (&review.Journal{Path: journal}).DuplicateEntries()
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("journal = %+v, %v", entries, err)
 	}
 	for _, e := range entries {
-		if e.Status != ai.ProposalPending {
+		if e.Status != review.ProposalPending {
 			t.Errorf("journal mode left %s %s", e.Proposal.ID, e.Status)
 		}
 	}
@@ -171,15 +172,15 @@ func TestDuplicatesAreOnlyRecordedInJournalMode(t *testing.T) {
 func TestUndoneMergeIsNotRepeated(t *testing.T) {
 	db, _, journal, _ := runMergeWatcher(t, config.AttributionAuto)
 
-	j := &ai.Journal{Path: journal}
+	j := &review.Journal{Path: journal}
 	entries, err := j.DuplicateEntries()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var applied *ai.DuplicateEntry
+	var applied *review.DuplicateEntry
 	for i, e := range entries {
-		if e.Status == ai.ProposalApplied {
+		if e.Status == review.ProposalApplied {
 			applied = &entries[i]
 		}
 	}
@@ -192,7 +193,7 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := j.RecordDuplicate(ai.DuplicateOutcome{ProposalID: applied.Proposal.ID, Status: ai.ProposalRetracted,
+	if err := j.RecordDuplicate(review.DuplicateOutcome{ProposalID: applied.Proposal.ID, Status: review.ProposalRetracted,
 		Reviewer: "caffix", RestoredID: res.RestoredID}); err != nil {
 		t.Fatal(err)
 	}

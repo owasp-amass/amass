@@ -9,15 +9,18 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
-func provenancePath() PlanMatch {
-	return PlanMatch{Nodes: []Asset{
+func provenancePath() graph.PlanMatch {
+	return graph.PlanMatch{Nodes: []graph.Asset{
 		{ID: "f", Type: "FQDN", Key: "tech.acme.example"},
 		{ID: "u", Type: "URL", Key: "https://tech.acme.example/"},
 		{ID: "o", Type: "Organization", Key: "synthetic-tech"},
 		{ID: "p", Type: "Organization", Key: "synthetic-parent"},
-	}, Edges: []Relation{
+	}, Edges: []graph.Relation{
 		{ID: "dns", FromID: "u", ToID: "f", Label: "domain", Type: "SimpleRelation"},
 		{ID: "web", FromID: "o", ToID: "u", Label: "website", Type: "SimpleRelation"},
 		{ID: "ownership", FromID: "p", ToID: "o", Label: "subsidiary", Type: "SimpleRelation"},
@@ -26,14 +29,14 @@ func provenancePath() PlanMatch {
 
 func TestPathEvidenceDistinguishesSourcedFromUnsupportedLinks(t *testing.T) {
 	path := provenancePath()
-	graph := fakeGraph{evidence: map[string][]Evidence{
+	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
 		"dns": {{ID: "dns-a", SubjectID: "dns", SourceID: "synthetic-dns-a", Kind: "SourceProperty"}},
 		"web": {{ID: "web-a", SubjectID: "web", SourceID: "synthetic-site-a", Kind: "SourceProperty"},
 			{ID: "web-b", SubjectID: "web", SourceID: "synthetic-site-b", Kind: "SourceProperty"}},
 		"ownership": {{ID: "own-a", SubjectID: "ownership", SourceID: "synthetic-registry-a", Kind: "SourceProperty"},
 			{ID: "own-b", SubjectID: "ownership", SourceID: "synthetic-lei-b", Kind: "SourceProperty"}},
 	}}
-	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{path})
+	dossier, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), []graph.PlanMatch{path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,13 +63,13 @@ func TestPathEvidenceDistinguishesSourcedFromUnsupportedLinks(t *testing.T) {
 
 func TestPathEvidenceDoesNotMistakeGenericTagsForIndependentSources(t *testing.T) {
 	path := provenancePath()
-	graph := fakeGraph{evidence: map[string][]Evidence{
+	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
 		"dns": {{ID: "tag1", SubjectID: "dns", Kind: "SimpleProperty"},
 			{ID: "tag2", SubjectID: "dns", Kind: "SimpleProperty"}},
 		"web": {{ID: "tag3", SubjectID: "web", SourceID: "same-upstream", Kind: "SourceProperty"},
 			{ID: "tag4", SubjectID: "web", SourceID: "same-upstream", Kind: "SourceProperty"}},
 	}}
-	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{path})
+	dossier, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), []graph.PlanMatch{path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,27 +85,27 @@ func TestPathEvidenceDoesNotMistakeGenericTagsForIndependentSources(t *testing.T
 }
 
 func TestPathEvidenceRejectsMisattachedSourceTags(t *testing.T) {
-	graph := fakeGraph{evidence: map[string][]Evidence{
+	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
 		"dns": {{ID: "tag", SubjectID: "not-dns", SourceID: "synthetic-incorrect", Kind: "SourceProperty"}},
 	}}
-	_, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{provenancePath()})
+	_, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), []graph.PlanMatch{provenancePath()})
 	if err == nil || !strings.Contains(err.Error(), "does not belong") {
 		t.Fatalf("tag assigned to wrong relation was accepted: %v", err)
 	}
 }
 
 func TestPathEvidenceReportsLookupBudgetAndNoFictitiousCoverage(t *testing.T) {
-	p := PlanMatch{}
-	graph := fakeGraph{evidence: map[string][]Evidence{}}
+	p := graph.PlanMatch{}
+	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{}}
 	for i := 0; i <= 42; i++ {
-		p.Nodes = append(p.Nodes, Asset{ID: fmt.Sprintf("n%d", i), Type: "FQDN"})
+		p.Nodes = append(p.Nodes, graph.Asset{ID: fmt.Sprintf("n%d", i), Type: "FQDN"})
 	}
 	for i := 0; i < 42; i++ {
-		p.Edges = append(p.Edges, Relation{ID: fmt.Sprintf("e%d",
+		p.Edges = append(p.Edges, graph.Relation{ID: fmt.Sprintf("e%d",
 			i), FromID: p.Nodes[i].ID, ToID: p.Nodes[i+1].ID, Label: "test"})
 	}
 
-	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{p})
+	dossier, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), []graph.PlanMatch{p})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,13 +118,13 @@ func TestPathEvidenceReportsLookupBudgetAndNoFictitiousCoverage(t *testing.T) {
 }
 
 func TestPathEvidenceReportsPerEdgeRecordTruncation(t *testing.T) {
-	graph := fakeGraph{evidence: map[string][]Evidence{}}
+	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{}}
 	for i := 0; i < 10; i++ {
-		graph.evidence["dns"] = append(graph.evidence["dns"], Evidence{ID: fmt.Sprintf("t%d",
+		g.EvidenceByID["dns"] = append(g.EvidenceByID["dns"], graph.Evidence{ID: fmt.Sprintf("t%d",
 			i), SubjectID: "dns", SourceID: fmt.Sprintf("src%d", i), Kind: "SourceProperty"})
 	}
 
-	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), []PlanMatch{provenancePath()})
+	dossier, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), []graph.PlanMatch{provenancePath()})
 	if err != nil {
 		t.Fatal(err)
 	}

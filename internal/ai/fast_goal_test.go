@@ -7,6 +7,9 @@ package ai
 import (
 	"context"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // The real Qwen3 acceptance question previously needed ~98s of goal
@@ -15,7 +18,7 @@ import (
 func TestExplicitOrganizationQuestionUsesZeroModelCalls(t *testing.T) {
 	model := &plannerModel{replies: []string{}}
 	agent := Agent{Model: model, Runner: ToolRunner{
-		Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits(),
+		Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits(),
 	}}
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
 	result, err := agent.AskAdaptive(context.Background(), question, AdaptiveOptions{MaxDepth: 8, GuidanceRounds: 0})
@@ -62,7 +65,7 @@ func TestDeterministicGoalFastPathFailsClosedForAmbiguity(t *testing.T) {
 		"Which organization is connected to tech.acme.example?",
 	}
 	for _, question := range cases {
-		_, ok := deterministicExplicitOrganizationGoal(question, testOAMCatalog)
+		_, ok := deterministicExplicitOrganizationGoal(question, aitest.TestOAMCatalog)
 		if ok {
 			t.Errorf("ambiguous question incorrectly bypassed model: %s", question)
 		}
@@ -71,7 +74,7 @@ func TestDeterministicGoalFastPathFailsClosedForAmbiguity(t *testing.T) {
 
 func TestDeterministicGoalAcceptsRealWorldTwoLabelFQDN(t *testing.T) {
 	question := "Which organization is connected to owasp.org through domain and website relationships?"
-	goal, ok := deterministicExplicitOrganizationGoal(question, testOAMCatalog)
+	goal, ok := deterministicExplicitOrganizationGoal(question, aitest.TestOAMCatalog)
 	if !ok || goal.Subject.Type != "FQDN" || goal.Subject.Value != "owasp.org" ||
 		goal.Purpose != "connected" || len(goal.Relationships) != 2 {
 		t.Fatalf("explicit two-label domain was not grounded: goal=%+v ok=%t", goal, ok)
@@ -81,7 +84,7 @@ func TestDeterministicGoalAcceptsRealWorldTwoLabelFQDN(t *testing.T) {
 func BenchmarkDeterministicExplicitOrganizationGoal(b *testing.B) {
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
 	for i := 0; i < b.N; i++ {
-		if _, ok := deterministicExplicitOrganizationGoal(question, testOAMCatalog); !ok {
+		if _, ok := deterministicExplicitOrganizationGoal(question, aitest.TestOAMCatalog); !ok {
 			b.Fatal("explicit question unexpectedly fell back to the model")
 		}
 	}
@@ -91,8 +94,8 @@ func BenchmarkDeterministicExplicitOrganizationGoal(b *testing.B) {
 // fixture: two equivalent direct routes, two routes to the parent, and two
 // routes to the sibling. The better-tagged URL path must win without Qwen.
 func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.T) {
-	g := fakeGraph{
-		assets: map[string]Asset{
+	g := aitest.FakeGraph{
+		Assets: map[string]graph.Asset{
 			"f":       {ID: "f", Type: "FQDN", Key: "tech.acme.example"},
 			"u1":      {ID: "u1", Type: "URL", Key: "https://tech.acme.example/"},
 			"u2":      {ID: "u2", Type: "URL", Key: "https://tech.acme.example/alternate"},
@@ -100,7 +103,7 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 			"parent":  {ID: "parent", Type: "Organization", Key: "synthetic-acme-holdings"},
 			"sibling": {ID: "sibling", Type: "Organization", Key: "synthetic-acme-europe"},
 		},
-		links: []Relation{
+		Links: []graph.Relation{
 			{ID: "d1", FromID: "u1", ToID: "f", Label: "domain", Type: "SimpleRelation"},
 			{ID: "d2", FromID: "u2", ToID: "f", Label: "domain", Type: "SimpleRelation"},
 			{ID: "w1", FromID: "tech", ToID: "u1", Label: "website", Type: "SimpleRelation"},
@@ -108,7 +111,7 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 			{ID: "s1", FromID: "parent", ToID: "tech", Label: "subsidiary", Type: "SimpleRelation"},
 			{ID: "s2", FromID: "parent", ToID: "sibling", Label: "subsidiary", Type: "SimpleRelation"},
 		},
-		evidence: map[string][]Evidence{
+		EvidenceByID: map[string][]graph.Evidence{
 			"d1": {{ID: "d1-a", SubjectID: "d1", SourceID: "dns-a", Kind: "SourceProperty"}},
 			"w1": {{ID: "w1-a", SubjectID: "w1", SourceID: "website-a", Kind: "SourceProperty"}},
 			"d2": {{ID: "d2-a", SubjectID: "d2", SourceID: "dns-a", Kind: "SourceProperty"},
@@ -123,8 +126,8 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 	model := &plannerModel{replies: []string{}}
 	// Use the same test resolver as the other end-to-end adaptive tests.
 	// fakeGraph alone supports traversal but not indexed ResolveAsset.
-	resolved := plannedGraph{fakeGraph: g}
-	a := Agent{Model: model, Runner: ToolRunner{Graph: resolved, Catalog: testOAMCatalog, Limits: DefaultLimits()}}
+	resolved := aitest.PlannedGraph{FakeGraph: g}
+	a := Agent{Model: model, Runner: ToolRunner{Graph: resolved, Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
 	out, err := a.AskAdaptive(context.Background(), question,
 		AdaptiveOptions{MaxDepth: 8, MaxPathsPerAsset: 3, GuidanceRounds: 0})

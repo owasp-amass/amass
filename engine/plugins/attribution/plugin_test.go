@@ -17,6 +17,7 @@ import (
 	"github.com/owasp-amass/amass/v5/config"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
@@ -199,7 +200,7 @@ func TestAttributionPassWritesAndWidensScopeOnSQLite(t *testing.T) {
 	}
 
 	tags, err := db.FindEdgeTags(context.Background(), edges[0], time.Time{})
-	if err != nil || len(tags) != 1 || tags[0].Property.Name() != ai.InferenceSource {
+	if err != nil || len(tags) != 1 || tags[0].Property.Name() != review.InferenceSource {
 		t.Errorf("edge tags = %v, %v", tags, err)
 	}
 
@@ -211,9 +212,9 @@ func TestAttributionPassWritesAndWidensScopeOnSQLite(t *testing.T) {
 		t.Errorf("scope additions = %v, want colgatealumni.org", sess.scope.keys())
 	}
 
-	entries, err := (&ai.Journal{Path: journal}).OwnershipEntries()
-	if err != nil || len(entries) != 1 || entries[0].Status != ai.ProposalApplied ||
-		entries[0].Outcome.Reviewer != ai.AutomaticReviewer {
+	entries, err := (&review.Journal{Path: journal}).OwnershipEntries()
+	if err != nil || len(entries) != 1 || entries[0].Status != review.ProposalApplied ||
+		entries[0].Outcome.Reviewer != review.AutomaticReviewer {
 		t.Errorf("journal = %+v, %v", entries, err)
 	}
 }

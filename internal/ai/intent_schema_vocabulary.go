@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 var aliasPunctuation = regexp.MustCompile(`[^a-z0-9]+`)
@@ -91,7 +93,7 @@ func searchableFieldAliases(field string) []string {
 // schemaRelationAliasCandidates returns every *registered* OAM label that can
 // match an explicit user phrase. An ambiguous alias produces multiple labels
 // and must not be silently reduced to one.
-func schemaRelationAliasCandidates(phrase string, catalog []RelationshipSchema) []string {
+func schemaRelationAliasCandidates(phrase string, catalog []graph.RelationshipSchema) []string {
 	needle := normalizeSchemaAlias(phrase)
 	if needle == "" {
 		return nil
@@ -121,7 +123,7 @@ func schemaRelationAliasCandidates(phrase string, catalog []RelationshipSchema) 
 
 // The catalog vocabulary is prompt context, not an alternate ontology.
 // Bounds keep local-model prompts practical even for a large schema.
-func compactRelationshipVocabulary(catalog []RelationshipSchema) string {
+func compactRelationshipVocabulary(catalog []graph.RelationshipSchema) string {
 	unique := map[string]bool{}
 	for _, r := range catalog {
 		unique[r.Label] = true
@@ -149,7 +151,7 @@ func compactRelationshipVocabulary(catalog []RelationshipSchema) string {
 	return strings.Join(lines, "\n")
 }
 
-func compactSearchVocabulary(selectors []AssetSearchSchema) string {
+func compactSearchVocabulary(selectors []graph.AssetSearchSchema) string {
 	fields := map[string]bool{}
 	for _, selector := range selectors {
 		for _, field := range selector.Fields {

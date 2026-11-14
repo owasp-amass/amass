@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 )
 
 // listServices prints the services stored for what a domain (-d) or an
 // organization (-org) controls. It reads only.
-func listServices(ctx context.Context, graph groupGraph, domain, org string, limits ai.LensLimits, format string,
+func listServices(ctx context.Context, graph groupGraph, domain, org string, limits lens.LensLimits, format string,
 	explicit bool, out io.Writer) error {
 	if err := limits.Validate(); err != nil {
 		return err
@@ -26,14 +26,14 @@ func listServices(ctx context.Context, graph groupGraph, domain, org string, lim
 		return err
 	}
 
-	r, err := ai.FindServices(ctx, graph, oamrepo.Catalog{}, root, limits)
+	r, err := lens.FindServices(ctx, graph, oamrepo.Catalog{}, root, limits)
 	if err != nil {
 		return err
 	}
 
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.FormatServicesReport(r))
+		_, err := fmt.Fprint(out, lens.FormatServicesReport(r))
 		return err
 	case format == "json":
 		return writeJSON(out, r)

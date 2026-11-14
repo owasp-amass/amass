@@ -8,12 +8,14 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestOAMIntentVocabularyCanonicalSynonyms(t *testing.T) {
-	selectors := append([]AssetSearchSchema(nil), typedIntentTestCatalog.selectors...)
+	selectors := append([]graph.AssetSearchSchema(nil), typedIntentTestCatalog.selectors...)
 	for _, kind := range []string{"Location", "TLSCertificate", "Netblock"} {
-		selectors = append(selectors, AssetSearchSchema{Type: kind})
+		selectors = append(selectors, graph.AssetSearchSchema{Type: kind})
 	}
 
 	cases := []struct{ words, expected string }{
@@ -40,8 +42,8 @@ func TestOAMIntentVocabularyCanonicalSynonyms(t *testing.T) {
 
 func TestOAMIntentVocabularyDoesNotGuessAmbiguousAddresses(t *testing.T) {
 	// Register Location explicitly as part of the production schema.
-	selectors := append(append([]AssetSearchSchema(nil), typedIntentTestCatalog.selectors...),
-		AssetSearchSchema{Type: "Location", Fields: []string{"address"}})
+	selectors := append(append([]graph.AssetSearchSchema(nil), typedIntentTestCatalog.selectors...),
+		graph.AssetSearchSchema{Type: "Location", Fields: []string{"address"}})
 	candidates := intentTypeCandidates("addresses", selectors, typedIntentTestCatalog.rels)
 	if !reflect.DeepEqual(candidates, []string{"IPAddress", "Location"}) {
 		t.Fatalf("address aliases must remain ambiguous: %+v", candidates)
@@ -53,8 +55,8 @@ func TestOAMIntentVocabularyDoesNotGuessAmbiguousAddresses(t *testing.T) {
 
 func TestOAMIntentAliasesCompileExactRelationshipRoutes(t *testing.T) {
 	cat := typedIntentTestCatalog
-	cat.selectors = append(append([]AssetSearchSchema(nil), cat.selectors...),
-		AssetSearchSchema{Type: "Location", Fields: []string{"address"}})
+	cat.selectors = append(append([]graph.AssetSearchSchema(nil), cat.selectors...),
+		graph.AssetSearchSchema{Type: "Location", Fields: []string{"address"}})
 	cases := []struct{ question, target, direction, label string }{
 		{
 			"Which companies are connected to tech.acme.example via domain and website relationships?",
@@ -88,10 +90,10 @@ func TestOAMIntentAliasesCompileExactRelationshipRoutes(t *testing.T) {
 
 func TestOAMIntentVocabularyFailsClosedOnCompetingSchemaRoutes(t *testing.T) {
 	cat := typedIntentTestCatalog
-	cat.selectors = append(append([]AssetSearchSchema(nil), cat.selectors...),
-		AssetSearchSchema{Type: "Location", Fields: []string{"address"}})
-	cat.rels = append(append([]RelationshipSchema(nil), cat.rels...),
-		RelationshipSchema{
+	cat.selectors = append(append([]graph.AssetSearchSchema(nil), cat.selectors...),
+		graph.AssetSearchSchema{Type: "Location", Fields: []string{"address"}})
+	cat.rels = append(append([]graph.RelationshipSchema(nil), cat.rels...),
+		graph.RelationshipSchema{
 			SourceType:      "FQDN",
 			Label:           "dns_record",
 			RelationType:    "BasicDNSRelation",
@@ -111,7 +113,7 @@ func TestOAMIntentVocabularyFailsClosedOnCompetingSchemaRoutes(t *testing.T) {
 }
 
 func TestOAMIntentVocabularyRespectsActiveSchema(t *testing.T) {
-	smallFields := []AssetSearchSchema{{Type: "FQDN", Fields: []string{"name"}}}
+	smallFields := []graph.AssetSearchSchema{{Type: "FQDN", Fields: []string{"name"}}}
 	result := intentTypeCandidates("companies", smallFields, nil)
 	if len(result) != 0 {
 		t.Fatalf("absent catalog types must not be invented: %+v", result)

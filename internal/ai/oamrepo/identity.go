@@ -11,7 +11,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
@@ -22,8 +23,8 @@ import (
 // other source recorded it, and the organization's legal fields are
 // cleared. The record holds what changed, so UndoIdentityCorrection can
 // restore it.
-func (a Adapter) CorrectIdentity(ctx context.Context, c ai.IdentityConflict) (ai.IdentityRecord, error) {
-	rec := ai.IdentityRecord{OrgID: c.OrgID}
+func (a Adapter) CorrectIdentity(ctx context.Context, c lens.IdentityConflict) (review.IdentityRecord, error) {
+	rec := review.IdentityRecord{OrgID: c.OrgID}
 	if a.Repo == nil {
 		return rec, errors.New("missing OAM repository")
 	}
@@ -85,7 +86,7 @@ func (a Adapter) CorrectIdentity(ctx context.Context, c ai.IdentityConflict) (ai
 // untagEnrichment removes the enrichment sources from one relationship and
 // deletes it when nothing else recorded it. It returns nil when the
 // relationship is gone or carries no enrichment source.
-func (a Adapter) untagEnrichment(ctx context.Context, org *dbt.Entity, edgeID string) (*ai.CorrectedEdge, error) {
+func (a Adapter) untagEnrichment(ctx context.Context, org *dbt.Entity, edgeID string) (*review.CorrectedEdge, error) {
 	edge, err := a.Repo.FindEdgeById(ctx, edgeID)
 	if err != nil || edge == nil || edge.Relation == nil || edge.FromEntity == nil || edge.ToEntity == nil {
 		return nil, nil
@@ -96,7 +97,7 @@ func (a Adapter) untagEnrichment(ctx context.Context, org *dbt.Entity, edgeID st
 		return nil, fmt.Errorf("edge %s does not belong to organization %s", edgeID, org.ID)
 	}
 
-	ce := ai.CorrectedEdge{MergedEdge: ai.MergedEdge{ID: edge.ID, Outgoing: outgoing,
+	ce := review.CorrectedEdge{MergedEdge: review.MergedEdge{ID: edge.ID, Outgoing: outgoing,
 		Label: edge.Relation.Label(), RelationType: string(edge.Relation.RelationType())}}
 	ce.OtherID = edge.ToEntity.ID
 	if !outgoing {
@@ -123,7 +124,7 @@ func (a Adapter) untagEnrichment(ctx context.Context, org *dbt.Entity, edgeID st
 			return nil, err
 		}
 		ce.Tags = append(ce.Tags, mt)
-		if ai.IsEnrichmentSource(source(t.Property)) {
+		if lens.IsEnrichmentSource(source(t.Property)) {
 			enrich = append(enrich, t)
 			ce.RemovedTags = append(ce.RemovedTags, mt)
 		} else {
@@ -152,7 +153,7 @@ func (a Adapter) untagEnrichment(ctx context.Context, org *dbt.Entity, edgeID st
 
 // undoIdentityEdges restores the relationships a failed correction touched
 // and returns err.
-func (a Adapter) undoIdentityEdges(ctx context.Context, rec ai.IdentityRecord, err error) error {
+func (a Adapter) undoIdentityEdges(ctx context.Context, rec review.IdentityRecord, err error) error {
 	if rerr := a.restoreIdentityEdges(ctx, rec); rerr != nil {
 		return fmt.Errorf("%w; restoring the relationships also failed: %v", err, rerr)
 	}
@@ -160,7 +161,7 @@ func (a Adapter) undoIdentityEdges(ctx context.Context, rec ai.IdentityRecord, e
 	return err
 }
 
-func (a Adapter) restoreIdentityEdges(ctx context.Context, rec ai.IdentityRecord) error {
+func (a Adapter) restoreIdentityEdges(ctx context.Context, rec review.IdentityRecord) error {
 	org, err := a.entityOfType(ctx, rec.OrgID, string(oam.Organization))
 	if err != nil {
 		return err
@@ -225,7 +226,7 @@ func (a Adapter) restoreIdentityEdges(ctx context.Context, rec ai.IdentityRecord
 
 // UndoIdentityCorrection restores the organization's legal fields and the
 // relationships and sources the correction removed.
-func (a Adapter) UndoIdentityCorrection(ctx context.Context, rec ai.IdentityRecord) error {
+func (a Adapter) UndoIdentityCorrection(ctx context.Context, rec review.IdentityRecord) error {
 	if a.Repo == nil {
 		return errors.New("missing OAM repository")
 	}

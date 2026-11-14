@@ -13,46 +13,47 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 type cliTestGraph struct{}
 
-func (cliTestGraph) GetAsset(_ context.Context, id string) (ai.Asset, error) {
+func (cliTestGraph) GetAsset(_ context.Context, id string) (graph.Asset, error) {
 	if id == "1" {
-		return ai.Asset{ID: "1", Type: "FQDN", Key: "tech.acme.example"}, nil
+		return graph.Asset{ID: "1", Type: "FQDN", Key: "tech.acme.example"}, nil
 	}
 
-	return ai.Asset{ID: "2", Type: "Organization", Key: "Acme Holdings"}, nil
+	return graph.Asset{ID: "2", Type: "Organization", Key: "Acme Holdings"}, nil
 }
 
-func (cliTestGraph) FindAssets(context.Context, string, time.Time, int) ([]ai.Asset, error) {
+func (cliTestGraph) FindAssets(context.Context, string, time.Time, int) ([]graph.Asset, error) {
 	return nil, nil
 }
 
-func (cliTestGraph) Edges(context.Context, string, string, string, time.Time) ([]ai.Relation, error) {
+func (cliTestGraph) Edges(context.Context, string, string, string, time.Time) ([]graph.Relation, error) {
 	return nil, nil
 }
 
-func (cliTestGraph) Evidence(context.Context, string, int) ([]ai.Evidence, error) { return nil, nil }
+func (cliTestGraph) Evidence(context.Context, string, int) ([]graph.Evidence, error) { return nil, nil }
 
-func (cliTestGraph) EdgesLimited(_ context.Context, id, dir, label string, _ time.Time, limit int) ([]ai.Relation, bool, error) {
+func (cliTestGraph) EdgesLimited(_ context.Context, id, dir, label string, _ time.Time, limit int) ([]graph.Relation, bool, error) {
 	if id == "1" {
-		return []ai.Relation{{ID: "e1", FromID: "2", ToID: "1", Label: "domain", Type: "SimpleRelation"}}, false, nil
+		return []graph.Relation{{ID: "e1", FromID: "2", ToID: "1", Label: "domain", Type: "SimpleRelation"}}, false, nil
 	}
 
-	return []ai.Relation{}, false, nil
+	return []graph.Relation{}, false, nil
 }
 
 type cliTestCatalog struct{}
 
-func (cliTestCatalog) Relations() []ai.RelationshipSchema {
-	return []ai.RelationshipSchema{
+func (cliTestCatalog) Relations() []graph.RelationshipSchema {
+	return []graph.RelationshipSchema{
 		{SourceType: "Organization", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	}
 }
 
 func TestGraphSearchUserFacingTextAndMermaid(t *testing.T) {
-	runner := ai.ToolRunner{Graph: cliTestGraph{}, Catalog: cliTestCatalog{}, Limits: ai.DefaultLimits()}
+	runner := ai.ToolRunner{Graph: cliTestGraph{}, Catalog: cliTestCatalog{}, Limits: graph.DefaultLimits()}
 	for _, format := range []string{"text", "mermaid", "json"} {
 		var buf bytes.Buffer
 		err := graphSearch(context.Background(), runner, graphSearchOptions{
@@ -86,7 +87,7 @@ func TestGraphSearchUserFacingTextAndMermaid(t *testing.T) {
 }
 
 func TestGraphSearchRejectsAmbiguousSelectors(t *testing.T) {
-	runner := ai.ToolRunner{Graph: cliTestGraph{}, Catalog: cliTestCatalog{}, Limits: ai.DefaultLimits()}
+	runner := ai.ToolRunner{Graph: cliTestGraph{}, Catalog: cliTestCatalog{}, Limits: graph.DefaultLimits()}
 	cases := []graphSearchOptions{
 		{Format: "json", SubjectType: "FQDN", SubjectField: "name"},
 		{Format: "json", SubjectID: "1", SubjectValue: "other"},
@@ -101,7 +102,7 @@ func TestGraphSearchRejectsAmbiguousSelectors(t *testing.T) {
 }
 
 func TestCollectionRequiresExactApprovalBeforeNetwork(t *testing.T) {
-	p := ai.PlanCollection(ai.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"})
+	p := ai.PlanCollection(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"})
 	var out bytes.Buffer
 	if err := collectTarget(context.Background(), nil, p, "", false, &out); err != nil {
 		t.Fatal(err)

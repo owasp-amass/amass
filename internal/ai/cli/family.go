@@ -12,12 +12,15 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // familyGraph is what the family lens needs: the graph and a way to find
 // the domain's FQDN.
 type familyGraph interface {
-	ai.Graph
+	graph.Graph
 	ai.AssetResolver
 }
 
@@ -25,14 +28,14 @@ type familyGraph interface {
 // to its main organization, and the networks and registered domains that
 // serve them. Departments and same-institution organizations are recorded
 // in the journal as proposals; nothing in the Asset Database changes.
-func listFamily(ctx context.Context, graph familyGraph, domain, journalPath, format string, explicit bool,
+func listFamily(ctx context.Context, g familyGraph, domain, journalPath, format string, explicit bool,
 	out, errout io.Writer) error {
 	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
 	if domain == "" {
 		return errors.New("-domain required")
 	}
 
-	res, err := graph.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
+	res, err := g.ResolveAsset(ctx, graph.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
 	if err != nil {
 		return err
 	}
@@ -40,19 +43,19 @@ func listFamily(ctx context.Context, graph familyGraph, domain, journalPath, for
 		return fmt.Errorf("%s is not a stored domain name", domain)
 	}
 
-	r, err := ai.FindOrganizationFamily(ctx, graph, res.Candidates[0].Asset)
+	r, err := lens.FindOrganizationFamily(ctx, g, res.Candidates[0].Asset)
 	if err != nil {
 		return err
 	}
 	if journalPath != "" {
-		if err := recordFamily(&ai.Journal{Path: journalPath}, r, errout); err != nil {
+		if err := recordFamily(&review.Journal{Path: journalPath}, r, errout); err != nil {
 			return err
 		}
 	}
 
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.FormatFamilyReport(r))
+		_, err := fmt.Fprint(out, lens.FormatFamilyReport(r))
 		return err
 	case format == "json":
 		return writeJSON(out, r)
@@ -63,8 +66,8 @@ func listFamily(ctx context.Context, graph familyGraph, domain, journalPath, for
 
 // recordFamily records a family's departments and same-institution
 // organizations as proposals.
-func recordFamily(j *ai.Journal, r ai.FamilyReport, errout io.Writer) error {
-	units, merges, err := j.SubmitFamily(r)
+func recordFamily(j *review.Journal, r lens.FamilyReport, errout io.Writer) error {
+	units, merges, err := review.SubmitFamily(j, r)
 	if err != nil {
 		return err
 	}

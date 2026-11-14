@@ -24,8 +24,12 @@ import (
 	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 	"github.com/owasp-amass/amass/v5/internal/ai/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
@@ -94,7 +98,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.IntVar(&graphDepth, "depth", 0,
 		"Maximum path length for graph search (default 16 with target types, otherwise 1)")
 	fs.IntVar(&graphMatches, "max-matches", 20, "Maximum graph path matches to return")
-	fs.IntVar(&inventoryNames, "max-names", ai.DefaultInventoryNames,
+	fs.IntVar(&inventoryNames, "max-names", lens.DefaultInventoryNames,
 		"Maximum names listed by an FQDN or subdomain inventory (not sent to the model)")
 	fs.IntVar(&graphAlternates, "max-paths-per-asset", 3, "Maximum witnessed simple paths retained per asset (1..8)")
 	fs.IntVar(&graphExpansions, "max-expansions", 0, "Maximum guided path expansions (bounded by global policy)")
@@ -122,9 +126,9 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		"Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer, or proposals to review")
 	fs.IntVar(&lensAssets, "max-assets", 0, fmt.Sprintf("Maximum controlled assets the vendors lens follows "+
-		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", ai.LensMaxAssetsLimit))
+		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", lens.LensMaxAssetsLimit))
 	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one vendors lens run "+
-		"(default 20000, up to %d)", ai.LensMaxReadsLimit))
+		"(default 20000, up to %d)", lens.LensMaxReadsLimit))
 	fs.IntVar(&maxTokens, "max-tokens", 0,
 		"Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
 	fs.StringVar(&temperatureFlag, "temperature", "",
@@ -279,7 +283,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	// client, so a model setting cannot break them.
 	usesModel := operation == "plan" || operation == "ask" || operation == "eval" || operation == "infer" ||
 		operation == "scan" || operation == "review"
-	var provider ai.Model
+	var provider llm.Model
 	if usesModel && modelName != "" {
 		var err error
 		provider, err = newProvider(providerSettings{Provider: providerName, Endpoint: endpoint, Model: modelName,
@@ -331,7 +335,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		defer cancel()
 		agent := ai.Agent{
 			Model:  provider,
-			Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{}},
+			Runner: ai.ToolRunner{Limits: graph.DefaultLimits(), Catalog: oamrepo.Catalog{}},
 		}
 		q, err := agent.CompileQuestion(ctx, question)
 		if err != nil {
@@ -361,53 +365,53 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		}
 	}
 
-	graph := oamrepo.Adapter{Repo: repo, Aliases: aliases, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
-	runner := ai.ToolRunner{Graph: graph, Limits: ai.DefaultLimits(), Catalog: oamrepo.Catalog{},
+	g := oamrepo.Adapter{Repo: repo, Aliases: aliases, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
+	runner := ai.ToolRunner{Graph: g, Limits: graph.DefaultLimits(), Catalog: oamrepo.Catalog{},
 		KnownVerification: dnssd.IsVerificationRecord}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
 	switch operation {
 	case "approve":
 		if isPersonNamedProposal(proposalID) {
-			return approvePersonNamed(ctx, graph, journalPath, proposalID, reviewer, out)
+			return approvePersonNamed(ctx, g, journalPath, proposalID, reviewer, out)
 		}
 		if isIdentityProposal(proposalID) {
-			return approveIdentity(ctx, graph, journalPath, proposalID, reviewer, out)
+			return approveIdentity(ctx, g, journalPath, proposalID, reviewer, out)
 		}
 		if isMergeProposal(proposalID) {
-			return approveMerge(ctx, graph, journalPath, proposalID, reviewer, out)
+			return approveMerge(ctx, g, journalPath, proposalID, reviewer, out)
 		}
-		return approveProposal(ctx, graph, journalPath, proposalID, reviewer, out)
+		return approveProposal(ctx, g, journalPath, proposalID, reviewer, out)
 	case "retract":
 		if isPersonNamedProposal(proposalID) {
-			return retractPersonNamed(ctx, graph, journalPath, proposalID, reviewer, out)
+			return retractPersonNamed(ctx, g, journalPath, proposalID, reviewer, out)
 		}
 		if isIdentityProposal(proposalID) {
-			return retractIdentity(ctx, graph, journalPath, proposalID, reviewer, out)
+			return retractIdentity(ctx, g, journalPath, proposalID, reviewer, out)
 		}
 		if isMergeProposal(proposalID) {
-			return retractMerge(ctx, graph, journalPath, proposalID, reviewer, out)
+			return retractMerge(ctx, g, journalPath, proposalID, reviewer, out)
 		}
-		return retractProposal(ctx, graph, journalPath, proposalID, reviewer, out)
+		return retractProposal(ctx, g, journalPath, proposalID, reviewer, out)
 	case "duplicates":
-		return listDuplicates(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+		return listDuplicates(ctx, g, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "identity-conflicts":
-		return listIdentityConflicts(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+		return listIdentityConflicts(ctx, g, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "person-named":
-		return listPersonNamed(ctx, graph, journalPath, outputFormat, explicitFlags["format"], out, errout)
+		return listPersonNamed(ctx, g, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "vendors":
-		return listVendors(ctx, graph, domainName, ai.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads},
+		return listVendors(ctx, g, domainName, lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads},
 			outputFormat, explicitFlags["format"], out)
 	case "family":
-		return listFamily(ctx, graph, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
+		return listFamily(ctx, g, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
 	case "org-group":
-		return listGroup(ctx, graph, domainName, orgName, outputFormat, explicitFlags["format"], out)
+		return listGroup(ctx, g, domainName, orgName, outputFormat, explicitFlags["format"], out)
 	case "services":
-		return listServices(ctx, graph, domainName, orgName,
-			ai.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
+		return listServices(ctx, g, domainName, orgName,
+			lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
 	case "group-vendors":
-		return listGroupVendors(ctx, graph, domainName, orgName,
-			ai.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
+		return listGroupVendors(ctx, g, domainName, orgName,
+			lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
 	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
@@ -464,7 +468,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 			return errors.New("collection requires exact -subject-type, -subject-field and -subject-value (not -subject-id)")
 		}
 
-		plan := ai.PlanCollection(ai.AssetSelector{Type: subjectType, Field: subjectField, Value: subjectValue})
+		plan := ai.PlanCollection(graph.AssetSelector{Type: subjectType, Field: subjectField, Value: subjectValue})
 		return collectTarget(ctx, cfg, plan, collectionApproval, operation == "collect", out)
 	}
 
@@ -539,7 +543,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	}
 	switch operation {
 	case "scan":
-		return scan(ctx, graph, provider, modelName, journalPath, scanLimit, localClassifier, classifierReview, out)
+		return scan(ctx, g, provider, modelName, journalPath, scanLimit, localClassifier, classifierReview, out)
 	case "ask":
 		if question == "" {
 			return errors.New("-question required")
@@ -578,35 +582,35 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 			return err
 		}
 
-		var c ai.Candidate
+		var c review.Candidate
 		if err := json.Unmarshal(file, &c); err != nil {
 			return err
 		}
-		if _, err := graph.GetAsset(ctx, c.SubjectID); err != nil {
+		if _, err := g.GetAsset(ctx, c.SubjectID); err != nil {
 			return fmt.Errorf("subject missing: %w", err)
 		}
-		if _, err := graph.GetAsset(ctx, c.ObjectID); err != nil {
+		if _, err := g.GetAsset(ctx, c.ObjectID); err != nil {
 			return fmt.Errorf("object missing: %w", err)
 		}
 
 		// Never trust unverified evidence supplied by a file: retrieve evidence
 		// for both assets and check each selected ID against the database.
-		a, err := graph.Evidence(ctx, c.SubjectID, runner.Limits.MaxEvidence)
+		a, err := g.Evidence(ctx, c.SubjectID, runner.Limits.MaxEvidence)
 		if err != nil {
 			return err
 		}
 
-		b, err := graph.Evidence(ctx, c.ObjectID, runner.Limits.MaxEvidence)
+		b, err := g.Evidence(ctx, c.ObjectID, runner.Limits.MaxEvidence)
 		if err != nil {
 			return err
 		}
 
-		actual := map[string]ai.Evidence{}
+		actual := map[string]graph.Evidence{}
 		for _, e := range append(a, b...) {
 			actual[e.ID] = e
 		}
 
-		verified := make([]ai.Evidence, 0, len(c.Evidence))
+		verified := make([]graph.Evidence, 0, len(c.Evidence))
 		for _, e := range c.Evidence {
 			v, ok := actual[e.ID]
 			if !ok {
@@ -618,12 +622,12 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 
 		c.Evidence = verified
 		// Taxonomy is verified in the CLI in addition to the generic inference layer.
-		subject, err := graph.GetAsset(ctx, c.SubjectID)
+		subject, err := g.GetAsset(ctx, c.SubjectID)
 		if err != nil {
 			return err
 		}
 
-		object, err := graph.GetAsset(ctx, c.ObjectID)
+		object, err := g.GetAsset(ctx, c.ObjectID)
 		if err != nil {
 			return err
 		}
@@ -643,7 +647,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 			return err
 		}
 
-		journal := &ai.Journal{Path: journalPath}
+		journal := &review.Journal{Path: journalPath}
 		if routing.Decision == "review" {
 			if err := journal.SubmitTriage(c, routing); err != nil {
 				return err

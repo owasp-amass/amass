@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -151,27 +152,27 @@ func TestResolveOrganizationNativeIdentifiersAndSourcedAliasSQLite(t *testing.T)
 	}}
 	cases := []struct {
 		name   string
-		q      ai.OrganizationQuery
+		q      graph.OrganizationQuery
 		status string
 		wantID string
 	}{
-		{"legal name", ai.OrganizationQuery{LegalName: "Acme Holdings Incorporated"}, "matched", primary.ID},
-		{"unique id", ai.OrganizationQuery{UniqueID: "acme-holdings"}, "matched", primary.ID},
+		{"legal name", graph.OrganizationQuery{LegalName: "Acme Holdings Incorporated"}, "matched", primary.ID},
+		{"unique id", graph.OrganizationQuery{UniqueID: "acme-holdings"}, "matched", primary.ID},
 		{
 			"registration id",
-			ai.OrganizationQuery{RegistrationID: "REG-100", Jurisdiction: "GB"},
+			graph.OrganizationQuery{RegistrationID: "REG-100", Jurisdiction: "GB"},
 			"matched",
 			secondary.ID,
 		},
-		{"alias", ai.OrganizationQuery{Name: "Acme Group"}, "matched", primary.ID},
-		{"ambiguous display", ai.OrganizationQuery{Name: "Acme Holdings Inc"}, "ambiguous", ""},
+		{"alias", graph.OrganizationQuery{Name: "Acme Group"}, "matched", primary.ID},
+		{"ambiguous display", graph.OrganizationQuery{Name: "Acme Holdings Inc"}, "ambiguous", ""},
 		{
 			"jurisdiction display",
-			ai.OrganizationQuery{Name: "Acme Holdings Inc", Jurisdiction: "US-NY"},
+			graph.OrganizationQuery{Name: "Acme Holdings Inc", Jurisdiction: "US-NY"},
 			"matched",
 			primary.ID,
 		},
-		{"unknown", ai.OrganizationQuery{Name: "Unknown Corp."}, "not_found", ""},
+		{"unknown", graph.OrganizationQuery{Name: "Unknown Corp."}, "not_found", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -215,13 +216,13 @@ func TestResolveFQDNAndURLOnSQLite(t *testing.T) {
 
 	adapter := Adapter{Repo: repo}
 	cases := []struct {
-		selector ai.AssetSelector
+		selector graph.AssetSelector
 		id       string
 	}{
-		{ai.AssetSelector{Type: "FQDN", Field: "name", Value: "test.example"}, fqdn.ID},
-		{ai.AssetSelector{Type: "FQDN", Field: "name", Value: "TEST.EXAMPLE."}, fqdn.ID},
-		{ai.AssetSelector{Type: "URL", Field: "url", Value: "https://test.example/"}, url.ID},
-		{ai.AssetSelector{Type: "URL", EntityID: url.ID}, url.ID},
+		{graph.AssetSelector{Type: "FQDN", Field: "name", Value: "test.example"}, fqdn.ID},
+		{graph.AssetSelector{Type: "FQDN", Field: "name", Value: "TEST.EXAMPLE."}, fqdn.ID},
+		{graph.AssetSelector{Type: "URL", Field: "url", Value: "https://test.example/"}, url.ID},
+		{graph.AssetSelector{Type: "URL", EntityID: url.ID}, url.ID},
 	}
 	for _, tc := range cases {
 		got, err := adapter.ResolveAsset(ctx, tc.selector, 10)
@@ -229,7 +230,7 @@ func TestResolveFQDNAndURLOnSQLite(t *testing.T) {
 			t.Fatalf("selector=%+v result=%+v err=%v", tc.selector, got, err)
 		}
 	}
-	if _, err := adapter.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "unknown", Value: "x"},
+	if _, err := adapter.ResolveAsset(ctx, graph.AssetSelector{Type: "FQDN", Field: "unknown", Value: "x"},
 		10); err == nil {
 		t.Fatal("invalid selector field accepted")
 	}

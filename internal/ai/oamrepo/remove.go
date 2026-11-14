@@ -10,19 +10,19 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
-var _ ai.OrganizationRemover = Adapter{}
+var _ review.OrganizationRemover = Adapter{}
 
 // RemoveOrganization deletes an organization with its relationships and
 // properties, and returns what it removed so RestoreOrganization can put
 // it back.
-func (a Adapter) RemoveOrganization(ctx context.Context, id string) (ai.OrganizationRemoval, error) {
-	rec := ai.OrganizationRemoval{OrganizationID: id}
+func (a Adapter) RemoveOrganization(ctx context.Context, id string) (review.OrganizationRemoval, error) {
+	rec := review.OrganizationRemoval{OrganizationID: id}
 	if a.Repo == nil {
 		return rec, errors.New("missing OAM repository")
 	}
@@ -75,8 +75,8 @@ func (a Adapter) RemoveOrganization(ctx context.Context, id string) (ai.Organiza
 }
 
 // recordEdge records a relationship of an entity about to be removed.
-func (a Adapter) recordEdge(ctx context.Context, edge *dbt.Edge, outgoing bool) (ai.MergedEdge, error) {
-	m := ai.MergedEdge{ID: edge.ID, Outgoing: outgoing}
+func (a Adapter) recordEdge(ctx context.Context, edge *dbt.Edge, outgoing bool) (review.MergedEdge, error) {
+	m := review.MergedEdge{ID: edge.ID, Outgoing: outgoing}
 	if edge.Relation == nil || edge.FromEntity == nil || edge.ToEntity == nil {
 		return m, fmt.Errorf("edge %s is incomplete", edge.ID)
 	}
@@ -113,7 +113,7 @@ func (a Adapter) recordEdge(ctx context.Context, edge *dbt.Edge, outgoing bool) 
 // RestoreOrganization recreates a removed organization with its properties
 // and its relationships to the entities that still exist, and returns its
 // new ID.
-func (a Adapter) RestoreOrganization(ctx context.Context, rec ai.OrganizationRemoval) (string, error) {
+func (a Adapter) RestoreOrganization(ctx context.Context, rec review.OrganizationRemoval) (string, error) {
 	if a.Repo == nil {
 		return "", errors.New("missing OAM repository")
 	}

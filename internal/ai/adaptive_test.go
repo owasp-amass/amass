@@ -9,13 +9,16 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestAdaptiveAskFindsParentWithoutSibling(t *testing.T) {
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"ultimate_parent"}`,
 	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}
 	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(),
 		"What is the highest parent organization associated with tech.acme.example?")
 	if err != nil {
@@ -42,7 +45,7 @@ func TestAdaptiveAskSelectsOnlyWitnessedPaths(t *testing.T) {
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"connected"}`,
 		`{"selected_asset_ids":["parent","tech"]}`,
 	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}
 	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(),
 		"Which organizations are connected to tech.acme.example?")
 	if err != nil {
@@ -61,9 +64,9 @@ func TestAdaptiveSelectionRejectsInventedAssetIDs(t *testing.T) {
 		`{"selected_asset_ids":["invented-database-id"]}`,
 		`{"selected_asset_ids":["also-invented"]}`,
 	}}
-	paths := []PlanMatch{
-		{Nodes: []Asset{{ID: "a", Type: "FQDN"}, {ID: "one", Type: "Organization"}}, Edges: []Relation{{ID: "edge1"}}},
-		{Nodes: []Asset{{ID: "a", Type: "FQDN"}, {ID: "two", Type: "Organization"}}, Edges: []Relation{{ID: "edge2"}}},
+	paths := []graph.PlanMatch{
+		{Nodes: []graph.Asset{{ID: "a", Type: "FQDN"}, {ID: "one", Type: "Organization"}}, Edges: []graph.Relation{{ID: "edge1"}}},
+		{Nodes: []graph.Asset{{ID: "a", Type: "FQDN"}, {ID: "two", Type: "Organization"}}, Edges: []graph.Relation{{ID: "edge2"}}},
 	}
 	_, err := (Agent{Model: model}).chooseAdaptivePaths(context.Background(), "Which organizations?",
 		InvestigationGoal{Purpose: "connected"}, paths)
@@ -73,16 +76,16 @@ func TestAdaptiveSelectionRejectsInventedAssetIDs(t *testing.T) {
 }
 
 func TestAdaptivePlanRejectsUnknownTargetAndHops(t *testing.T) {
-	_, err := parseGoal(`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"connected","hops":[]}`, testOAMCatalog.SearchFields())
+	_, err := parseGoal(`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"connected","hops":[]}`, aitest.TestOAMCatalog.SearchFields())
 	if err == nil {
 		t.Fatal("adaptive planner accepted unsupported fixed hop key")
 	}
 
-	goal, err := parseGoal(`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["NotAnOAMType"],"direction":"both","purpose":"connected"}`, testOAMCatalog.SearchFields())
+	goal, err := parseGoal(`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["NotAnOAMType"],"direction":"both","purpose":"connected"}`, aitest.TestOAMCatalog.SearchFields())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validateGoal(goal, testOAMCatalog.Relations(), testOAMCatalog.SearchFields()); err == nil {
+	if err := validateGoal(goal, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields()); err == nil {
 		t.Fatal("unknown OAM target type accepted")
 	}
 }
@@ -91,7 +94,7 @@ func TestAdaptiveSearchReturnedJSONRemainsMachineReadable(t *testing.T) {
 	model := &plannerModel{replies: []string{
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"ultimate_parent"}`,
 	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}
 	out, err := (Agent{Model: model, Runner: runner}).Ask(context.Background(),
 		"Highest parent organization of tech.acme.example?")
 	if err != nil {

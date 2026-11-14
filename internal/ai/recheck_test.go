@@ -8,6 +8,11 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 type fakeRetractor struct{ retracted []string }
@@ -18,42 +23,42 @@ func (f *fakeRetractor) RetractOwnership(_ context.Context, id string) (bool, er
 }
 
 func TestRecheckAttributions(t *testing.T) {
-	g := newOrgGraph()
-	g.org("colgate", "colgate university", "", "", "")
-	g.g.assets["cr-a"] = Asset{ID: "cr-a", Type: "ContactRecord"}
-	g.g.assets["cr-b"] = Asset{ID: "cr-b", Type: "ContactRecord"}
-	g.g.assets["phone"] = Asset{ID: "phone", Type: "Phone"}
-	g.link("cr-a", "phone", "phone")
-	g.link("cr-b", "phone", "phone")
+	g := aitest.NewOrgGraph()
+	g.Org("colgate", "colgate university", "", "", "")
+	g.Graph.Assets["cr-a"] = graph.Asset{ID: "cr-a", Type: "ContactRecord"}
+	g.Graph.Assets["cr-b"] = graph.Asset{ID: "cr-b", Type: "ContactRecord"}
+	g.Graph.Assets["phone"] = graph.Asset{ID: "phone", Type: "Phone"}
+	g.Link("cr-a", "phone", "phone")
+	g.Link("cr-b", "phone", "phone")
 
-	witness := func(from, to string) WitnessEdge {
-		return WitnessEdge{FromID: from, FromType: "ContactRecord", From: from, Label: "phone", ToID: to,
+	witness := func(from, to string) graph.WitnessEdge {
+		return graph.WitnessEdge{FromID: from, FromType: "ContactRecord", From: from, Label: "phone", ToID: to,
 			ToType: "Phone", To: to}
 	}
-	proposal := func(id, cr string) OwnershipProposal {
-		return OwnershipProposal{ID: id, OwnerID: "colgate", AssetID: cr, Decision: GapPropose,
-			Edge: ProposedEdge{FromID: cr, FromType: "ContactRecord", Label: "organization", RelationType: "SimpleRelation",
+	proposal := func(id, cr string) review.OwnershipProposal {
+		return review.OwnershipProposal{ID: id, OwnerID: "colgate", AssetID: cr, Decision: lens.GapPropose,
+			Edge: lens.ProposedEdge{FromID: cr, FromType: "ContactRecord", Label: "organization", RelationType: "SimpleRelation",
 				ToID: "colgate", ToType: "Organization"},
-			Witness: []WitnessEdge{witness("cr-a", "phone"), witness(cr, "phone")}}
+			Witness: []graph.WitnessEdge{witness("cr-a", "phone"), witness(cr, "phone")}}
 	}
 
-	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	kept := proposal("own-kept", "cr-b")
 	gone := proposal("own-gone", "cr-c")
 	person := proposal("own-person", "cr-d")
-	if _, err := j.SubmitOwnership([]OwnershipProposal{kept, gone, person}); err != nil {
+	if _, err := j.SubmitOwnership([]review.OwnershipProposal{kept, gone, person}); err != nil {
 		t.Fatal(err)
 	}
-	for id, reviewer := range map[string]string{"own-kept": AutomaticReviewer, "own-gone": AutomaticReviewer,
+	for id, reviewer := range map[string]string{"own-kept": review.AutomaticReviewer, "own-gone": review.AutomaticReviewer,
 		"own-person": "caffix"} {
-		if err := j.RecordOwnership(OwnershipOutcome{ProposalID: id, Status: ProposalApplied, Reviewer: reviewer,
+		if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: review.ProposalApplied, Reviewer: reviewer,
 			EdgeID: "edge-" + id}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	r := &fakeRetractor{}
-	res, err := RecheckAttributions(context.Background(), g.g, r, j)
+	res, err := review.RecheckAttributions(context.Background(), g.Graph, r, j)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,13 +73,13 @@ func TestRecheckAttributions(t *testing.T) {
 		t.Fatal(err)
 	}
 	g2 := state["own-gone"]
-	if g2.Status != ProposalRetracted || g2.Outcome.Reviewer != RecheckReviewer {
+	if g2.Status != review.ProposalRetracted || g2.Outcome.Reviewer != review.RecheckReviewer {
 		t.Fatalf("own-gone = %+v", g2)
 	}
-	if !redecidable(g2) {
+	if !review.Redecidable(g2) {
 		t.Error("a re-check retraction blocks the relationship from being written again")
 	}
-	if redecidable(&OwnershipEntry{Status: ProposalRetracted, Outcome: &OwnershipOutcome{Reviewer: "caffix"}}) {
+	if review.Redecidable(&review.OwnershipEntry{Status: review.ProposalRetracted, Outcome: &review.OwnershipOutcome{Reviewer: "caffix"}}) {
 		t.Error("a person's retraction can be overturned")
 	}
 	if _, ok := OwnershipLabel(*g2); ok {

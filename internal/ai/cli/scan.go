@@ -13,12 +13,14 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // scan uses deterministic candidate selection before calling the LLM. It
 // deliberately does not attempt broad graph mining or mutate existing OAM.
-func scan(ctx context.Context, graph oamrepo.Adapter, model ai.Model, modelName, journalPath string, limit int, classifier classify.Classifier, allowReview bool, out io.Writer) error {
+func scan(ctx context.Context, graph oamrepo.Adapter, model llm.Model, modelName, journalPath string, limit int, classifier classify.Classifier, allowReview bool, out io.Writer) error {
 	if journalPath == "" {
 		return fmt.Errorf("-journal required for scan")
 	}
@@ -36,7 +38,7 @@ func scan(ctx context.Context, graph oamrepo.Adapter, model ai.Model, modelName,
 		return err
 	}
 
-	store := &ai.Journal{Path: journalPath}
+	store := &review.Journal{Path: journalPath}
 	inferrer := ai.Inferrer{Model: model, Plugin: "entity-resolution-scanner", ModelID: modelName, MinSources: 2}
 	summary := struct {
 		Candidates int `json:"candidates"`

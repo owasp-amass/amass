@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // CollectionPlan is a proposal, never permission. Its ID is a deterministic
@@ -21,14 +23,14 @@ import (
 // who may run the collect command. A model must not be able to launch
 // discovery by calling a read-only graph tool; no tool exposes collection.
 type CollectionPlan struct {
-	ID               string        `json:"id,omitempty"`
-	Target           AssetSelector `json:"target"`
-	Status           string        `json:"status"`
-	ScopeType        string        `json:"scope_type,omitempty"`
-	ScopeValue       string        `json:"scope_value,omitempty"`
-	Methods          []string      `json:"methods,omitempty"`
-	RequiresApproval bool          `json:"requires_approval"`
-	Reason           string        `json:"reason,omitempty"`
+	ID               string              `json:"id,omitempty"`
+	Target           graph.AssetSelector `json:"target"`
+	Status           string              `json:"status"`
+	ScopeType        string              `json:"scope_type,omitempty"`
+	ScopeValue       string              `json:"scope_value,omitempty"`
+	Methods          []string            `json:"methods,omitempty"`
+	RequiresApproval bool                `json:"requires_approval"`
+	Reason           string              `json:"reason,omitempty"`
 }
 
 var collectionDNSLabel = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
@@ -36,7 +38,7 @@ var collectionDNSLabel = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A
 // PlanCollection does not touch the Internet or Asset Database. Direct
 // enumeration currently supports precisely specified FQDN, IP, netblock and
 // ASN targets. Other OAM asset types require more specialized adapters.
-func PlanCollection(target AssetSelector) CollectionPlan {
+func PlanCollection(target graph.AssetSelector) CollectionPlan {
 	plan := CollectionPlan{Target: target, Status: "unsupported", RequiresApproval: true}
 	value := strings.TrimSpace(target.Value)
 	if target.EntityID != "" || value == "" {

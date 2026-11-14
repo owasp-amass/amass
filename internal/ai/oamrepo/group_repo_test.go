@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -56,13 +56,13 @@ func checkCorporateGroup(t *testing.T, repo repository.Repository) {
 		t.Fatal(err)
 	}
 
-	r, err := ai.FindCorporateGroup(ctx, adapter, subject)
+	r, err := lens.FindCorporateGroup(ctx, adapter, subject)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(r.Tops) != 1 || r.Tops[0].ID != top.ID || len(r.Members) != 4 || r.Truncated {
 		t.Fatalf("tops %+v, %d members, truncated %v (%s)\n%s", r.Tops, len(r.Members), r.Truncated, r.Reason,
-			ai.FormatGroupReport(r))
+			lens.FormatGroupReport(r))
 	}
 	for _, m := range r.Members {
 		if m.Organization.ID == sib.ID && (m.Depth != 2 || m.ParentID != mid.ID || m.Jurisdiction != "GB") {

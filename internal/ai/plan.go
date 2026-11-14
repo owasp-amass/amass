@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 const maxPlanHops = 3
@@ -33,8 +35,8 @@ type PlanSubject struct {
 	EntityID       string `json:"entity_id,omitempty"`
 }
 
-func (s PlanSubject) AssetSelector() AssetSelector {
-	return AssetSelector{Type: s.Type, Field: s.Field, Value: s.Value, EntityID: s.EntityID}
+func (s PlanSubject) AssetSelector() graph.AssetSelector {
+	return graph.AssetSelector{Type: s.Type, Field: s.Field, Value: s.Value, EntityID: s.EntityID}
 }
 
 // organizationSubject moves an Organization name or legal_name selector
@@ -62,8 +64,8 @@ func (s PlanSubject) UsesOrganizationResolution() bool {
 	return s.Type == "Organization" && s.Field == "" && s.Value == "" && s.EntityID == ""
 }
 
-func (s PlanSubject) OrganizationQuery() OrganizationQuery {
-	return OrganizationQuery{
+func (s PlanSubject) OrganizationQuery() graph.OrganizationQuery {
+	return graph.OrganizationQuery{
 		Name:           s.Name,
 		LegalName:      s.LegalName,
 		UniqueID:       s.UniqueID,
@@ -79,19 +81,13 @@ type PlanHop struct {
 	DestinationType string `json:"destination_type"`
 }
 
-type PlanMatch struct {
-	Nodes  []Asset    `json:"nodes"`
-	Edges  []Relation `json:"edges"`
-	PathID string     `json:"path_id,omitempty"`
-}
-
 // validatePlan accepts only transitions explicitly present in the catalog.
 // An unknown semantic label is never treated as a negative query result.
-func validatePlan(plan TypedPlan, catalog []RelationshipSchema, limits Limits) error {
+func validatePlan(plan TypedPlan, catalog []graph.RelationshipSchema, limits graph.Limits) error {
 	return validatePlanWithSelectors(plan, catalog, nil, limits)
 }
 
-func validatePlanWithSelectors(plan TypedPlan, catalog []RelationshipSchema, selectors []AssetSearchSchema, limits Limits) error {
+func validatePlanWithSelectors(plan TypedPlan, catalog []graph.RelationshipSchema, selectors []graph.AssetSearchSchema, limits graph.Limits) error {
 	if plan.Subject.UsesOrganizationResolution() {
 		if err := plan.Subject.OrganizationQuery().Validate(); err != nil {
 			return fmt.Errorf("invalid organization subject: %w", err)
@@ -143,7 +139,7 @@ func validatePlanWithSelectors(plan TypedPlan, catalog []RelationshipSchema, sel
 // If and only if the selected asset's schema has an indexed "name" field,
 // move that name into the generic typed selector. This does not guess a
 // missing value, choose an entity, or recognize natural-language phrases.
-func normalizePlannedSubject(subject PlanSubject, selectors []AssetSearchSchema) PlanSubject {
+func normalizePlannedSubject(subject PlanSubject, selectors []graph.AssetSearchSchema) PlanSubject {
 	if subject.Type == "Organization" || subject.Name == "" ||
 		subject.EntityID != "" || subject.Value != "" ||
 		subject.LegalName != "" || subject.UniqueID != "" ||
@@ -167,7 +163,7 @@ func normalizePlannedSubject(subject PlanSubject, selectors []AssetSearchSchema)
 	return subject
 }
 
-func selectorCorrectionHint(subject PlanSubject, selectors []AssetSearchSchema) string {
+func selectorCorrectionHint(subject PlanSubject, selectors []graph.AssetSearchSchema) string {
 	for _, schema := range selectors {
 		if schema.Type != subject.Type {
 			continue
@@ -189,7 +185,7 @@ func selectorCorrectionHint(subject PlanSubject, selectors []AssetSearchSchema) 
 // The single field must appear in the authoritative selector catalog. Any
 // unsupported, ambiguous, or additional keys remain subject to strict JSON
 // validation; this is not general-purpose schema coercion.
-func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte, error) {
+func canonicalizeSelectorFields(raw []byte, schemas []graph.AssetSearchSchema) ([]byte, error) {
 	var envelope map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return raw, nil
@@ -266,7 +262,7 @@ func canonicalizeSelectorFields(raw []byte, schemas []AssetSearchSchema) ([]byte
 // but avoids repeating long JSON property names for every OAM relation.
 // The model sees source|label|relation_type|destinations. All plan validation
 // still uses the original unfiltered RelationshipSchema values.
-func compactRelationshipCatalog(catalog []RelationshipSchema) string {
+func compactRelationshipCatalog(catalog []graph.RelationshipSchema) string {
 	groups := map[string]map[string]bool{}
 	for _, rel := range catalog {
 		key := rel.SourceType + "|" + rel.Label + "|" + rel.RelationType
@@ -303,8 +299,8 @@ func compactRelationshipCatalog(catalog []RelationshipSchema) string {
 
 // compactSelectorCatalog describes the indexed selector fields without
 // encouraging models to copy a JSON "fields" property into the plan.
-func compactSelectorCatalog(catalog []AssetSearchSchema) string {
-	rows := make([]AssetSearchSchema, len(catalog))
+func compactSelectorCatalog(catalog []graph.AssetSearchSchema) string {
+	rows := make([]graph.AssetSearchSchema, len(catalog))
 	copy(rows, catalog)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Type < rows[j].Type })
 	var b strings.Builder
@@ -325,7 +321,7 @@ func compactSelectorCatalog(catalog []AssetSearchSchema) string {
 	return b.String()
 }
 
-func formatMatch(p PlanMatch) string {
+func formatMatch(p graph.PlanMatch) string {
 	if len(p.Nodes) == 0 {
 		return ""
 	}
@@ -352,7 +348,7 @@ func formatMatch(p PlanMatch) string {
 	return strings.Join(parts, " ")
 }
 
-func humanAsset(a Asset) string {
+func humanAsset(a graph.Asset) string {
 	display := a.Key
 	// Content is an OAM struct in database adapters and a map after JSON
 	// decoding. Pull display fields only from JSON to avoid model speculation.
@@ -373,7 +369,7 @@ func humanAsset(a Asset) string {
 	return fmt.Sprintf("%s (asset %s)", display, a.ID)
 }
 
-func resolutionAnswer(status string, candidates []OrganizationCandidate) string {
+func resolutionAnswer(status string, candidates []graph.OrganizationCandidate) string {
 	switch status {
 	case "not_found":
 		return "No asset matched the asserted typed identifier in the current Asset Database; no relationship conclusion can be drawn."

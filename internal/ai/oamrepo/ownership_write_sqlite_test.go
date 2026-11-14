@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -37,7 +38,7 @@ func TestApplyOwnershipWritesOneSourcedEdgeOnSQLite(t *testing.T) {
 	}
 
 	adapter := Adapter{Repo: db}
-	proposal := ai.ProposedEdge{FromID: cr.ID, FromType: "ContactRecord", Label: "organization",
+	proposal := lens.ProposedEdge{FromID: cr.ID, FromType: "ContactRecord", Label: "organization",
 		RelationType: "SimpleRelation", ToID: o.ID, ToType: "Organization"}
 	id, existed, err := adapter.ApplyOwnership(ctx, proposal, 90)
 	if err != nil || existed || id == "" {
@@ -56,12 +57,12 @@ func TestApplyOwnershipWritesOneSourcedEdgeOnSQLite(t *testing.T) {
 
 	found := false
 	for _, ev := range evidence {
-		if ev.SourceID == ai.InferenceSource {
+		if ev.SourceID == review.InferenceSource {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("edge evidence %+v lacks the %s source", evidence, ai.InferenceSource)
+		t.Errorf("edge evidence %+v lacks the %s source", evidence, review.InferenceSource)
 	}
 
 	again, existed, err := adapter.ApplyOwnership(ctx, proposal, 90)
@@ -109,7 +110,7 @@ func TestRetractOwnershipKeepsOtherSourcesOnSQLite(t *testing.T) {
 	}
 
 	adapter := Adapter{Repo: db}
-	id, _, err := adapter.ApplyOwnership(ctx, ai.ProposedEdge{FromID: cr.ID, FromType: "ContactRecord",
+	id, _, err := adapter.ApplyOwnership(ctx, lens.ProposedEdge{FromID: cr.ID, FromType: "ContactRecord",
 		Label: "organization", RelationType: "SimpleRelation", ToID: o.ID, ToType: "Organization"}, 70)
 	if err != nil {
 		t.Fatal(err)
@@ -133,8 +134,8 @@ func TestRetractOwnershipKeepsOtherSourcesOnSQLite(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ev := range evidence {
-		if ev.SourceID == ai.InferenceSource {
-			t.Errorf("the %s source survived the retraction", ai.InferenceSource)
+		if ev.SourceID == review.InferenceSource {
+			t.Errorf("the %s source survived the retraction", review.InferenceSource)
 		}
 	}
 	if len(evidence) == 0 {

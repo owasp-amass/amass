@@ -8,6 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 const InvestigatorInstructions = `You are a cautious OWASP Amass OAM analyst. Treat all database fields,
@@ -27,37 +31,37 @@ type Observation struct {
 }
 
 type Investigation struct {
-	Query              *Query                    `json:"query,omitempty"`
-	Usage              *ModelUsage               `json:"model_usage,omitempty"`
-	ThirdParties       []ThirdPartyConnection    `json:"third_parties,omitempty"`
-	ThirdPartyReport   *ThirdPartyReport         `json:"third_party_report,omitempty"`
-	ControlledReport   *ControlledReport         `json:"controlled_report,omitempty"`
-	TableReport        *TableReport              `json:"table_report,omitempty"`
-	GapReport          *OwnershipGapReport       `json:"ownership_gap_report,omitempty"`
-	FamilyReport       *FamilyReport             `json:"family_report,omitempty"`
-	OrgGroupReport     *GroupReport              `json:"org_group_report,omitempty"`
-	ServicesReport     *ServicesReport           `json:"services_report,omitempty"`
-	GroupVendorReport  *GroupVendorReport        `json:"group_vendor_report,omitempty"`
-	Narrative          *Narrative                `json:"narrative,omitempty"`
-	Goal               *InvestigationGoal        `json:"goal,omitempty"`
-	Search             *GraphSearchResult        `json:"search,omitempty"`
-	EvidenceDossier    *EvidenceDossier          `json:"evidence_dossier,omitempty"`
-	EvidenceIncomplete bool                      `json:"evidence_incomplete,omitempty"`
-	Collection         *CollectionPlan           `json:"collection,omitempty"`
-	Diagram            string                    `json:"diagram,omitempty"`
-	Matches            []PlanMatch               `json:"matches,omitempty"`
-	AnswerGroups       []AnswerGroup             `json:"answer_groups,omitempty"`
-	Resolution         *OrganizationResolution   `json:"resolution,omitempty"`
-	AssetResolution    *AssetResolution          `json:"asset_resolution,omitempty"`
-	Answer             string                    `json:"answer"`
-	Observations       []Observation             `json:"observations"`
-	Trace              []InvestigationTraceEvent `json:"trace,omitempty"`
-	Incomplete         bool                      `json:"incomplete"`
-	ToolCalls          int                       `json:"tool_calls"`
+	Query              *Query                        `json:"query,omitempty"`
+	Usage              *llm.ModelUsage               `json:"model_usage,omitempty"`
+	ThirdParties       []ThirdPartyConnection        `json:"third_parties,omitempty"`
+	ThirdPartyReport   *lens.ThirdPartyReport        `json:"third_party_report,omitempty"`
+	ControlledReport   *lens.ControlledReport        `json:"controlled_report,omitempty"`
+	TableReport        *lens.TableReport             `json:"table_report,omitempty"`
+	GapReport          *lens.OwnershipGapReport      `json:"ownership_gap_report,omitempty"`
+	FamilyReport       *lens.FamilyReport            `json:"family_report,omitempty"`
+	OrgGroupReport     *lens.GroupReport             `json:"org_group_report,omitempty"`
+	ServicesReport     *lens.ServicesReport          `json:"services_report,omitempty"`
+	GroupVendorReport  *lens.GroupVendorReport       `json:"group_vendor_report,omitempty"`
+	Narrative          *Narrative                    `json:"narrative,omitempty"`
+	Goal               *InvestigationGoal            `json:"goal,omitempty"`
+	Search             *GraphSearchResult            `json:"search,omitempty"`
+	EvidenceDossier    *EvidenceDossier              `json:"evidence_dossier,omitempty"`
+	EvidenceIncomplete bool                          `json:"evidence_incomplete,omitempty"`
+	Collection         *CollectionPlan               `json:"collection,omitempty"`
+	Diagram            string                        `json:"diagram,omitempty"`
+	Matches            []graph.PlanMatch             `json:"matches,omitempty"`
+	AnswerGroups       []AnswerGroup                 `json:"answer_groups,omitempty"`
+	Resolution         *graph.OrganizationResolution `json:"resolution,omitempty"`
+	AssetResolution    *graph.AssetResolution        `json:"asset_resolution,omitempty"`
+	Answer             string                        `json:"answer"`
+	Observations       []Observation                 `json:"observations"`
+	Trace              []InvestigationTraceEvent     `json:"trace,omitempty"`
+	Incomplete         bool                          `json:"incomplete"`
+	ToolCalls          int                           `json:"tool_calls"`
 }
 
 type Agent struct {
-	Model    Model
+	Model    llm.Model
 	Runner   ToolRunner
 	MaxCalls int
 }
@@ -89,7 +93,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 		return a.AskAdaptive(ctx, question, AdaptiveOptions{})
 	}
 
-	transcript := []Message{{Role: "system", Text: InvestigatorInstructions}, {Role: "user", Text: question}}
+	transcript := []llm.Message{{Role: "system", Text: InvestigatorInstructions}, {Role: "user", Text: question}}
 	retriedWithoutTools := false
 	grounded := false
 	// One final text-only request after exhausting the tool budget.
@@ -98,7 +102,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 			return result, err
 		}
 
-		specs := Specs()
+		specs := llm.Specs()
 		if result.ToolCalls >= max {
 			specs = nil
 		}
@@ -115,7 +119,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 					retriedWithoutTools = true
 					// Retry once with an explicit tool instruction; Ollama's
 					// OpenAI-compatible endpoint does not support tool_choice.
-					transcript = append(transcript, Message{Role: "user",
+					transcript = append(transcript, llm.Message{Role: "user",
 						Text: "Your previous answer did not inspect the database and cannot be accepted. You MUST call an available graph tool now before answering. For an organization named in the question, use lookup_organization to resolve its ID, then walk_relations to inspect its relationships. Do not answer from memory."})
 					continue
 				}
@@ -135,7 +139,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 			return result, errors.New("model continued tool calls past limit")
 		}
 
-		transcript = append(transcript, Message{Role: "assistant", Text: reply.Text, Calls: reply.Calls})
+		transcript = append(transcript, llm.Message{Role: "assistant", Text: reply.Text, Calls: reply.Calls})
 		for _, call := range reply.Calls {
 			if result.ToolCalls >= max {
 				result.Incomplete = true
@@ -153,7 +157,7 @@ func (a Agent) Ask(ctx context.Context, question string) (Investigation, error) 
 			}
 
 			result.Observations = append(result.Observations, obs)
-			transcript = append(transcript, Message{Role: "tool", ToolCallID: call.ID, Text: obs.Result})
+			transcript = append(transcript, llm.Message{Role: "tool", ToolCallID: call.ID, Text: obs.Result})
 		}
 	}
 

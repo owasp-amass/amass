@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // namedRelationshipPhrase requires the user to explicitly name OAM
@@ -25,7 +27,7 @@ type explicitRelationHint struct {
 
 // explicitRelationLabels only discovers exact catalog label words from an
 // explicit relationship phrase. It does not infer unseen edges or ownership.
-func explicitRelationLabels(question string, catalog []RelationshipSchema) (explicitRelationHint, bool) {
+func explicitRelationLabels(question string, catalog []graph.RelationshipSchema) (explicitRelationHint, bool) {
 	var hint explicitRelationHint
 	matches := namedRelationshipPhrase.FindAllStringSubmatch(question, -1)
 	if len(matches) != 1 {
@@ -145,7 +147,7 @@ func explicitRelationLabels(question string, catalog []RelationshipSchema) (expl
 //
 // Fail closed when more than one distinct taxonomy sequence fits the same
 // root/target/labels; the model must disambiguate the semantic goal.
-func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType string, catalog []RelationshipSchema) ([]GoalRelation, bool) {
+func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType string, catalog []graph.RelationshipSchema) ([]GoalRelation, bool) {
 	if rootType == "" || targetType == "" || len(hint.Labels) == 0 {
 		return nil, false
 	}
@@ -220,7 +222,7 @@ func groundedRelationshipGoal(hint explicitRelationHint, rootType, targetType st
 // It is called after the model's subject, targets, direction and purpose
 // have been validated independently. It never changes the user-selected
 // asset identifier or destination types and does not fabricate OAM edges.
-func applyExplicitRelationGrounding(goal InvestigationGoal, hint explicitRelationHint, catalog []RelationshipSchema) (InvestigationGoal, bool) {
+func applyExplicitRelationGrounding(goal InvestigationGoal, hint explicitRelationHint, catalog []graph.RelationshipSchema) (InvestigationGoal, bool) {
 	if len(goal.TargetTypes) != 1 {
 		return goal, false
 	}

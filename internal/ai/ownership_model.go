@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // The ownership model learns how much each kind of signal counts from
@@ -33,7 +35,7 @@ const (
 // hosting, the listing relationship for co-listing), and "signal:id" for
 // its catalog entry. New signals and routes become features without code
 // changes.
-func OwnershipFeatures(p OwnershipProposal) map[string]float64 {
+func OwnershipFeatures(p review.OwnershipProposal) map[string]float64 {
 	f := map[string]float64{}
 	count := map[string]int{}
 	for _, s := range p.Signals {
@@ -52,7 +54,7 @@ func OwnershipFeatures(p OwnershipProposal) map[string]float64 {
 	}
 
 	f["kinds"] = math.Min(float64(len(count)), 3) / 3
-	f["gains"] = math.Min(float64(len(p.Gains)), gapMaxGains) / gapMaxGains
+	f["gains"] = math.Min(float64(len(p.Gains)), lens.GapMaxGains) / lens.GapMaxGains
 	return f
 }
 
@@ -60,21 +62,21 @@ func OwnershipFeatures(p OwnershipProposal) map[string]float64 {
 // a person's approval is positive; a rejection or retraction is negative.
 // Pending proposals and automatic writes are not labels, so the model never
 // learns from its own decisions.
-func OwnershipLabel(e OwnershipEntry) (string, bool) {
+func OwnershipLabel(e review.OwnershipEntry) (string, bool) {
 	if e.Outcome == nil {
 		return "", false
 	}
 
 	switch e.Status {
-	case ProposalApplied:
-		if e.Outcome.Reviewer == AutomaticReviewer {
+	case review.ProposalApplied:
+		if e.Outcome.Reviewer == review.AutomaticReviewer {
 			return "", false
 		}
 
 		return "potential_relation", true
-	case ProposalRejected, ProposalRetracted:
+	case review.ProposalRejected, review.ProposalRetracted:
 		// A re-check retracts when evidence disappears; no person decided.
-		if e.Outcome.Reviewer == RecheckReviewer {
+		if e.Outcome.Reviewer == review.RecheckReviewer {
 			return "", false
 		}
 
@@ -86,7 +88,7 @@ func OwnershipLabel(e OwnershipEntry) (string, bool) {
 
 // OwnershipTrainingSet turns reviewed journal entries into labeled examples
 // and the feature list they use.
-func OwnershipTrainingSet(entries []OwnershipEntry) ([]classify.LabeledExample, classify.LinearSpec) {
+func OwnershipTrainingSet(entries []review.OwnershipEntry) ([]classify.LabeledExample, classify.LinearSpec) {
 	var rows []classify.LabeledExample
 	names := map[string]bool{}
 	for _, e := range entries {
@@ -146,7 +148,7 @@ func LoadAttributionModel(path string) (*classify.LinearModel, error) {
 }
 
 // ownershipProbability scores p with m, ignoring features m never saw.
-func ownershipProbability(m *classify.LinearModel, p OwnershipProposal) (float64, error) {
+func ownershipProbability(m *classify.LinearModel, p review.OwnershipProposal) (float64, error) {
 	known := map[string]bool{}
 	for _, name := range m.Features() {
 		known[name] = true

@@ -4,7 +4,9 @@
 
 package ai
 
-import "sort"
+import (
+	"sort"
+)
 
 // EdgeSourceSummary exposes the exact stored provenance of one witnessed edge
 // without presenting named sources as proof of independent corroboration.

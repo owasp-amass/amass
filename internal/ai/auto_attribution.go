@@ -11,18 +11,21 @@ import (
 	"math"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // OwnershipWriter writes an approved ownership proposal to the Asset
 // Database and returns the edge ID and whether it was already stored.
 type OwnershipWriter interface {
-	ApplyOwnership(ctx context.Context, e ProposedEdge, confidence int) (string, bool, error)
+	ApplyOwnership(ctx context.Context, e lens.ProposedEdge, confidence int) (string, bool, error)
 }
 
 // ProposalConfidence is the source confidence written for a proposal: the
 // ownership model's probability when a model decided it, otherwise the rule
 // score, as a percentage.
-func ProposalConfidence(p OwnershipProposal) int {
+func ProposalConfidence(p review.OwnershipProposal) int {
 	score := p.Score
 	if p.ModelID != "" {
 		score = p.ModelScore
@@ -50,12 +53,12 @@ type AttributionPolicy struct {
 
 // AttributionResult is one automatic attribution pass for an organization.
 type AttributionResult struct {
-	Report OwnershipGapReport
+	Report lens.OwnershipGapReport
 	// Applied are the proposals written in this pass, with the assets each
 	// brought under the organization.
 	Applied []AppliedOwnership
 	// Queued are proposals left in the journal for review.
-	Queued []OwnershipProposal
+	Queued []review.OwnershipProposal
 	// Unanchored reports an organization whose footprint holds none of the
 	// policy's anchor domains; nothing was proposed for it.
 	Unanchored bool
@@ -63,11 +66,11 @@ type AttributionResult struct {
 
 // AppliedOwnership is a proposal written to the Asset Database.
 type AppliedOwnership struct {
-	Proposal OwnershipProposal
+	Proposal review.OwnershipProposal
 	EdgeID   string
 	Existed  bool
 	// Gains are the assets the relationship brought under the owner.
-	Gains []Asset
+	Gains []graph.Asset
 }
 
 // AttributeOwnership finds the ownership gaps of org and acts on them without
@@ -77,8 +80,8 @@ type AppliedOwnership struct {
 // acted on again, so a rejected or retracted proposal is not rewritten; one
 // still pending is written once its evidence reaches propose.
 // Every write is recorded in the journal with AutomaticReviewer.
-func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, org Asset, w OwnershipWriter,
-	j *Journal, policy AttributionPolicy) (AttributionResult, error) {
+func AttributeOwnership(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, org graph.Asset, w OwnershipWriter,
+	j *review.Journal, policy AttributionPolicy) (AttributionResult, error) {
 	mode := policy.Mode
 	var res AttributionResult
 	if j == nil || j.Path == "" {
@@ -95,7 +98,7 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 		return res, fmt.Errorf("attribution starts from an Organization, not %s", org.Type)
 	}
 
-	report, err := searchOwnershipGaps(ctx, graph, schema, org)
+	report, err := lens.SearchOwnershipGaps(ctx, g, schema, org)
 	res.Report = report
 	if err != nil {
 		return res, err
@@ -110,24 +113,24 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 		return res, err
 	}
 
-	gains := map[string][]Asset{}
+	gains := map[string][]graph.Asset{}
 	for _, c := range report.Candidates {
 		if c.Attachment != nil {
-			gains[ProposalID(*c.Attachment)] = c.GainAssets
+			gains[review.ProposalID(*c.Attachment)] = c.GainAssets
 		}
 	}
-	for _, p := range OwnershipProposals(report) {
+	for _, p := range review.OwnershipProposals(report) {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
 		e, known := state[p.ID]
-		if known && !redecidable(e) {
+		if known && !review.Redecidable(e) {
 			// Applied, rejected or retracted by a person: a decision was
 			// made. A re-check's retraction only says the evidence was gone.
 			continue
 		}
 
-		qualifies := p.Decision == GapPropose
+		qualifies := p.Decision == lens.GapPropose
 		if policy.Model != nil {
 			prob, err := ownershipProbability(policy.Model, p)
 			if err != nil {
@@ -138,7 +141,7 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 			qualifies = prob >= policy.Model.ReviewThreshold
 		}
 		if !known {
-			if _, err := j.SubmitOwnership([]OwnershipProposal{p}); err != nil {
+			if _, err := j.SubmitOwnership([]review.OwnershipProposal{p}); err != nil {
 				return res, err
 			}
 		}
@@ -154,8 +157,8 @@ func AttributeOwnership(ctx context.Context, graph Graph, schema SchemaCatalog, 
 		if err != nil {
 			return res, fmt.Errorf("write %s: %w", p.Edge, err)
 		}
-		if err := j.RecordOwnership(OwnershipOutcome{ProposalID: p.ID, Status: ProposalApplied,
-			Reviewer: AutomaticReviewer, EdgeID: edgeID}); err != nil {
+		if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: p.ID, Status: review.ProposalApplied,
+			Reviewer: review.AutomaticReviewer, EdgeID: edgeID}); err != nil {
 			return res, err
 		}
 
@@ -174,7 +177,7 @@ func anchored(domains, anchors []string) bool {
 	}
 	for _, d := range domains {
 		for _, a := range anchors {
-			if hostWithin(a, d) || hostWithin(d, a) {
+			if lens.HostWithin(a, d) || lens.HostWithin(d, a) {
 				return true
 			}
 		}

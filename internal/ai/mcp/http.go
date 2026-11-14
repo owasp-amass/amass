@@ -16,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 // HTTPServer serves read-only MCP over Streamable HTTP (JSON responses)
@@ -26,7 +27,7 @@ import (
 type HTTPServer struct {
 	Runner ai.ToolRunner
 	// Model is optional; see Server.
-	Model    ai.Model
+	Model    llm.Model
 	Evidence *ai.EvidenceStore
 	Token    string
 	// SessionTTL is how long an idle session stays valid; MaxSessions caps

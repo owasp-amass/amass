@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -35,8 +35,8 @@ const skippedBetween = "links the two merged organizations"
 // UnmergeOrganizations removes only what the merge added. A merge that
 // fails part way is rolled back.
 func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID string,
-	confidence int) (ai.MergeRecord, error) {
-	rec := ai.MergeRecord{SurvivorID: survivorID, DuplicateID: duplicateID}
+	confidence int) (review.MergeRecord, error) {
+	rec := review.MergeRecord{SurvivorID: survivorID, DuplicateID: duplicateID}
 	if a.Repo == nil {
 		return rec, errors.New("missing OAM repository")
 	}
@@ -66,7 +66,7 @@ func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID
 		return rec, a.rollback(wctx, rec, err)
 	}
 
-	src := &general.SourceProperty{Source: ai.InferenceSource, Confidence: confidence}
+	src := &general.SourceProperty{Source: review.InferenceSource, Confidence: confidence}
 	for _, outgoing := range []bool{true, false} {
 		edges, err := a.edgesOf(wctx, dup, outgoing)
 		if err != nil {
@@ -97,7 +97,7 @@ func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID
 
 // fillEmptyFields gives the survivor the duplicate's organization fields
 // that the survivor lacks. It never overwrites a value.
-func (a Adapter) fillEmptyFields(ctx context.Context, surv, dup *dbt.Entity, rec *ai.MergeRecord) error {
+func (a Adapter) fillEmptyFields(ctx context.Context, surv, dup *dbt.Entity, rec *review.MergeRecord) error {
 	so, ok := surv.Asset.(*oamorg.Organization)
 	if !ok {
 		return errors.New("survivor is not an organization")
@@ -182,7 +182,7 @@ func (a Adapter) edgeTagsOf(ctx context.Context, edge *dbt.Edge) ([]*dbt.EdgeTag
 
 // mergeEntityTags records the duplicate's properties and adds those the
 // survivor lacks.
-func (a Adapter) mergeEntityTags(ctx context.Context, surv, dup *dbt.Entity, rec *ai.MergeRecord) error {
+func (a Adapter) mergeEntityTags(ctx context.Context, surv, dup *dbt.Entity, rec *review.MergeRecord) error {
 	dupTags, err := a.tagsOf(ctx, dup)
 	if err != nil {
 		return err
@@ -226,8 +226,8 @@ func (a Adapter) mergeEntityTags(ctx context.Context, surv, dup *dbt.Entity, rec
 // moveEdge gives the survivor the duplicate's relationship, with its
 // properties and the amass-ai source.
 func (a Adapter) moveEdge(ctx context.Context, surv, dup *dbt.Entity, edge *dbt.Edge, outgoing bool,
-	src oam.Property) (ai.MergedEdge, error) {
-	m := ai.MergedEdge{ID: edge.ID, Outgoing: outgoing}
+	src oam.Property) (review.MergedEdge, error) {
+	m := review.MergedEdge{ID: edge.ID, Outgoing: outgoing}
 	if edge.Relation == nil || edge.FromEntity == nil || edge.ToEntity == nil {
 		return m, fmt.Errorf("edge %s is incomplete", edge.ID)
 	}
@@ -334,7 +334,7 @@ func (a Adapter) survivorEdge(ctx context.Context, surv, other *dbt.Entity, rel 
 }
 
 // rollback removes what a failed merge added and returns err.
-func (a Adapter) rollback(ctx context.Context, rec ai.MergeRecord, err error) error {
+func (a Adapter) rollback(ctx context.Context, rec review.MergeRecord, err error) error {
 	if rerr := a.removeAdditions(ctx, rec); rerr != nil {
 		return fmt.Errorf("%w; rolling back the merge also failed: %v", err, rerr)
 	}
@@ -345,7 +345,7 @@ func (a Adapter) rollback(ctx context.Context, rec ai.MergeRecord, err error) er
 // removeAdditions deletes the properties and relationships a merge added
 // to the survivor. A relationship the merge created is deleted only when
 // nothing else has recorded it since.
-func (a Adapter) removeAdditions(ctx context.Context, rec ai.MergeRecord) error {
+func (a Adapter) removeAdditions(ctx context.Context, rec review.MergeRecord) error {
 	for _, m := range rec.Edges {
 		if m.SurvivorEdgeID == "" {
 			continue
@@ -393,8 +393,8 @@ func (a Adapter) removeAdditions(ctx context.Context, rec ai.MergeRecord) error 
 // the survivor, clears the fields it filled when they are unchanged, and
 // recreates the duplicate with its properties and the relationships whose
 // other end still exists. The restored organization has a new ID.
-func (a Adapter) UnmergeOrganizations(ctx context.Context, rec ai.MergeRecord) (ai.UnmergeResult, error) {
-	var res ai.UnmergeResult
+func (a Adapter) UnmergeOrganizations(ctx context.Context, rec review.MergeRecord) (review.UnmergeResult, error) {
+	var res review.UnmergeResult
 	if a.Repo == nil {
 		return res, errors.New("missing OAM repository")
 	}
@@ -570,16 +570,16 @@ func hasProperty(have []oam.Property, p oam.Property) bool {
 	return false
 }
 
-func mergedTag(p oam.Property) (ai.MergedTag, error) {
+func mergedTag(p oam.Property) (review.MergedTag, error) {
 	raw, err := p.JSON()
 	if err != nil {
-		return ai.MergedTag{}, err
+		return review.MergedTag{}, err
 	}
 
-	return ai.MergedTag{Type: string(p.PropertyType()), Property: raw}, nil
+	return review.MergedTag{Type: string(p.PropertyType()), Property: raw}, nil
 }
 
-func propertyFromTag(t ai.MergedTag) (oam.Property, error) {
+func propertyFromTag(t review.MergedTag) (oam.Property, error) {
 	var p oam.Property
 	switch oam.PropertyType(t.Type) {
 	case oam.SimpleProperty:

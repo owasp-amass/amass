@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 func TestCompatibleModelToolCalls(t *testing.T) {
@@ -35,7 +37,7 @@ func TestCompatibleModelToolCalls(t *testing.T) {
 		Endpoint:  server.URL,
 		ModelName: "test-model",
 		APIKey:    "test-key",
-	}).Generate(context.Background(), []Message{{Role: "user", Text: "hello"}}, Specs())
+	}).Generate(context.Background(), []llm.Message{{Role: "user", Text: "hello"}}, llm.Specs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +56,7 @@ func TestCompatibleModelHonorsConfiguredClientTimeout(t *testing.T) {
 	defer server.Close()
 	client := &http.Client{Timeout: 50 * time.Millisecond}
 	_, err := (CompatibleModel{Endpoint: server.URL, ModelName: "slow-test-model", Client: client}).
-		Generate(context.Background(), []Message{{Role: "user", Text: "hello"}}, nil)
+		Generate(context.Background(), []llm.Message{{Role: "user", Text: "hello"}}, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected configured HTTP timeout, got %v", err)
 	}

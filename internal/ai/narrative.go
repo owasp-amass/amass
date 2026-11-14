@@ -9,6 +9,9 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // Narrative bounds. The evidence and answer excerpt must fit a local
@@ -23,11 +26,11 @@ const (
 // bundle and verified in Go. Only a verified narrative is shown; otherwise
 // the computed answer stands alone and Rejected says why.
 type Narrative struct {
-	Text     string         `json:"text,omitempty"`
-	Verified bool           `json:"verified"`
-	Cited    []EvidenceItem `json:"cited,omitempty"`
-	Attempts int            `json:"attempts"`
-	Rejected []string       `json:"rejected,omitempty"`
+	Text     string                `json:"text,omitempty"`
+	Verified bool                  `json:"verified"`
+	Cited    []review.EvidenceItem `json:"cited,omitempty"`
+	Attempts int                   `json:"attempts"`
+	Rejected []string              `json:"rejected,omitempty"`
 }
 
 const narrativeInstructions = `You summarize a computed OAM investigation for the user in one short paragraph (at most 5 sentences).
@@ -61,7 +64,7 @@ func (a Agent) Narrate(ctx context.Context, question string, inv Investigation) 
 		user += "\n(Only the first evidence items are listed; describe the rest only through the computed answer's counts.)"
 	}
 
-	history := []Message{{Role: "system", Text: narrativeInstructions}, {Role: "user", Text: user}}
+	history := []llm.Message{{Role: "system", Text: narrativeInstructions}, {Role: "user", Text: user}}
 	for n.Attempts < narrativeMaxAttempt {
 		n.Attempts++
 		resp, err := a.Model.Generate(ctx, history, nil)
@@ -77,7 +80,7 @@ func (a Agent) Narrate(ctx context.Context, question string, inv Investigation) 
 		}
 
 		n.Rejected = problems
-		history = append(history, Message{Role: "assistant", Text: resp.Text}, Message{Role: "user",
+		history = append(history, llm.Message{Role: "assistant", Text: resp.Text}, llm.Message{Role: "user",
 			Text: "The paragraph was rejected: " + strings.Join(problems, "; ") + ". Rewrite it so every sentence " +
 				"cites evidence items that mention each asset it names. Return only the paragraph."})
 	}
@@ -123,9 +126,9 @@ func (a Agent) AttachNarrative(ctx context.Context, question string, inv *Invest
 	inv.recordTrace(started, InvestigationTraceEvent{Stage: "narrative", OutputPaths: len(n.Cited),
 		Incomplete: !n.Verified, Detail: detail})
 	if meter != nil {
-		u := meter.snapshot()
+		u := meter.Snapshot()
 		if inv.Usage == nil {
-			inv.Usage = &ModelUsage{}
+			inv.Usage = &llm.ModelUsage{}
 		}
 
 		inv.Usage.Calls += u.Calls

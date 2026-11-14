@@ -5,7 +5,7 @@
 # Meaning of every Open Asset Model relationship, for AI investigations.
 #
 # STATUS: reviewed by the maintainer (2026-11-09). Owner questions use the
-# attribution field; see internal/ai/ownership.go.
+# attribution field; see internal/ai/graph/semantics.go.
 #
 # Keyed exactly like OAM's own relationship table (source, label,
 # relation_type, destination) so it can move into open-asset-model

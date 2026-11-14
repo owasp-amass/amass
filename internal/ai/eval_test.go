@@ -8,131 +8,128 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 // owaspCertificateFixture holds owasp.org with no documented owner and a
 // certificate that lists it, issued by Let's Encrypt.
-func owaspCertificateFixture() vendorGraph {
-	g := fakeGraph{assets: map[string]Asset{
+func owaspCertificateFixture() aitest.VendorGraph {
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{
 		"owasp": {ID: "owasp", Type: "FQDN", Key: "owasp.org", Content: map[string]any{"name": "owasp.org"}},
 		"cert": {ID: "cert", Type: "TLSCertificate", Key: "4566311",
 			Content: map[string]any{"subject_common_name": "owasp.org"}},
 		"issuer": {ID: "issuer", Type: "ContactRecord", Key: "https://crt.example/issuer"},
 		"le":     {ID: "le", Type: "Organization", Key: "le", Content: map[string]any{"name": "let's encrypt"}},
-	}, links: []Relation{
+	}, Links: []graph.Relation{
 		{ID: "e1", FromID: "cert", ToID: "owasp", Label: "san_dns_name", Type: "SimpleRelation"},
 		{ID: "e2", FromID: "cert", ToID: "issuer", Label: "issuer_contact", Type: "SimpleRelation"},
 		{ID: "e3", FromID: "issuer", ToID: "le", Label: "organization", Type: "SimpleRelation"},
 	}}
 
-	return vendorGraph{plannedGraph{fakeGraph: g}}
+	return aitest.VendorGraph{PlannedGraph: aitest.PlannedGraph{FakeGraph: g}}
 }
 
-// campusWebFixture adds websites to the campus: the organization's website
-// on a CDN and a portal on its own network.
-func campusWebFixture() vendorGraph {
-	g := vendorFixture()
-	g.assets["url-www"] = Asset{ID: "url-www", Type: "URL", Key: "https://www.colgate.edu",
-		Content: map[string]any{"url": "https://www.colgate.edu"}}
-	g.assets["url-portal"] = Asset{ID: "url-portal", Type: "URL", Key: "https://portal.colgate.edu",
-		Content: map[string]any{"url": "https://portal.colgate.edu"}}
-	g.links = append(g.links,
-		Relation{ID: "w1", FromID: "colgate", ToID: "url-www", Label: "website", Type: "SimpleRelation"},
-		Relation{ID: "w2", FromID: "url-www", ToID: "www.colgate.edu", Label: "domain", Type: "SimpleRelation"},
-		Relation{ID: "w3", FromID: "url-portal", ToID: "portal.colgate.edu", Label: "domain", Type: "SimpleRelation"})
-	return g
+func campus() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.VendorFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 }
 
-func campus() (Graph, SchemaCatalog) { return vendorFixture(), vendorCatalog{testOAMCatalog} }
+func campusDNS() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.LargeFQDNInventoryFixture(), aitest.FQDNInventoryCatalog
+}
 
-func campusWeb() (Graph, SchemaCatalog) { return campusWebFixture(), vendorCatalog{testOAMCatalog} }
-
-func campusDNS() (Graph, SchemaCatalog) { return largeFQDNInventoryFixture(), fqdnInventoryCatalog }
-
-func owaspCerts() (Graph, SchemaCatalog) {
-	return owaspCertificateFixture(), vendorCatalog{testOAMCatalog}
+func owaspCerts() (graph.Graph, graph.SchemaCatalog) {
+	return owaspCertificateFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 }
 
 // sunyitServicesFixture is a namespace whose names reach services directly
 // (www over a port relation), through an IP address (mail), or not at all
 // (vpn). It has no documented owner.
-func sunyitServicesFixture() vendorGraph {
-	g := fakeGraph{assets: map[string]Asset{}}
+func sunyitServicesFixture() aitest.VendorGraph {
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{}}
 	named := func(id, typ, name string) {
-		g.assets[id] = Asset{ID: id, Type: typ, Key: name, Content: map[string]any{"name": name}}
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: name, Content: map[string]any{"name": name}}
 	}
 
 	named("sunyit.edu", "FQDN", "sunyit.edu")
 	for _, n := range []string{"www", "mail", "vpn"} {
 		named(n+".sunyit.edu", "FQDN", n+".sunyit.edu")
-		g.links = append(g.links, Relation{ID: "node-" + n, FromID: "sunyit.edu", ToID: n + ".sunyit.edu",
+		g.Links = append(g.Links, graph.Relation{ID: "node-" + n, FromID: "sunyit.edu", ToID: n + ".sunyit.edu",
 			Label: "node", Type: "SimpleRelation"})
 	}
 
-	g.assets["ip-mail"] = Asset{ID: "ip-mail", Type: "IPAddress", Key: "192.0.2.25",
+	g.Assets["ip-mail"] = graph.Asset{ID: "ip-mail", Type: "IPAddress", Key: "192.0.2.25",
 		Content: map[string]any{"address": "192.0.2.25"}}
-	g.assets["svc-https"] = Asset{ID: "svc-https", Type: "Service", Key: "a1b2",
+	g.Assets["svc-https"] = graph.Asset{ID: "svc-https", Type: "Service", Key: "a1b2",
 		Content: map[string]any{"unique_id": "a1b2", "service_type": "https"}}
-	g.assets["svc-smtp"] = Asset{ID: "svc-smtp", Type: "Service", Key: "c3d4",
+	g.Assets["svc-smtp"] = graph.Asset{ID: "svc-smtp", Type: "Service", Key: "c3d4",
 		Content: map[string]any{"unique_id": "c3d4", "service_type": "smtp"}}
-	g.links = append(g.links,
-		Relation{ID: "p-www", FromID: "www.sunyit.edu", ToID: "svc-https", Label: "port", Type: "PortRelation",
+	g.Links = append(g.Links,
+		graph.Relation{ID: "p-www", FromID: "www.sunyit.edu", ToID: "svc-https", Label: "port", Type: "PortRelation",
 			Content: map[string]any{"label": "port", "port_number": 443, "protocol": "tcp"}},
-		Relation{ID: "a-mail", FromID: "mail.sunyit.edu", ToID: "ip-mail", Label: "dns_record",
+		graph.Relation{ID: "a-mail", FromID: "mail.sunyit.edu", ToID: "ip-mail", Label: "dns_record",
 			Type: "BasicDNSRelation"},
-		Relation{ID: "p-mail", FromID: "ip-mail", ToID: "svc-smtp", Label: "port", Type: "PortRelation",
+		graph.Relation{ID: "p-mail", FromID: "ip-mail", ToID: "svc-smtp", Label: "port", Type: "PortRelation",
 			Content: map[string]any{"label": "port", "port_number": 25, "protocol": "tcp"}})
-	return vendorGraph{plannedGraph{fakeGraph: g}}
+	return aitest.VendorGraph{PlannedGraph: aitest.PlannedGraph{FakeGraph: g}}
 }
 
-func campusGaps() (Graph, SchemaCatalog) { return campusGapsFixture(), vendorCatalog{testOAMCatalog} }
+func campusGaps() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.CampusGapsFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+}
 
-func sunyitServices() (Graph, SchemaCatalog) {
-	return sunyitServicesFixture(), vendorCatalog{testOAMCatalog}
+func sunyitServices() (graph.Graph, graph.SchemaCatalog) {
+	return sunyitServicesFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 }
 
 // campusTXT adds what colgate.edu's DNS TXT records show to the campus
 // fixture: an SPF record naming Google Workspace and a sender no catalog
 // entry knows, a verification token the DNS-SD plugin stored as a
 // verified_for relationship to Google, and one it did not recognize.
-func campusTXT() (Graph, SchemaCatalog) {
-	g := vendorFixture()
-	g.assets["google"] = Asset{ID: "google", Type: "Organization", Key: "Google LLC",
+func campusTXT() (graph.Graph, graph.SchemaCatalog) {
+	g := aitest.VendorFixture()
+	g.Assets["google"] = graph.Asset{ID: "google", Type: "Organization", Key: "Google LLC",
 		Content: map[string]any{"name": "Google LLC"}}
-	g.links = append(g.links, Relation{ID: "colgate.edu-verified_for-google", FromID: "colgate.edu",
+	g.Links = append(g.Links, graph.Relation{ID: "colgate.edu-verified_for-google", FromID: "colgate.edu",
 		ToID: "google", Label: "verified_for", Type: "SimpleRelation"})
-	txt := func(id, data string) Evidence {
-		return Evidence{ID: id, SubjectID: "colgate.edu", Kind: "property", Property: map[string]any{
-			"property_name": dnsRecordProperty, "header": map[string]any{"rr_type": rrTypeTXT}, "data": data}}
+	txt := func(id, data string) graph.Evidence {
+		return graph.Evidence{ID: id, SubjectID: "colgate.edu", Kind: "property", Property: map[string]any{
+			"property_name": graph.DNSRecordProperty, "header": map[string]any{"rr_type": graph.RRTypeTXT}, "data": data}}
 	}
-	g.evidence = map[string][]Evidence{"colgate.edu": {
+	g.EvidenceByID = map[string][]graph.Evidence{"colgate.edu": {
 		txt("t1", "v=spf1 include:_spf.google.com include:spf.acme-mailer.example -all"),
 		txt("t2", "acme-domain-verification=1"),
 	}}
 
-	return g, vendorCatalog{testOAMCatalog}
+	return g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 }
 
 // institutionFamily is the Johns Hopkins shaped family fixture.
-func institutionFamily() (Graph, SchemaCatalog) {
-	return vendorGraph{plannedGraph{fakeGraph: familyGraph()}}, vendorCatalog{testOAMCatalog}
+func institutionFamily() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.VendorGraph{PlannedGraph: aitest.PlannedGraph{FakeGraph: aitest.FamilyGraph()}}, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 }
 
 // corporateGroup is a GLEIF-shaped corporate group.
-func corporateGroup() (Graph, SchemaCatalog) { return groupFixture(), vendorCatalog{testOAMCatalog} }
+func corporateGroup() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.GroupFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+}
 
 // campusServices adds probe-stored services to the campus vendor fixture.
-func campusServices() (Graph, SchemaCatalog) { return servicesFixture(), vendorCatalog{testOAMCatalog} }
+func campusServices() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.ServicesFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+}
 
 // collegeGroup puts two colleges under one parent.
-func collegeGroup() (Graph, SchemaCatalog) {
-	return groupVendorFixture(), vendorCatalog{testOAMCatalog}
+func collegeGroup() (graph.Graph, graph.SchemaCatalog) {
+	return aitest.GroupVendorFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 }
 
 // evalFixtures are the graphs offline evaluation cases name.
-var evalFixtures = map[string]func() (Graph, SchemaCatalog){
+var evalFixtures = map[string]func() (graph.Graph, graph.SchemaCatalog){
 	"campus":             campus,
-	"campus-web":         campusWeb,
+	"campus-web":         aitest.CampusWeb,
 	"campus-dns":         campusDNS,
 	"owasp-certificate":  owaspCerts,
 	"sunyit-services":    sunyitServices,
@@ -164,16 +161,16 @@ func TestQuestionEvaluationSet(t *testing.T) {
 				t.Fatalf("unknown fixture %q", c.Offline.Fixture)
 			}
 
-			graph, catalog := fixture()
+			g, catalog := fixture()
 			replies := c.Offline.PlannerReplies
 			if len(replies) == 0 {
 				replies = []string{`{"error":"this case must not call the model"}`}
 			}
 
 			agent := Agent{Model: &plannerModel{replies: replies},
-				Runner: ToolRunner{Graph: graph, Catalog: catalog, Limits: DefaultLimits()}}
+				Runner: ToolRunner{Graph: g, Catalog: catalog, Limits: graph.DefaultLimits()}}
 			res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks,
-				AdaptiveOptions{MaxInventory: DefaultInventoryNames})
+				AdaptiveOptions{MaxInventory: lens.DefaultInventoryNames})
 			if !res.Pass {
 				t.Fatalf("%s\n%s\nanswer:\n%s", c.Question, strings.Join(res.Failures, "\n"), res.Text)
 			}
@@ -196,10 +193,10 @@ func TestLoadEvalCasesRejectsBadSets(t *testing.T) {
 
 func TestEvalFailuresAreReported(t *testing.T) {
 	agent := Agent{Model: &plannerModel{replies: []string{"{}"}},
-		Runner: ToolRunner{Graph: vendorFixture(), Catalog: vendorCatalog{testOAMCatalog}, Limits: DefaultLimits()}}
+		Runner: ToolRunner{Graph: aitest.VendorFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
 	zero := 0
 	c := EvalCase{ID: "x", Question: "Which third-party vendors are used by colgate.edu?",
-		Expect: EvalExpect{Answer: LensControlled, MaxModelCalls: &zero}}
+		Expect: EvalExpect{Answer: lens.LensControlled, MaxModelCalls: &zero}}
 
 	res := agent.RunEvalCase(context.Background(), c, EvalChecks{ResultsInclude: []string{"nobody"}}, AdaptiveOptions{})
 	if res.Pass || len(res.Failures) != 2 {
@@ -234,10 +231,10 @@ func TestEvalResultsShowRejectedPlans(t *testing.T) {
 	// Two unparseable plans are rejected and the recorded reply is accepted:
 	// three calls, over the case's budget of two.
 	bad := "a table of websites"
-	graph, catalog := evalFixtures[c.Offline.Fixture]()
+	g, catalog := evalFixtures[c.Offline.Fixture]()
 	agent := Agent{Model: &plannerModel{replies: []string{bad, bad, c.Offline.PlannerReplies[0]}},
-		Runner: ToolRunner{Graph: graph, Catalog: catalog, Limits: DefaultLimits()}}
-	res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks, AdaptiveOptions{MaxInventory: DefaultInventoryNames})
+		Runner: ToolRunner{Graph: g, Catalog: catalog, Limits: graph.DefaultLimits()}}
+	res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks, AdaptiveOptions{MaxInventory: lens.DefaultInventoryNames})
 	if res.Pass || len(res.Corrections) != 2 || res.ModelCalls != 3 {
 		t.Fatalf("result = %+v", res)
 	}
@@ -264,10 +261,10 @@ func TestTableRowTypeRepairedWithoutACall(t *testing.T) {
 	// The controller as the row type, as Qwen chose live: the rows become the
 	// first ownable type the question names (website: URL), with no retry.
 	bad := strings.Replace(c.Offline.PlannerReplies[0], `"target_types":["URL"]`, `"target_types":["Organization"]`, 1)
-	graph, catalog := evalFixtures[c.Offline.Fixture]()
+	g, catalog := evalFixtures[c.Offline.Fixture]()
 	agent := Agent{Model: &plannerModel{replies: []string{bad}},
-		Runner: ToolRunner{Graph: graph, Catalog: catalog, Limits: DefaultLimits()}}
-	res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks, AdaptiveOptions{MaxInventory: DefaultInventoryNames})
+		Runner: ToolRunner{Graph: g, Catalog: catalog, Limits: graph.DefaultLimits()}}
+	res := agent.RunEvalCase(context.Background(), c, c.Offline.Checks, AdaptiveOptions{MaxInventory: lens.DefaultInventoryNames})
 	if !res.Pass || res.ModelCalls != 1 || len(res.Corrections) != 0 {
 		t.Fatalf("result = %+v", res)
 	}

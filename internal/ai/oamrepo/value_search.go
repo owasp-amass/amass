@@ -8,7 +8,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -20,13 +21,13 @@ type valueFinder interface {
 	FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*dbt.Entity, bool, error)
 }
 
-var _ ai.ValueSearcher = Adapter{}
+var _ lens.ValueSearcher = Adapter{}
 
 // FindByTagValue implements ai.ValueSearcher.
-func (a Adapter) FindByTagValue(ctx context.Context, assetType, name, value string, contains bool, limit int) ([]ai.Asset, bool, error) {
+func (a Adapter) FindByTagValue(ctx context.Context, assetType, name, value string, contains bool, limit int) ([]graph.Asset, bool, error) {
 	vf, ok := a.Repo.(valueFinder)
 	if !ok {
-		return nil, false, ai.ErrValueSearchUnsupported
+		return nil, false, lens.ErrValueSearchUnsupported
 	}
 
 	ents, more, err := vf.FindEntitiesByTagValue(ctx, oam.AssetType(assetType), name, value, contains, time.Time{}, limit)
@@ -38,10 +39,10 @@ func (a Adapter) FindByTagValue(ctx context.Context, assetType, name, value stri
 }
 
 // FindByAttribute implements ai.ValueSearcher.
-func (a Adapter) FindByAttribute(ctx context.Context, assetType, key, value string, contains bool, limit int) ([]ai.Asset, bool, error) {
+func (a Adapter) FindByAttribute(ctx context.Context, assetType, key, value string, contains bool, limit int) ([]graph.Asset, bool, error) {
 	vf, ok := a.Repo.(valueFinder)
 	if !ok {
-		return nil, false, ai.ErrValueSearchUnsupported
+		return nil, false, lens.ErrValueSearchUnsupported
 	}
 
 	ents, more, err := vf.FindEntitiesByAttribute(ctx, oam.AssetType(assetType), key, value, contains, time.Time{}, limit)
@@ -52,8 +53,8 @@ func (a Adapter) FindByAttribute(ctx context.Context, assetType, key, value stri
 	return convertAll(ents, more)
 }
 
-func convertAll(ents []*dbt.Entity, more bool) ([]ai.Asset, bool, error) {
-	out := make([]ai.Asset, 0, len(ents))
+func convertAll(ents []*dbt.Entity, more bool) ([]graph.Asset, bool, error) {
+	out := make([]graph.Asset, 0, len(ents))
 	for _, e := range ents {
 		a, err := convert(e)
 		if err != nil {

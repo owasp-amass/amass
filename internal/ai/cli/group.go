@@ -11,13 +11,14 @@ import (
 	"io"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
 )
 
 type groupGraph interface {
 	familyGraph
-	ai.OrganizationResolver
+	graph.OrganizationResolver
 }
 
 // listGroup prints the corporate group of an organization, named with -org
@@ -29,14 +30,14 @@ func listGroup(ctx context.Context, graph groupGraph, domain, org, format string
 		return err
 	}
 
-	r, err := ai.FindCorporateGroup(ctx, graph, root)
+	r, err := lens.FindCorporateGroup(ctx, graph, root)
 	if err != nil {
 		return err
 	}
 
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.FormatGroupReport(r))
+		_, err := fmt.Fprint(out, lens.FormatGroupReport(r))
 		return err
 	case format == "json":
 		return writeJSON(out, r)
@@ -47,21 +48,21 @@ func listGroup(ctx context.Context, graph groupGraph, domain, org, format string
 
 // listGroupVendors prints the outside parties a corporate group depends on,
 // across its organizations. It reads only.
-func listGroupVendors(ctx context.Context, graph groupGraph, domain, org string, limits ai.LensLimits,
+func listGroupVendors(ctx context.Context, graph groupGraph, domain, org string, limits lens.LensLimits,
 	format string, explicit bool, out io.Writer) error {
 	root, err := groupRoot(ctx, graph, domain, org)
 	if err != nil {
 		return err
 	}
 
-	r, err := ai.FindGroupVendors(ctx, graph, oamrepo.Catalog{}, root, limits)
+	r, err := lens.FindGroupVendors(ctx, graph, oamrepo.Catalog{}, root, limits)
 	if err != nil {
 		return err
 	}
 
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.FormatGroupVendorReport(r))
+		_, err := fmt.Fprint(out, lens.FormatGroupVendorReport(r))
 		return err
 	case format == "json":
 		return writeJSON(out, r)
@@ -72,16 +73,16 @@ func listGroupVendors(ctx context.Context, graph groupGraph, domain, org string,
 
 // groupRoot finds the organization named with -org, or the domain named with
 // -d.
-func groupRoot(ctx context.Context, graph groupGraph, domain, org string) (ai.Asset, error) {
+func groupRoot(ctx context.Context, g groupGraph, domain, org string) (graph.Asset, error) {
 	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
 	org = strings.TrimSpace(org)
 
-	var root ai.Asset
+	var root graph.Asset
 	switch {
 	case domain != "" && org != "":
 		return root, errors.New("use -org or -domain, not both")
 	case domain != "":
-		res, err := graph.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
+		res, err := g.ResolveAsset(ctx, graph.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
 		if err != nil {
 			return root, err
 		}
@@ -90,7 +91,7 @@ func groupRoot(ctx context.Context, graph groupGraph, domain, org string) (ai.As
 		}
 		root = res.Candidates[0].Asset
 	case org != "":
-		res, err := graph.ResolveOrganizations(ctx, ai.OrganizationQuery{Name: org}, 10)
+		res, err := g.ResolveOrganizations(ctx, graph.OrganizationQuery{Name: org}, 10)
 		if err != nil {
 			return root, err
 		}
@@ -102,7 +103,7 @@ func groupRoot(ctx context.Context, graph groupGraph, domain, org string) (ai.As
 		default:
 			names := make([]string, 0, len(res.Candidates))
 			for _, c := range res.Candidates {
-				names = append(names, fmt.Sprintf("%s [%s]", ai.AssetLabel(c.Asset), c.Asset.ID))
+				names = append(names, fmt.Sprintf("%s [%s]", graph.AssetLabel(c.Asset), c.Asset.ID))
 			}
 			return root, fmt.Errorf("%q names %d organizations; be more specific: %s", org, len(names),
 				strings.Join(names, "; "))

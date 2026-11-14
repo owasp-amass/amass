@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/config"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 )
@@ -55,11 +55,11 @@ func TestRecheckRetractsWhenEvidenceIsGoneOnSQLite(t *testing.T) {
 		t.Fatal("the pass did not write the attribution")
 	}
 
-	j := &ai.Journal{Path: journal}
+	j := &review.Journal{Path: journal}
 	adapter := oamrepo.Adapter{Repo: db}
 
 	// The evidence still holds: nothing is retracted.
-	res, err := ai.RecheckAttributions(context.Background(), adapter, adapter, j)
+	res, err := review.RecheckAttributions(context.Background(), adapter, adapter, j)
 	if err != nil || res.Checked != 1 || len(res.Retracted) != 0 {
 		t.Fatalf("re-check with evidence: %+v, %v", res, err)
 	}
@@ -73,7 +73,7 @@ func TestRecheckRetractsWhenEvidenceIsGoneOnSQLite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err = ai.RecheckAttributions(context.Background(), adapter, adapter, j)
+	res, err = review.RecheckAttributions(context.Background(), adapter, adapter, j)
 	if err != nil || len(res.Retracted) != 1 {
 		t.Fatalf("re-check without evidence: %+v, %v", res, err)
 	}
@@ -81,7 +81,7 @@ func TestRecheckRetractsWhenEvidenceIsGoneOnSQLite(t *testing.T) {
 		t.Error("the retracted attribution is still stored")
 	}
 	entries, _ := j.OwnershipEntries()
-	if entries[0].Status != ai.ProposalRetracted || entries[0].Outcome.Reviewer != ai.RecheckReviewer {
+	if entries[0].Status != review.ProposalRetracted || entries[0].Outcome.Reviewer != review.RecheckReviewer {
 		t.Errorf("journal = %+v", entries[0])
 	}
 }

@@ -8,19 +8,22 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 func TestOwnershipProposalsKeepOnlyAttachableCandidates(t *testing.T) {
-	ps := OwnershipProposals(gapReport(t))
+	ps := review.OwnershipProposals(gapReport(t))
 	if len(ps) != 1 {
 		t.Fatalf("proposals = %+v, want the shared-registrant contact only", ps)
 	}
 
 	p := ps[0]
-	if p.Asset != "https://rdap.example/alumni" || p.Decision != GapPropose || p.Owner != "Colgate University" {
+	if p.Asset != "https://rdap.example/alumni" || p.Decision != lens.GapPropose || p.Owner != "Colgate University" {
 		t.Errorf("proposal = %+v", p)
 	}
-	if p.ID != ProposalID(p.Edge) || !strings.HasPrefix(p.ID, "own-") {
+	if p.ID != review.ProposalID(p.Edge) || !strings.HasPrefix(p.ID, "own-") {
 		t.Errorf("ID = %q", p.ID)
 	}
 	if len(p.Signals) != 2 || len(p.Evidence) == 0 {
@@ -34,13 +37,13 @@ func TestOwnershipProposalsKeepOnlyAttachableCandidates(t *testing.T) {
 }
 
 func TestOwnershipJournalLifecycle(t *testing.T) {
-	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	entries, err := j.OwnershipEntries()
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("empty journal = %v, %v", entries, err)
 	}
 
-	ps := OwnershipProposals(gapReport(t))
+	ps := review.OwnershipProposals(gapReport(t))
 	added, err := j.SubmitOwnership(ps)
 	if err != nil || len(added) != 1 {
 		t.Fatalf("submit = %v, %v", added, err)
@@ -50,13 +53,13 @@ func TestOwnershipJournalLifecycle(t *testing.T) {
 	}
 
 	id := added[0].ID
-	if err := j.RecordOwnership(OwnershipOutcome{ProposalID: id, Status: ProposalApplied, Reviewer: "jeff"}); err == nil {
+	if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: review.ProposalApplied, Reviewer: "jeff"}); err == nil {
 		t.Error("applied without an edge ID was accepted")
 	}
-	if err := j.RecordOwnership(OwnershipOutcome{ProposalID: id, Status: "accepted", Reviewer: "jeff"}); err == nil {
+	if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: "accepted", Reviewer: "jeff"}); err == nil {
 		t.Error("unknown status was accepted")
 	}
-	if err := j.RecordOwnership(OwnershipOutcome{ProposalID: id, Status: ProposalApplied, Reviewer: "jeff",
+	if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: review.ProposalApplied, Reviewer: "jeff",
 		EdgeID: "42"}); err != nil {
 		t.Fatal(err)
 	}
@@ -65,11 +68,11 @@ func TestOwnershipJournalLifecycle(t *testing.T) {
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("entries = %v, %v", entries, err)
 	}
-	if e := entries[0]; e.Status != ProposalApplied || e.Outcome == nil || e.Outcome.EdgeID != "42" {
+	if e := entries[0]; e.Status != review.ProposalApplied || e.Outcome == nil || e.Outcome.EdgeID != "42" {
 		t.Errorf("entry = %+v", e)
 	}
 
-	text := FormatOwnershipEntries(entries)
+	text := review.FormatOwnershipEntries(entries)
 	for _, want := range []string{id, "applied by jeff", "(edge 42)", "would record: ContactRecord"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("listing lacks %q:\n%s", want, text)

@@ -1,0 +1,101 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package lens
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
+)
+
+// The vendor name rules say how the third-party lens names a party that
+// has no stored Organization.
+var vendorNamesJSON = semantics.File("vendor_names.json")
+
+type vendorNameGroup struct {
+	Vendor  string `json:"vendor"`
+	Pattern string `json:"pattern"`
+	Source  string `json:"source"`
+	re      *regexp.Regexp
+}
+
+type vendorNameRules struct {
+	License       string            `json:"_license"`
+	About         string            `json:"_about"`
+	ReverseZones  []string          `json:"reverse_zones"`
+	ReservedZones []string          `json:"reserved_zones"`
+	NameGroups    []vendorNameGroup `json:"name_groups"`
+}
+
+var loadVendorNames = sync.OnceValues(func() (vendorNameRules, error) {
+	var r vendorNameRules
+	if err := graph.DecodeStrict(vendorNamesJSON, &r); err != nil {
+		return r, fmt.Errorf("vendor_names.json: %w", err)
+	}
+	for i, g := range r.NameGroups {
+		if g.Vendor == "" || g.Pattern == "" || !strings.HasPrefix(g.Source, "https://") {
+			return r, fmt.Errorf("vendor_names.json: group %q: vendor, pattern and a documentation source are "+
+				"required", g.Vendor)
+		}
+
+		re, err := regexp.Compile(g.Pattern)
+		if err != nil {
+			return r, fmt.Errorf("vendor_names.json: group %s: %w", g.Vendor, err)
+		}
+		r.NameGroups[i].re = re
+	}
+
+	return r, nil
+})
+
+func vendorNameCatalog() vendorNameRules {
+	r, err := loadVendorNames()
+	if err != nil {
+		panic(err)
+	}
+
+	return r
+}
+
+// reverseZone reports whether a registrable domain is a reverse lookup
+// zone.
+func reverseZone(domain string) bool {
+	for _, z := range vendorNameCatalog().ReverseZones {
+		if domain == z || strings.HasSuffix(domain, "."+z) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// reservedName reports whether a name is in a special-use top-level domain
+// that reaches no one (msv1.invalid).
+func reservedName(name string) bool {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	for _, z := range vendorNameCatalog().ReservedZones {
+		if name == z || strings.HasSuffix(name, "."+z) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// vendorNameOf names the party behind a registrable domain: its name
+// group's vendor, or the domain itself.
+func vendorNameOf(domain string) string {
+	for _, g := range vendorNameCatalog().NameGroups {
+		if g.re.MatchString(domain) {
+			return g.Vendor
+		}
+	}
+
+	return domain
+}

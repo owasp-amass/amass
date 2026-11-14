@@ -26,7 +26,9 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -58,13 +60,13 @@ type plugin struct {
 	mergeMu  sync.Mutex
 	mu       sync.Mutex
 	sessions map[uuid.UUID]*tracker
-	journals map[string]*ai.Journal
+	journals map[string]*review.Journal
 }
 
 // NewAttribution returns the ownership attribution plugin.
 func NewAttribution() et.Plugin {
 	return &plugin{name: "AI-Attribution", lookup: os.LookupEnv, quiet: defaultQuiet, maxWait: defaultMaxWait,
-		mergeCheck: defaultMergeCheck, sessions: map[uuid.UUID]*tracker{}, journals: map[string]*ai.Journal{}}
+		mergeCheck: defaultMergeCheck, sessions: map[uuid.UUID]*tracker{}, journals: map[string]*review.Journal{}}
 }
 
 func (p *plugin) Name() string {
@@ -130,7 +132,7 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 	case mode != config.AttributionOff:
 		j, ok := p.journals[path]
 		if !ok {
-			j = &ai.Journal{Path: path}
+			j = &review.Journal{Path: path}
 			p.journals[path] = j
 		}
 
@@ -160,7 +162,7 @@ type tracker struct {
 	p       *plugin
 	sess    et.Session
 	mode    string
-	journal *ai.Journal
+	journal *review.Journal
 	// model is the ownership model trained from review decisions, if any.
 	model *classify.LinearModel
 
@@ -286,7 +288,7 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 		res, err := ai.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal,
 			ai.AttributionPolicy{Mode: t.mode, Model: t.model, Anchors: t.sess.Config().Domains()})
 		if err != nil {
-			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", ai.AssetLabel(org), err))
+			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", graph.AssetLabel(org), err))
 		}
 		if res.Unanchored {
 			continue
@@ -302,7 +304,7 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 		}
 		if len(res.Queued) > 0 {
 			t.sess.Log().Info(fmt.Sprintf("AI attribution left %d ownership proposal(s) for %s in %s for review",
-				len(res.Queued), ai.AssetLabel(org), t.journal.Path))
+				len(res.Queued), graph.AssetLabel(org), t.journal.Path))
 		}
 	}
 }
@@ -311,7 +313,7 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 // organization to the session scope, and queues them for another look when
 // the configuration's confidence for their type allows it, as the
 // Horizontals plugin does.
-func (t *tracker) widenScope(ctx context.Context, gains []ai.Asset) {
+func (t *tracker) widenScope(ctx context.Context, gains []graph.Asset) {
 	if t.sess.Config().Rigid {
 		return
 	}

@@ -7,129 +7,17 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
-type fakeGraph struct {
-	assets   map[string]Asset
-	links    []Relation
-	evidence map[string][]Evidence
-}
-
-func (g fakeGraph) GetAsset(_ context.Context, id string) (Asset, error) {
-	a, ok := g.assets[id]
-	if !ok {
-		return Asset{}, errors.New("missing asset")
-	}
-
-	return a, nil
-}
-
-func (g fakeGraph) FindAssets(_ context.Context, kind string, _ time.Time, limit int) ([]Asset, error) {
-	out := []Asset{}
-	for _, a := range g.assets {
-		if a.Type == kind {
-			out = append(out, a)
-			if len(out) >= limit {
-				break
-			}
-		}
-	}
-
-	return out, nil
-}
-
-func (g fakeGraph) Edges(_ context.Context, id, dir, label string, _ time.Time) ([]Relation, error) {
-	out := []Relation{}
-	for _, r := range g.links {
-		if label != "" && r.Label != label {
-			continue
-		}
-		if (dir == "out" || dir == "both") && r.FromID == id {
-			out = append(out, r)
-		} else if (dir == "in" || dir == "both") && r.ToID == id {
-			out = append(out, r)
-		}
-	}
-
-	return out, nil
-}
-
-func (g fakeGraph) EdgesLimited(ctx context.Context, id, dir, label string, since time.Time, limit int) ([]Relation, bool, error) {
-	// Enforce the repositories' limit so tests catch oversized reads.
-	if limit < 1 || limit > MaxEdgeRead {
-		return nil, false, errors.New("edge limit must be 1..500")
-	}
-
-	edges, err := g.Edges(ctx, id, dir, label, since)
-	if err != nil {
-		return nil, false, err
-	}
-	if len(edges) > limit {
-		return edges[:limit], true, nil
-	}
-
-	return edges, false, nil
-}
-
-func (g fakeGraph) EdgeEvidence(ctx context.Context, id string, limit int) ([]Evidence, error) {
-	return g.Evidence(ctx, id, limit)
-}
-
-func (g fakeGraph) Evidence(_ context.Context, id string, limit int) ([]Evidence, error) {
-	v := g.evidence[id]
-	if len(v) > limit {
-		v = v[:limit]
-	}
-
-	return v, nil
-}
-
-func graph() fakeGraph {
-	return fakeGraph{
-		assets: map[string]Asset{
-			"a": {ID: "a", Type: "Organization", Key: "Acme"},
-			"b": {ID: "b", Type: "FQDN", Key: "acme.example"},
-			"c": {ID: "c", Type: "Service", Key: "svc"},
-		},
-		links: []Relation{
-			{ID: "e1", FromID: "a", ToID: "b", Label: "website"},
-			{ID: "e2", FromID: "b", ToID: "c", Label: "port"},
-		},
-	}
-}
-
-func TestWalkBoundAndDirection(t *testing.T) {
-	l := DefaultLimits()
-	l.MaxNodes = 2
-	out, err := Walk(context.Background(), graph(), l, WalkRequest{StartID: "a", Depth: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !out.Truncated || len(out.Nodes) != 2 {
-		t.Fatalf("expected bounded result: %+v", out)
-	}
-
-	_, err = Walk(context.Background(), graph(), l, WalkRequest{StartID: "a", Depth: 33})
-	if err == nil {
-		t.Fatal("unbounded depth accepted")
-	}
-
-	res, err := Walk(context.Background(), graph(), DefaultLimits(),
-		WalkRequest{StartID: "c", Direction: "in", Depth: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Nodes) != 3 {
-		t.Fatalf("incoming walk: %+v", res)
-	}
-}
-
 func TestRunnerRejectsUnknownFields(t *testing.T) {
-	runner := ToolRunner{Graph: graph(), Limits: DefaultLimits()}
+	runner := ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()}
 	_, err := runner.Run(context.Background(), "get_asset", json.RawMessage(`{"id":"a","injection":"x"}`))
 	if err == nil {
 		t.Fatal("unknown field accepted")
@@ -142,9 +30,9 @@ func TestRunnerRejectsUnknownFields(t *testing.T) {
 }
 
 func TestInferenceRejectsFakeEvidenceAndSources(t *testing.T) {
-	candidate := Candidate{SubjectID: "a", ObjectID: "b", AllowedLabels: []string{"subsidiary"}, Evidence: []Evidence{
+	candidate := review.Candidate{SubjectID: "a", ObjectID: "b", AllowedLabels: []string{"subsidiary"}, Evidence: []graph.Evidence{
 		{ID: "x", SourceID: "registry-A"}, {ID: "y", SourceID: "registry-B"}}}
-	proposal := Proposal{
+	proposal := review.Proposal{
 		SubjectID:   "a",
 		ObjectID:    "b",
 		Predicate:   "subsidiary",
@@ -169,7 +57,7 @@ func TestInferenceRejectsFakeEvidenceAndSources(t *testing.T) {
 }
 
 func TestCandidatePairs(t *testing.T) {
-	pairs, err := CandidatePairs([]Asset{
+	pairs, err := CandidatePairs([]graph.Asset{
 		{ID: "a", Type: "Organization", Key: "Acme, Inc."},
 		{ID: "b", Type: "Organization", Key: "ACME Ltd"},
 		{ID: "c", Type: "FQDN", Key: "acme.example"},
@@ -184,20 +72,20 @@ func TestCandidatePairs(t *testing.T) {
 
 type fakeModel struct{ step int }
 
-func (m *fakeModel) Generate(_ context.Context, _ []Message, _ []ToolSpec) (Response, error) {
+func (m *fakeModel) Generate(_ context.Context, _ []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
 	m.step++
 	if m.step == 1 {
-		return Response{Calls: []Call{{ID: "call-1", Name: "get_asset", Arguments: json.RawMessage(`{"id":"a"}`)}}}, nil
+		return llm.Response{Calls: []llm.Call{{ID: "call-1", Name: "get_asset", Arguments: json.RawMessage(`{"id":"a"}`)}}}, nil
 	}
 
-	return Response{Text: "Found Organization asset a (Acme); ownership beyond this record is unverified."}, nil
+	return llm.Response{Text: "Found Organization asset a (Acme); ownership beyond this record is unverified."}, nil
 }
 
 func TestAgent(t *testing.T) {
 	model := &fakeModel{}
 	out, err := (Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: graph(), Limits: DefaultLimits()},
+		Runner: ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()},
 	}).Ask(context.Background(), "What is a?")
 	if err != nil {
 		t.Fatal(err)
@@ -207,26 +95,8 @@ func TestAgent(t *testing.T) {
 	}
 }
 
-func TestJournal(t *testing.T) {
-	j := &Journal{Path: t.TempDir() + "/proposals.jsonl"}
-	if err := j.Submit(Proposal{ID: "test", Status: "proposed"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := j.Review("test", "accepted", "analyst"); err != nil {
-		t.Fatal(err)
-	}
-
-	rows, err := j.History()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("rows=%d", len(rows))
-	}
-}
-
 func TestDiagramSanitizesLabels(t *testing.T) {
-	got := Mermaid(WalkResult{Nodes: []Asset{{ID: "a", Type: "FQDN", Key: `demo.example\"<script>`}}})
+	got := Mermaid(graph.WalkResult{Nodes: []graph.Asset{{ID: "a", Type: "FQDN", Key: `demo.example\"<script>`}}})
 	if strings.Contains(got, "<") || strings.Contains(got, "\"") && strings.Contains(got, "script>") {
 		t.Fatalf("unsafe diagram: %q", got)
 	}
@@ -234,12 +104,12 @@ func TestDiagramSanitizesLabels(t *testing.T) {
 
 type inferenceModel struct{ answer string }
 
-func (m inferenceModel) Generate(_ context.Context, _ []Message, _ []ToolSpec) (Response, error) {
-	return Response{Text: m.answer}, nil
+func (m inferenceModel) Generate(_ context.Context, _ []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
+	return llm.Response{Text: m.answer}, nil
 }
 
 func TestInferrerProposesReviewedOnly(t *testing.T) {
-	c := Candidate{SubjectID: "org1", ObjectID: "org2", AllowedLabels: []string{"subsidiary"}, Evidence: []Evidence{
+	c := review.Candidate{SubjectID: "org1", ObjectID: "org2", AllowedLabels: []string{"subsidiary"}, Evidence: []graph.Evidence{
 		{ID: "reg1", SourceID: "registry1"}, {ID: "lei2", SourceID: "gleif2"}}}
 	model := inferenceModel{
 		answer: `{"subject_id":"org1","predicate":"subsidiary","object_id":"org2","confidence":0.8,"reason":"Registry corroboration","evidence_ids":["reg1","lei2"],"contradictions":[]}`,
@@ -270,7 +140,7 @@ func TestAgentRequiresToolEvidence(t *testing.T) {
 	m := inferenceModel{answer: "The domain belongs to the organization."}
 	_, err := (Agent{
 		Model:  m,
-		Runner: ToolRunner{Graph: graph(), Limits: DefaultLimits()},
+		Runner: ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()},
 	}).Ask(context.Background(), "Who owns the domain?")
 	if err == nil {
 		t.Fatal("ungrounded answer accepted")
@@ -279,40 +149,40 @@ func TestAgentRequiresToolEvidence(t *testing.T) {
 
 type failedToolModel struct{ step int }
 
-func (m *failedToolModel) Generate(_ context.Context, _ []Message, _ []ToolSpec) (Response, error) {
+func (m *failedToolModel) Generate(_ context.Context, _ []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
 	m.step++
 	if m.step == 1 {
-		return Response{
-			Calls: []Call{{ID: "bad", Name: "get_asset", Arguments: json.RawMessage(`{"id":"not-in-db"}`)}},
+		return llm.Response{
+			Calls: []llm.Call{{ID: "bad", Name: "get_asset", Arguments: json.RawMessage(`{"id":"not-in-db"}`)}},
 		}, nil
 	}
 
-	return Response{Text: "The domain belongs to Acme."}, nil
+	return llm.Response{Text: "The domain belongs to Acme."}, nil
 }
 
 func TestAgentRejectsAnswerAfterFailedTools(t *testing.T) {
 	m := &failedToolModel{}
 	_, err := (Agent{
 		Model:  m,
-		Runner: ToolRunner{Graph: graph(), Limits: DefaultLimits()},
+		Runner: ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()},
 	}).Ask(context.Background(), "Who owns the domain?")
 	if err == nil {
 		t.Fatal("model supplied ungrounded answer following failed tool")
 	}
 }
 
-type collidingEvidenceGraph struct{ fakeGraph }
+type collidingEvidenceGraph struct{ aitest.FakeGraph }
 
-func (g collidingEvidenceGraph) Evidence(ctx context.Context, id string, limit int) ([]Evidence, error) {
-	return []Evidence{{ID: "asset-tag", SubjectID: id, SourceID: "asset-only", Kind: "SourceProperty"}}, nil
+func (g collidingEvidenceGraph) Evidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
+	return []graph.Evidence{{ID: "asset-tag", SubjectID: id, SourceID: "asset-only", Kind: "SourceProperty"}}, nil
 }
 
-func (g collidingEvidenceGraph) EdgeEvidence(ctx context.Context, id string, limit int) ([]Evidence, error) {
-	return []Evidence{{ID: "edge-tag", SubjectID: id, SourceID: "edge-only", Kind: "SourceProperty"}}, nil
+func (g collidingEvidenceGraph) EdgeEvidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
+	return []graph.Evidence{{ID: "edge-tag", SubjectID: id, SourceID: "edge-only", Kind: "SourceProperty"}}, nil
 }
 
 func TestGetEdgeEvidenceUsesExactRelationNamespace(t *testing.T) {
-	runner := ToolRunner{Graph: collidingEvidenceGraph{fakeGraph: graph()}, Limits: DefaultLimits()}
+	runner := ToolRunner{Graph: collidingEvidenceGraph{FakeGraph: aitest.SampleGraph()}, Limits: graph.DefaultLimits()}
 	raw, err := runner.Run(context.Background(), "get_edge_evidence", json.RawMessage(`{"id":"1","limit":8}`))
 	if err != nil {
 		t.Fatal(err)

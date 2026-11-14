@@ -8,6 +8,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 // AnswerPaths is the default answer kind: explore stored relationships and
@@ -60,7 +64,7 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
-		Name: LensControlled,
+		Name: lens.LensControlled,
 		Description: "List the assets the subject owns or controls (networks, autonomous systems, domains, " +
 			"certificates, accounts), attributed through registration, contact, website and subsidiary " +
 			"relationships.",
@@ -71,7 +75,7 @@ var answerKinds = []AnswerKind{
 			"Which domains belong to <organization>?"},
 	},
 	{
-		Name: LensThirdParty,
+		Name: lens.LensThirdParty,
 		Description: "List the outside parties the subject's controlled assets depend on: vendors, suppliers, " +
 			"service providers, registrars, DNS and hosting networks, certificate authorities and software.",
 		Subjects: []string{"Organization", "FQDN"},
@@ -79,7 +83,7 @@ var answerKinds = []AnswerKind{
 		Examples: []string{"Which vendors does <organization> use?", "Who hosts or provides services for <domain>?"},
 	},
 	{
-		Name: LensTable,
+		Name: lens.LensTable,
 		Description: "Build a table with one row per asset of the single target type that the subject controls " +
 			"and one column per entry of columns. Columns form a chain: the first follows from the row asset " +
 			"and each later one from the previous column. {\"type\":T,\"role\":\"\"} is the nearest asset of type T " +
@@ -112,7 +116,7 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
-		Name: LensOrgGroup,
+		Name: lens.LensOrgGroup,
 		Description: "Show the corporate group of an organization: its ultimate parent company and every " +
 			"subsidiary and organizational unit below it, from stored corporate relationships, with each " +
 			"organization's jurisdiction and registration. From a domain, the group of its main organization. " +
@@ -126,7 +130,7 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
-		Name: LensServices,
+		Name: lens.LensServices,
 		Description: "List the services stored for what a domain or organization controls: where each listens, " +
 			"its type, the software its responses name (identified product and version), its certificates, and " +
 			"what stands out (unusual ports, expired or self-issued certificates). Services come from past probes, " +
@@ -140,7 +144,7 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
-		Name: LensGroupVendors,
+		Name: lens.LensGroupVendors,
 		Description: "List the outside parties a whole corporate group depends on: the vendors of each " +
 			"organization in the group (parent, subsidiaries and units) merged, with how many and which group " +
 			"organizations use each, and services one group organization provides another set apart. From a " +
@@ -153,7 +157,7 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
-		Name: LensOwnershipGaps,
+		Name: lens.LensOwnershipGaps,
 		Description: "Find assets with no documented owner that share identity (contact details), hosting (resolving " +
 			"into its networks) or certificate signals with what the subject controls, each scored, with the OAM " +
 			"relationship that would record the subject as owner. Proposals only; nothing is written.",
@@ -213,7 +217,7 @@ func answerKindCatalog(owned []string) string {
 
 // validateAnswer checks the planner's answer kind against the subject,
 // targets and purpose, and against the semantics table for lenses.
-func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
+func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 	k, ok := answerKind(goal.Answer)
 	if !ok {
 		return fmt.Errorf("unknown answer %q; choose one of %s", goal.Answer, strings.Join(answerKindNames(), ", "))
@@ -233,30 +237,30 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 		if len(goal.TargetTypes) > 1 || (len(goal.TargetTypes) == 1 && goal.TargetTypes[0] != "FQDN") {
 			return fmt.Errorf("answer %q lists FQDNs; use target_types [\"FQDN\"]", k.Name)
 		}
-	case LensControlled:
-		if meaningsOf(schema) == nil {
+	case lens.LensControlled:
+		if graph.MeaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
-		if len(goal.TargetTypes) > 0 && !controlledReachable(schema, goal.TargetTypes) {
+		if len(goal.TargetTypes) > 0 && !lens.ControlledReachable(schema, goal.TargetTypes) {
 			return fmt.Errorf("answer %q lists asset types that can be attributed to an owner; %v cannot be. "+
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
-				strings.Join(ownedTypes(schema), ", "), AnswerPaths)
+				strings.Join(lens.OwnedTypes(schema), ", "), AnswerPaths)
 		}
-	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices, LensGroupVendors:
-		if meaningsOf(schema) == nil {
+	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors:
+		if graph.MeaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
-	case LensTable:
+	case lens.LensTable:
 		if len(goal.TargetTypes) != 1 {
 			return fmt.Errorf("answer %q needs exactly one row type in target_types", k.Name)
 		}
-		if !controlledReachable(schema, goal.TargetTypes) {
+		if !lens.ControlledReachable(schema, goal.TargetTypes) {
 			return fmt.Errorf("answer %q: target_types holds the row type, the kind of asset each row is "+
 				"(URL for websites, FQDN for host names, Netblock for networks); %s cannot be a row. Row types an "+
 				"owner can control: %s. Keep the organization in subject and put providers or owners in columns "+
-				"with role controller", k.Name, goal.TargetTypes[0], strings.Join(ownedTypes(schema), ", "))
+				"with role controller", k.Name, goal.TargetTypes[0], strings.Join(lens.OwnedTypes(schema), ", "))
 		}
-		if err := validateColumns(goal.Columns, catalogTypes(schema.Relations(), nil)); err != nil {
+		if err := lens.ValidateColumns(goal.Columns, graph.CatalogTypes(schema.Relations(), nil)); err != nil {
 			return fmt.Errorf("answer %q: %w", k.Name, err)
 		}
 	}
@@ -273,28 +277,28 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 // Organization to asset types the semantics table can attribute to an
 // owner is the controlled lens, which reads the same attribution paths
 // without model path selection.
-func queryFromPlannedGoal(goal InvestigationGoal, question string, schema SchemaCatalog) Query {
+func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.SchemaCatalog) Query {
 	q := QueryFromGoal(goal, question, SourceModelGoal)
 	switch goal.Answer {
 	case AnswerHierarchy:
 		hierarchyQuery(&q)
-	case LensControlled:
+	case lens.LensControlled:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
-			Lens: LensControlled, Source: SourceModelGoal}
-	case LensThirdParty:
+			Lens: lens.LensControlled, Source: SourceModelGoal}
+	case lens.LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-	case LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices, LensGroupVendors:
+	case lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
-	case LensTable:
+	case lens.LensTable:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
-			Lens: LensTable, Columns: tableColumns(goal, mentionedTypes(question, schema)), Source: SourceModelGoal}
+			Lens: lens.LensTable, Columns: tableColumns(goal, mentionedTypes(question, schema)), Source: SourceModelGoal}
 	default:
 		if goal.Subject.Type == "Organization" && goal.Purpose == "connected" && len(goal.Relationships) == 0 &&
-			controlledReachable(schema, goal.TargetTypes) {
-			goal.Answer = LensControlled
+			lens.ControlledReachable(schema, goal.TargetTypes) {
+			goal.Answer = lens.LensControlled
 			return queryFromPlannedGoal(goal, question, schema)
 		}
 
@@ -314,24 +318,6 @@ func contains(list []string, v string) bool {
 	return false
 }
 
-// ownedTypes lists, from the semantics table, the asset types an owner can
-// control: the valid targets of the controlled and table answers.
-func ownedTypes(schema SchemaCatalog) []string {
-	if schema == nil || meaningsOf(schema) == nil {
-		return nil
-	}
-
-	var out []string
-	for t := range catalogTypes(schema.Relations(), nil) {
-		if controlledReachable(schema, []string{t}) {
-			out = append(out, t)
-		}
-	}
-
-	sort.Strings(out)
-	return out
-}
-
 // tableColumns normalizes a planned column chain. It drops leading columns
 // that only repeat the row asset (a URL column in a table of URLs), and
 // adds a column for each asset type the question mentions that the chain
@@ -340,9 +326,9 @@ func ownedTypes(schema SchemaCatalog) []string {
 // the IP address column the provider column needs). Mentions come from the
 // vocabulary data; the subject's and row's types and Organization (the
 // subject or a controller) are never added.
-func tableColumns(goal InvestigationGoal, mentioned []string) []TableColumn {
-	cols := append([]TableColumn(nil), goal.Columns...)
-	for len(cols) > 1 && len(goal.TargetTypes) == 1 && cols[0].Role == ColumnReached &&
+func tableColumns(goal InvestigationGoal, mentioned []string) []lens.TableColumn {
+	cols := append([]lens.TableColumn(nil), goal.Columns...)
+	for len(cols) > 1 && len(goal.TargetTypes) == 1 && cols[0].Role == lens.ColumnReached &&
 		cols[0].Type == goal.TargetTypes[0] {
 		cols = cols[1:]
 	}
@@ -355,11 +341,11 @@ func tableColumns(goal InvestigationGoal, mentioned []string) []TableColumn {
 		present[c.Type] = true
 	}
 
-	var missing []TableColumn
+	var missing []lens.TableColumn
 	for _, t := range mentioned {
 		if !present[t] {
 			present[t] = true
-			missing = append(missing, TableColumn{Type: t, Role: ColumnReached})
+			missing = append(missing, lens.TableColumn{Type: t, Role: lens.ColumnReached})
 		}
 	}
 	if len(missing) == 0 {
@@ -368,14 +354,14 @@ func tableColumns(goal InvestigationGoal, mentioned []string) []TableColumn {
 
 	at := len(cols)
 	for i, c := range cols {
-		if c.Role == ColumnController {
+		if c.Role == lens.ColumnController {
 			at = i
 			break
 		}
 	}
 
-	out := append(append(append([]TableColumn(nil), cols[:at]...), missing...), cols[at:]...)
-	if len(out) > tableMaxColumns {
+	out := append(append(append([]lens.TableColumn(nil), cols[:at]...), missing...), cols[at:]...)
+	if len(out) > lens.TableMaxColumns {
 		return cols
 	}
 
@@ -385,7 +371,7 @@ func tableColumns(goal InvestigationGoal, mentioned []string) []TableColumn {
 // mentionedTypes lists, sorted, the catalog asset types the question names
 // through the vocabulary. Longer phrases claim their words first, so "IP
 // address" names IPAddress and not also Location ("address").
-func mentionedTypes(question string, schema SchemaCatalog) []string {
+func mentionedTypes(question string, schema graph.SchemaCatalog) []string {
 	pos := mentionedTypePositions(question, schema)
 	out := make([]string, 0, len(pos))
 	for t := range pos {
@@ -398,7 +384,7 @@ func mentionedTypes(question string, schema SchemaCatalog) []string {
 
 // mentionedTypesInOrder returns the asset types a question mentions in the
 // order it mentions them.
-func mentionedTypesInOrder(question string, schema SchemaCatalog) []string {
+func mentionedTypesInOrder(question string, schema graph.SchemaCatalog) []string {
 	pos := mentionedTypePositions(question, schema)
 	out := make([]string, 0, len(pos))
 	for t := range pos {
@@ -418,7 +404,7 @@ func mentionedTypesInOrder(question string, schema SchemaCatalog) []string {
 // mentionedTypePositions finds the asset types a question names through
 // their vocabulary aliases, longest alias first, with where each is first
 // named.
-func mentionedTypePositions(question string, schema SchemaCatalog) map[string]int {
+func mentionedTypePositions(question string, schema graph.SchemaCatalog) map[string]int {
 	found := map[string]int{}
 	if schema == nil {
 		return found
@@ -426,7 +412,7 @@ func mentionedTypePositions(question string, schema SchemaCatalog) map[string]in
 
 	type alias struct{ words, kind string }
 	var aliases []alias
-	for kind := range catalogTypes(schema.Relations(), nil) {
+	for kind := range graph.CatalogTypes(schema.Relations(), nil) {
 		for _, a := range intentAssetAliases(kind) {
 			if n := normalizeSchemaAlias(a); n != "" {
 				aliases = append(aliases, alias{words: n, kind: kind})
@@ -461,16 +447,16 @@ func mentionedTypePositions(question string, schema SchemaCatalog) map[string]in
 // controller itself, typically) without another model call: the rows become
 // the first type the question mentions that an owner can control, as in
 // "a table with each website, its IP address and hosting provider".
-func repairRowType(goal InvestigationGoal, question string, schema SchemaCatalog) InvestigationGoal {
+func repairRowType(goal InvestigationGoal, question string, schema graph.SchemaCatalog) InvestigationGoal {
 	k, ok := answerKind(goal.Answer)
-	if !ok || k.Name != LensTable || schema == nil {
+	if !ok || k.Name != lens.LensTable || schema == nil {
 		return goal
 	}
-	if len(goal.TargetTypes) == 1 && controlledReachable(schema, goal.TargetTypes) {
+	if len(goal.TargetTypes) == 1 && lens.ControlledReachable(schema, goal.TargetTypes) {
 		return goal
 	}
 	for _, t := range mentionedTypesInOrder(question, schema) {
-		if t != "Organization" && controlledReachable(schema, []string{t}) {
+		if t != "Organization" && lens.ControlledReachable(schema, []string{t}) {
 			goal.TargetTypes = []string{t}
 			return goal
 		}
@@ -485,7 +471,7 @@ func repairRowType(goal InvestigationGoal, question string, schema SchemaCatalog
 // kind can list (for controlled and table, the types an owner can control,
 // from the semantics table), and fields the kind does not use must be
 // empty. A provider that enforces schemas then cannot repeat the mistake.
-func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JSONSchema {
+func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaCatalog) llm.JSONSchema {
 	props := map[string]any{}
 	for k, v := range base.Schema["properties"].(map[string]any) {
 		props[k] = v
@@ -526,15 +512,15 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 		props["path_rule"] = map[string]any{"type": "string", "enum": []string{""}}
 	}
 
-	owned := ownedTypes(schema)
+	owned := lens.OwnedTypes(schema)
 	switch kind.Name {
 	case AnswerHierarchy:
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
-	case LensControlled:
+	case lens.LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices, LensGroupVendors:
+	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors:
 		props["target_types"] = none
-	case LensTable:
+	case lens.LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)
 		if cols, ok := props["columns"].(map[string]any); ok {
 			narrowed := map[string]any{}
@@ -546,7 +532,7 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 			props["columns"] = narrowed
 		}
 	}
-	if kind.Name != LensTable {
+	if kind.Name != lens.LensTable {
 		props["columns"] = none
 	}
 
@@ -556,6 +542,6 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 	}
 
 	out["properties"] = props
-	return JSONSchema{Name: base.Name, Description: base.Description + " Answer kind: " + kind.Name + ".",
+	return llm.JSONSchema{Name: base.Name, Description: base.Description + " Answer kind: " + kind.Name + ".",
 		Schema: out}
 }

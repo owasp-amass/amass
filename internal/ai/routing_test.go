@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 type routingClassifier struct {
@@ -30,17 +33,17 @@ func (m *routingClassifier) Classify(_ context.Context, in classify.Input) (clas
 
 type routingGenerative struct{ calls int }
 
-func (m *routingGenerative) Generate(_ context.Context, _ []Message, _ []ToolSpec) (Response, error) {
+func (m *routingGenerative) Generate(_ context.Context, _ []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
 	m.calls++
-	return Response{
+	return llm.Response{
 		Text: `{"subject_id":"a","predicate":"subsidiary","object_id":"b","confidence":0.78,"reason":"Synthetic sources","evidence_ids":["e1","e2"],"contradictions":[]}`,
 	}, nil
 }
 
-func routedCandidate() Candidate {
-	return Candidate{
+func routedCandidate() review.Candidate {
+	return review.Candidate{
 		SubjectID: "a", ObjectID: "b", AllowedLabels: []string{"subsidiary"},
-		Evidence: []Evidence{
+		Evidence: []graph.Evidence{
 			{ID: "e1", SourceID: "registry", Kind: "SourceProperty"},
 			{ID: "e2", SourceID: "lei", Kind: "SourceProperty"},
 		},
@@ -49,7 +52,7 @@ func routedCandidate() Candidate {
 
 func TestFeatureProvenanceCountsUniqueSources(t *testing.T) {
 	c := routedCandidate()
-	c.Evidence = append(c.Evidence, Evidence{ID: "e3", SourceID: "registry", Kind: "SourceProperty"})
+	c.Evidence = append(c.Evidence, graph.Evidence{ID: "e3", SourceID: "registry", Kind: "SourceProperty"})
 	in, summary, err := ExtractProvenanceFeatures(c)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +61,7 @@ func TestFeatureProvenanceCountsUniqueSources(t *testing.T) {
 		t.Fatalf("got %+v %+v", in, summary)
 	}
 
-	c.Evidence = append(c.Evidence, Evidence{ID: "e2", SourceID: "different"})
+	c.Evidence = append(c.Evidence, graph.Evidence{ID: "e2", SourceID: "different"})
 	if _, _, err := ExtractProvenanceFeatures(c); err == nil {
 		t.Fatal("conflicting source accepted")
 	}
@@ -141,17 +144,6 @@ func TestRejectIncompatibleFeatureSchema(t *testing.T) {
 		wrongVersionClassifier{}, RoutingPolicy{AllowLocalReview: true})
 	if err == nil || model.calls != 0 {
 		t.Fatalf("feature schema mismatch accepted, err=%v, calls=%d", err, model.calls)
-	}
-}
-
-// A graph without server-side bounded reads must not be traversed by an agent.
-type legacyUnboundedGraph struct{ Graph }
-
-func TestWalkRequiresBoundedReader(t *testing.T) {
-	_, err := Walk(context.Background(), legacyUnboundedGraph{Graph: graph()}, DefaultLimits(),
-		WalkRequest{StartID: "a"})
-	if err == nil {
-		t.Fatal("agent accepted unbounded graph traversal")
 	}
 }
 

@@ -7,6 +7,8 @@ package ai
 import (
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func normalizeIntentTerm(raw string) string {
@@ -19,7 +21,7 @@ func normalizeIntentTerm(raw string) string {
 // intentTypeCandidates resolves all linguistic meanings before choosing one.
 // Unknown/ambiguous words remain unresolved; the active catalog alone decides
 // which resulting types are valid and which transitions are possible.
-func intentTypeCandidates(raw string, selectors []AssetSearchSchema, relations []RelationshipSchema) []string {
+func intentTypeCandidates(raw string, selectors []graph.AssetSearchSchema, relations []graph.RelationshipSchema) []string {
 	term := normalizeIntentTerm(raw)
 	if term == "" {
 		return nil
@@ -50,7 +52,7 @@ func intentTypeCandidates(raw string, selectors []AssetSearchSchema, relations [
 
 // compactIntentVocabulary gives the model semantic examples, not permission
 // to invent types, selector fields, graph edges or legal ownership.
-func compactIntentVocabulary(selectors []AssetSearchSchema, relations []RelationshipSchema) string {
+func compactIntentVocabulary(selectors []graph.AssetSearchSchema, relations []graph.RelationshipSchema) string {
 	registered := map[string]bool{}
 	for _, s := range selectors {
 		registered[s.Type] = true

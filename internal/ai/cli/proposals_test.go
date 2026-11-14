@@ -13,30 +13,34 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 type fakeOwnershipWriter struct {
-	writes     []ai.ProposedEdge
+	writes     []lens.ProposedEdge
 	confidence int
 }
 
-func (f *fakeOwnershipWriter) ApplyOwnership(_ context.Context, e ai.ProposedEdge, confidence int) (string, bool, error) {
+func (f *fakeOwnershipWriter) ApplyOwnership(_ context.Context, e lens.ProposedEdge, confidence int) (string, bool, error) {
 	f.writes = append(f.writes, e)
 	f.confidence = confidence
 	return "77", false, nil
 }
 
-func journalWithProposal(t *testing.T) (string, ai.OwnershipProposal) {
+func journalWithProposal(t *testing.T) (string, review.OwnershipProposal) {
 	t.Helper()
 
-	edge := ai.ProposedEdge{FromID: "1", FromType: "ContactRecord", From: "https://rdap.example/alumni",
+	edge := lens.ProposedEdge{FromID: "1", FromType: "ContactRecord", From: "https://rdap.example/alumni",
 		Label: "organization", RelationType: "SimpleRelation", ToID: "2", ToType: "Organization",
 		To: "Synthetic University"}
-	p := ai.OwnershipProposal{ID: ai.ProposalID(edge), Owner: "Synthetic University", OwnerID: "2",
+	p := review.OwnershipProposal{ID: review.ProposalID(edge), Owner: "Synthetic University", OwnerID: "2",
 		Asset: edge.From, AssetID: "1", AssetType: "ContactRecord", Edge: edge, Score: 0.9,
-		Decision: ai.GapPropose, Signals: []string{"identity via phone"}}
+		Decision: lens.GapPropose, Signals: []string{"identity via phone"}}
 	path := filepath.Join(t.TempDir(), "review.jsonl")
-	if _, err := (&ai.Journal{Path: path}).SubmitOwnership([]ai.OwnershipProposal{p}); err != nil {
+	if _, err := (&review.Journal{Path: path}).SubmitOwnership([]review.OwnershipProposal{p}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,25 +112,25 @@ func TestRetractRemovesAppliedEdgeAndBlocksRewrites(t *testing.T) {
 		t.Errorf("retracted edges = %v", r.edges)
 	}
 
-	state, err := (&ai.Journal{Path: path}).OwnershipState()
-	if err != nil || state[p.ID].Status != ai.ProposalRetracted {
+	state, err := (&review.Journal{Path: path}).OwnershipState()
+	if err != nil || state[p.ID].Status != review.ProposalRetracted {
 		t.Errorf("status = %+v, %v", state[p.ID], err)
 	}
 }
 
 type adviceModel struct{}
 
-func (adviceModel) Generate(_ context.Context, _ []ai.Message, _ []ai.ToolSpec) (ai.Response, error) {
-	return ai.Response{Text: "RECOMMENDATION: reject\nThe only link is shared hosting [E1]."}, nil
+func (adviceModel) Generate(_ context.Context, _ []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
+	return llm.Response{Text: "RECOMMENDATION: reject\nThe only link is shared hosting [E1]."}, nil
 }
 
 func TestReviewRecordsAdviceWithoutDeciding(t *testing.T) {
 	_, p := journalWithProposal(t)
-	p.Witness = []ai.WitnessEdge{{FromType: "FQDN", From: "alumni.example", Label: "dns_record", ToType: "IPAddress",
+	p.Witness = []graph.WitnessEdge{{FromType: "FQDN", From: "alumni.example", Label: "dns_record", ToType: "IPAddress",
 		To: "192.0.2.1"}}
 	path := filepath.Join(t.TempDir(), "review.jsonl")
-	j := &ai.Journal{Path: path}
-	if _, err := j.SubmitOwnership([]ai.OwnershipProposal{p}); err != nil {
+	j := &review.Journal{Path: path}
+	if _, err := j.SubmitOwnership([]review.OwnershipProposal{p}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -140,7 +144,7 @@ func TestReviewRecordsAdviceWithoutDeciding(t *testing.T) {
 	}
 
 	state, err := j.OwnershipState()
-	if err != nil || state[p.ID].Status != ai.ProposalPending || state[p.ID].Advice == nil {
+	if err != nil || state[p.ID].Status != review.ProposalPending || state[p.ID].Advice == nil {
 		t.Fatalf("state = %+v, %v", state[p.ID], err)
 	}
 
@@ -153,18 +157,18 @@ func TestReviewRecordsAdviceWithoutDeciding(t *testing.T) {
 
 func TestTrainAttributionWritesALoadableModel(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "review.jsonl")
-	j := &ai.Journal{Path: path}
+	j := &review.Journal{Path: path}
 	for i := 0; i < 90; i++ {
-		edge := ai.ProposedEdge{FromID: fmt.Sprint(i), Label: "organization", RelationType: "SimpleRelation", ToID: "o"}
-		p := ai.OwnershipProposal{ID: ai.ProposalID(edge), Edge: edge}
-		outcome := ai.OwnershipOutcome{ProposalID: p.ID, Status: ai.ProposalApplied, Reviewer: "jeff", EdgeID: "e"}
+		edge := lens.ProposedEdge{FromID: fmt.Sprint(i), Label: "organization", RelationType: "SimpleRelation", ToID: "o"}
+		p := review.OwnershipProposal{ID: review.ProposalID(edge), Edge: edge}
+		outcome := review.OwnershipOutcome{ProposalID: p.ID, Status: review.ProposalApplied, Reviewer: "jeff", EdgeID: "e"}
 		if i%2 == 0 {
 			p.Signals = []string{"identity via ContactRecord phone Phone", "identity via ContactRecord location Location"}
 		} else {
 			p.Signals = []string{"hosting via FQDN dns_record IPAddress"}
-			outcome.Status, outcome.EdgeID = ai.ProposalRejected, ""
+			outcome.Status, outcome.EdgeID = review.ProposalRejected, ""
 		}
-		if _, err := j.SubmitOwnership([]ai.OwnershipProposal{p}); err != nil {
+		if _, err := j.SubmitOwnership([]review.OwnershipProposal{p}); err != nil {
 			t.Fatal(err)
 		}
 		if err := j.RecordOwnership(outcome); err != nil {
@@ -198,14 +202,14 @@ func TestSignalsExplainEachRule(t *testing.T) {
 	if err := listSignals("json", false, &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range ai.OwnershipSignals() {
+	for _, s := range lens.OwnershipSignals() {
 		if !strings.Contains(out.String(), s.Title+" ("+s.ID+")") || !strings.Contains(out.String(), s.Rationale) {
 			t.Errorf("text listing lacks %s or its rationale", s.ID)
 		}
 	}
 
 	out.Reset()
-	if err := listSignals("markdown", true, &out); err != nil || out.String() != ai.SignalsMarkdown() {
+	if err := listSignals("markdown", true, &out); err != nil || out.String() != lens.SignalsMarkdown() {
 		t.Errorf("markdown listing differs from SIGNALS.md source: %v", err)
 	}
 	if err := listSignals("mermaid", true, &out); err == nil {

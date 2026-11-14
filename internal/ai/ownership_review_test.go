@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // scriptedModel replies with each text in turn.
@@ -17,16 +20,16 @@ type scriptedModel struct {
 	calls   int
 }
 
-func (m *scriptedModel) Generate(_ context.Context, _ []Message, _ []ToolSpec) (Response, error) {
+func (m *scriptedModel) Generate(_ context.Context, _ []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
 	reply := m.replies[min(m.calls, len(m.replies)-1)]
 	m.calls++
-	return Response{Text: reply}, nil
+	return llm.Response{Text: reply}, nil
 }
 
-func alumniProposal(t *testing.T) OwnershipProposal {
+func alumniProposal(t *testing.T) review.OwnershipProposal {
 	t.Helper()
 
-	ps := OwnershipProposals(gapReport(t))
+	ps := review.OwnershipProposals(gapReport(t))
 	if len(ps) != 1 || len(ps[0].Witness) == 0 {
 		t.Fatalf("proposals = %+v", ps)
 	}
@@ -46,7 +49,7 @@ func TestAdviceIsVerifiedAgainstTheProposalEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !adv.Verified || adv.Recommendation != AdviseApprove || m.calls != 2 {
+	if !adv.Verified || adv.Recommendation != review.AdviseApprove || m.calls != 2 {
 		t.Fatalf("advice = %+v after %d calls", adv, m.calls)
 	}
 	if strings.Contains(adv.Rationale, "RECOMMENDATION") {
@@ -60,22 +63,22 @@ func TestUnverifiedAdviceIsNotARecommendation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if adv.Verified || adv.Recommendation != AdviseUnsure || len(adv.Problems) == 0 {
+	if adv.Verified || adv.Recommendation != review.AdviseUnsure || len(adv.Problems) == 0 {
 		t.Errorf("advice = %+v", adv)
 	}
 }
 
 func TestAdviceIsJournaledButNeverDecides(t *testing.T) {
-	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	p := alumniProposal(t)
-	if _, err := j.SubmitOwnership([]OwnershipProposal{p}); err != nil {
+	if _, err := j.SubmitOwnership([]review.OwnershipProposal{p}); err != nil {
 		t.Fatal(err)
 	}
-	if err := j.RecordAdvice(OwnershipAdvice{ProposalID: p.ID, Recommendation: AdviseApprove, Verified: true,
+	if err := j.RecordAdvice(review.OwnershipAdvice{ProposalID: p.ID, Recommendation: review.AdviseApprove, Verified: true,
 		Rationale: "Shared registrant details [E1].", Model: "qwen3:8b"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := j.RecordAdvice(OwnershipAdvice{ProposalID: p.ID, Recommendation: "write it", Model: "x"}); err == nil {
+	if err := j.RecordAdvice(review.OwnershipAdvice{ProposalID: p.ID, Recommendation: "write it", Model: "x"}); err == nil {
 		t.Error("an invalid recommendation was recorded")
 	}
 
@@ -85,19 +88,19 @@ func TestAdviceIsJournaledButNeverDecides(t *testing.T) {
 	}
 
 	e := entries[0]
-	if e.Status != ProposalPending || e.Advice == nil || e.Advice.Recommendation != AdviseApprove {
+	if e.Status != review.ProposalPending || e.Advice == nil || e.Advice.Recommendation != review.AdviseApprove {
 		t.Errorf("entry = %+v", e)
 	}
 	if _, ok := OwnershipLabel(e); ok {
 		t.Error("advice became a training label")
 	}
-	if text := FormatOwnershipEntries(entries); !strings.Contains(text, "advice from qwen3:8b: approve.") {
+	if text := review.FormatOwnershipEntries(entries); !strings.Contains(text, "advice from qwen3:8b: approve.") {
 		t.Errorf("listing lacks the advice:\n%s", text)
 	}
 }
 
 func TestEvidenceLinesParseForOlderProposals(t *testing.T) {
-	w, ok := parseEvidenceLine("FQDN www.example.com --port 443/tcp--> Service 1a2b")
+	w, ok := review.ParseEvidenceLine("FQDN www.example.com --port 443/tcp--> Service 1a2b")
 	if !ok || w.FromType != "FQDN" || w.From != "www.example.com" || w.Label != "port" || w.Detail != "443/tcp" ||
 		w.ToType != "Service" || w.To != "1a2b" {
 		t.Errorf("parsed = %+v, %v", w, ok)
@@ -105,7 +108,7 @@ func TestEvidenceLinesParseForOlderProposals(t *testing.T) {
 
 	p := alumniProposal(t)
 	p.Witness = nil
-	if b := proposalBundle(p); len(b.Items) != len(p.Evidence) {
+	if b := review.ProposalBundle(p); len(b.Items) != len(p.Evidence) {
 		t.Errorf("bundle from evidence lines has %d items, want %d", len(b.Items), len(p.Evidence))
 	}
 }

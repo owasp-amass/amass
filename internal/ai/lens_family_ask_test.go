@@ -9,6 +9,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 func familyQuery(subject PlanSubject) Query {
@@ -31,14 +35,14 @@ func TestAskFamilyLensFromDomain(t *testing.T) {
 	if result.FamilyReport == nil || result.FamilyReport.Domain != "colgate.edu" {
 		t.Fatalf("missing family report: %+v", result)
 	}
-	if result.Answer != strings.TrimRight(FormatFamilyReport(*result.FamilyReport), "\n") {
+	if result.Answer != strings.TrimRight(lens.FormatFamilyReport(*result.FamilyReport), "\n") {
 		t.Errorf("answer is not the family report:\n%s", result.Answer)
 	}
 }
 
 func TestFamilyLensNeedsADomain(t *testing.T) {
 	validate := func(q Query) error {
-		return ValidateQuery(q, testOAMCatalog.Relations(), testOAMCatalog.SearchFields(), DefaultLimits())
+		return ValidateQuery(q, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields(), graph.DefaultLimits())
 	}
 	if err := validate(familyQuery(PlanSubject{Type: "Organization", Name: "Colgate University"})); err == nil {
 		t.Error("a family query from an organization was accepted")
@@ -56,7 +60,7 @@ func TestPlannerOffersFamilyKind(t *testing.T) {
 		t.Fatalf("family answer kind = %+v, %v", k, ok)
 	}
 
-	raw, err := json.Marshal(goalJSONSchema(testOAMCatalog.Relations(), nil))
+	raw, err := json.Marshal(goalJSONSchema(aitest.TestOAMCatalog.Relations(), nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +70,7 @@ func TestPlannerOffersFamilyKind(t *testing.T) {
 
 	goal := InvestigationGoal{Answer: LensFamily, Subject: PlanSubject{Type: "FQDN", Field: "name",
 		Value: "jhu.edu"}, Purpose: "connected"}
-	q := queryFromPlannedGoal(goal, "Which organizations make up jhu.edu's institution?", testOAMCatalog)
+	q := queryFromPlannedGoal(goal, "Which organizations make up jhu.edu's institution?", aitest.TestOAMCatalog)
 	if q.Lens != LensFamily || q.Subject.Value != "jhu.edu" || !q.Deterministic() {
 		t.Errorf("planned family goal became %+v", q)
 	}
@@ -75,21 +79,21 @@ func TestPlannerOffersFamilyKind(t *testing.T) {
 // Asked about a domain, the vendor answer is the full vendors lens: the
 // services its TXT records name, checked against the runner's DNS-SD test.
 func TestAskVendorsOfDomainUsesVendorsLens(t *testing.T) {
-	g := vendorFixture()
-	g.evidence = map[string][]Evidence{"colgate.edu": {
+	g := aitest.VendorFixture()
+	g.EvidenceByID = map[string][]graph.Evidence{"colgate.edu": {
 		{ID: "t1", SubjectID: "colgate.edu", Kind: "property", Property: map[string]any{
-			"property_name": dnsRecordProperty, "header": map[string]any{"rr_type": rrTypeTXT},
+			"property_name": graph.DNSRecordProperty, "header": map[string]any{"rr_type": graph.RRTypeTXT},
 			"data": "v=spf1 include:_spf.google.com -all"}},
 		{ID: "t2", SubjectID: "colgate.edu", Kind: "property", Property: map[string]any{
-			"property_name": dnsRecordProperty, "header": map[string]any{"rr_type": rrTypeTXT},
+			"property_name": graph.DNSRecordProperty, "header": map[string]any{"rr_type": graph.RRTypeTXT},
 			"data": "acme-domain-verification=1"}},
 		{ID: "t3", SubjectID: "colgate.edu", Kind: "property", Property: map[string]any{
-			"property_name": dnsRecordProperty, "header": map[string]any{"rr_type": rrTypeTXT},
+			"property_name": graph.DNSRecordProperty, "header": map[string]any{"rr_type": graph.RRTypeTXT},
 			"data": "known-verification=2"}},
 	}}
 
-	agent := Agent{Model: &plannerModel{}, Runner: ToolRunner{Graph: g, Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits(), KnownVerification: func(r string) bool {
+	agent := Agent{Model: &plannerModel{}, Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits(), KnownVerification: func(r string) bool {
 			return strings.HasPrefix(r, "known-verification=")
 		}}}
 	result, err := agent.AskQuery(context.Background(),

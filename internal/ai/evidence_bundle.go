@@ -9,50 +9,35 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
-
-// EvidenceItem is one stored relationship an answer rests on, numbered so
-// that prose can cite it as [E1].
-type EvidenceItem struct {
-	ID string `json:"id"`
-	WitnessEdge
-	// Sources are the attributed source tags on the edge, when the
-	// investigation inspected its provenance.
-	Sources []string `json:"sources,omitempty"`
-}
-
-// EvidenceBundle is the numbered evidence behind an investigation's answer.
-type EvidenceBundle struct {
-	Items []EvidenceItem `json:"items"`
-	// Subjects are the question's subject and its documented owners. Every
-	// item is about them, so prose may name them in any cited sentence.
-	Subjects  []string `json:"subjects,omitempty"`
-	Truncated bool     `json:"truncated,omitempty"`
-}
 
 // BuildEvidenceBundle numbers the stored edges behind inv's answer, in
 // answer order and without repeats: witnessed paths, vendor witnesses and
 // table row witnesses. At most max items are kept.
-func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
-	var edges []WitnessEdge
+func BuildEvidenceBundle(inv Investigation, max int) review.EvidenceBundle {
+	var edges []graph.WitnessEdge
 	var subjects []string
 	for _, m := range inv.Matches {
-		edges = append(edges, pathWitness(m)...)
+		edges = append(edges, lens.PathWitness(m)...)
 		if len(m.Nodes) > 0 {
-			subjects = append(subjects, assetLabel(m.Nodes[0]))
+			subjects = append(subjects, graph.AssetLabel(m.Nodes[0]))
 		}
 	}
 	if r := inv.ThirdPartyReport; r != nil {
-		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
+		subjects = append(append(subjects, graph.AssetLabel(r.Root)), r.Owners...)
 		for _, v := range r.Vendors {
 			edges = append(edges, v.Witness...)
 		}
 	}
 	if r := inv.ControlledReport; r != nil {
-		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
+		subjects = append(append(subjects, graph.AssetLabel(r.Root)), r.Owners...)
 	}
 	if r := inv.GapReport; r != nil {
-		subjects = append(subjects, assetLabel(r.Root), assetLabel(r.Owner))
+		subjects = append(subjects, graph.AssetLabel(r.Root), graph.AssetLabel(r.Owner))
 		for _, c := range r.Candidates {
 			for _, s := range c.Signals {
 				edges = append(edges, s.Witness...)
@@ -60,7 +45,7 @@ func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 		}
 	}
 	if r := inv.TableReport; r != nil {
-		subjects = append(append(subjects, assetLabel(r.Root)), r.Owners...)
+		subjects = append(append(subjects, graph.AssetLabel(r.Root)), r.Owners...)
 		for _, w := range r.Witness {
 			edges = append(edges, w...)
 		}
@@ -75,7 +60,7 @@ func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 		}
 	}
 
-	var b EvidenceBundle
+	var b review.EvidenceBundle
 	seenSubject := map[string]bool{}
 	for _, s := range subjects {
 		if s != "" && !seenSubject[strings.ToLower(s)] {
@@ -99,37 +84,11 @@ func BuildEvidenceBundle(inv Investigation, max int) EvidenceBundle {
 		}
 
 		seen[key] = true
-		b.Items = append(b.Items, EvidenceItem{ID: fmt.Sprintf("E%d", len(b.Items)+1), WitnessEdge: e,
+		b.Items = append(b.Items, review.EvidenceItem{ID: fmt.Sprintf("E%d", len(b.Items)+1), WitnessEdge: e,
 			Sources: sources[e.EdgeID]})
 	}
 
 	return b
-}
-
-// Line renders an item as "E1: FQDN www.example.com --dns_record--> IPAddress
-// 192.0.2.1 (sources: dns)".
-func (i EvidenceItem) Line() string {
-	label := i.Label
-	if i.Detail != "" {
-		label += " " + i.Detail
-	}
-
-	line := fmt.Sprintf("%s: %s %s --%s--> %s %s", i.ID, i.FromType, i.From, label, i.ToType, i.To)
-	if len(i.Sources) > 0 {
-		line += " (sources: " + strings.Join(i.Sources, ", ") + ")"
-	}
-
-	return line
-}
-
-// String renders the bundle one item per line.
-func (b EvidenceBundle) String() string {
-	lines := make([]string, 0, len(b.Items))
-	for _, i := range b.Items {
-		lines = append(lines, i.Line())
-	}
-
-	return strings.Join(lines, "\n")
 }
 
 var (
@@ -163,8 +122,8 @@ func sentences(text string) []string {
 // question's subjects may be named in any cited sentence.
 // Names are matched longest first, so "www.example.com" does not also count
 // as "example.com".
-func VerifyCitations(text string, bundle EvidenceBundle) []string {
-	byID := map[string]EvidenceItem{}
+func VerifyCitations(text string, bundle review.EvidenceBundle) []string {
+	byID := map[string]review.EvidenceItem{}
 	var labels []string
 	seenLabel := map[string]bool{}
 	subject := map[string]bool{}
@@ -247,7 +206,7 @@ func VerifyCitations(text string, bundle EvidenceBundle) []string {
 }
 
 // CitedItems returns the bundle items text cites, in bundle order.
-func CitedItems(text string, bundle EvidenceBundle) []EvidenceItem {
+func CitedItems(text string, bundle review.EvidenceBundle) []review.EvidenceItem {
 	cited := map[string]bool{}
 	for _, g := range citationGroup.FindAllStringSubmatch(text, -1) {
 		for _, id := range citationID.FindAllString(g[1], -1) {
@@ -255,7 +214,7 @@ func CitedItems(text string, bundle EvidenceBundle) []EvidenceItem {
 		}
 	}
 
-	var out []EvidenceItem
+	var out []review.EvidenceItem
 	for _, i := range bundle.Items {
 		if cited[i.ID] {
 			out = append(out, i)

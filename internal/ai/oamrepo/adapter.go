@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 	"github.com/owasp-amass/asset-db/repository"
 	neo4jrepo "github.com/owasp-amass/asset-db/repository/neo4j"
@@ -32,25 +33,25 @@ type Adapter struct {
 	Neo4jDatabase string
 }
 
-func (a Adapter) GetAsset(ctx context.Context, id string) (ai.Asset, error) {
+func (a Adapter) GetAsset(ctx context.Context, id string) (graph.Asset, error) {
 	if a.Repo == nil {
-		return ai.Asset{}, errors.New("missing OAM repository")
+		return graph.Asset{}, errors.New("missing OAM repository")
 	}
 
 	ent, err := a.Repo.FindEntityById(ctx, id)
 	if err != nil {
-		return ai.Asset{}, err
+		return graph.Asset{}, err
 	}
 
 	return convert(ent)
 }
 
-func convert(e *dbt.Entity) (ai.Asset, error) {
+func convert(e *dbt.Entity) (graph.Asset, error) {
 	if e == nil || e.Asset == nil {
-		return ai.Asset{}, errors.New("empty entity/asset")
+		return graph.Asset{}, errors.New("empty entity/asset")
 	}
 
-	return ai.Asset{ID: e.ID, Type: string(e.Asset.AssetType()), Key: e.Asset.Key(),
+	return graph.Asset{ID: e.ID, Type: string(e.Asset.AssetType()), Key: e.Asset.Key(),
 		Content: e.Asset, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen}, nil
 }
 
@@ -64,7 +65,7 @@ func knownAssetType(t string) bool {
 	return false
 }
 
-func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limit int) ([]ai.Asset, error) {
+func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limit int) ([]graph.Asset, error) {
 	if !knownAssetType(t) {
 		return nil, fmt.Errorf("unknown OAM asset type %q", t)
 	}
@@ -83,7 +84,7 @@ func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limi
 		ents = ents[:limit]
 	}
 
-	out := make([]ai.Asset, 0, len(ents))
+	out := make([]graph.Asset, 0, len(ents))
 	for _, ent := range ents {
 		v, err := convert(ent)
 		if err != nil {
@@ -96,14 +97,14 @@ func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limi
 	return out, nil
 }
 
-func (a Adapter) Edges(ctx context.Context, id, direction, label string, since time.Time) ([]ai.Relation, error) {
+func (a Adapter) Edges(ctx context.Context, id, direction, label string, since time.Time) ([]graph.Relation, error) {
 	ent, err := a.Repo.FindEntityById(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	labels := storedLabels(label)
-	var found []ai.Relation
+	var found []graph.Relation
 	convertEdges := func(edges []*dbt.Edge, dir string) error {
 		for _, edge := range edges {
 			if edge == nil || edge.Relation == nil || edge.FromEntity == nil || edge.ToEntity == nil {
@@ -113,7 +114,7 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 				continue
 			}
 
-			found = append(found, ai.Relation{ID: edge.ID, FromID: edge.FromEntity.ID, ToID: edge.ToEntity.ID,
+			found = append(found, graph.Relation{ID: edge.ID, FromID: edge.FromEntity.ID, ToID: edge.ToEntity.ID,
 				Label: schemaLabel(edge.Relation), Type: string(edge.Relation.RelationType()), Direction: dir,
 				Content: edge.Relation, CreatedAt: edge.CreatedAt, LastSeen: edge.LastSeen})
 		}
@@ -143,17 +144,17 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 	return found, nil
 }
 
-func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evidence, error) {
+func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
 	if ent, err := a.Repo.FindEntityById(ctx, id); err == nil {
 		tags, err := a.Repo.FindEntityTags(ctx, ent, time.Time{})
 		if emptyTagLookup(err) {
-			return []ai.Evidence{}, nil
+			return []graph.Evidence{}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		out := make([]ai.Evidence, 0)
+		out := make([]graph.Evidence, 0)
 		for _, tag := range tags {
 			if tag == nil || tag.Property == nil {
 				continue
@@ -162,7 +163,7 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 				break
 			}
 
-			out = append(out, ai.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
+			out = append(out, graph.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
 				Kind: string(tag.Property.PropertyType()), Property: tag.Property, LastSeen: tag.LastSeen})
 		}
 
@@ -176,13 +177,13 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 
 	tags, err := a.Repo.FindEdgeTags(ctx, edge, time.Time{})
 	if emptyTagLookup(err) {
-		return []ai.Evidence{}, nil
+		return []graph.Evidence{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]ai.Evidence, 0)
+	out := make([]graph.Evidence, 0)
 	for _, tag := range tags {
 		if tag == nil || tag.Property == nil {
 			continue
@@ -191,7 +192,7 @@ func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]ai.Evide
 			break
 		}
 
-		out = append(out, ai.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
+		out = append(out, graph.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
 			Kind: string(tag.Property.PropertyType()), Property: tag.Property, LastSeen: tag.LastSeen})
 	}
 
@@ -240,7 +241,7 @@ func (a Adapter) createEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, err
 // EdgeEvidence always queries the relation namespace. Entity and edge
 // identifiers may be identical; a generic FindEntityById-first lookup cannot
 // safely be used for source-level relationship attribution.
-func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]ai.Evidence, error) {
+func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
 	if a.Repo == nil {
 		return nil, errors.New("missing OAM repository")
 	}
@@ -255,13 +256,13 @@ func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]ai.E
 
 	tags, err := a.Repo.FindEdgeTags(ctx, edge, time.Time{})
 	if emptyTagLookup(err) {
-		return []ai.Evidence{}, nil
+		return []graph.Evidence{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read edge %s provenance tags: %w", id, err)
 	}
 
-	out := make([]ai.Evidence, 0, min(len(tags), limit))
+	out := make([]graph.Evidence, 0, min(len(tags), limit))
 	for _, tag := range tags {
 		if tag == nil || tag.Property == nil {
 			continue
@@ -270,14 +271,14 @@ func (a Adapter) EdgeEvidence(ctx context.Context, id string, limit int) ([]ai.E
 			break
 		}
 
-		out = append(out, ai.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
+		out = append(out, graph.Evidence{ID: tag.ID, SubjectID: id, SourceID: source(tag.Property),
 			Kind: string(tag.Property.PropertyType()), Property: tag.Property, LastSeen: tag.LastSeen})
 	}
 
 	return out, nil
 }
 
-var _ ai.EdgeEvidenceReader = Adapter{}
+var _ graph.EdgeEvidenceReader = Adapter{}
 
 // Source identity is only assigned to explicitly typed provenance properties.
 // Other properties are evidence but do not establish independent sources.
@@ -289,7 +290,7 @@ func source(p oam.Property) string {
 	return p.Name()
 }
 
-var _ ai.Graph = Adapter{}
+var _ graph.Graph = Adapter{}
 
 // schemaLabel is the OAM schema label of a stored relation. A port
 // relation is stored under its own name (tcp_port_443) but is the "port"
@@ -323,7 +324,7 @@ func AllowedRelation(subject, label, object string) bool {
 // SQLite and PostgreSQL need asset-db's ReadEdgesLimited (not yet in the
 // released asset-db); Neo4j is bounded here with a LIMIT Cypher query over
 // released asset-db APIs. Any other repository fails closed.
-func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, since time.Time, limit int) ([]ai.Relation, bool, error) {
+func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, since time.Time, limit int) ([]graph.Relation, bool, error) {
 	if a.Repo == nil {
 		return nil, false, errors.New("missing repository")
 	}
@@ -356,7 +357,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 		return nil, false, errors.New("repository violated bounded edge limit")
 	}
 
-	out := make([]ai.Relation, 0, len(edges))
+	out := make([]graph.Relation, 0, len(edges))
 	for _, e := range edges {
 		if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
 			return nil, false, errors.New("malformed bounded edge")
@@ -372,7 +373,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 		}
 
 		out = append(out,
-			ai.Relation{
+			graph.Relation{
 				ID:        e.ID,
 				FromID:    e.FromEntity.ID,
 				ToID:      e.ToEntity.ID,
@@ -388,13 +389,13 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	return out, more, nil
 }
 
-var _ ai.BoundedGraph = Adapter{}
+var _ graph.BoundedGraph = Adapter{}
 
 // EdgesPage reads the page of edges after cursor, newest first, so a lens
 // can read past the first EdgesLimited page. cursor is "" for the first
 // page; the returned cursor is "" after the last one. SQLite and PostgreSQL
 // page in asset-db (ReadEdgesPage); Neo4j pages here.
-func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, since time.Time, cursor string, limit int) ([]ai.Relation, string, error) {
+func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, since time.Time, cursor string, limit int) ([]graph.Relation, string, error) {
 	if a.Repo == nil {
 		return nil, "", errors.New("missing repository")
 	}
@@ -435,7 +436,7 @@ func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, sin
 		return nil, "", errors.New("repository violated bounded edge limit")
 	}
 
-	out := make([]ai.Relation, 0, len(edges))
+	out := make([]graph.Relation, 0, len(edges))
 	for _, e := range edges {
 		if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
 			return nil, "", errors.New("malformed paged edge")
@@ -448,7 +449,7 @@ func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, sin
 		if e.ToEntity.ID == id {
 			dir = "in"
 		}
-		out = append(out, ai.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID,
+		out = append(out, graph.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID,
 			Label: schemaLabel(e.Relation), Type: string(e.Relation.RelationType()), Direction: dir,
 			Content: e.Relation, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen})
 	}
@@ -465,12 +466,12 @@ func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, sin
 	return out, string(raw), nil
 }
 
-var _ ai.PagedGraph = Adapter{}
+var _ graph.PagedGraph = Adapter{}
 
 // LookupOrganizations performs bounded, typed lookups with a conservative
 // punctuation fallback. It never scans the repository, and never silently
 // selects among multiple plausible legal entities.
-func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int) ([]ai.Asset, error) {
+func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int) ([]graph.Asset, error) {
 	if a.Repo == nil {
 		return nil, errors.New("missing OAM repository")
 	}
@@ -486,7 +487,7 @@ func (a Adapter) LookupOrganizations(ctx context.Context, name string, limit int
 	// other punctuation and arbitrary string similarity are not accepted as
 	// an entity identity.
 	variants := organizationNameVariants(name)
-	out := make([]ai.Asset, 0, limit)
+	out := make([]graph.Asset, 0, limit)
 	seen := make(map[string]bool, limit)
 	for _, candidate := range variants {
 		if candidate == "" || len(out) >= limit {
@@ -561,8 +562,8 @@ func organizationNameVariants(name string) []string {
 // ResolveOrganizations generates field-specific candidate matches using only
 // bounded repository content filters. Alias metadata must be explicitly supplied
 // from a curated source; neither aliases nor names imply legal ownership.
-func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.OrganizationQuery, limit int) (ai.OrganizationResolution, error) {
-	result := ai.OrganizationResolution{Query: query, Candidates: []ai.OrganizationCandidate{}, Status: "not_found"}
+func (a Adapter) ResolveOrganizations(ctx context.Context, query graph.OrganizationQuery, limit int) (graph.OrganizationResolution, error) {
+	result := graph.OrganizationResolution{Query: query, Candidates: []graph.OrganizationCandidate{}, Status: "not_found"}
 	if a.Repo == nil {
 		return result, errors.New("missing OAM repository")
 	}
@@ -577,7 +578,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 	// terminal-period variant, which models frequently omit. Fuzzy
 	// similarity, suffix removal and unrestricted table scans are prohibited.
 	variants := organizationNameVariants
-	matches := map[string]*ai.OrganizationCandidate{}
+	matches := map[string]*graph.OrganizationCandidate{}
 	tooMany := false
 	add := func(ent *dbt.Entity, field, value, source string) error {
 		asset, err := convert(ent)
@@ -605,7 +606,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 				return nil
 			}
 
-			c = &ai.OrganizationCandidate{Asset: asset, Matches: []ai.ResolutionMatch{}}
+			c = &graph.OrganizationCandidate{Asset: asset, Matches: []graph.ResolutionMatch{}}
 			matches[asset.ID] = c
 		}
 		for _, m := range c.Matches {
@@ -614,7 +615,7 @@ func (a Adapter) ResolveOrganizations(ctx context.Context, query ai.Organization
 			}
 		}
 
-		c.Matches = append(c.Matches, ai.ResolutionMatch{Field: field, Value: value, Source: source})
+		c.Matches = append(c.Matches, graph.ResolutionMatch{Field: field, Value: value, Source: source})
 		return nil
 	}
 	queryBy := func(field, value, source string) error {
@@ -749,22 +750,22 @@ func queryByAlias(alias ai.OrganizationAlias,
 	return nil
 }
 
-var _ ai.OrganizationResolver = Adapter{}
+var _ graph.OrganizationResolver = Adapter{}
 
-var _ ai.OrganizationLookup = Adapter{}
+var _ graph.OrganizationLookup = Adapter{}
 
 // Catalog derives permitted graph transitions from the OAM package.
 type Catalog struct{}
 
 // Relations enumerates actual OAM labels and relation types. Sorted so
 // different providers and runs receive the same schema context.
-func (Catalog) Relations() []ai.RelationshipSchema {
-	var results []ai.RelationshipSchema
+func (Catalog) Relations() []graph.RelationshipSchema {
+	var results []graph.RelationshipSchema
 	for _, src := range oam.AssetList {
 		for _, label := range oam.GetAssetOutgoingRelations(src) {
 			for _, relType := range oam.RelationList {
 				for _, dst := range oam.GetTransformAssetTypes(src, label, relType) {
-					results = append(results, ai.RelationshipSchema{
+					results = append(results, graph.RelationshipSchema{
 						SourceType: string(src), Label: label,
 						RelationType: string(relType), DestinationType: string(dst),
 					})
@@ -790,7 +791,7 @@ func (Catalog) Relations() []ai.RelationshipSchema {
 	return results
 }
 
-var _ ai.SchemaCatalog = Catalog{}
+var _ graph.SchemaCatalog = Catalog{}
 
 var (
 	semanticsOnce  sync.Once
@@ -811,26 +812,26 @@ func (Catalog) Attribution(source, label, relationType, destination string) (str
 	return r.Attribution, ok
 }
 
-var _ ai.AttributionCatalog = Catalog{}
+var _ graph.AttributionCatalog = Catalog{}
 
 // Meaning returns the full semantics table entry of an OAM relationship.
-func (Catalog) Meaning(source, label, relationType, destination string) (ai.RelationMeaning, bool) {
+func (Catalog) Meaning(source, label, relationType, destination string) (graph.RelationMeaning, bool) {
 	semanticsOnce.Do(func() { semanticsTable, _ = semantics.Load() })
 	if semanticsTable == nil {
-		return ai.RelationMeaning{}, false
+		return graph.RelationMeaning{}, false
 	}
 
 	r, ok := semanticsTable.Lookup(source, label, relationType, destination)
-	return ai.RelationMeaning{Attribution: r.Attribution, Purpose: r.Purpose, Vendor: !r.NotVendor}, ok
+	return graph.RelationMeaning{Attribution: r.Attribution, Purpose: r.Purpose, Vendor: !r.NotVendor}, ok
 }
 
-var _ ai.SemanticsCatalog = Catalog{}
+var _ graph.SemanticsCatalog = Catalog{}
 
 // SearchFields enumerates indexed typed selectors for each OAM asset kind.
 // These keys follow the Asset Database content-filter registries.
 // ContactRecord currently has only discovered_at, a non-identity timestamp:
 // use an explicit entity_id for reliable lookup.
-func (Catalog) SearchFields() []ai.AssetSearchSchema {
+func (Catalog) SearchFields() []graph.AssetSearchSchema {
 	filters := map[string][]string{
 		"Account":          {"unique_id", "account_type", "username", "account_number"},
 		"AutnumRecord":     {"number", "handle", "name", "whois_server"},
@@ -865,14 +866,14 @@ func (Catalog) SearchFields() []ai.AssetSearchSchema {
 		"TLSCertificate": {"serial_number", "subject_common_name"},
 		"URL":            {"url", "scheme"},
 	}
-	out := make([]ai.AssetSearchSchema, 0, len(oam.AssetList))
+	out := make([]graph.AssetSearchSchema, 0, len(oam.AssetList))
 	for _, t := range oam.AssetList {
 		fields, ok := filters[string(t)]
 		if !ok {
 			continue
 		}
 
-		out = append(out, ai.AssetSearchSchema{Type: string(t), Fields: fields})
+		out = append(out, graph.AssetSearchSchema{Type: string(t), Fields: fields})
 	}
 
 	return out
@@ -882,8 +883,8 @@ var _ ai.AssetSearchCatalog = Catalog{}
 
 // ResolveAsset requires a registered typed selector, uses only bounded read
 // APIs, and never silently resolves an ambiguous query to its first result.
-func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, limit int) (ai.AssetResolution, error) {
-	result := ai.AssetResolution{Query: selector, Status: "not_found", Candidates: []ai.OrganizationCandidate{}}
+func (a Adapter) ResolveAsset(ctx context.Context, selector graph.AssetSelector, limit int) (graph.AssetResolution, error) {
+	result := graph.AssetResolution{Query: selector, Status: "not_found", Candidates: []graph.OrganizationCandidate{}}
 	if a.Repo == nil {
 		return result, errors.New("missing OAM repository")
 	}
@@ -903,8 +904,8 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 			return result, errors.New("entity_id does not match asserted OAM type")
 		}
 
-		result.Candidates = append(result.Candidates, ai.OrganizationCandidate{
-			Asset: asset, Matches: []ai.ResolutionMatch{{Field: "entity_id", Value: selector.EntityID}},
+		result.Candidates = append(result.Candidates, graph.OrganizationCandidate{
+			Asset: asset, Matches: []graph.ResolutionMatch{{Field: "entity_id", Value: selector.EntityID}},
 		})
 		result.Status = "matched"
 		return result, nil
@@ -942,8 +943,8 @@ func (a Adapter) ResolveAsset(ctx context.Context, selector ai.AssetSelector, li
 			return result, errors.New("repository returned wrong OAM type")
 		}
 
-		result.Candidates = append(result.Candidates, ai.OrganizationCandidate{
-			Asset: asset, Matches: []ai.ResolutionMatch{{Field: selector.Field, Value: value}},
+		result.Candidates = append(result.Candidates, graph.OrganizationCandidate{
+			Asset: asset, Matches: []graph.ResolutionMatch{{Field: selector.Field, Value: value}},
 		})
 	}
 

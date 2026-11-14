@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
@@ -41,7 +41,7 @@ func checkPersonNamedRemoval(t *testing.T, repo repository.Repository) {
 	f.edge(cr, person, "person", "WHOIS")
 
 	adapter := Adapter{Repo: repo}
-	r, err := ai.FindPersonNamedOrganizations(ctx, adapter)
+	r, err := lens.FindPersonNamedOrganizations(ctx, adapter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func checkPersonNamedRemoval(t *testing.T, repo repository.Repository) {
 	if got, err := repo.FindEntityById(ctx, org.ID); err == nil && got != nil {
 		t.Fatal("the organization is still stored")
 	}
-	if left, _ := ai.FindPersonNamedOrganizations(ctx, adapter); len(left.Candidates) != 0 {
+	if left, _ := lens.FindPersonNamedOrganizations(ctx, adapter); len(left.Candidates) != 0 {
 		t.Errorf("still found after removal: %+v", left.Candidates)
 	}
 

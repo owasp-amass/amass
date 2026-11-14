@@ -8,25 +8,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-)
 
-// Attribution values, matching internal/ai/semantics.
-const (
-	attrController  = "controller"
-	attrControls    = "controls"
-	attrSameSubject = "same_subject"
-	attrThirdParty  = "third_party"
-	attrShared      = "shared"
-	// attrInfrastructure is a technical dependency such as DNS resolution.
-	attrInfrastructure = "infrastructure"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
-
-// AttributionCatalog is implemented by schema catalogs that know what each
-// OAM relationship says about who controls an asset (see
-// internal/ai/semantics/oam_relations.yaml).
-type AttributionCatalog interface {
-	Attribution(source, label, relationType, destination string) (string, bool)
-}
 
 // ThirdPartyConnection is an Organization reached from the investigated
 // asset only through a relationship that names a separate provider, issuer,
@@ -50,7 +34,7 @@ type ThirdPartyConnection struct {
 //     source, such as a domain registrant);
 //   - controls edges followed backward (from an asset to the party that
 //     controls it, such as from a URL to the Organization with that website).
-func stepAttribution(cat AttributionCatalog, p PlanMatch, i int) (bool, string) {
+func stepAttribution(cat graph.AttributionCatalog, p graph.PlanMatch, i int) (bool, string) {
 	e := p.Edges[i]
 	from, to := p.Nodes[i], p.Nodes[i+1]
 	forward := e.FromID == from.ID && e.ToID == to.ID
@@ -64,11 +48,11 @@ func stepAttribution(cat AttributionCatalog, p PlanMatch, i int) (bool, string) 
 		return false, ""
 	}
 	switch attr {
-	case attrSameSubject:
+	case graph.AttrSameSubject:
 		return true, attr
-	case attrController:
+	case graph.AttrController:
 		return forward, attr
-	case attrControls:
+	case graph.AttrControls:
 		return !forward, attr
 	}
 
@@ -78,7 +62,7 @@ func stepAttribution(cat AttributionCatalog, p PlanMatch, i int) (bool, string) 
 // ownerAttributed reports whether every step from the root to the first
 // Organization on p passes owner attribution. It also returns the first
 // step that does not, for third-party reporting.
-func ownerAttributed(cat AttributionCatalog, p PlanMatch) (bool, int, string) {
+func ownerAttributed(cat graph.AttributionCatalog, p graph.PlanMatch) (bool, int, string) {
 	for i := 0; i+1 < len(p.Nodes) && i < len(p.Edges); i++ {
 		pass, attr := stepAttribution(cat, p, i)
 		if !pass {
@@ -99,7 +83,7 @@ func ownerAttributed(cat AttributionCatalog, p PlanMatch) (bool, int, string) {
 // not matter: the authority that issued a certificate covering the asset is
 // a third party of the asset, even when the certificate was found through a
 // shared SAN. One entry per Organization, preferring the shortest path.
-func thirdPartyConnections(cat AttributionCatalog, paths []PlanMatch) []ThirdPartyConnection {
+func thirdPartyConnections(cat graph.AttributionCatalog, paths []graph.PlanMatch) []ThirdPartyConnection {
 	best := map[string]ThirdPartyConnection{}
 	depth := map[string]int{}
 	for _, p := range paths {
@@ -113,7 +97,7 @@ func thirdPartyConnections(cat AttributionCatalog, paths []PlanMatch) []ThirdPar
 				last, lastAttr = i, attr
 			}
 		}
-		if last < 0 || lastAttr != attrThirdParty {
+		if last < 0 || lastAttr != graph.AttrThirdParty {
 			continue
 		}
 
@@ -124,12 +108,12 @@ func thirdPartyConnections(cat AttributionCatalog, paths []PlanMatch) []ThirdPar
 
 		id := p.PathID
 		if id == "" {
-			id = WitnessPathID(p)
+			id = graph.WitnessPathID(p)
 		}
 
 		depth[org.ID] = len(p.Edges)
 		best[org.ID] = ThirdPartyConnection{AssetID: org.ID, Display: humanAsset(org),
-			Via: p.Nodes[last].Type + " " + p.Edges[last].Label, Attribution: attrThirdParty, PathID: id}
+			Via: p.Nodes[last].Type + " " + p.Edges[last].Label, Attribution: graph.AttrThirdParty, PathID: id}
 	}
 
 	out := make([]ThirdPartyConnection, 0, len(best))

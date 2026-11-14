@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -75,16 +75,16 @@ func checkOrganizationFamily(t *testing.T, repo repository.Repository) {
 		t.Fatal(err)
 	}
 
-	r, err := ai.FindOrganizationFamily(ctx, adapter, root)
+	r, err := lens.FindOrganizationFamily(ctx, adapter, root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r.Main == nil || len(r.Members) != 2 {
-		t.Fatalf("report:\n%s", ai.FormatFamilyReport(r))
+		t.Fatalf("report:\n%s", lens.FormatFamilyReport(r))
 	}
 	for _, m := range r.Members {
-		if m.Relation != ai.FamilySame {
-			t.Errorf("%s is %s, want %s:\n%s", m.Organization.ID, m.Relation, ai.FamilySame, ai.FormatFamilyReport(r))
+		if m.Relation != lens.FamilySame {
+			t.Errorf("%s is %s, want %s:\n%s", m.Organization.ID, m.Relation, lens.FamilySame, lens.FormatFamilyReport(r))
 		}
 	}
 	if len(r.Networks) != 1 || !r.Networks[0].Dedicated || r.Networks[0].CIDR != "2605:6480::/32" {

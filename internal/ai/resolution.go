@@ -9,65 +9,15 @@ import (
 	"fmt"
 	"io"
 	"strings"
-)
 
-// OrganizationQuery contains one asserted identifier and an optional
-// jurisdiction qualifier. The planner must never invent these values.
-type OrganizationQuery struct {
-	Name           string `json:"name,omitempty"`
-	LegalName      string `json:"legal_name,omitempty"`
-	UniqueID       string `json:"unique_id,omitempty"`
-	RegistrationID string `json:"registration_id,omitempty"`
-	Jurisdiction   string `json:"jurisdiction,omitempty"`
-}
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+)
 
 type OrganizationAlias struct {
 	Alias        string `json:"alias"`
 	UniqueID     string `json:"unique_id"`
 	Source       string `json:"source"`
 	Jurisdiction string `json:"jurisdiction,omitempty"`
-}
-
-type ResolutionMatch struct {
-	Field  string `json:"field"`
-	Value  string `json:"value"`
-	Source string `json:"source,omitempty"`
-}
-
-type OrganizationCandidate struct {
-	Asset   Asset             `json:"asset"`
-	Matches []ResolutionMatch `json:"matches"`
-}
-
-type OrganizationResolution struct {
-	Query      OrganizationQuery       `json:"query"`
-	Status     string                  `json:"status"`
-	Candidates []OrganizationCandidate `json:"candidates"`
-	Truncated  bool                    `json:"truncated"`
-}
-
-func (q OrganizationQuery) Validate() error {
-	identifiers := []string{q.Name, q.LegalName, q.UniqueID, q.RegistrationID}
-	count := 0
-	for _, v := range identifiers {
-		if v != "" {
-			count++
-		}
-		if len(v) > 256 {
-			return errors.New("organization identifier exceeds 256 bytes")
-		}
-	}
-	if count != 1 {
-		return errors.New("provide exactly one of name, legal_name, unique_id, or registration_id")
-	}
-	if len(q.Jurisdiction) > 64 {
-		return errors.New("jurisdiction exceeds 64 bytes")
-	}
-	if q.RegistrationID != "" && q.Jurisdiction == "" {
-		return errors.New("registration_id requires jurisdiction")
-	}
-
-	return nil
 }
 
 // Only whitespace, case, and a final full stop are normalized for curated
@@ -90,7 +40,7 @@ func LoadOrganizationAliases(r io.Reader) ([]OrganizationAlias, error) {
 	var doc struct {
 		Aliases []OrganizationAlias `json:"aliases"`
 	}
-	if err := decodeStrict(b, &doc); err != nil {
+	if err := graph.DecodeStrict(b, &doc); err != nil {
 		return nil, fmt.Errorf("decode aliases: %w", err)
 	}
 	if len(doc.Aliases) > 1000 {

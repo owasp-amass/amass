@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // exchange runs a stdio session like a client: it sends requests one at a
@@ -64,7 +65,7 @@ const (
 )
 
 func TestMCPList(t *testing.T) {
-	out := exchange(t, Server{Runner: ai.ToolRunner{Limits: ai.DefaultLimits()}}, initRequest, initializedNote,
+	out := exchange(t, Server{Runner: ai.ToolRunner{Limits: graph.DefaultLimits()}}, initRequest, initializedNote,
 		listRequest)
 	if !strings.Contains(out, "walk_relations") {
 		t.Fatalf("tools not listed: %s", out)
@@ -73,15 +74,15 @@ func TestMCPList(t *testing.T) {
 
 type nodeCatalog struct{}
 
-func (nodeCatalog) Relations() []ai.RelationshipSchema {
-	return []ai.RelationshipSchema{
+func (nodeCatalog) Relations() []graph.RelationshipSchema {
+	return []graph.RelationshipSchema{
 		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	}
 }
 
 // With a catalog, the investigation tools are listed with the graph tools.
 func TestMCPListsInvestigationTools(t *testing.T) {
-	out := exchange(t, Server{Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: nodeCatalog{}}},
+	out := exchange(t, Server{Runner: ai.ToolRunner{Limits: graph.DefaultLimits(), Catalog: nodeCatalog{}}},
 		initRequest, initializedNote, listRequest)
 	for _, name := range []string{`"name":"investigate"`, `"name":"verify_citations"`, `"name":"walk_relations"`} {
 		if !strings.Contains(out, name) {
@@ -92,7 +93,7 @@ func TestMCPListsInvestigationTools(t *testing.T) {
 
 // A tool failure is a result the client can read, not a protocol error.
 func TestMCPToolErrorsAreResults(t *testing.T) {
-	out := exchange(t, Server{Runner: ai.ToolRunner{Limits: ai.DefaultLimits(), Catalog: nodeCatalog{}}},
+	out := exchange(t, Server{Runner: ai.ToolRunner{Limits: graph.DefaultLimits(), Catalog: nodeCatalog{}}},
 		initRequest, initializedNote,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"verify_citations",`+
 			`"arguments":{"investigation_id":"inv-none","text":"x [E1]."}}}`)

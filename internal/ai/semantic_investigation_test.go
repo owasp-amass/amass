@@ -8,6 +8,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestAdaptiveQuestionUsesGenericRelationshipGoalAndSourceDossier(t *testing.T) {
@@ -15,7 +18,7 @@ func TestAdaptiveQuestionUsesGenericRelationshipGoalAndSourceDossier(t *testing.
 		`{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["Organization"],"direction":"both","purpose":"connected","relationships":[{"source_type":"URL","label":"domain","relation_type":"SimpleRelation","destination_type":"FQDN"},{"source_type":"Organization","label":"website","relation_type":"SimpleRelation","destination_type":"URL"},{"source_type":"Organization","label":"subsidiary","relation_type":"SimpleRelation","destination_type":"Organization"}],"path_rule":"ordered"}`,
 		`{"selected_asset_ids":["parent"]}`,
 	}}
-	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}
 	result, err := (Agent{Model: model, Runner: runner}).AskAdaptive(context.Background(),
 		"Which Organization has a path from tech.acme.example through domain then website then subsidiary relationships?",
 		AdaptiveOptions{MaxDepth: 8, MaxPathsPerAsset: 3, GuidanceRounds: 0})
@@ -104,7 +107,7 @@ func TestAdaptiveGoalPlannerRepairsUnknownTaxonomyRelation(t *testing.T) {
 	}}
 	agent := Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: testOAMCatalog, Limits: DefaultLimits()},
+		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()},
 	}
 	goal, err := agent.planGoal(context.Background(),
 		"What organizations relate to tech.acme.example through domain records?")

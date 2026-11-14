@@ -14,6 +14,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -85,9 +86,9 @@ func TestFamilyDepartmentProposal(t *testing.T) {
 		t.Fatalf("family:\n%s\n%s", out.String(), errout.String())
 	}
 
-	j := &ai.Journal{Path: journal}
+	j := &review.Journal{Path: journal}
 	entries, err := j.OwnershipEntries()
-	if err != nil || len(entries) != 1 || entries[0].Proposal.Kind != ai.ProposalKindOrgUnit {
+	if err != nil || len(entries) != 1 || entries[0].Proposal.Kind != review.ProposalKindOrgUnit {
 		t.Fatalf("entries = %+v, %v", entries, err)
 	}
 	id := entries[0].Proposal.ID

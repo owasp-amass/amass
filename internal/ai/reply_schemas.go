@@ -4,7 +4,12 @@
 
 package ai
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
+)
 
 // enumArray is a schema for an array of at most max distinct strings drawn
 // from values. With no values the array must be empty.
@@ -46,13 +51,13 @@ func objectOf(properties map[string]any) map[string]any {
 }
 
 // pathSelectionSchema limits a path selection to the candidate path IDs.
-func pathSelectionSchema(candidates []adaptiveCandidate) JSONSchema {
+func pathSelectionSchema(candidates []adaptiveCandidate) llm.JSONSchema {
 	ids := make([]string, 0, len(candidates))
 	for _, c := range candidates {
 		ids = append(ids, c.PathID)
 	}
 
-	return JSONSchema{
+	return llm.JSONSchema{
 		Name:        "path_selection",
 		Description: "Witnessed path IDs that answer the question.",
 		Schema:      objectOf(map[string]any{"selected_path_ids": enumArray(ids, 5)}),
@@ -61,7 +66,7 @@ func pathSelectionSchema(candidates []adaptiveCandidate) JSONSchema {
 
 // guidanceSchema limits navigation advice to the allowed labels and the
 // pending frontier's asset and path IDs.
-func guidanceSchema(state guidedSummary) JSONSchema {
+func guidanceSchema(state guidedSummary) llm.JSONSchema {
 	assets := make([]string, 0, len(state.Pending))
 	paths := make([]string, 0, len(state.Pending))
 	for _, f := range state.Pending {
@@ -69,7 +74,7 @@ func guidanceSchema(state guidedSummary) JSONSchema {
 		paths = append(paths, f.PathID)
 	}
 
-	return JSONSchema{
+	return llm.JSONSchema{
 		Name:        "navigation_priorities",
 		Description: "Relationship labels and frontier assets or paths to explore first.",
 		Schema: objectOf(map[string]any{
@@ -82,14 +87,14 @@ func guidanceSchema(state guidedSummary) JSONSchema {
 
 // proposalSchema limits an inference proposal to the candidate's endpoints,
 // allowed labels (or "none") and evidence IDs.
-func proposalSchema(c Candidate) JSONSchema {
+func proposalSchema(c review.Candidate) llm.JSONSchema {
 	evidence := make([]string, 0, len(c.Evidence))
 	for _, e := range c.Evidence {
 		evidence = append(evidence, e.ID)
 	}
 
 	predicates := append([]string{"none"}, c.AllowedLabels...)
-	return JSONSchema{
+	return llm.JSONSchema{
 		Name:        "relation_proposal",
 		Description: "A proposed OAM relationship between the two candidate assets, or none.",
 		Schema: objectOf(map[string]any{

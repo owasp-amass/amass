@@ -8,24 +8,28 @@ import (
 	"context"
 	"reflect"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // schemaModel records the schema it was asked to honor and returns reply.
 type schemaModel struct {
 	reply  string
-	schema JSONSchema
+	schema llm.JSONSchema
 }
 
-func (m *schemaModel) Generate(context.Context, []Message, []ToolSpec) (Response, error) {
-	return Response{Text: m.reply}, nil
+func (m *schemaModel) Generate(context.Context, []llm.Message, []llm.ToolSpec) (llm.Response, error) {
+	return llm.Response{Text: m.reply}, nil
 }
 
-func (m *schemaModel) GenerateStructured(_ context.Context, _ []Message, s JSONSchema) (Response, error) {
+func (m *schemaModel) GenerateStructured(_ context.Context, _ []llm.Message, s llm.JSONSchema) (llm.Response, error) {
 	m.schema = s
-	return Response{Text: m.reply}, nil
+	return llm.Response{Text: m.reply}, nil
 }
 
-func enumOf(t *testing.T, schema JSONSchema, property string) []string {
+func enumOf(t *testing.T, schema llm.JSONSchema, property string) []string {
 	t.Helper()
 
 	props, _ := schema.Schema["properties"].(map[string]any)
@@ -72,9 +76,9 @@ func TestGuidanceSchemaUsesFrontierIDs(t *testing.T) {
 }
 
 func TestInferrerSendsProposalSchema(t *testing.T) {
-	c := Candidate{
+	c := review.Candidate{
 		SubjectID: "o1", ObjectID: "o2", AllowedLabels: []string{"subsidiary"},
-		Evidence: []Evidence{{ID: "e1", SourceID: "s1"}, {ID: "e2", SourceID: "s2"}},
+		Evidence: []graph.Evidence{{ID: "e1", SourceID: "s1"}, {ID: "e2", SourceID: "s2"}},
 	}
 	m := &schemaModel{reply: `{"subject_id":"o1","predicate":"subsidiary","object_id":"o2","confidence":0.8,` +
 		`"reason":"shared registrant and filings","evidence_ids":["e1","e2"],"contradictions":[]}`}

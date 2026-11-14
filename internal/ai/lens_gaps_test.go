@@ -9,53 +9,17 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
-// campusGapsFixture adds unattributed assets to the campus: a registrant
-// contact sharing Colgate's phone and address (identity), a name resolving
-// into Colgate's netblock (hosting), a name on Colgate's certificate that
-// also resolves there (co-listing and hosting), and a Hamilton College name
-// pointing into Colgate's network (controlled elsewhere, not a gap).
-func campusGapsFixture() vendorGraph {
-	g := vendorFixture()
-	add := func(id, typ, key string, content map[string]any) {
-		g.assets[id] = Asset{ID: id, Type: typ, Key: key, Content: content}
-	}
-	link := func(from, label, to, rt string) {
-		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
-			Type: rt})
-	}
-	named := func(id, typ, name string) { add(id, typ, name, map[string]any{"name": name}) }
-
-	add("phone", "Phone", "+1.3152287000", map[string]any{"e164": "+1.3152287000"})
-	add("loc", "Location", "13 Oak Drive, Hamilton NY", map[string]any{"address": "13 Oak Drive, Hamilton NY"})
-	link("cr-colgate", "phone", "phone", "SimpleRelation")
-	link("cr-colgate", "location", "loc", "SimpleRelation")
-
-	add("cr-alt", "ContactRecord", "https://rdap.example/alumni", nil)
-	add("dr-alt", "DomainRecord", "colgatealumni.org", map[string]any{"domain": "colgatealumni.org"})
-	named("colgatealumni.org", "FQDN", "colgatealumni.org")
-	link("cr-alt", "phone", "phone", "SimpleRelation")
-	link("cr-alt", "location", "loc", "SimpleRelation")
-	link("dr-alt", "registrant_contact", "cr-alt", "SimpleRelation")
-	link("colgatealumni.org", "registration", "dr-alt", "SimpleRelation")
-
-	named("raiders.example.net", "FQDN", "raiders.example.net")
-	link("raiders.example.net", "dns_record", "ip-own", "BasicDNSRelation")
-
-	named("colgate-events.com", "FQDN", "colgate-events.com")
-	link("cert", "san_dns_name", "colgate-events.com", "SimpleRelation")
-	link("colgate-events.com", "dns_record", "ip-own", "BasicDNSRelation")
-
-	link("www.hamilton.edu", "dns_record", "ip-own", "BasicDNSRelation")
-	return g
-}
-
-func gapReport(t *testing.T) OwnershipGapReport {
+func gapReport(t *testing.T) lens.OwnershipGapReport {
 	t.Helper()
 
-	r, err := searchOwnershipGaps(context.Background(), campusGapsFixture(), vendorCatalog{testOAMCatalog},
-		campusGapsFixture().assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), aitest.CampusGapsFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		aitest.CampusGapsFixture().Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +27,7 @@ func gapReport(t *testing.T) OwnershipGapReport {
 	return r
 }
 
-func gapCandidate(r OwnershipGapReport, asset string) *GapCandidate {
+func gapCandidate(r lens.OwnershipGapReport, asset string) *lens.GapCandidate {
 	for i, c := range r.Candidates {
 		if c.Asset == asset {
 			return &r.Candidates[i]
@@ -79,7 +43,7 @@ func TestSharedRegistrantDetailsAreProposed(t *testing.T) {
 	if c == nil {
 		t.Fatalf("shared-identity contact not found: %+v", r.Candidates)
 	}
-	if c.Decision != GapPropose || len(c.Signals) != 2 || c.Signals[0].Kind != SignalIdentity {
+	if c.Decision != lens.GapPropose || len(c.Signals) != 2 || c.Signals[0].Kind != lens.SignalIdentity {
 		t.Errorf("candidate = %+v, want propose on two identity signals", c)
 	}
 	if c.Attachment == nil || c.Attachment.String() !=
@@ -93,14 +57,14 @@ func TestSharedRegistrantDetailsAreProposed(t *testing.T) {
 
 func TestHostingAloneIsWeakAndUnattachable(t *testing.T) {
 	c := gapCandidate(gapReport(t), "raiders.example.net")
-	if c == nil || c.Decision != GapWeak || c.Attachment != nil {
+	if c == nil || c.Decision != lens.GapWeak || c.Attachment != nil {
 		t.Fatalf("candidate = %+v, want weak with no attachment", c)
 	}
 }
 
 func TestHostingPlusColistingNeedsReview(t *testing.T) {
 	c := gapCandidate(gapReport(t), "colgate-events.com")
-	if c == nil || c.Decision != GapReview {
+	if c == nil || c.Decision != lens.GapReview {
 		t.Fatalf("candidate = %+v, want review", c)
 	}
 
@@ -108,7 +72,7 @@ func TestHostingPlusColistingNeedsReview(t *testing.T) {
 	for _, s := range c.Signals {
 		kinds[s.Kind] = true
 	}
-	if !kinds[SignalHosting] || !kinds[SignalColisting] {
+	if !kinds[lens.SignalHosting] || !kinds[lens.SignalColisting] {
 		t.Errorf("signals = %+v, want hosting and co-listing", c.Signals)
 	}
 }
@@ -123,10 +87,10 @@ func TestAssetsControlledElsewhereAreNotGaps(t *testing.T) {
 }
 
 func TestGapAnswerAndEvidence(t *testing.T) {
-	inv, err := (Agent{Runner: ToolRunner{Graph: campusGapsFixture(), Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits()}}).AskQuery(context.Background(),
+	inv, err := (Agent{Runner: ToolRunner{Graph: aitest.CampusGapsFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}).AskQuery(context.Background(),
 		Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
-			Traversal: TraversalExplore, Direction: "both", Purpose: "connected", Lens: LensOwnershipGaps,
+			Traversal: TraversalExplore, Direction: "both", Purpose: "connected", Lens: lens.LensOwnershipGaps,
 			Source: SourceCaller}, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -144,13 +108,13 @@ func TestGapAnswerAndEvidence(t *testing.T) {
 }
 
 func TestRedactedValuesGiveNoIdentitySignal(t *testing.T) {
-	g := campusGapsFixture()
-	g.assets["loc"] = Asset{ID: "loc", Type: "Location", Key: "REDACTED FOR PRIVACY",
+	g := aitest.CampusGapsFixture()
+	g.Assets["loc"] = graph.Asset{ID: "loc", Type: "Location", Key: "REDACTED FOR PRIVACY",
 		Content: map[string]any{"address": "REDACTED FOR PRIVACY"}}
-	g.assets["phone"] = Asset{ID: "phone", Type: "Phone", Key: "REDACTED FOR PRIVACY",
+	g.Assets["phone"] = graph.Asset{ID: "phone", Type: "Phone", Key: "REDACTED FOR PRIVACY",
 		Content: map[string]any{"e164": "REDACTED FOR PRIVACY"}}
 
-	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,38 +123,14 @@ func TestRedactedValuesGiveNoIdentitySignal(t *testing.T) {
 	}
 }
 
-func TestWidelySharedValuesGiveNoIdentitySignal(t *testing.T) {
-	g := campusGapsFixture()
-	for i := 0; i <= gapMaxShared; i++ {
-		id := fmt.Sprintf("cr-tenant-%d", i)
-		g.assets[id] = Asset{ID: id, Type: "ContactRecord", Key: "https://rdap.example/" + id}
-		for _, v := range []string{"phone", "loc"} {
-			g.links = append(g.links, Relation{ID: id + "-" + v, FromID: id, ToID: v,
-				Label: map[string]string{"phone": "phone", "loc": "location"}[v], Type: "SimpleRelation"})
-		}
-	}
-
-	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range r.Candidates {
-		for _, s := range c.Signals {
-			if s.Kind == SignalIdentity {
-				t.Fatalf("a value shared by %d assets gave an identity signal to %s", gapMaxShared+1, c.Asset)
-			}
-		}
-	}
-}
-
 func TestReverseLookupNamesAreNotCandidates(t *testing.T) {
-	g := campusGapsFixture()
-	g.assets["rev"] = Asset{ID: "rev", Type: "FQDN", Key: "1.1.43.149.in-addr.arpa",
+	g := aitest.CampusGapsFixture()
+	g.Assets["rev"] = graph.Asset{ID: "rev", Type: "FQDN", Key: "1.1.43.149.in-addr.arpa",
 		Content: map[string]any{"name": "1.1.43.149.in-addr.arpa"}}
-	g.links = append(g.links, Relation{ID: "rev-ip", FromID: "rev", ToID: "ip-own", Label: "dns_record",
+	g.Links = append(g.Links, graph.Relation{ID: "rev-ip", FromID: "rev", ToID: "ip-own", Label: "dns_record",
 		Type: "BasicDNSRelation"})
 
-	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,37 +143,37 @@ func TestReverseLookupNamesAreNotCandidates(t *testing.T) {
 }
 
 func TestLargeGainsAreCounted(t *testing.T) {
-	g := campusGapsFixture()
-	for i := 0; i < gapMaxGains+5; i++ {
+	g := aitest.CampusGapsFixture()
+	for i := 0; i < lens.GapMaxGains+5; i++ {
 		id := fmt.Sprintf("alumni-%02d.colgatealumni.org", i)
-		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
-		g.links = append(g.links, Relation{ID: "node-" + id, FromID: "colgatealumni.org", ToID: id, Label: "node",
+		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
+		g.Links = append(g.Links, graph.Relation{ID: "node-" + id, FromID: "colgatealumni.org", ToID: id, Label: "node",
 			Type: "SimpleRelation"})
 	}
 
-	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	c := gapCandidate(r, "https://rdap.example/alumni")
-	if c == nil || len(c.GainAssets) != gapMaxGains || len(c.Gains) != gapMaxGains+1 ||
-		!strings.HasPrefix(c.Gains[gapMaxGains], "and ") {
+	if c == nil || len(c.GainAssets) != lens.GapMaxGains || len(c.Gains) != lens.GapMaxGains+1 ||
+		!strings.HasPrefix(c.Gains[lens.GapMaxGains], "and ") {
 		t.Fatalf("gains = %v (%d assets)", c.Gains, len(c.GainAssets))
 	}
 }
 
 func TestAddressesInOwnedNetblocksAreOwned(t *testing.T) {
-	g := campusGapsFixture()
+	g := aitest.CampusGapsFixture()
 	// An address in Colgate's 149.43.0.0/16 that the lens never read as
 	// contained (a large netblock), and one outside it.
 	for id, addr := range map[string]string{"ip-unread": "149.43.200.9", "ip-outside": "198.51.100.9"} {
-		g.assets[id] = Asset{ID: id, Type: "IPAddress", Key: addr, Content: map[string]any{"address": addr}}
-		g.links = append(g.links, Relation{ID: id + "-ptr", FromID: id, ToID: "portal.colgate.edu", Label: "ptr_record",
+		g.Assets[id] = graph.Asset{ID: id, Type: "IPAddress", Key: addr, Content: map[string]any{"address": addr}}
+		g.Links = append(g.Links, graph.Relation{ID: id + "-ptr", FromID: id, ToID: "portal.colgate.edu", Label: "ptr_record",
 			Type: "SimpleRelation"})
 	}
 
-	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, g.assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -22,7 +23,7 @@ import (
 // the engine's plugins record theirs. Both entities must still exist with the
 // proposed types, and the relationship must be one OAM defines. When the
 // relationship is already stored, its ID is returned and nothing is written.
-func (a Adapter) ApplyOwnership(ctx context.Context, e ai.ProposedEdge, confidence int) (string, bool, error) {
+func (a Adapter) ApplyOwnership(ctx context.Context, e lens.ProposedEdge, confidence int) (string, bool, error) {
 	if a.Repo == nil {
 		return "", false, errors.New("missing OAM repository")
 	}
@@ -74,7 +75,7 @@ func (a Adapter) ApplyOwnership(ctx context.Context, e ai.ProposedEdge, confiden
 	}
 
 	if _, err := a.Repo.CreateEdgeProperty(wctx, edge, &general.SourceProperty{
-		Source:     ai.InferenceSource,
+		Source:     review.InferenceSource,
 		Confidence: confidence,
 	}); err != nil {
 		return edge.ID, false, err
@@ -131,7 +132,7 @@ func (a Adapter) RetractOwnership(ctx context.Context, id string) (bool, error) 
 		}
 
 		switch source(tag.Property) {
-		case ai.InferenceSource:
+		case review.InferenceSource:
 			ours = append(ours, tag.ID)
 		case "":
 		default:
@@ -139,7 +140,7 @@ func (a Adapter) RetractOwnership(ctx context.Context, id string) (bool, error) 
 		}
 	}
 	if len(ours) == 0 {
-		return false, fmt.Errorf("edge %s has no %s source", id, ai.InferenceSource)
+		return false, fmt.Errorf("edge %s has no %s source", id, review.InferenceSource)
 	}
 	if others > 0 {
 		for _, tid := range ours {

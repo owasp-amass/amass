@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
@@ -17,14 +19,14 @@ import (
 // oamrepo.Catalog, with the Asset Database's indexed selector fields.
 type oamCatalog struct{}
 
-func (oamCatalog) Relations() []RelationshipSchema {
-	var out []RelationshipSchema
+func (oamCatalog) Relations() []graph.RelationshipSchema {
+	var out []graph.RelationshipSchema
 	for _, src := range oam.AssetList {
 		for _, label := range oam.GetAssetOutgoingRelations(src) {
 			for _, rt := range oam.RelationList {
 				for _, dst := range oam.GetTransformAssetTypes(src, label, rt) {
 					out = append(out,
-						RelationshipSchema{
+						graph.RelationshipSchema{
 							SourceType:      string(src),
 							Label:           label,
 							RelationType:    string(rt),
@@ -43,7 +45,7 @@ func (oamCatalog) Relations() []RelationshipSchema {
 	return out
 }
 
-func (oamCatalog) SearchFields() []AssetSearchSchema {
+func (oamCatalog) SearchFields() []graph.AssetSearchSchema {
 	fields := map[string][]string{
 		"Account": {
 			"unique_id",
@@ -66,9 +68,9 @@ func (oamCatalog) SearchFields() []AssetSearchSchema {
 			"service_type",
 		}, "TLSCertificate": {"serial_number", "subject_common_name"}, "URL": {"url", "scheme"},
 	}
-	out := make([]AssetSearchSchema, 0, len(fields))
+	out := make([]graph.AssetSearchSchema, 0, len(fields))
 	for t, f := range fields {
-		out = append(out, AssetSearchSchema{Type: t, Fields: f})
+		out = append(out, graph.AssetSearchSchema{Type: t, Fields: f})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Type < out[j].Type })
@@ -137,9 +139,9 @@ type replyModel struct {
 	calls int
 }
 
-func (m *replyModel) Generate(context.Context, []Message, []ToolSpec) (Response, error) {
+func (m *replyModel) Generate(context.Context, []llm.Message, []llm.ToolSpec) (llm.Response, error) {
 	m.calls++
-	return Response{Text: m.reply}, nil
+	return llm.Response{Text: m.reply}, nil
 }
 
 // Reproduces a Docker Desktop run: for a parent question that names no
@@ -149,7 +151,7 @@ func TestPlannerDropsRelationshipsTheQuestionDidNotRequest(t *testing.T) {
 	bad := `{"subject":{"type":"FQDN","field":"name","value":"owasp.org"},"target_types":["Organization"],"direction":"both","purpose":"ultimate_parent",` +
 		`"relationships":[{"source_type":"FQDN","label":"website","relation_type":"SimpleRelation","destination_type":"Organization"}],"path_rule":"all"}`
 	model := &replyModel{reply: bad}
-	agent := Agent{Model: model, Runner: ToolRunner{Limits: DefaultLimits(), Catalog: oamCatalog{}}}
+	agent := Agent{Model: model, Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: oamCatalog{}}}
 	q, err := agent.CompileQuestion(context.Background(),
 		"What is the highest parent organization connected to owasp.org?")
 	if err != nil {

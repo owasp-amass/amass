@@ -9,20 +9,22 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // listDuplicates compares the stored organizations and prints the pairs
 // the duplicate signals link. Proposed and review pairs are recorded in the
 // journal as merge proposals; nothing in the Asset Database changes.
-func listDuplicates(ctx context.Context, graph ai.Graph, journalPath, format string, explicit bool,
+func listDuplicates(ctx context.Context, graph graph.Graph, journalPath, format string, explicit bool,
 	out, errout io.Writer) error {
-	r, err := ai.FindDuplicateOrganizations(ctx, graph)
+	r, err := lens.FindDuplicateOrganizations(ctx, graph)
 	if err != nil {
 		return err
 	}
 	if journalPath != "" {
-		added, err := (&ai.Journal{Path: journalPath}).SubmitDuplicates(ai.DuplicateProposals(r))
+		added, err := (&review.Journal{Path: journalPath}).SubmitDuplicates(review.DuplicateProposals(r))
 		if err != nil {
 			return fmt.Errorf("record merge proposals: %w", err)
 		}
@@ -33,7 +35,7 @@ func listDuplicates(ctx context.Context, graph ai.Graph, journalPath, format str
 
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.FormatDuplicateReport(r))
+		_, err := fmt.Fprint(out, lens.FormatDuplicateReport(r))
 		return err
 	case format == "json":
 		return writeJSON(out, r)

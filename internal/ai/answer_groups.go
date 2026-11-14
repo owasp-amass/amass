@@ -8,6 +8,8 @@ import (
 	"context"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // AnswerGroup keeps the preferred explanation separate from all alternative
@@ -33,7 +35,7 @@ type AnswerGroup struct {
 // orientation. Only witnesses with the same signature are automatically
 // compared by source-tag coverage. Different graph meanings must not
 // disappear behind one representative destination.
-func pathSemanticSignature(path PlanMatch) string {
+func pathSemanticSignature(path graph.PlanMatch) string {
 	var b strings.Builder
 	for i, e := range path.Edges {
 		if i > 0 {
@@ -63,9 +65,9 @@ func pathSemanticSignature(path PlanMatch) string {
 	return b.String()
 }
 
-func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal InvestigationGoal, paths []PlanMatch, dossier *EvidenceDossier) ([]PlanMatch, []AnswerGroup, bool, error) {
-	groups := map[string][]PlanMatch{}
-	typeInfo := map[string]Asset{}
+func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal InvestigationGoal, paths []graph.PlanMatch, dossier *EvidenceDossier) ([]graph.PlanMatch, []AnswerGroup, bool, error) {
+	groups := map[string][]graph.PlanMatch{}
+	typeInfo := map[string]graph.Asset{}
 	groupAsset := map[string]string{}
 	groupSignature := map[string]string{}
 	for _, path := range paths {
@@ -96,17 +98,17 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 
 	sort.Strings(ids)
 	var summaries []AnswerGroup
-	var representatives []PlanMatch
+	var representatives []graph.PlanMatch
 	direct := map[string]bool{}
 	for _, groupKey := range ids {
 		id := groupAsset[groupKey]
 		options := groups[groupKey]
 		candidates := make([]adaptiveCandidate, 0, len(options))
-		byPath := map[string]PlanMatch{}
+		byPath := map[string]graph.PlanMatch{}
 		for _, p := range options {
 			pid := p.PathID
 			if pid == "" {
-				pid = WitnessPathID(p)
+				pid = graph.WitnessPathID(p)
 				p.PathID = pid
 			}
 
@@ -132,7 +134,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 						continue
 					}
 
-					prefix := PlanMatch{Nodes: p.Nodes[:i+1], Edges: p.Edges[:i]}
+					prefix := graph.PlanMatch{Nodes: p.Nodes[:i+1], Edges: p.Edges[:i]}
 					if pathSatisfiesGoal(prefix, goal.Relationships, goal.PathRule) {
 						// All witness routes to this destination that reach a
 						// completed target earlier are contextual rather than direct.
@@ -161,7 +163,7 @@ func (a Agent) selectAnswerPaths(ctx context.Context, question string, goal Inve
 
 	// Context is retained in summaries and full evidence; prefer minimum
 	// semantically completed routes when at least one exists.
-	var primary []PlanMatch
+	var primary []graph.PlanMatch
 	for _, p := range representatives {
 		if goal.Purpose == "connected" && len(goal.Relationships) > 0 && !direct[p.PathID] {
 			continue

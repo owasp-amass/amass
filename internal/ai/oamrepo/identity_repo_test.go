@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/postgres"
@@ -88,7 +88,7 @@ func identityConflicts(t *testing.T, repo repository.Repository) {
 		"location", "RDAP")
 
 	adapter := Adapter{Repo: repo}
-	r, err := ai.FindIdentityConflicts(ctx, adapter)
+	r, err := lens.FindIdentityConflicts(ctx, adapter)
 	if err != nil {
 		t.Fatal(err)
 	}

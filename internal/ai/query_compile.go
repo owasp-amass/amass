@@ -8,6 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 // CompileQuestion turns a natural-language question into a validated Query.
@@ -38,7 +41,7 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 		q.PlanCorrections = corrections
 	}
 
-	var selectors []AssetSearchSchema
+	var selectors []graph.AssetSearchSchema
 	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
 		selectors = c.SearchFields()
 	}
@@ -51,14 +54,14 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 
 // compileDeterministicQuestion runs the model-free compilers. It returns
 // false when no compiler recognises the wording.
-func compileDeterministicQuestion(question string, catalog SchemaCatalog) (Query, bool) {
+func compileDeterministicQuestion(question string, catalog graph.SchemaCatalog) (Query, bool) {
 	if q, ok := deterministicThirdPartyQuery(question); ok {
 		return q, true
 	}
 	if goal, ok := deterministicFQDNInventoryGoal(question, catalog); ok {
 		q := QueryFromGoal(goal, question, SourceFQDNHierarchy)
 		q.Traversal = TraversalHierarchy
-		q.ExcludeRoot = isSubdomainInventoryQuestion(question)
+		q.ExcludeRoot = lens.IsSubdomainInventoryQuestion(question)
 		return q, true
 	}
 	if intent, ok := deterministicTypedRelationIntent(question, catalog); ok {

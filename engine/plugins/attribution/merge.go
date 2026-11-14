@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 const (
@@ -113,13 +115,13 @@ func (t *tracker) mergeDuplicates() {
 		t.recheck(ctx, adapter)
 	}
 
-	report, err := ai.FindDuplicateOrganizations(ctx, adapter)
+	report, err := lens.FindDuplicateOrganizations(ctx, adapter)
 	if err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI duplicate search: %v", err))
 		return
 	}
 
-	if _, err := t.journal.SubmitDuplicates(ai.DuplicateProposals(report)); err != nil {
+	if _, err := t.journal.SubmitDuplicates(review.DuplicateProposals(report)); err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI duplicate search could not record proposals: %v", err))
 		return
 	}
@@ -133,15 +135,15 @@ func (t *tracker) mergeDuplicates() {
 		}
 
 		for _, c := range report.Candidates {
-			id := ai.DuplicateProposalID(c.Survivor, c.Duplicate)
+			id := review.DuplicateProposalID(c.Survivor, c.Duplicate)
 			e, ok := state[id]
 			// Only proposed pairs nobody has decided on: a rejected or undone
 			// merge is never applied again.
-			if !ok || c.Decision != ai.GapPropose || e.Status != ai.ProposalPending {
+			if !ok || c.Decision != lens.GapPropose || e.Status != review.ProposalPending {
 				continue
 			}
 
-			if _, err := ai.ApplyMerge(ctx, adapter, t.journal, e.Proposal, ai.AutomaticReviewer); err != nil {
+			if _, err := review.ApplyMerge(ctx, adapter, t.journal, e.Proposal, review.AutomaticReviewer); err != nil {
 				// An earlier merge in this pass can remove one of the pair.
 				t.sess.Log().Info(fmt.Sprintf("AI duplicate merge %s skipped: %v", id, err))
 				continue
@@ -162,8 +164,8 @@ func (t *tracker) mergeDuplicates() {
 	}
 
 	pending := 0
-	for _, p := range ai.DuplicateProposals(report) {
-		if e, ok := state[p.ID]; ok && e.Status == ai.ProposalPending {
+	for _, p := range review.DuplicateProposals(report) {
+		if e, ok := state[p.ID]; ok && e.Status == review.ProposalPending {
 			pending++
 		}
 	}
@@ -177,7 +179,7 @@ func (t *tracker) mergeDuplicates() {
 // contradicts their own evidence. A correction is never applied
 // automatically: companies do rename and relocate.
 func (t *tracker) recordIdentityConflicts(ctx context.Context, adapter oamrepo.Adapter) {
-	report, err := ai.FindIdentityConflicts(ctx, adapter)
+	report, err := lens.FindIdentityConflicts(ctx, adapter)
 	if err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI identity check: %v", err))
 		return
@@ -199,18 +201,18 @@ func (t *tracker) recordIdentityConflicts(ctx context.Context, adapter oamrepo.A
 // organizations as merge proposals. Neither is applied automatically.
 func (t *tracker) recordFamilies(ctx context.Context, adapter oamrepo.Adapter) {
 	for _, d := range t.sess.Config().Domains() {
-		res, err := adapter.ResolveAsset(ctx, ai.AssetSelector{Type: "FQDN", Field: "name", Value: d}, 2)
+		res, err := adapter.ResolveAsset(ctx, graph.AssetSelector{Type: "FQDN", Field: "name", Value: d}, 2)
 		if err != nil || len(res.Candidates) != 1 {
 			continue
 		}
 
-		r, err := ai.FindOrganizationFamily(ctx, adapter, res.Candidates[0].Asset)
+		r, err := lens.FindOrganizationFamily(ctx, adapter, res.Candidates[0].Asset)
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI family of %s: %v", d, err))
 			continue
 		}
 
-		units, merges, err := t.journal.SubmitFamily(r)
+		units, merges, err := review.SubmitFamily(t.journal, r)
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI family of %s could not record proposals: %v", d, err))
 			continue
@@ -225,7 +227,7 @@ func (t *tracker) recordFamilies(ctx context.Context, adapter oamrepo.Adapter) {
 // recheck retracts the automatic ownership writes whose evidence is gone;
 // the next pass writes them again if what remains still supports them.
 func (t *tracker) recheck(ctx context.Context, adapter oamrepo.Adapter) {
-	res, err := ai.RecheckAttributions(ctx, adapter, adapter, t.journal)
+	res, err := review.RecheckAttributions(ctx, adapter, adapter, t.journal)
 	if err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI attribution re-check: %v", err))
 		return

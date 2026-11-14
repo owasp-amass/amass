@@ -8,11 +8,14 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestGraphSearchVariableLengthBeyondTen(t *testing.T) {
-	g := fakeGraph{assets: map[string]Asset{}, links: []Relation{}}
-	catalog := planCatalog{
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{}, Links: []graph.Relation{}}
+	catalog := aitest.PlanCatalog{
 		{SourceType: "FQDN", Label: "next", RelationType: "SimpleRelation", DestinationType: "Service"},
 		{SourceType: "Service", Label: "next", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	}
@@ -23,7 +26,7 @@ func TestGraphSearchVariableLengthBeyondTen(t *testing.T) {
 			typ = "Service"
 		}
 
-		g.assets[id] = Asset{ID: id, Type: typ, Key: id}
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: id}
 		if i == 0 {
 			continue
 		}
@@ -31,13 +34,13 @@ func TestGraphSearchVariableLengthBeyondTen(t *testing.T) {
 		prev := fmt.Sprintf("n%02d", i-1)
 		eid := fmt.Sprintf("e%02d", i)
 		if i%2 == 1 {
-			g.links = append(g.links, Relation{ID: eid, FromID: prev, ToID: id, Label: "next", Type: "SimpleRelation"})
+			g.Links = append(g.Links, graph.Relation{ID: eid, FromID: prev, ToID: id, Label: "next", Type: "SimpleRelation"})
 		} else {
-			g.links = append(g.links, Relation{ID: eid, FromID: id, ToID: prev, Label: "next", Type: "SimpleRelation"})
+			g.Links = append(g.Links, graph.Relation{ID: eid, FromID: id, ToID: prev, Label: "next", Type: "SimpleRelation"})
 		}
 	}
 
-	result, err := SearchGraph(context.Background(), g, catalog, DefaultLimits(), GraphSearchRequest{
+	result, err := SearchGraph(context.Background(), g, catalog, graph.DefaultLimits(), GraphSearchRequest{
 		StartID: "n00", TargetTypes: []string{"Service"}, MaxDepth: 15, MaxMatches: 20,
 	})
 	if err != nil {
@@ -59,7 +62,7 @@ func TestGraphSearchVariableLengthBeyondTen(t *testing.T) {
 }
 
 func TestGraphSearchDiscoversIncomingPaths(t *testing.T) {
-	result, err := SearchGraph(context.Background(), examplePlannedGraph(), testOAMCatalog, DefaultLimits(),
+	result, err := SearchGraph(context.Background(), examplePlannedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
 		GraphSearchRequest{
 			StartID: "fqdn-tech", TargetTypes: []string{"Organization"}, MaxDepth: 3,
 		})
@@ -77,9 +80,9 @@ func TestGraphSearchDiscoversIncomingPaths(t *testing.T) {
 }
 
 func TestGraphSearchDistinguishesTruncation(t *testing.T) {
-	limits := DefaultLimits()
+	limits := graph.DefaultLimits()
 	limits.MaxPerNode = 1
-	result, err := SearchGraph(context.Background(), examplePlannedGraph(), testOAMCatalog, limits, GraphSearchRequest{
+	result, err := SearchGraph(context.Background(), examplePlannedGraph(), aitest.TestOAMCatalog, limits, GraphSearchRequest{
 		StartID: "parent", TargetTypes: []string{"FQDN"}, MaxDepth: 3,
 	})
 	if err != nil || !result.Truncated || result.Exhausted {
@@ -88,7 +91,7 @@ func TestGraphSearchDistinguishesTruncation(t *testing.T) {
 }
 
 func TestGraphSearchRejectsUnknownTypes(t *testing.T) {
-	_, err := SearchGraph(context.Background(), examplePlannedGraph(), testOAMCatalog, DefaultLimits(),
+	_, err := SearchGraph(context.Background(), examplePlannedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
 		GraphSearchRequest{
 			StartID: "fqdn-tech", TargetTypes: []string{"Imaginary"},
 		})

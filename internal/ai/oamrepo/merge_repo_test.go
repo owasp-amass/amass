@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/postgres"
@@ -195,8 +195,8 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 		if !ok {
 			t.Fatalf("after the merge the survivor lacks %q: %v", want, links)
 		}
-		if !contains(f.edgeSources(e), ai.InferenceSource) {
-			t.Errorf("moved edge %q lacks the %s source: %v", want, ai.InferenceSource, f.edgeSources(e))
+		if !contains(f.edgeSources(e), review.InferenceSource) {
+			t.Errorf("moved edge %q lacks the %s source: %v", want, review.InferenceSource, f.edgeSources(e))
 		}
 	}
 	if !contains(f.edgeSources(links["out id "+name.ID]), "DNS-SD") {
@@ -270,12 +270,12 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 	}
 	if e, ok := links["out id "+lei.ID]; !ok {
 		t.Error("undo removed the survivor's own LEI edge")
-	} else if contains(f.edgeSources(e), ai.InferenceSource) {
+	} else if contains(f.edgeSources(e), review.InferenceSource) {
 		t.Error("undo left the amass-ai source on the survivor's own edge")
 	}
 	if e, ok := links["in organization "+cr.ID]; !ok {
 		t.Error("undo deleted a relationship another source recorded after the merge")
-	} else if contains(f.edgeSources(e), ai.InferenceSource) || !contains(f.edgeSources(e), "RDAP") {
+	} else if contains(f.edgeSources(e), review.InferenceSource) || !contains(f.edgeSources(e), "RDAP") {
 		t.Errorf("relationship recorded since the merge has sources %v", f.edgeSources(e))
 	}
 	if contains(f.entitySources(surv.ID), "DNS-SD") || !contains(f.entitySources(surv.ID), "GLEIF") {
@@ -289,8 +289,8 @@ func mergeAndUnmerge(t *testing.T, repo repository.Repository) {
 		if !ok {
 			t.Fatalf("the restored organization lacks %q: %v", want, back)
 		}
-		if contains(f.edgeSources(e), ai.InferenceSource) {
-			t.Errorf("restored edge %q carries the %s source", want, ai.InferenceSource)
+		if contains(f.edgeSources(e), review.InferenceSource) {
+			t.Errorf("restored edge %q carries the %s source", want, review.InferenceSource)
 		}
 	}
 	if !contains(f.entitySources(restored), "DNS-SD") {

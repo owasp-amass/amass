@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -65,15 +66,15 @@ func TestMergeReviewFlow(t *testing.T) {
 		t.Fatalf("recording: %s", errout.String())
 	}
 
-	j := &ai.Journal{Path: journal}
+	j := &review.Journal{Path: journal}
 	entries, err := j.DuplicateEntries()
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("got %d entries, err %v", len(entries), err)
 	}
 
-	var merge, name ai.DuplicateProposal
+	var merge, name review.DuplicateProposal
 	for _, e := range entries {
-		if e.Proposal.Decision == ai.GapPropose {
+		if e.Proposal.Decision == lens.GapPropose {
 			merge = e.Proposal
 		} else {
 			name = e.Proposal
@@ -131,7 +132,7 @@ func TestMergeReviewFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	restored := state[merge.ID].Outcome.RestoredID
-	if state[merge.ID].Status != ai.ProposalRetracted || restored == "" {
+	if state[merge.ID].Status != review.ProposalRetracted || restored == "" {
 		t.Fatalf("after retract: %+v", state[merge.ID])
 	}
 	ent, err := repo.FindEntityById(ctx, restored)

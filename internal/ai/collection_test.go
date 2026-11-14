@@ -7,18 +7,20 @@ package ai
 import (
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestPlanCollectionRequiresExactSupportedSelector(t *testing.T) {
 	cases := []struct {
-		selector  AssetSelector
+		selector  graph.AssetSelector
 		wantType  string
 		wantValue string
 	}{
-		{AssetSelector{Type: "FQDN", Field: "name", Value: "WWW.Example.org."}, "domain", "www.example.org"},
-		{AssetSelector{Type: "IPAddress", Field: "address", Value: "8.8.8.8"}, "ip", "8.8.8.8"},
-		{AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.8.8.0/24"}, "cidr", "8.8.8.0/24"},
-		{AssetSelector{Type: "AutonomousSystem", Field: "number", Value: "15169"}, "asn", "15169"},
+		{graph.AssetSelector{Type: "FQDN", Field: "name", Value: "WWW.Example.org."}, "domain", "www.example.org"},
+		{graph.AssetSelector{Type: "IPAddress", Field: "address", Value: "8.8.8.8"}, "ip", "8.8.8.8"},
+		{graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.8.8.0/24"}, "cidr", "8.8.8.0/24"},
+		{graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: "15169"}, "asn", "15169"},
 	}
 	for _, tc := range cases {
 		plan := PlanCollection(tc.selector)
@@ -33,7 +35,7 @@ func TestPlanCollectionRequiresExactSupportedSelector(t *testing.T) {
 }
 
 func TestCollectionCannotExpandToUnsupportedOrInvalidTargets(t *testing.T) {
-	cases := []AssetSelector{
+	cases := []graph.AssetSelector{
 		{Type: "Organization", Field: "name", Value: "Acme"},
 		{Type: "ContactRecord", Field: "name", Value: "Owner"},
 		{Type: "FQDN", Field: "name", Value: "bad..example.org"},
@@ -54,8 +56,8 @@ func TestCollectionCannotExpandToUnsupportedOrInvalidTargets(t *testing.T) {
 }
 
 func TestCollectionApprovalsBindScopeAndMethod(t *testing.T) {
-	a := PlanCollection(AssetSelector{Type: "FQDN", Field: "name", Value: "a.example.org"})
-	b := PlanCollection(AssetSelector{Type: "FQDN", Field: "name", Value: "b.example.org"})
+	a := PlanCollection(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "a.example.org"})
+	b := PlanCollection(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "b.example.org"})
 	if a.ID == b.ID {
 		t.Fatal("distinct target scopes share approval id")
 	}

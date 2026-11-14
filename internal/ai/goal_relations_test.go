@@ -7,15 +7,18 @@ package ai
 import (
 	"context"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestGoalRelationshipsAnyAllOrderedAndDirections(t *testing.T) {
-	graph := examplePlannedGraph()
-	root := graph.assets["fqdn-tech"]
-	url := graph.assets["website-tech"]
-	tech := graph.assets["tech"]
-	parent := graph.assets["parent"]
-	path := PlanMatch{Nodes: []Asset{root, url, tech, parent}, Edges: []Relation{
+	g := examplePlannedGraph()
+	root := g.Assets["fqdn-tech"]
+	url := g.Assets["website-tech"]
+	tech := g.Assets["tech"]
+	parent := g.Assets["parent"]
+	path := graph.PlanMatch{Nodes: []graph.Asset{root, url, tech, parent}, Edges: []graph.Relation{
 		{ID: "e5", FromID: "website-tech", ToID: "fqdn-tech", Label: "domain", Type: "SimpleRelation"},
 		{ID: "e3", FromID: "tech", ToID: "website-tech", Label: "website", Type: "SimpleRelation"},
 		{ID: "e1", FromID: "parent", ToID: "tech", Label: "subsidiary", Type: "SimpleRelation"},
@@ -51,15 +54,15 @@ func TestGoalRelationshipsAnyAllOrderedAndDirections(t *testing.T) {
 		}, "any") {
 		t.Fatal("inverse traversal was incorrectly treated as inverse stored assertion")
 	}
-	if err := validGoalRelations([]GoalRelation{domain, website}, "ordered", testOAMCatalog.Relations()); err != nil {
+	if err := validGoalRelations([]GoalRelation{domain, website}, "ordered", aitest.TestOAMCatalog.Relations()); err != nil {
 		t.Fatal(err)
 	}
 	if err := validGoalRelations([]GoalRelation{
 		{SourceType: "URL", Label: "unknown", RelationType: "SimpleRelation", DestinationType: "FQDN"},
-	}, "any", testOAMCatalog.Relations()); err == nil {
+	}, "any", aitest.TestOAMCatalog.Relations()); err == nil {
 		t.Fatal("unregistered relation accepted")
 	}
-	if err := validGoalRelations([]GoalRelation{domain}, "everything", testOAMCatalog.Relations()); err == nil {
+	if err := validGoalRelations([]GoalRelation{domain}, "everything", aitest.TestOAMCatalog.Relations()); err == nil {
 		t.Fatal("unsupported quantifier accepted")
 	}
 
@@ -67,7 +70,7 @@ func TestGoalRelationshipsAnyAllOrderedAndDirections(t *testing.T) {
 }
 
 func TestGuidedGraphRespectsExactRelationshipGoal(t *testing.T) {
-	graph := examplePlannedGraph()
+	g := examplePlannedGraph()
 	req := GuidedSearchRequest{GraphSearchRequest: GraphSearchRequest{
 		StartID:     "fqdn-tech",
 		TargetTypes: []string{"Organization"},
@@ -85,7 +88,7 @@ func TestGuidedGraphRespectsExactRelationshipGoal(t *testing.T) {
 		},
 		PathRule: "ordered", MaxPathsPerAsset: 3,
 	}
-	e, err := NewGuidedExplorer(context.Background(), graph, testOAMCatalog, DefaultLimits(), req)
+	e, err := NewGuidedExplorer(context.Background(), g, aitest.TestOAMCatalog, graph.DefaultLimits(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,10 +114,10 @@ func TestGuidedGraphRespectsExactRelationshipGoal(t *testing.T) {
 func TestUnspecifiedGoalMaintainsLegacySemantics(t *testing.T) {
 	goal := InvestigationGoal{Subject: PlanSubject{Type: "FQDN", Field: "name", Value: "tech.acme.example"},
 		TargetTypes: []string{"Organization"}, Direction: "both", Purpose: "connected"}
-	if err := validateGoal(goal, testOAMCatalog.Relations(), testOAMCatalog.SearchFields()); err != nil {
+	if err := validateGoal(goal, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields()); err != nil {
 		t.Fatal(err)
 	}
-	if !pathSatisfiesGoal(PlanMatch{}, nil, "") {
+	if !pathSatisfiesGoal(graph.PlanMatch{}, nil, "") {
 		t.Fatal("unspecified relation constraints must not suppress exploratory questions")
 	}
 }

@@ -4,20 +4,26 @@
 
 package ai
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+)
 
 // goalJSONSchema describes the planner's InvestigationGoal reply. Asset
 // types and whole relationship transitions are enumerated from the OAM
 // catalog, so a provider that enforces the schema cannot emit invented
 // names or transitions. validateGoal still decides validity.
-func goalJSONSchema(relations []RelationshipSchema, selectors []AssetSearchSchema) JSONSchema {
+func goalJSONSchema(relations []graph.RelationshipSchema, selectors []graph.AssetSearchSchema) llm.JSONSchema {
 	return goalJSONSchemaFor(relations, selectors, relations)
 }
 
 // goalJSONSchemaFor enumerates every OAM asset type but only the transitions
 // in promptRelations, the relationships the planner was shown. With none,
 // the relationships list must be empty.
-func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSchema, promptRelations []RelationshipSchema) JSONSchema {
+func goalJSONSchemaFor(relations []graph.RelationshipSchema, selectors []graph.AssetSearchSchema, promptRelations []graph.RelationshipSchema) llm.JSONSchema {
 	types := map[string]bool{}
 	for _, s := range selectors {
 		types[s.Type] = true
@@ -67,7 +73,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 	}
 
 	relation := map[string]any{"enum": transitions}
-	return JSONSchema{
+	return llm.JSONSchema{
 		Name:        "investigation_goal",
 		Description: "The read-only OAM investigation goal for the user's question.",
 		Schema: map[string]any{
@@ -82,7 +88,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 				"answer":        map[string]any{"type": "string", "enum": answerKindNames()},
 				"columns": map[string]any{
 					"type":     "array",
-					"maxItems": tableMaxColumns,
+					"maxItems": lens.TableMaxColumns,
 					// Exactly two column shapes: any asset type reached from the
 					// previous cell, or the Organization that controls it.
 					"items": map[string]any{"anyOf": []any{
@@ -90,7 +96,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 							"type": "object",
 							"properties": map[string]any{
 								"type": assetType,
-								"role": map[string]any{"type": "string", "enum": []string{ColumnReached}},
+								"role": map[string]any{"type": "string", "enum": []string{lens.ColumnReached}},
 							},
 							"required":             []string{"type", "role"},
 							"additionalProperties": false,
@@ -99,7 +105,7 @@ func goalJSONSchemaFor(relations []RelationshipSchema, selectors []AssetSearchSc
 							"type": "object",
 							"properties": map[string]any{
 								"type": map[string]any{"type": "string", "enum": []string{"Organization"}},
-								"role": map[string]any{"type": "string", "enum": []string{ColumnController}},
+								"role": map[string]any{"type": "string", "enum": []string{lens.ColumnController}},
 							},
 							"required":             []string{"type", "role"},
 							"additionalProperties": false,

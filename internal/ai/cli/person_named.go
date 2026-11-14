@@ -11,24 +11,26 @@ import (
 	"io"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 func isPersonNamedProposal(id string) bool {
-	return strings.HasPrefix(id, ai.PersonNamedPrefix)
+	return strings.HasPrefix(id, lens.PersonNamedPrefix)
 }
 
 // listPersonNamed finds organizations recorded under a person's name,
 // prints them and records them in the journal as removal proposals.
 // Nothing in the Asset Database changes.
-func listPersonNamed(ctx context.Context, graph ai.Graph, journalPath, format string, explicit bool,
+func listPersonNamed(ctx context.Context, graph graph.Graph, journalPath, format string, explicit bool,
 	out, errout io.Writer) error {
-	r, err := ai.FindPersonNamedOrganizations(ctx, graph)
+	r, err := lens.FindPersonNamedOrganizations(ctx, graph)
 	if err != nil {
 		return err
 	}
 	if journalPath != "" {
-		added, err := (&ai.Journal{Path: journalPath}).SubmitPersonNamed(r.Candidates)
+		added, err := (&review.Journal{Path: journalPath}).SubmitPersonNamed(r.Candidates)
 		if err != nil {
 			return fmt.Errorf("record person-named organizations: %w", err)
 		}
@@ -39,7 +41,7 @@ func listPersonNamed(ctx context.Context, graph ai.Graph, journalPath, format st
 
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.FormatPersonNamedReport(r))
+		_, err := fmt.Fprint(out, lens.FormatPersonNamedReport(r))
 		return err
 	case format == "json":
 		return writeJSON(out, r)
@@ -48,33 +50,33 @@ func listPersonNamed(ctx context.Context, graph ai.Graph, journalPath, format st
 	return fmt.Errorf("person-named format %q: use text or json", format)
 }
 
-func pendingPersonNamed(j *ai.Journal, id, reviewer string) (ai.PersonNamedOrg, error) {
+func pendingPersonNamed(j *review.Journal, id, reviewer string) (lens.PersonNamedOrg, error) {
 	if id == "" || reviewer == "" {
-		return ai.PersonNamedOrg{}, errors.New("-proposal and -reviewer required")
+		return lens.PersonNamedOrg{}, errors.New("-proposal and -reviewer required")
 	}
 
 	state, err := j.PersonNamedState()
 	if err != nil {
-		return ai.PersonNamedOrg{}, err
+		return lens.PersonNamedOrg{}, err
 	}
 
 	e, ok := state[id]
 	if !ok {
-		return ai.PersonNamedOrg{}, fmt.Errorf("no person-named organization proposal %s in the journal", id)
+		return lens.PersonNamedOrg{}, fmt.Errorf("no person-named organization proposal %s in the journal", id)
 	}
-	if e.Status != ai.ProposalPending {
-		return ai.PersonNamedOrg{}, fmt.Errorf("proposal %s is already %s", id, e.Status)
+	if e.Status != review.ProposalPending {
+		return lens.PersonNamedOrg{}, fmt.Errorf("proposal %s is already %s", id, e.Status)
 	}
 
 	return e.Proposal, nil
 }
 
 func rejectPersonNamed(journalPath, id, reviewer string, out io.Writer) error {
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	if _, err := pendingPersonNamed(j, id, reviewer); err != nil {
 		return err
 	}
-	if err := j.RecordPersonNamed(ai.PersonNamedOutcome{ProposalID: id, Status: ai.ProposalRejected,
+	if err := j.RecordPersonNamed(review.PersonNamedOutcome{ProposalID: id, Status: review.ProposalRejected,
 		Reviewer: reviewer}); err != nil {
 		return err
 	}
@@ -83,19 +85,19 @@ func rejectPersonNamed(journalPath, id, reviewer string, out io.Writer) error {
 	return err
 }
 
-func approvePersonNamed(ctx context.Context, r ai.OrganizationRemover, journalPath, id, reviewer string,
+func approvePersonNamed(ctx context.Context, r review.OrganizationRemover, journalPath, id, reviewer string,
 	out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	p, err := pendingPersonNamed(j, id, reviewer)
 	if err != nil {
 		return err
 	}
 
-	rec, err := ai.ApplyPersonNamedRemoval(ctx, r, j, p, reviewer)
+	rec, err := review.ApplyPersonNamedRemoval(ctx, r, j, p, reviewer)
 	if err != nil {
 		return err
 	}
@@ -106,7 +108,7 @@ func approvePersonNamed(ctx context.Context, r ai.OrganizationRemover, journalPa
 	return err
 }
 
-func retractPersonNamed(ctx context.Context, r ai.OrganizationRemover, journalPath, id, reviewer string,
+func retractPersonNamed(ctx context.Context, r review.OrganizationRemover, journalPath, id, reviewer string,
 	out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
@@ -115,7 +117,7 @@ func retractPersonNamed(ctx context.Context, r ai.OrganizationRemover, journalPa
 		return errors.New("-proposal and -reviewer required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	state, err := j.PersonNamedState()
 	if err != nil {
 		return err
@@ -125,7 +127,7 @@ func retractPersonNamed(ctx context.Context, r ai.OrganizationRemover, journalPa
 	if !ok {
 		return fmt.Errorf("no person-named organization proposal %s in the journal", id)
 	}
-	if e.Status != ai.ProposalApplied || e.Outcome == nil || e.Outcome.Record == nil {
+	if e.Status != review.ProposalApplied || e.Outcome == nil || e.Outcome.Record == nil {
 		return fmt.Errorf("proposal %s is %s, not applied", id, e.Status)
 	}
 
@@ -133,7 +135,7 @@ func retractPersonNamed(ctx context.Context, r ai.OrganizationRemover, journalPa
 	if err != nil {
 		return fmt.Errorf("restore organization for %s: %w", id, err)
 	}
-	if err := j.RecordPersonNamed(ai.PersonNamedOutcome{ProposalID: id, Status: ai.ProposalRetracted,
+	if err := j.RecordPersonNamed(review.PersonNamedOutcome{ProposalID: id, Status: review.ProposalRetracted,
 		Reviewer: reviewer, RestoredID: restored}); err != nil {
 		return err
 	}

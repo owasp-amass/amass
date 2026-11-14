@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 // planningFocus is the part of the OAM catalog a question mentions: asset
@@ -29,7 +32,7 @@ var (
 
 // questionFocus finds the types and labels a question mentions. Aliases
 // must match whole words; identifiers imply their asset type.
-func questionFocus(question string, relations []RelationshipSchema, selectors []AssetSearchSchema) planningFocus {
+func questionFocus(question string, relations []graph.RelationshipSchema, selectors []graph.AssetSearchSchema) planningFocus {
 	f := planningFocus{Types: map[string]bool{}, Labels: map[string]bool{}}
 	text := " " + normalizeSchemaAlias(question) + " "
 	mentions := func(alias string) bool {
@@ -101,7 +104,7 @@ func questionFocus(question string, relations []RelationshipSchema, selectors []
 // plannerPrompt is the system prompt and reply schema for one planning attempt.
 type plannerPrompt struct {
 	Text     string
-	Schema   JSONSchema
+	Schema   llm.JSONSchema
 	Explicit bool
 	Hint     explicitRelationHint
 	// Sliced reports that the prompt shows only the question's focus.
@@ -116,7 +119,7 @@ type plannerPrompt struct {
 // shown, which cuts the prompt from about 3,500 tokens to well under half
 // for most questions; CPU-only local models spend most of their time
 // reading the prompt. Without slicing, the whole catalog is shown.
-func goalPlannerPrompt(question string, relations []RelationshipSchema, selectors []AssetSearchSchema, sliced bool, owned []string) plannerPrompt {
+func goalPlannerPrompt(question string, relations []graph.RelationshipSchema, selectors []graph.AssetSearchSchema, sliced bool, owned []string) plannerPrompt {
 	out := plannerPrompt{}
 	types := map[string]bool{}
 	for _, s := range selectors {
@@ -155,7 +158,7 @@ func goalPlannerPrompt(question string, relations []RelationshipSchema, selector
 	if sliced && len(focus.Types) > 0 {
 		out.Sliced = true
 		typeAliasTypes = focus.Types
-		promptSelectors = make([]AssetSearchSchema, 0, len(focus.Types))
+		promptSelectors = make([]graph.AssetSearchSchema, 0, len(focus.Types))
 		for _, s := range selectors {
 			if focus.Types[s.Type] || s.Type == "Organization" {
 				promptSelectors = append(promptSelectors, s)
@@ -213,13 +216,13 @@ ANSWER KINDS:
 	return out
 }
 
-func relationsWithLabels(relations []RelationshipSchema, labels []string) []RelationshipSchema {
+func relationsWithLabels(relations []graph.RelationshipSchema, labels []string) []graph.RelationshipSchema {
 	selected := map[string]bool{}
 	for _, l := range labels {
 		selected[strings.ToLower(l)] = true
 	}
 
-	out := make([]RelationshipSchema, 0)
+	out := make([]graph.RelationshipSchema, 0)
 	for _, r := range relations {
 		if selected[strings.ToLower(r.Label)] {
 			out = append(out, r)

@@ -8,37 +8,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
-// Only unambiguous FQDN inventory questions qualify for this fast path.
-// "Associated" in this narrow mode means descending stored OAM "node"
-// edges, not DNS-record association, organization attribution or validation.
-// Ambiguous questions still fall through to the model planner.
-var fqdnInventoryQuestion = regexp.MustCompile(`(?i)^\s*(?:(?:which|what|list|show)(?:\s+(?:all|the))?\s+(?:fqdn|fqdns|fully qualified domain name|fully qualified domain names|hostname|hostnames|dns names?|subdomain|subdomains|subdomain names?)(?:\s+assets)?(?:\s+(?:are|were))?(?:\s+(?:associated|connected|related)\s+with|\s+(?:under|beneath|within|for|of))|(?:list|show)\s+(?:all\s+)?(?:subdomains|subdomain names|hostnames)\s+(?:of|under|for))\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?:\s*\?)?\s*$`)
-
-// subdomainInventoryQuestion accepts the everyday wordings of a subdomain
-// listing, such as "what are all the subdomains within example.com?" or
-// "list the hostnames in example.com's DNS namespace". The question must
-// name exactly one domain and nothing else.
-var subdomainInventoryQuestion = regexp.MustCompile(`(?i)^\s*(?:(?:what|which)(?:\s+(?:are|were))?\s+|(?:list|show|give me|find|get|enumerate|name)\s+)?(?:all\s+)?(?:of\s+)?(?:the\s+)?(?:known\s+|discovered\s+)?(?:subdomains?|subdomain names|hostnames|fqdns|dns names)(?:\s+(?:that\s+)?(?:are|were|exist))?\s+(?:in|within|under|beneath|below|of|for|on)\s+(?:the\s+)?([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?:'s)?(?:\s+(?:dns\s+)?(?:namespace|domain|zone))?\s*\??\s*$`)
-
-func fqdnInventoryHost(question string) (string, bool) {
-	for _, re := range []*regexp.Regexp{fqdnInventoryQuestion, subdomainInventoryQuestion} {
-		if m := re.FindStringSubmatch(question); len(m) == 2 {
-			return strings.ToLower(m[1]), true
-		}
-	}
-
-	return "", false
-}
-
-func deterministicFQDNInventoryGoal(question string, catalog SchemaCatalog) (InvestigationGoal, bool) {
+func deterministicFQDNInventoryGoal(question string, catalog graph.SchemaCatalog) (InvestigationGoal, bool) {
 	var zero InvestigationGoal
-	host, ok := fqdnInventoryHost(question)
+	host, ok := lens.FQDNInventoryHost(question)
 	if !ok {
 		return zero, false
 	}
@@ -94,8 +74,8 @@ func deterministicFQDNInventoryGoal(question string, catalog SchemaCatalog) (Inv
 // spending match limits on unrelated DNS, URLs, IPs and organizations.
 // A suffix check ensures a malformed stored relation cannot pull an
 // unrelated FQDN into the requested scope.
-func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root Asset, opts AdaptiveOptions) (GraphSearchResult, error) {
-	out := GraphSearchResult{Root: root, Matches: []PlanMatch{}, Mode: "fqdn_inventory"}
+func searchFQDNInventory(ctx context.Context, g graph.Graph, limits graph.Limits, root graph.Asset, opts AdaptiveOptions) (GraphSearchResult, error) {
+	out := GraphSearchResult{Root: root, Matches: []graph.PlanMatch{}, Mode: "fqdn_inventory"}
 	if err := limits.Validate(); err != nil {
 		return out, err
 	}
@@ -103,7 +83,7 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 		return out, errors.New("FQDN inventory requires FQDN root")
 	}
 
-	bounded, ok := graph.(BoundedGraph)
+	bounded, ok := g.(graph.BoundedGraph)
 	if !ok {
 		return out, errors.New("bounded graph reader required")
 	}
@@ -120,8 +100,8 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 	if depth < 1 || depth > limits.MaxDepth {
 		return out, errors.New("depth exceeds policy")
 	}
-	if maxMatches < 1 || maxMatches > MaxInventoryNames {
-		return out, fmt.Errorf("inventory limit must be 1..%d", MaxInventoryNames)
+	if maxMatches < 1 || maxMatches > lens.MaxInventoryNames {
+		return out, fmt.Errorf("inventory limit must be 1..%d", lens.MaxInventoryNames)
 	}
 	if maxExpansions < 1 || maxExpansions > maxMatches+1 {
 		return out, errors.New("max expansions exceeds inventory policy")
@@ -130,19 +110,19 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 	// A name's children are read in one bounded read, or a page at a time
 	// up to the inventory's own limit when the graph pages, so a domain with
 	// more direct subdomains than one read returns is still listed in full.
-	perNode := min(maxMatches+1, MaxEdgeRead)
-	_, paged := graph.(PagedGraph)
+	perNode := min(maxMatches+1, graph.MaxEdgeRead)
+	_, paged := g.(graph.PagedGraph)
 	if paged {
 		perNode = maxMatches + 1
 	}
 	maxEdges := 4 * (maxMatches + 1)
 
 	type queued struct {
-		asset Asset
-		path  PlanMatch
+		asset graph.Asset
+		path  graph.PlanMatch
 	}
-	initial := PlanMatch{Nodes: []Asset{root}, Edges: []Relation{}}
-	initial.PathID = WitnessPathID(initial)
+	initial := graph.PlanMatch{Nodes: []graph.Asset{root}, Edges: []graph.Relation{}}
+	initial.PathID = graph.WitnessPathID(initial)
 	pending := []queued{{asset: root, path: initial}}
 	seen := map[string]bool{root.ID: true}
 	seenEdges := map[string]bool{}
@@ -164,11 +144,11 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 		}
 
 		out.ExpandedPaths++
-		var edges []Relation
+		var edges []graph.Relation
 		var more bool
 		var err error
 		if paged {
-			edges, more, err = readEdges(ctx, graph, current.asset.ID, "out", "node", perNode,
+			edges, more, err = graph.ReadEdges(ctx, g, current.asset.ID, "out", "node", perNode,
 				func() bool { return true })
 		} else {
 			edges, more, err = bounded.EdgesLimited(ctx, current.asset.ID, "out", "node", time.Time{}, perNode)
@@ -214,7 +194,7 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 				break
 			}
 
-			next, err := graph.GetAsset(ctx, edge.ToID)
+			next, err := g.GetAsset(ctx, edge.ToID)
 			if err != nil {
 				return out, err
 			}
@@ -226,11 +206,11 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 			}
 
 			seen[next.ID] = true
-			path := PlanMatch{
-				Nodes: append(append([]Asset(nil), current.path.Nodes...), next),
-				Edges: append(append([]Relation(nil), current.path.Edges...), edge),
+			path := graph.PlanMatch{
+				Nodes: append(append([]graph.Asset(nil), current.path.Nodes...), next),
+				Edges: append(append([]graph.Relation(nil), current.path.Edges...), edge),
 			}
-			path.PathID = WitnessPathID(path)
+			path.PathID = graph.WitnessPathID(path)
 			out.Matches = append(out.Matches, path)
 			pending = append(pending, queued{asset: next, path: path})
 			if len(out.Matches) >= maxMatches {
@@ -265,7 +245,7 @@ func searchFQDNInventory(ctx context.Context, graph Graph, limits Limits, root A
 	return out, nil
 }
 
-func fqdnInventoryAnswerScoped(root Asset, paths []PlanMatch, truncated bool, reason string, subdomainsOnly bool) string {
+func fqdnInventoryAnswerScoped(root graph.Asset, paths []graph.PlanMatch, truncated bool, reason string, subdomainsOnly bool) string {
 	names := make([]string, 0, len(paths)+1)
 	if !subdomainsOnly {
 		names = append(names, root.Key)
@@ -302,15 +282,6 @@ func fqdnInventoryAnswerScoped(root Asset, paths []PlanMatch, truncated bool, re
 	return answer
 }
 
-var subdomainInventoryLanguage = regexp.MustCompile(`(?i)\bsubdomains?\b|\bdns\s+namespace\b`)
-
-// Inventory limits. An inventory is listed by Go and never sent to the
-// model, so it can return far more names than a model-evaluated search.
-const (
-	DefaultInventoryNames = 1000
-	MaxInventoryNames     = 10000
-)
-
 // inventoryLimit is MaxInventory when set, then an explicit MaxMatches,
 // then DefaultInventoryNames.
 func inventoryLimit(opts AdaptiveOptions) int {
@@ -321,7 +292,7 @@ func inventoryLimit(opts AdaptiveOptions) int {
 		return opts.MaxMatches
 	}
 
-	return DefaultInventoryNames
+	return lens.DefaultInventoryNames
 }
 
 // promoteHierarchyGoal turns a goal that starts at an FQDN, asks for FQDNs
@@ -355,9 +326,5 @@ func hierarchyQuery(q *Query) {
 		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	}
 	q.PathRule = "all"
-	q.ExcludeRoot = isSubdomainInventoryQuestion(q.Question)
-}
-
-func isSubdomainInventoryQuestion(question string) bool {
-	return subdomainInventoryLanguage.MatchString(question)
+	q.ExcludeRoot = lens.IsSubdomainInventoryQuestion(q.Question)
 }

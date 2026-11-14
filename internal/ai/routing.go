@@ -11,16 +11,8 @@ import (
 	"sort"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
-
-// EvidenceSummary records the provenance that was available to the router.
-// Distinct source IDs are an approximation, not proof of source independence.
-type EvidenceSummary struct {
-	EvidenceIDs      []string `json:"evidence_ids"`
-	SourceIDs        []string `json:"source_ids"`
-	SourceProperties int      `json:"source_properties"`
-	Unattributed     int      `json:"unattributed"`
-}
 
 const OrganizationFeatureVersion = "oam-provenance-v1"
 const OrganizationClassificationTask = "organization_relation"
@@ -29,8 +21,8 @@ const OrganizationClassificationTask = "organization_relation"
 // from supplied, repository-verified OAM evidence. No model is asked to parse
 // arbitrary web, DNS, or certificate text as an instruction.
 // The caller must verify evidence IDs against the Asset Database first.
-func ExtractProvenanceFeatures(c Candidate) (classify.Input, EvidenceSummary, error) {
-	var out EvidenceSummary
+func ExtractProvenanceFeatures(c review.Candidate) (classify.Input, review.EvidenceSummary, error) {
+	var out review.EvidenceSummary
 	if c.SubjectID == "" || c.ObjectID == "" || c.SubjectID == c.ObjectID {
 		return classify.Input{}, out, errors.New("invalid candidate endpoints")
 	}
@@ -110,20 +102,11 @@ type RoutingPolicy struct {
 	AllowCalibratedSkip bool
 }
 
-type RoutingResult struct {
-	Decision            string               `json:"decision"` // needs_evidence, review, skip, escalate, proposed, no_proposal
-	Reason              string               `json:"reason"`
-	Prediction          *classify.Prediction `json:"prediction,omitempty"`
-	Provenance          EvidenceSummary      `json:"provenance"`
-	Proposal            *Proposal            `json:"proposal,omitempty"`
-	UsedGenerativeModel bool                 `json:"used_generative_model"`
-}
-
 // AnalyzeRouted runs cheap classification first, escalating when needed.
 // It never inserts OAM relationships. The caller decides how to persist a
 // review-only routing result or an LLM proposal.
-func (i Inferrer) AnalyzeRouted(ctx context.Context, c Candidate, classifier classify.Classifier, policy RoutingPolicy) (RoutingResult, error) {
-	var out RoutingResult
+func (i Inferrer) AnalyzeRouted(ctx context.Context, c review.Candidate, classifier classify.Classifier, policy RoutingPolicy) (review.RoutingResult, error) {
+	var out review.RoutingResult
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}

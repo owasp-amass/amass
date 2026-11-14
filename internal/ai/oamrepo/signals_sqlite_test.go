@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	"github.com/owasp-amass/amass/v5/internal/fingerprint"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
@@ -117,7 +118,7 @@ func checkServiceSignals(t *testing.T, db repository.Repository) {
 		t.Fatal(err)
 	}
 
-	j := &ai.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	res, err := ai.AttributeOwnership(ctx, adapter, Catalog{}, owner, nil, j, ai.AttributionPolicy{Mode: "journal"})
 	if err != nil {
 		t.Fatal(err)

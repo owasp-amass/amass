@@ -6,13 +6,12 @@ package ai
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // GuidedSearchRequest extends bounded graph search with ranked relation hints
@@ -35,12 +34,12 @@ type GuidedFrontier struct {
 }
 
 type guidedPath struct {
-	match PlanMatch
+	match graph.PlanMatch
 	score int
 }
 
 type guidedEdgeBatch struct {
-	edges []Relation
+	edges []graph.Relation
 	more  bool
 }
 
@@ -49,14 +48,14 @@ type guidedEdgeBatch struct {
 // node. This preserves alternative routes while prohibiting cycles within
 // a path. No path or model hint can bypass resource budgets.
 type GuidedExplorer struct {
-	graph         Graph
-	bounded       BoundedGraph
-	limits        Limits
+	graph         graph.Graph
+	bounded       graph.BoundedGraph
+	limits        graph.Limits
 	req           GuidedSearchRequest
 	catalog       map[string]bool
 	out           GraphSearchResult
 	frontier      []guidedPath
-	assets        map[string]Asset
+	assets        map[string]graph.Asset
 	edgeCache     map[string]guidedEdgeBatch
 	seenEdge      map[string]bool
 	seenPath      map[string]bool
@@ -75,33 +74,15 @@ type GuidedExplorer struct {
 	finished      bool
 }
 
-// WitnessPathID is derived only from real asset and edge identifiers. It is
-// stable for a given directed traversal path and does not assert ownership.
-func WitnessPathID(match PlanMatch) string {
-	var s strings.Builder
-	for i, n := range match.Nodes {
-		s.WriteString(n.ID)
-		s.WriteByte(0)
-		if i < len(match.Edges) {
-			e := match.Edges[i]
-			s.WriteString(e.ID)
-			s.WriteByte(0)
-		}
-	}
-
-	sum := sha256.Sum256([]byte(s.String()))
-	return hex.EncodeToString(sum[:12])
-}
-
-func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, limits Limits, req GuidedSearchRequest) (*GuidedExplorer, error) {
+func NewGuidedExplorer(ctx context.Context, g graph.Graph, catalog graph.SchemaCatalog, limits graph.Limits, req GuidedSearchRequest) (*GuidedExplorer, error) {
 	if err := limits.Validate(); err != nil {
 		return nil, err
 	}
-	if graph == nil || catalog == nil {
+	if g == nil || catalog == nil {
 		return nil, errors.New("graph and OAM schema catalog required")
 	}
 
-	bounded, ok := graph.(BoundedGraph)
+	bounded, ok := g.(graph.BoundedGraph)
 	if !ok {
 		return nil, errors.New("graph repository lacks bounded edge queries")
 	}
@@ -139,24 +120,24 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 		return nil, errors.New("max_expansions exceeds policy")
 	}
 
-	since, err := DateSince(req.Since)
+	since, err := graph.DateSince(req.Since)
 	if err != nil {
 		return nil, err
 	}
 
-	root, err := graph.GetAsset(ctx, req.StartID)
+	root, err := g.GetAsset(ctx, req.StartID)
 	if err != nil {
 		return nil, err
 	}
 
 	s := &GuidedExplorer{
-		graph: graph, bounded: bounded, limits: limits, req: req, since: since,
+		graph: g, bounded: bounded, limits: limits, req: req, since: since,
 		catalog: map[string]bool{}, targets: map[string]bool{}, labels: map[string]bool{},
 		knownTypes: map[string]bool{}, typeDistances: map[string]int{},
-		assets: map[string]Asset{root.ID: root}, edgeCache: map[string]guidedEdgeBatch{},
+		assets: map[string]graph.Asset{root.ID: root}, edgeCache: map[string]guidedEdgeBatch{},
 		seenEdge: map[string]bool{}, seenPath: map[string]bool{},
 		perAsset: map[string]int{root.ID: 1}, preferAssets: map[string]bool{}, preferPaths: map[string]bool{},
-		out: GraphSearchResult{Root: root, Matches: []PlanMatch{}, Mode: "guided"},
+		out: GraphSearchResult{Root: root, Matches: []graph.PlanMatch{}, Mode: "guided"},
 	}
 	for _, t := range catalog.Relations() {
 		s.catalog[t.SourceType+"\x00"+t.Label+"\x00"+t.RelationType+"\x00"+t.DestinationType] = true
@@ -210,8 +191,8 @@ func NewGuidedExplorer(ctx context.Context, graph Graph, catalog SchemaCatalog, 
 		}
 	}
 
-	initial := PlanMatch{Nodes: []Asset{root}, Edges: []Relation{}}
-	initial.PathID = WitnessPathID(initial)
+	initial := graph.PlanMatch{Nodes: []graph.Asset{root}, Edges: []graph.Relation{}}
+	initial.PathID = graph.WitnessPathID(initial)
 	s.frontier = []guidedPath{{match: initial}}
 	s.seenPath[initial.PathID] = true
 	return s, nil
@@ -355,7 +336,7 @@ func (s *GuidedExplorer) end(reason string) {
 	s.finished = true
 }
 
-func containsPathAsset(p PlanMatch, id string) bool {
+func containsPathAsset(p graph.PlanMatch, id string) bool {
 	for _, n := range p.Nodes {
 		if n.ID == id {
 			return true
@@ -474,11 +455,11 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 				continue
 			}
 
-			path := PlanMatch{
-				Nodes: append(append([]Asset(nil), current.match.Nodes...), next),
-				Edges: append(append([]Relation(nil), current.match.Edges...), e),
+			path := graph.PlanMatch{
+				Nodes: append(append([]graph.Asset(nil), current.match.Nodes...), next),
+				Edges: append(append([]graph.Relation(nil), current.match.Edges...), e),
 			}
-			path.PathID = WitnessPathID(path)
+			path.PathID = graph.WitnessPathID(path)
 			if s.seenPath[path.PathID] {
 				continue
 			}

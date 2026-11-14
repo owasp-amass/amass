@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // Mermaid converts an already-bounded graph walk to a safe static diagram.
 // Generated node IDs are local to this diagram; original OAM IDs remain in the labels.
-func Mermaid(w WalkResult) string {
+func Mermaid(w graph.WalkResult) string {
 	var b strings.Builder
 	b.WriteString("flowchart LR\n")
 	ids := map[string]string{}

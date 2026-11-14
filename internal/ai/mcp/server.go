@@ -19,6 +19,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 // serverVersion is reported to MCP clients.
@@ -29,7 +30,7 @@ const serverVersion = "0.3.0"
 // investigations for verify_citations; a nil store is created on Serve.
 type Server struct {
 	Runner   ai.ToolRunner
-	Model    ai.Model
+	Model    llm.Model
 	Evidence *ai.EvidenceStore
 }
 
@@ -83,7 +84,7 @@ func (nopWriteCloser) Close() error { return nil }
 
 // newSDKServer builds an MCP server with every read-only tool: the graph
 // tools and the investigation tools.
-func newSDKServer(runner ai.ToolRunner, model ai.Model, store *ai.EvidenceStore) *mcp.Server {
+func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
 		&mcp.ServerOptions{GetSessionID: newSessionID})
 	for _, spec := range toolSpecs(runner) {
@@ -116,12 +117,12 @@ func newSDKServer(runner ai.ToolRunner, model ai.Model, store *ai.EvidenceStore)
 }
 
 // toolSpecs lists the graph tools and the investigation tools.
-func toolSpecs(runner ai.ToolRunner) []ai.ToolSpec {
-	return append(ai.Specs(), ai.InvestigationSpecs(runner.Catalog)...)
+func toolSpecs(runner ai.ToolRunner) []llm.ToolSpec {
+	return append(llm.Specs(), ai.InvestigationSpecs(runner.Catalog)...)
 }
 
 // runTool dispatches a tool call to the investigation tools or the runner.
-func runTool(ctx context.Context, runner ai.ToolRunner, model ai.Model, store *ai.EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
+func runTool(ctx context.Context, runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
 	if ai.IsInvestigationTool(name) {
 		return ai.RunInvestigationTool(ctx, runner, model, store, name, args)
 	}

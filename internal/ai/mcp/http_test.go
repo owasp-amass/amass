@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func post(t *testing.T, url, token, session, body string) (int, http.Header, map[string]any) {
@@ -61,7 +62,7 @@ func post(t *testing.T, url, token, session, body string) (int, http.Header, map
 
 func TestHTTPMCPAuthenticatedSessionAndTools(t *testing.T) {
 	token := strings.Repeat("x", 40)
-	svc := NewHTTPServer(ai.ToolRunner{Limits: ai.DefaultLimits()}, token)
+	svc := NewHTTPServer(ai.ToolRunner{Limits: graph.DefaultLimits()}, token)
 	server := httptest.NewServer(svc.Handler())
 	defer server.Close()
 	init := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
@@ -131,7 +132,7 @@ func TestHTTPMCPSessionsExpireAndAreCapped(t *testing.T) {
 	var clock atomic.Int64
 	clock.Store(time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC).UnixNano())
 	advance := func(d time.Duration) { clock.Add(int64(d)) }
-	svc := NewHTTPServer(ai.ToolRunner{Limits: ai.DefaultLimits()}, token)
+	svc := NewHTTPServer(ai.ToolRunner{Limits: graph.DefaultLimits()}, token)
 	svc.SessionTTL = time.Minute
 	svc.MaxSessions = 2
 	svc.now = func() time.Time { return time.Unix(0, clock.Load()) }

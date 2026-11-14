@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
@@ -63,17 +64,17 @@ type EvidenceDossier struct {
 // 40 different edge lookups, across a bounded candidate set. It does not
 // accept a model-supplied evidence list, and never treats generic asset tags
 // as proof of a particular relationship.
-func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths []PlanMatch) (EvidenceDossier, error) {
+func EvaluatePathEvidence(ctx context.Context, g graph.Graph, limits graph.Limits, paths []graph.PlanMatch) (EvidenceDossier, error) {
 	out := EvidenceDossier{Paths: make([]PathEvidence, 0, len(paths)), EdgeLookupsLimit: min(40,
 		limits.MaxEdges), RecordsPerEdgeLimit: min(8, limits.MaxEvidence)}
-	if graph == nil {
+	if g == nil {
 		return out, fmt.Errorf("graph evidence interface required")
 	}
 	if err := limits.Validate(); err != nil {
 		return out, err
 	}
 
-	reader, ok := graph.(EdgeEvidenceReader)
+	reader, ok := g.(graph.EdgeEvidenceReader)
 	if !ok {
 		return out, fmt.Errorf("explicit edge evidence reader required (asset and edge identifiers can overlap)")
 	}
@@ -89,7 +90,7 @@ func EvaluatePathEvidence(ctx context.Context, graph Graph, limits Limits, paths
 
 		report := PathEvidence{PathID: p.PathID, Edges: make([]EdgeEvidence, 0, len(p.Edges))}
 		if report.PathID == "" {
-			report.PathID = WitnessPathID(p)
+			report.PathID = graph.WitnessPathID(p)
 		}
 		if len(p.Edges)+1 != len(p.Nodes) {
 			return out, fmt.Errorf("malformed witnessed path %s", report.PathID)

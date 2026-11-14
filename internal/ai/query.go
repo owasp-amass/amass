@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 // QueryVersion is the current Query schema version.
@@ -75,7 +78,7 @@ type Query struct {
 	Lens string `json:"lens,omitempty"`
 	// Columns are the column chain of the table lens; TargetTypes holds its
 	// single row type.
-	Columns []TableColumn `json:"columns,omitempty"`
+	Columns []lens.TableColumn `json:"columns,omitempty"`
 	// Source names the compiler that produced the Query.
 	Source string `json:"source"`
 	// PlanCorrections are the reasons the model planner's earlier plans
@@ -111,25 +114,25 @@ func (q Query) Describe() string {
 		targets = strings.Join(q.TargetTypes, ", ")
 	}
 	switch q.Lens {
-	case LensThirdParty:
+	case lens.LensThirdParty:
 		return fmt.Sprintf("List the third-party vendors used by the assets %s controls.", subject)
-	case LensControlled:
+	case lens.LensControlled:
 		return fmt.Sprintf("List the %s assets controlled by %s.", targets, subject)
-	case LensOwnershipGaps:
+	case lens.LensOwnershipGaps:
 		return fmt.Sprintf("Find unattributed assets that share signals with the assets %s controls.", subject)
 	case LensFamily:
 		return fmt.Sprintf("Show the organizations, networks and related domains in the family of %s.", subject)
-	case LensOrgGroup:
+	case lens.LensOrgGroup:
 		return fmt.Sprintf("Show the corporate group (ultimate parent, subsidiaries and units) of %s.", subject)
-	case LensServices:
+	case lens.LensServices:
 		return fmt.Sprintf("List the services, software and certificates stored for what %s controls.", subject)
-	case LensGroupVendors:
+	case lens.LensGroupVendors:
 		return fmt.Sprintf("List the vendors used across the corporate group of %s.", subject)
-	case LensTable:
+	case lens.LensTable:
 		cols := make([]string, 0, len(q.Columns))
 		for _, c := range q.Columns {
 			col := c.Type
-			if c.Role == ColumnController {
+			if c.Role == lens.ColumnController {
 				col = "controlling " + c.Type
 			}
 
@@ -193,7 +196,7 @@ func QueryFromGoal(goal InvestigationGoal, question, source string) Query {
 // ValidateQuery accepts only queries whose subject selector, types,
 // relationships and hops all exist in the OAM catalog, and whose traversal
 // fields are consistent. It never touches the Asset Database.
-func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearchSchema, limits Limits) error {
+func ValidateQuery(q Query, catalog []graph.RelationshipSchema, selectors []graph.AssetSearchSchema, limits graph.Limits) error {
 	if q.Version != QueryVersion {
 		return fmt.Errorf("unsupported query version %d (want %d)", q.Version, QueryVersion)
 	}
@@ -250,8 +253,8 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	}
 	switch q.Lens {
 	case "":
-	case LensThirdParty, LensControlled, LensTable, LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices,
-		LensGroupVendors:
+	case lens.LensThirdParty, lens.LensControlled, lens.LensTable, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices,
+		lens.LensGroupVendors:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}
@@ -261,11 +264,11 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 		if q.Subject.Type != "Organization" && q.Subject.Type != "FQDN" {
 			return fmt.Errorf("the %s lens starts from an Organization or FQDN", q.Lens)
 		}
-		if q.Lens == LensTable {
+		if q.Lens == lens.LensTable {
 			if len(q.TargetTypes) != 1 {
 				return errors.New("a table has exactly one row type in target_types")
 			}
-			if err := validateColumns(q.Columns, catalogTypes(catalog, selectors)); err != nil {
+			if err := lens.ValidateColumns(q.Columns, graph.CatalogTypes(catalog, selectors)); err != nil {
 				return err
 			}
 		} else if len(q.Columns) != 0 {
@@ -285,7 +288,7 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 }
 
 // routeRelationships returns the catalog transition behind each hop.
-func routeRelationships(subjectType string, hops []PlanHop, catalog []RelationshipSchema) ([]GoalRelation, error) {
+func routeRelationships(subjectType string, hops []PlanHop, catalog []graph.RelationshipSchema) ([]GoalRelation, error) {
 	out := make([]GoalRelation, 0, len(hops))
 	current := subjectType
 	for i, h := range hops {
@@ -322,17 +325,4 @@ func sameRelations(a, b []GoalRelation) bool {
 	}
 
 	return true
-}
-
-// catalogTypes returns every asset type in the catalog.
-func catalogTypes(catalog []RelationshipSchema, selectors []AssetSearchSchema) map[string]bool {
-	types := map[string]bool{}
-	for _, s := range selectors {
-		types[s.Type] = true
-	}
-	for _, r := range catalog {
-		types[r.SourceType], types[r.DestinationType] = true, true
-	}
-
-	return types
 }

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/postgres"
@@ -76,7 +76,7 @@ func findGlobalSignDuplicates(t *testing.T, repo repository.Repository) {
 		ids = append(ids, o.ID)
 	}
 
-	r, err := ai.FindDuplicateOrganizations(ctx, Adapter{Repo: repo})
+	r, err := lens.FindDuplicateOrganizations(ctx, Adapter{Repo: repo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func findGlobalSignDuplicates(t *testing.T, repo repository.Repository) {
 	}
 
 	c := r.Candidates[0]
-	if c.Decision != ai.GapPropose {
+	if c.Decision != lens.GapPropose {
 		t.Fatalf("decision %s, want propose: %+v", c.Decision, c.Signals)
 	}
 	if got := []string{c.Survivor.ID, c.Duplicate.ID}; !(got[0] == ids[0] && got[1] == ids[1]) &&

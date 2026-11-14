@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -51,7 +51,7 @@ func checkServices(t *testing.T, repo repository.Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := ai.FindServices(ctx, adapter, Catalog{}, root, ai.LensLimits{})
+	r, err := lens.FindServices(ctx, adapter, Catalog{}, root, lens.LensLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +61,6 @@ func checkServices(t *testing.T, repo repository.Repository) {
 	s := r.Services[0]
 	if strings.Join(s.Ports, ",") != "8443/TCP" || strings.Join(s.Software, ",") != "server: Apache/2.4.58" ||
 		len(s.Certificates) != 1 || s.Certificates[0].Subject != "www.example.edu" || !s.Certificates[0].Expired {
-		t.Errorf("service = %+v\n%s", s, ai.FormatServicesReport(r))
+		t.Errorf("service = %+v\n%s", s, lens.FormatServicesReport(r))
 	}
 }

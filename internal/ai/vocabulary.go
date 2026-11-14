@@ -5,9 +5,10 @@
 package ai
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
 )
 
 // The user-language vocabulary lives in data next to the relationship
@@ -16,9 +17,7 @@ import (
 // aid, not an OAM schema extension: only names registered by the active
 // OAM catalog are ever used, and "addresses" stays ambiguous between
 // network and physical addresses.
-//
-//go:embed semantics/vocabulary.json
-var vocabularyJSON []byte
+var vocabularyJSON = semantics.File("vocabulary.json")
 
 type vocabulary struct {
 	AssetTypes   map[string][]string `json:"asset_types"`

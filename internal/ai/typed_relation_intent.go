@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // TypedRelationIntent compiles an unambiguous, user-named OAM relationship
@@ -26,11 +28,9 @@ type TypedRelationIntent struct {
 
 var typedRelationQuestion = regexp.MustCompile(`(?i)^\s*(?:which|what|list|show)(?:\s+(?:all|the))?\s+(.+?)\s+(?:are\s+)?(?:associated|connected|related|linked)\s+(?:with|to)\s+(.+?)\s+(?:through|via|using)\s+(.+?)\s+(?:relationships|relations|edges)\s*\??\s*$`)
 var typedSubject = regexp.MustCompile("^([A-Za-z][A-Za-z0-9]*):([a-zA-Z][a-zA-Z0-9_]+)=(.+)$")
-var camelBoundary1 = regexp.MustCompile("([a-z0-9])([A-Z])")
-var camelBoundary2 = regexp.MustCompile("([A-Z])([A-Z][a-z])")
 
 func intentAssetAliases(kind string) []string {
-	words := strings.ToLower(camelBoundary1.ReplaceAllString(camelBoundary2.ReplaceAllString(kind, "$1 $2"), "$1 $2"))
+	words := strings.ToLower(graph.CamelBoundary1.ReplaceAllString(graph.CamelBoundary2.ReplaceAllString(kind, "$1 $2"), "$1 $2"))
 	candidates := []string{strings.ToLower(kind), words}
 	for _, base := range []string{strings.ToLower(kind), words} {
 		if strings.HasSuffix(base, "y") {
@@ -60,7 +60,7 @@ func intentAssetAliases(kind string) []string {
 	return out
 }
 
-func intentTargetType(raw string, selector []AssetSearchSchema, relations []RelationshipSchema) (string, bool) {
+func intentTargetType(raw string, selector []graph.AssetSearchSchema, relations []graph.RelationshipSchema) (string, bool) {
 	candidates := intentTypeCandidates(raw, selector, relations)
 	if len(candidates) != 1 {
 		return "", false
@@ -69,7 +69,7 @@ func intentTargetType(raw string, selector []AssetSearchSchema, relations []Rela
 	return candidates[0], true
 }
 
-func intentSubject(raw string, selectors []AssetSearchSchema) (PlanSubject, bool) {
+func intentSubject(raw string, selectors []graph.AssetSearchSchema) (PlanSubject, bool) {
 	raw = strings.TrimSpace(raw)
 	if m := typedSubject.FindStringSubmatch(raw); len(m) == 4 {
 		value := strings.TrimSpace(m[3])
@@ -128,7 +128,7 @@ func intentSubject(raw string, selectors []AssetSearchSchema) (PlanSubject, bool
 // Only an explicitly requested hierarchy is allowed to constrain edge
 // direction before compiling the route. Other relations stay ambiguous if
 // both orientations are valid from the requested source and destination.
-func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, relations []RelationshipSchema, requiredFirstDirection string) ([]PlanHop, bool) {
+func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, relations []graph.RelationshipSchema, requiredFirstDirection string) ([]PlanHop, bool) {
 	if len(hint.Labels) == 0 || len(hint.Labels) > maxPlanHops {
 		return nil, false
 	}
@@ -209,7 +209,7 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 	return nil, false
 }
 
-func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (TypedRelationIntent, bool) {
+func deterministicTypedRelationIntent(question string, catalog graph.SchemaCatalog) (TypedRelationIntent, bool) {
 	var zero TypedRelationIntent
 	selectors, ok := catalog.(AssetSearchCatalog)
 	if !ok {
@@ -270,7 +270,7 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 	}
 
 	plan := TypedPlan{Subject: subject, Hops: hops}
-	if err := validatePlanWithSelectors(plan, relations, fields, DefaultLimits()); err != nil {
+	if err := validatePlanWithSelectors(plan, relations, fields, graph.DefaultLimits()); err != nil {
 		return zero, false
 	}
 
@@ -306,13 +306,13 @@ func deterministicTypedRelationIntent(question string, catalog SchemaCatalog) (T
 // searchTypedRelationIntent executes the compiled route with server-side
 // direction+label bounds. This avoids wasting the global match budget on
 // unrelated URLs, DNS, TLS and other OAM graph neighbors.
-func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, root Asset, intent TypedRelationIntent, opts AdaptiveOptions) (GraphSearchResult, error) {
-	out := GraphSearchResult{Root: root, Matches: []PlanMatch{}, Mode: "typed_relation_inventory"}
+func searchTypedRelationIntent(ctx context.Context, g graph.Graph, limits graph.Limits, root graph.Asset, intent TypedRelationIntent, opts AdaptiveOptions) (GraphSearchResult, error) {
+	out := GraphSearchResult{Root: root, Matches: []graph.PlanMatch{}, Mode: "typed_relation_inventory"}
 	if err := limits.Validate(); err != nil {
 		return out, err
 	}
 
-	bounded, ok := graph.(BoundedGraph)
+	bounded, ok := g.(graph.BoundedGraph)
 	if !ok {
 		return out, errors.New("bounded graph reader required")
 	}
@@ -353,7 +353,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 		return out, errors.New("max expansions exceeds policy")
 	}
 
-	paths := []PlanMatch{{Nodes: []Asset{root}}}
+	paths := []graph.PlanMatch{{Nodes: []graph.Asset{root}}}
 	seenNodes := map[string]bool{root.ID: true}
 	seenEdges := map[string]bool{}
 	seenMatches := map[string]bool{}
@@ -368,7 +368,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 			Direction: hop.Direction, Label: hop.Label, RelationType: hop.RelationType,
 			InputPaths: len(paths),
 		}
-		nextPaths := make([]PlanMatch, 0)
+		nextPaths := make([]graph.PlanMatch, 0)
 		for _, path := range paths {
 			if err := ctx.Err(); err != nil {
 				return out, err
@@ -386,12 +386,12 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 			// matches were asked for, a page at a time, when that exceeds the
 			// per-node limit meant for model context.
 			perNode := limits.MaxPerNode
-			var edges []Relation
+			var edges []graph.Relation
 			var more bool
 			var err error
-			if _, paged := graph.(PagedGraph); paged && maxMatches+1 > perNode {
+			if _, paged := g.(graph.PagedGraph); paged && maxMatches+1 > perNode {
 				perNode = maxMatches + 1
-				edges, more, err = readEdges(ctx, graph, last.ID, hop.Direction, hop.Label, perNode,
+				edges, more, err = graph.ReadEdges(ctx, g, last.ID, hop.Direction, hop.Label, perNode,
 					func() bool { return true })
 			} else {
 				edges, more, err = bounded.EdgesLimited(ctx, last.ID, hop.Direction, hop.Label, time.Time{}, perNode)
@@ -458,7 +458,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 					break
 				}
 
-				asset, err := graph.GetAsset(ctx, dest)
+				asset, err := g.GetAsset(ctx, dest)
 				if err != nil {
 					return out, err
 				}
@@ -469,11 +469,11 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 
 				seenNodes[dest] = true
 				diagnostic.AcceptedEdges++
-				witness := PlanMatch{
-					Nodes: append(append([]Asset(nil), path.Nodes...), asset),
-					Edges: append(append([]Relation(nil), path.Edges...), edge),
+				witness := graph.PlanMatch{
+					Nodes: append(append([]graph.Asset(nil), path.Nodes...), asset),
+					Edges: append(append([]graph.Relation(nil), path.Edges...), edge),
 				}
-				witness.PathID = WitnessPathID(witness)
+				witness.PathID = graph.WitnessPathID(witness)
 				if index == len(intent.Hops)-1 {
 					if seenMatches[asset.ID] {
 						continue
@@ -541,7 +541,7 @@ func searchTypedRelationIntent(ctx context.Context, graph Graph, limits Limits, 
 	return out, nil
 }
 
-func typedRelationAnswer(root Asset, intent TypedRelationIntent, paths []PlanMatch, truncated bool, reason string) string {
+func typedRelationAnswer(root graph.Asset, intent TypedRelationIntent, paths []graph.PlanMatch, truncated bool, reason string) string {
 	target := ""
 	if len(intent.Goal.TargetTypes) > 0 {
 		target = intent.Goal.TargetTypes[0]

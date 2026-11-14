@@ -7,6 +7,8 @@ package ai
 import (
 	"regexp"
 	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // This fast path intentionally recognizes only a narrow, explicitly
@@ -20,7 +22,7 @@ var topParentTerms = regexp.MustCompile(`(?i)\b(?:highest|ultimate|topmost|top-l
 // FQDN + Organization + relationship labels and a single unique taxonomy
 // route. All full-catalog validation still applies. It neither looks up the
 // graph nor asserts that any edge exists.
-func deterministicExplicitOrganizationGoal(question string, catalog SchemaCatalog) (InvestigationGoal, bool) {
+func deterministicExplicitOrganizationGoal(question string, catalog graph.SchemaCatalog) (InvestigationGoal, bool) {
 	var zero InvestigationGoal
 	if !explicitOrgQuestion.MatchString(question) || topParentTerms.MatchString(question) {
 		return zero, false

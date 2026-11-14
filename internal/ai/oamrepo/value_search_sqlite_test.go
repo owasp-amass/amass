@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
@@ -118,7 +119,7 @@ func TestTokenAndSPFAttributeOwnershipOnSQLite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	j := &ai.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	res, err := ai.AttributeOwnership(ctx, adapter, Catalog{}, owner, adapter, j, ai.AttributionPolicy{Mode: "auto"})
 	if err != nil {
 		t.Fatal(err)

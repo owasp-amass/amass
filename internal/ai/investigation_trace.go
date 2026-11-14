@@ -4,7 +4,9 @@
 
 package ai
 
-import "time"
+import (
+	"time"
+)
 
 // InvestigationTraceEvent describes one completed, synchronous stage of an
 // investigation. It is not a prediction or model-authored execution log.

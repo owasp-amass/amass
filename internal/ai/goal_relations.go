@@ -7,6 +7,8 @@ package ai
 import (
 	"errors"
 	"fmt"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // GoalRelation is one exact, oriented OAM taxonomy transition.
@@ -23,7 +25,7 @@ func relationKey(src, label, relation, dst string) string {
 	return src + "\x00" + label + "\x00" + relation + "\x00" + dst
 }
 
-func validGoalRelations(requirements []GoalRelation, rule string, catalog []RelationshipSchema) error {
+func validGoalRelations(requirements []GoalRelation, rule string, catalog []graph.RelationshipSchema) error {
 	if len(requirements) > 8 {
 		return errors.New("at most 8 relationship constraints are supported")
 	}
@@ -60,7 +62,7 @@ func validGoalRelations(requirements []GoalRelation, rule string, catalog []Rela
 // "any" permits any requested transition, "all" requires each transition,
 // and "ordered" requires a subsequence, not necessarily consecutive edges.
 // Unspecified constraints do not restrict any path.
-func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) bool {
+func pathSatisfiesGoal(path graph.PlanMatch, required []GoalRelation, rule string) bool {
 	if len(required) == 0 {
 		return true
 	}
@@ -68,7 +70,7 @@ func pathSatisfiesGoal(path PlanMatch, required []GoalRelation, rule string) boo
 		return false
 	}
 
-	match := func(edge Relation, r GoalRelation) bool {
+	match := func(edge graph.Relation, r GoalRelation) bool {
 		if edge.Label != r.Label || edge.Type != r.RelationType {
 			return false
 		}

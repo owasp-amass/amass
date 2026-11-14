@@ -6,115 +6,22 @@ package ai
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
-	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
-
-func unlimited() bool { return true }
-
-func zeroTime() time.Time { return time.Time{} }
-
-func TestReadEdgesPagesToTheEnd(t *testing.T) {
-	ctx := context.Background()
-	n := MaxEdgeRead + 100
-	paged := pagedVendorGraph{vendorGraph: busyColgate(n), pages: new(int)}
-	all, _ := paged.Edges(ctx, "colgate.edu", "out", "node", zeroTime())
-
-	edges, more, err := readEdges(ctx, paged, "colgate.edu", "out", "node", lensMaxPerLabel, unlimited)
-	if err != nil || len(edges) != len(all) || more {
-		t.Errorf("paged read: %d edges, more=%v, err=%v; want all %d", len(edges), more, err, len(all))
-	}
-
-	edges, more, _ = readEdges(ctx, paged, "colgate.edu", "out", "node", 550, unlimited)
-	if len(edges) != 550 || !more {
-		t.Errorf("capped read: %d edges, more=%v; want 550 and more", len(edges), more)
-	}
-
-	budget := 1
-	spend := func() bool { budget--; return budget >= 0 }
-	edges, more, _ = readEdges(ctx, paged, "colgate.edu", "out", "node", lensMaxPerLabel, spend)
-	if len(edges) != MaxEdgeRead || !more {
-		t.Errorf("budget of one read: %d edges, more=%v; want one page and more", len(edges), more)
-	}
-
-	// A graph that cannot page returns one bounded page and says so.
-	edges, more, _ = readEdges(ctx, busyColgate(n), "colgate.edu", "out", "node", lensMaxPerLabel, unlimited)
-	if len(edges) != MaxEdgeRead || !more {
-		t.Errorf("bounded read: %d edges, more=%v; want one page and more", len(edges), more)
-	}
-}
-
-// An organization named by more contact records than one read returns: the
-// duplicate search reads them all when the graph pages, and says its
-// result is partial when it cannot.
-func TestDuplicateProfilesReadEveryContact(t *testing.T) {
-	build := func() vendorGraph {
-		g := vendorFixture()
-		for i := 0; i < MaxEdgeRead+50; i++ {
-			cr := fmt.Sprintf("https://rdap.example/contact-%d", i)
-			g.assets[cr] = Asset{ID: cr, Type: "ContactRecord", Key: cr}
-			g.links = append(g.links, Relation{ID: "org-" + cr, FromID: cr, ToID: "colgate", Label: "organization",
-				Type: "SimpleRelation"})
-		}
-		return g
-	}
-
-	paged := &dupSearch{ctx: context.Background(), graph: pagedVendorGraph{vendorGraph: build(), pages: new(int)},
-		profiles: map[string]*orgProfile{}}
-	crs, err := paged.edges("colgate", "in", "organization")
-	if err != nil || len(crs) < MaxEdgeRead+50 || paged.report.Truncated {
-		t.Errorf("paged: %d contact records, truncated=%v (%s), err=%v", len(crs), paged.report.Truncated,
-			paged.report.Reason, err)
-	}
-
-	bounded := &dupSearch{ctx: context.Background(), graph: build(), profiles: map[string]*orgProfile{}}
-	if _, err := bounded.edges("colgate", "in", "organization"); err != nil {
-		t.Fatal(err)
-	}
-	if !bounded.report.Truncated || !strings.Contains(bounded.report.Reason, "in organization edges") {
-		t.Errorf("a cut-short read was not reported: truncated=%v reason=%q", bounded.report.Truncated,
-			bounded.report.Reason)
-	}
-}
-
-// The re-check finds evidence past the first page, and never declares
-// evidence gone without reading all of it.
-func TestMissingWitnessReadsPastOnePage(t *testing.T) {
-	n := MaxEdgeRead + 100
-	last := fmt.Sprintf("h%d.colgate.edu", n-1)
-	w := []WitnessEdge{{FromID: "colgate.edu", FromType: "FQDN", From: "colgate.edu", ToID: last, ToType: "FQDN",
-		To: last, Label: "node"}}
-
-	paged := pagedVendorGraph{vendorGraph: busyColgate(n), pages: new(int)}
-	if missing, err := missingWitness(context.Background(), paged, w); err != nil || missing != "" {
-		t.Errorf("evidence past the first page reported missing: %q, %v", missing, err)
-	}
-
-	gone := []WitnessEdge{{FromID: "colgate.edu", FromType: "FQDN", From: "colgate.edu", ToID: "gone.colgate.edu",
-		ToType: "FQDN", To: "gone.colgate.edu", Label: "node"}}
-	if missing, _ := missingWitness(context.Background(), paged, gone); missing == "" {
-		t.Error("evidence absent from every page was not reported missing")
-	}
-
-	// Without paging the evidence cannot be confirmed either way, so it
-	// counts as present.
-	if missing, _ := missingWitness(context.Background(), busyColgate(n), gone); missing != "" {
-		t.Errorf("unread evidence was declared gone: %q", missing)
-	}
-}
 
 // A domain with more direct subdomains than one read returns is listed in
 // full, up to the inventory's name limit, when the graph pages.
 func TestInventoryPagesBusyNames(t *testing.T) {
-	n := MaxEdgeRead + 100
-	g := busyColgate(n)
-	root := g.assets["colgate.edu"]
+	n := graph.MaxEdgeRead + 100
+	g := aitest.BusyColgate(n)
+	root := g.Assets["colgate.edu"]
 	opts := AdaptiveOptions{MaxInventory: 1000}
 
-	paged := pagedVendorGraph{vendorGraph: g, pages: new(int)}
-	r, err := searchFQDNInventory(context.Background(), paged, DefaultLimits(), root, opts)
+	paged := aitest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}
+	r, err := searchFQDNInventory(context.Background(), paged, graph.DefaultLimits(), root, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,11 +30,11 @@ func TestInventoryPagesBusyNames(t *testing.T) {
 			r.Truncated, r.Reason, n)
 	}
 
-	r, err = searchFQDNInventory(context.Background(), g, DefaultLimits(), root, opts)
+	r, err = searchFQDNInventory(context.Background(), g, graph.DefaultLimits(), root, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.Truncated || len(r.Matches) > MaxEdgeRead {
+	if !r.Truncated || len(r.Matches) > graph.MaxEdgeRead {
 		t.Errorf("bounded inventory: %d names, truncated=%v; want one read's worth, reported partial",
 			len(r.Matches), r.Truncated)
 	}
@@ -136,14 +43,14 @@ func TestInventoryPagesBusyNames(t *testing.T) {
 // A typed relationship answer returns as many matches as were asked for,
 // past the per-node limit meant for model context.
 func TestTypedRelationReadsRequestedMatches(t *testing.T) {
-	g := busyColgate(100)
-	paged := pagedVendorGraph{vendorGraph: g, pages: new(int)}
+	g := aitest.BusyColgate(100)
+	paged := aitest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}
 	intent := TypedRelationIntent{Goal: InvestigationGoal{Subject: PlanSubject{Type: "FQDN", Field: "name",
 		Value: "colgate.edu"}, TargetTypes: []string{"FQDN"}},
 		Hops: []PlanHop{{Direction: "out", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"}}}
-	limits := DefaultLimits()
+	limits := graph.DefaultLimits()
 
-	r, err := searchTypedRelationIntent(context.Background(), paged, limits, g.assets["colgate.edu"], intent,
+	r, err := searchTypedRelationIntent(context.Background(), paged, limits, g.Assets["colgate.edu"], intent,
 		AdaptiveOptions{MaxMatches: limits.MaxFind})
 	if err != nil {
 		t.Fatal(err)

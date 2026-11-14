@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // recordGapProposals submits an investigation's ownership proposals to the
@@ -23,7 +25,7 @@ func recordGapProposals(journalPath string, result ai.Investigation, errout io.W
 		return nil
 	}
 
-	added, err := (&ai.Journal{Path: journalPath}).SubmitOwnership(ai.OwnershipProposals(*result.GapReport))
+	added, err := (&review.Journal{Path: journalPath}).SubmitOwnership(review.OwnershipProposals(*result.GapReport))
 	if err != nil {
 		return fmt.Errorf("record ownership proposals: %w", err)
 	}
@@ -39,7 +41,7 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 		return errors.New("-journal required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	entries, err := j.OwnershipEntries()
 	if err != nil {
 		return err
@@ -62,44 +64,44 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 	// Text unless JSON is asked for: -format defaults to json for search.
 	if explicit && format == "json" {
 		return writeJSON(out, struct {
-			Ownership   []ai.OwnershipEntry   `json:"ownership"`
-			Merges      []ai.DuplicateEntry   `json:"merges"`
-			Identities  []ai.IdentityEntry    `json:"identities"`
-			PersonNamed []ai.PersonNamedEntry `json:"person_named"`
+			Ownership   []review.OwnershipEntry   `json:"ownership"`
+			Merges      []review.DuplicateEntry   `json:"merges"`
+			Identities  []review.IdentityEntry    `json:"identities"`
+			PersonNamed []review.PersonNamedEntry `json:"person_named"`
 		}{entries, merges, identities, people})
 	}
 
-	_, err = fmt.Fprintln(out, ai.FormatOwnershipEntries(entries))
+	_, err = fmt.Fprintln(out, review.FormatOwnershipEntries(entries))
 	if err == nil && len(merges) > 0 {
-		_, err = fmt.Fprint(out, "\nMerge proposals:\n\n"+ai.FormatDuplicateEntries(merges))
+		_, err = fmt.Fprint(out, "\nMerge proposals:\n\n"+review.FormatDuplicateEntries(merges))
 	}
 	if err == nil && len(identities) > 0 {
-		_, err = fmt.Fprint(out, "\nIdentity corrections:\n\n"+ai.FormatIdentityEntries(identities))
+		_, err = fmt.Fprint(out, "\nIdentity corrections:\n\n"+review.FormatIdentityEntries(identities))
 	}
 	if err == nil && len(people) > 0 {
 		_, err = fmt.Fprint(out, "\nOrganizations recorded under a person's name:\n\n"+
-			ai.FormatPersonNamedEntries(people))
+			review.FormatPersonNamedEntries(people))
 	}
 	return err
 }
 
 // pendingProposal finds a proposal that has not been reviewed.
-func pendingProposal(j *ai.Journal, id, reviewer string) (ai.OwnershipProposal, error) {
+func pendingProposal(j *review.Journal, id, reviewer string) (review.OwnershipProposal, error) {
 	if id == "" || reviewer == "" {
-		return ai.OwnershipProposal{}, errors.New("-proposal and -reviewer required")
+		return review.OwnershipProposal{}, errors.New("-proposal and -reviewer required")
 	}
 
 	state, err := j.OwnershipState()
 	if err != nil {
-		return ai.OwnershipProposal{}, err
+		return review.OwnershipProposal{}, err
 	}
 
 	e, ok := state[id]
 	if !ok {
-		return ai.OwnershipProposal{}, fmt.Errorf("no ownership proposal %s in the journal", id)
+		return review.OwnershipProposal{}, fmt.Errorf("no ownership proposal %s in the journal", id)
 	}
-	if e.Status != ai.ProposalPending {
-		return ai.OwnershipProposal{}, fmt.Errorf("proposal %s is already %s", id, e.Status)
+	if e.Status != review.ProposalPending {
+		return review.OwnershipProposal{}, fmt.Errorf("proposal %s is already %s", id, e.Status)
 	}
 
 	return e.Proposal, nil
@@ -122,11 +124,11 @@ func rejectProposal(journalPath, id, reviewer string, out io.Writer) error {
 		return rejectPersonNamed(journalPath, id, reviewer, out)
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	if _, err := pendingProposal(j, id, reviewer); err != nil {
 		return err
 	}
-	if err := j.RecordOwnership(ai.OwnershipOutcome{ProposalID: id, Status: ai.ProposalRejected,
+	if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: review.ProposalRejected,
 		Reviewer: reviewer}); err != nil {
 		return err
 	}
@@ -143,7 +145,7 @@ func approveProposal(ctx context.Context, w ai.OwnershipWriter, journalPath, id,
 		return errors.New("-journal required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	p, err := pendingProposal(j, id, reviewer)
 	if err != nil {
 		return err
@@ -154,7 +156,7 @@ func approveProposal(ctx context.Context, w ai.OwnershipWriter, journalPath, id,
 	if err != nil {
 		return fmt.Errorf("write %s: %w", p.Edge, err)
 	}
-	if err := j.RecordOwnership(ai.OwnershipOutcome{ProposalID: id, Status: ai.ProposalApplied,
+	if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: review.ProposalApplied,
 		Reviewer: reviewer, EdgeID: edgeID}); err != nil {
 		return fmt.Errorf("edge %s was written but the journal was not updated: %w", edgeID, err)
 	}
@@ -164,7 +166,7 @@ func approveProposal(ctx context.Context, w ai.OwnershipWriter, journalPath, id,
 	}
 
 	_, err = fmt.Fprintf(out, "Wrote edge %s: %s (source %s, confidence %d)\n", edgeID, p.Edge,
-		ai.InferenceSource, confidence)
+		review.InferenceSource, confidence)
 	return err
 }
 
@@ -183,7 +185,7 @@ func retractProposal(ctx context.Context, r ownershipRetractor, journalPath, id,
 		return errors.New("-proposal and -reviewer required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	state, err := j.OwnershipState()
 	if err != nil {
 		return err
@@ -193,7 +195,7 @@ func retractProposal(ctx context.Context, r ownershipRetractor, journalPath, id,
 	if !ok {
 		return fmt.Errorf("no ownership proposal %s in the journal", id)
 	}
-	if e.Status != ai.ProposalApplied || e.Outcome == nil || e.Outcome.EdgeID == "" {
+	if e.Status != review.ProposalApplied || e.Outcome == nil || e.Outcome.EdgeID == "" {
 		return fmt.Errorf("proposal %s is %s, not applied", id, e.Status)
 	}
 
@@ -202,7 +204,7 @@ func retractProposal(ctx context.Context, r ownershipRetractor, journalPath, id,
 	if err != nil {
 		return fmt.Errorf("retract edge %s: %w", edgeID, err)
 	}
-	if err := j.RecordOwnership(ai.OwnershipOutcome{ProposalID: id, Status: ai.ProposalRetracted,
+	if err := j.RecordOwnership(review.OwnershipOutcome{ProposalID: id, Status: review.ProposalRetracted,
 		Reviewer: reviewer, EdgeID: edgeID}); err != nil {
 		return err
 	}
@@ -210,7 +212,7 @@ func retractProposal(ctx context.Context, r ownershipRetractor, journalPath, id,
 		_, err = fmt.Fprintf(out, "Removed edge %s: %s\n", edgeID, e.Proposal.Edge)
 	} else {
 		_, err = fmt.Fprintf(out, "Removed the %s source from edge %s; other sources also record it\n",
-			ai.InferenceSource, edgeID)
+			review.InferenceSource, edgeID)
 	}
 
 	return err
@@ -223,7 +225,7 @@ func trainAttribution(journalPath, output string, out io.Writer) error {
 		return errors.New("-journal required")
 	}
 
-	entries, err := (&ai.Journal{Path: journalPath}).OwnershipEntries()
+	entries, err := (&review.Journal{Path: journalPath}).OwnershipEntries()
 	if err != nil {
 		return err
 	}
@@ -267,7 +269,7 @@ func reviewProposals(ctx context.Context, agent ai.Agent, model, journalPath, id
 		return errors.New("-journal required")
 	}
 
-	j := &ai.Journal{Path: journalPath}
+	j := &review.Journal{Path: journalPath}
 	entries, err := j.OwnershipEntries()
 	if err != nil {
 		return err
@@ -282,7 +284,7 @@ func reviewProposals(ctx context.Context, agent ai.Agent, model, journalPath, id
 		switch {
 		case id != "" && e.Proposal.ID != id:
 			continue
-		case id == "" && (e.Status != ai.ProposalPending || (e.Advice != nil && e.Advice.Verified)):
+		case id == "" && (e.Status != review.ProposalPending || (e.Advice != nil && e.Advice.Verified)):
 			continue
 		}
 
@@ -296,7 +298,7 @@ func reviewProposals(ctx context.Context, agent ai.Agent, model, journalPath, id
 
 		reviewed++
 		e.Advice = &adv
-		if _, err := fmt.Fprintln(out, ai.FormatOwnershipEntries([]ai.OwnershipEntry{e})+"\n"); err != nil {
+		if _, err := fmt.Fprintln(out, review.FormatOwnershipEntries([]review.OwnershipEntry{e})+"\n"); err != nil {
 			return err
 		}
 	}
@@ -316,13 +318,13 @@ func reviewProposals(ctx context.Context, agent ai.Agent, model, journalPath, id
 func listSignals(format string, explicit bool, out io.Writer) error {
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.SignalsText())
+		_, err := fmt.Fprint(out, lens.SignalsText())
 		return err
 	case format == "markdown":
-		_, err := fmt.Fprint(out, ai.SignalsMarkdown())
+		_, err := fmt.Fprint(out, lens.SignalsMarkdown())
 		return err
 	case format == "json":
-		return writeJSON(out, ai.OwnershipSignals())
+		return writeJSON(out, lens.OwnershipSignals())
 	}
 
 	return fmt.Errorf("signals format %q: use text, json or markdown", format)
@@ -333,13 +335,13 @@ func listSignals(format string, explicit bool, out io.Writer) error {
 func listDuplicateSignals(format string, explicit bool, out io.Writer) error {
 	switch {
 	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, ai.DuplicateSignalsText())
+		_, err := fmt.Fprint(out, lens.DuplicateSignalsText())
 		return err
 	case format == "markdown":
-		_, err := fmt.Fprint(out, ai.DuplicateSignalsMarkdown())
+		_, err := fmt.Fprint(out, lens.DuplicateSignalsMarkdown())
 		return err
 	case format == "json":
-		return writeJSON(out, ai.DuplicateSignals())
+		return writeJSON(out, lens.DuplicateSignals())
 	}
 
 	return fmt.Errorf("duplicate-signals format %q: use text, json or markdown", format)

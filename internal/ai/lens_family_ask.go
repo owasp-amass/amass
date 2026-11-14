@@ -8,6 +8,9 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 // LensFamily asks for the organization family of an enumerated domain: the
@@ -17,9 +20,9 @@ import (
 const LensFamily = "family"
 
 // familyLens answers a family lens query from a domain.
-func (a Agent) familyLens(ctx context.Context, root Asset, out Investigation) (Investigation, error) {
+func (a Agent) familyLens(ctx context.Context, root graph.Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	report, err := FindOrganizationFamily(ctx, a.Runner.Graph, root)
+	report, err := lens.FindOrganizationFamily(ctx, a.Runner.Graph, root)
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "family_lens", OutputPaths: len(report.Members),
 		Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {
@@ -30,6 +33,6 @@ func (a Agent) familyLens(ctx context.Context, root Asset, out Investigation) (I
 	out.ToolCalls++
 	out.FamilyReport = &report
 	out.Incomplete = report.Truncated
-	out.Answer = strings.TrimRight(FormatFamilyReport(report), "\n")
+	out.Answer = strings.TrimRight(lens.FormatFamilyReport(report), "\n")
 	return out, nil
 }

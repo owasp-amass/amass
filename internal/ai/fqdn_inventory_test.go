@@ -9,6 +9,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 var realWorldFQDNInventoryNames = []string{
@@ -20,38 +24,32 @@ var realWorldFQDNInventoryNames = []string{
 	"training.owasp.org", "lists.owasp.org",
 }
 
-func fqdnInventoryFixture() plannedGraph {
-	root := Asset{ID: "root", Type: "FQDN", Key: "owasp.org", Content: map[string]any{"name": "owasp.org"}}
-	g := fakeGraph{assets: map[string]Asset{"root": root}}
+func fqdnInventoryFixture() aitest.PlannedGraph {
+	root := graph.Asset{ID: "root", Type: "FQDN", Key: "owasp.org", Content: map[string]any{"name": "owasp.org"}}
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{"root": root}}
 	for i, name := range realWorldFQDNInventoryNames[1:] {
 		id := fmt.Sprintf("fqdn-%02d", i)
-		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
-		g.links = append(g.links, Relation{ID: fmt.Sprintf("node-%02d",
+		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+		g.Links = append(g.Links, graph.Relation{ID: fmt.Sprintf("node-%02d",
 			i), FromID: "root", ToID: id, Label: "node", Type: "SimpleRelation"})
 	}
 	// Real-world graphs also contain incoming URL/domain records and other
 	// unrelated edges. They must not consume the 20-match inventory budget.
 	for i := 0; i < 30; i++ {
 		id := fmt.Sprintf("url-%02d", i)
-		g.assets[id] = Asset{ID: id, Type: "URL", Key: "https://owasp.org/" + id}
-		g.links = append(g.links,
-			Relation{ID: "domain-" + id, FromID: id, ToID: "root", Label: "domain", Type: "SimpleRelation"})
+		g.Assets[id] = graph.Asset{ID: id, Type: "URL", Key: "https://owasp.org/" + id}
+		g.Links = append(g.Links,
+			graph.Relation{ID: "domain-" + id, FromID: id, ToID: "root", Label: "domain", Type: "SimpleRelation"})
 	}
 
-	return plannedGraph{fakeGraph: g}
-}
-
-var fqdnInventoryCatalog = planCatalog{
-	{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
-	{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
-	{SourceType: "FQDN", Label: "dns_record", RelationType: "BasicDNSRelation", DestinationType: "IPAddress"},
+	return aitest.PlannedGraph{FakeGraph: g}
 }
 
 func TestFQDNInventoryQuestionRetainsAllSeventeenNames(t *testing.T) {
 	question := "Which FQDN assets are associated with owasp.org?"
 	model := &plannerModel{}
 	agent := Agent{Model: model, Runner: ToolRunner{
-		Graph: fqdnInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
+		Graph: fqdnInventoryFixture(), Catalog: aitest.FQDNInventoryCatalog, Limits: graph.DefaultLimits(),
 	}}
 	result, err := agent.AskAdaptive(context.Background(), question, AdaptiveOptions{GuidanceRounds: 2})
 	if err != nil {
@@ -96,7 +94,7 @@ func TestFQDNInventoryReportsPartialNamesAtConfiguredLimit(t *testing.T) {
 	model := &plannerModel{}
 	agent := Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: fqdnInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits()},
+		Runner: ToolRunner{Graph: fqdnInventoryFixture(), Catalog: aitest.FQDNInventoryCatalog, Limits: graph.DefaultLimits()},
 	}
 	result, err := agent.AskAdaptive(context.Background(),
 		"Which FQDN assets are associated with owasp.org?",
@@ -125,7 +123,7 @@ func TestFQDNInventoryFastPathRejectsAmbiguousQuestions(t *testing.T) {
 		"Which FQDN assets are connected to https://owasp.org?",
 		"What FQDNs are related to user@owasp.org?",
 	} {
-		if _, ok := deterministicFQDNInventoryGoal(q, fqdnInventoryCatalog); ok {
+		if _, ok := deterministicFQDNInventoryGoal(q, aitest.FQDNInventoryCatalog); ok {
 			t.Errorf("ambiguous query bypassed semantic planner: %s", q)
 		}
 	}
@@ -139,7 +137,7 @@ func TestSubdomainIntentUsesHierarchyAndExcludesApex(t *testing.T) {
 	} {
 		model := &plannerModel{}
 		agent := Agent{Model: model, Runner: ToolRunner{
-			Graph: fqdnInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
+			Graph: fqdnInventoryFixture(), Catalog: aitest.FQDNInventoryCatalog, Limits: graph.DefaultLimits(),
 		}}
 		result, err := agent.AskAdaptive(context.Background(), question, AdaptiveOptions{})
 		if err != nil {
@@ -157,29 +155,6 @@ func TestSubdomainIntentUsesHierarchyAndExcludesApex(t *testing.T) {
 	}
 }
 
-// largeFQDNInventoryFixture models a campus namespace: 150 direct
-// subdomains plus 50 under cslab, more than the model-context node,
-// per-node and find limits allow.
-func largeFQDNInventoryFixture() plannedGraph {
-	root := Asset{ID: "root", Type: "FQDN", Key: "colgate.edu", Content: map[string]any{"name": "colgate.edu"}}
-	g := fakeGraph{assets: map[string]Asset{"root": root}}
-	add := func(id, name, parent string) {
-		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
-		g.links = append(g.links, Relation{ID: "node-" + id, FromID: parent, ToID: id, Label: "node",
-			Type: "SimpleRelation"})
-	}
-
-	add("cslab", "cslab.colgate.edu", "root")
-	for i := 0; i < 149; i++ {
-		add(fmt.Sprintf("host-%03d", i), fmt.Sprintf("host%03d.colgate.edu", i), "root")
-	}
-	for i := 0; i < 50; i++ {
-		add(fmt.Sprintf("lab-%02d", i), fmt.Sprintf("lab%02d.cslab.colgate.edu", i), "cslab")
-	}
-
-	return plannedGraph{fakeGraph: g}
-}
-
 func TestSubdomainInventoryWordingsCompileWithoutModel(t *testing.T) {
 	for _, q := range []string{
 		"What are all the subdomains within colgate.edu?",
@@ -189,7 +164,7 @@ func TestSubdomainInventoryWordingsCompileWithoutModel(t *testing.T) {
 		"Show the hostnames within colgate.edu's DNS namespace",
 		"Give me all subdomains of colgate.edu?",
 	} {
-		goal, ok := deterministicFQDNInventoryGoal(q, fqdnInventoryCatalog)
+		goal, ok := deterministicFQDNInventoryGoal(q, aitest.FQDNInventoryCatalog)
 		if !ok || goal.Subject.Value != "colgate.edu" {
 			t.Errorf("%q was not compiled as an inventory of colgate.edu: %+v", q, goal)
 		}
@@ -199,11 +174,11 @@ func TestSubdomainInventoryWordingsCompileWithoutModel(t *testing.T) {
 func TestLargeSubdomainInventoryIsCompleteAndSkipsModel(t *testing.T) {
 	model := &plannerModel{}
 	agent := Agent{Model: model, Runner: ToolRunner{
-		Graph: largeFQDNInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
+		Graph: aitest.LargeFQDNInventoryFixture(), Catalog: aitest.FQDNInventoryCatalog, Limits: graph.DefaultLimits(),
 	}}
 
 	result, err := agent.AskAdaptive(context.Background(), "What are all the subdomains within colgate.edu?",
-		AdaptiveOptions{MaxMatches: 20, MaxInventory: DefaultInventoryNames, GuidanceRounds: 2})
+		AdaptiveOptions{MaxMatches: 20, MaxInventory: lens.DefaultInventoryNames, GuidanceRounds: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +203,7 @@ func TestModelHierarchyAnswerRunsInventory(t *testing.T) {
 			`"direction":"both","purpose":"connected","answer":"hierarchy"}`,
 	}}
 	agent := Agent{Model: model, Runner: ToolRunner{
-		Graph: largeFQDNInventoryFixture(), Catalog: fqdnInventoryCatalog, Limits: DefaultLimits(),
+		Graph: aitest.LargeFQDNInventoryFixture(), Catalog: aitest.FQDNInventoryCatalog, Limits: graph.DefaultLimits(),
 	}}
 
 	question := "What are all the subdomains within Colgate University's DNS namespace?"

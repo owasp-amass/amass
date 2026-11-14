@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 type state struct {
@@ -68,14 +69,14 @@ func run() error {
 
 	apiKey := os.Getenv("AMASS_AI_API_KEY")
 	client := &http.Client{Timeout: timeout}
-	var model ai.Model
+	var model llm.Model
 	switch provider {
 	case "ollama":
-		if _, err := ai.OllamaChatURL(endpoint); err != nil {
+		if _, err := llm.OllamaChatURL(endpoint); err != nil {
 			return err
 		}
 
-		m := ai.NewOllamaModel(endpoint, modelName, client)
+		m := llm.NewOllamaModel(endpoint, modelName, client)
 		m.Think = os.Getenv("AMASS_AI_THINK") == "true"
 		if raw := os.Getenv("AMASS_AI_CONTEXT_TOKENS"); raw != "" {
 			n, err := strconv.Atoi(raw)
@@ -94,7 +95,7 @@ func run() error {
 			return errors.New("the Anthropic provider requires AMASS_AI_API_KEY")
 		}
 
-		model = ai.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
+		model = llm.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
 	default:
 		return fmt.Errorf("unsupported inference provider %q", provider)
 	}
@@ -106,7 +107,7 @@ func run() error {
 		probe := func() {
 			check, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			response, err := model.Generate(check, []ai.Message{
+			response, err := model.Generate(check, []llm.Message{
 				{Role: "system", Text: "Model connectivity check. Reply briefly with READY."},
 				{Role: "user", Text: "READY"},
 			}, nil)

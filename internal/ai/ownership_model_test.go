@@ -10,10 +10,11 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 func TestOwnershipFeaturesFromSignals(t *testing.T) {
-	p := OwnershipProposals(gapReport(t))[0]
+	p := review.OwnershipProposals(gapReport(t))[0]
 	f := OwnershipFeatures(p)
 	want := map[string]float64{"identity": 1, "identity:Phone": 1, "identity:Location": 1, "kinds": 1.0 / 3,
 		"gains": 0.2}
@@ -29,16 +30,16 @@ func TestOwnershipLabelsComeFromPeopleOnly(t *testing.T) {
 		status, reviewer, label string
 		ok                      bool
 	}{
-		{ProposalApplied, "jeff", "potential_relation", true},
-		{ProposalApplied, AutomaticReviewer, "", false},
-		{ProposalRejected, "jeff", "unrelated", true},
-		{ProposalRetracted, "jeff", "unrelated", true},
-		{ProposalPending, "", "", false},
+		{review.ProposalApplied, "jeff", "potential_relation", true},
+		{review.ProposalApplied, review.AutomaticReviewer, "", false},
+		{review.ProposalRejected, "jeff", "unrelated", true},
+		{review.ProposalRetracted, "jeff", "unrelated", true},
+		{review.ProposalPending, "", "", false},
 	}
 	for _, c := range cases {
-		e := OwnershipEntry{Status: c.status}
+		e := review.OwnershipEntry{Status: c.status}
 		if c.reviewer != "" {
-			e.Outcome = &OwnershipOutcome{Status: c.status, Reviewer: c.reviewer}
+			e.Outcome = &review.OwnershipOutcome{Status: c.status, Reviewer: c.reviewer}
 		}
 
 		label, ok := OwnershipLabel(e)
@@ -50,11 +51,11 @@ func TestOwnershipLabelsComeFromPeopleOnly(t *testing.T) {
 
 // reviewedJournal returns entries a reviewer decided: shared registrant
 // details approved, hosting or co-listing alone rejected.
-func reviewedJournal(n int) []OwnershipEntry {
-	var out []OwnershipEntry
+func reviewedJournal(n int) []review.OwnershipEntry {
+	var out []review.OwnershipEntry
 	for i := 0; i < n; i++ {
-		p := OwnershipProposal{ID: fmt.Sprintf("own-%04d", i)}
-		status := ProposalApplied
+		p := review.OwnershipProposal{ID: fmt.Sprintf("own-%04d", i)}
+		status := review.ProposalApplied
 		switch i % 3 {
 		case 0:
 			p.Signals = []string{"identity via ContactRecord phone Phone",
@@ -63,11 +64,11 @@ func reviewedJournal(n int) []OwnershipEntry {
 			p.Signals = []string{"identity via ContactRecord phone Phone", "hosting via FQDN dns_record IPAddress"}
 		default:
 			p.Signals = []string{"hosting via FQDN dns_record IPAddress", "colisting via TLSCertificate san_dns_name"}
-			status = ProposalRejected
+			status = review.ProposalRejected
 		}
 
-		out = append(out, OwnershipEntry{Proposal: p, Status: status,
-			Outcome: &OwnershipOutcome{Status: status, Reviewer: "jeff"}})
+		out = append(out, review.OwnershipEntry{Proposal: p, Status: status,
+			Outcome: &review.OwnershipOutcome{Status: status, Reviewer: "jeff"}})
 	}
 
 	return out
@@ -90,9 +91,9 @@ func trainedOwnershipModel(t *testing.T) *classify.LinearModel {
 
 func TestOwnershipModelLearnsFromReviews(t *testing.T) {
 	m := trainedOwnershipModel(t)
-	strong := OwnershipProposal{Signals: []string{"identity via ContactRecord phone Phone",
+	strong := review.OwnershipProposal{Signals: []string{"identity via ContactRecord phone Phone",
 		"identity via ContactRecord location Location"}}
-	weak := OwnershipProposal{Signals: []string{"hosting via FQDN dns_record IPAddress"}}
+	weak := review.OwnershipProposal{Signals: []string{"hosting via FQDN dns_record IPAddress"}}
 
 	ps, err := ownershipProbability(m, strong)
 	if err != nil {
@@ -111,7 +112,7 @@ func TestOwnershipModelLearnsFromReviews(t *testing.T) {
 
 func TestAttributeOwnershipDecidesWithTheModel(t *testing.T) {
 	m := trainedOwnershipModel(t)
-	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	w := &recordingWriter{}
 	res := attributeWith(t, w, j, AttributionPolicy{Mode: "auto", Model: m})
 	if len(res.Applied) != 1 || res.Applied[0].Proposal.ModelID != "test-model" {
@@ -123,7 +124,7 @@ func TestAttributeOwnershipDecidesWithTheModel(t *testing.T) {
 
 	// A model that has learned to distrust everything writes nothing.
 	m.ReviewThreshold = 1
-	j2 := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	j2 := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	if res := attributeWith(t, &recordingWriter{}, j2, AttributionPolicy{Mode: "auto", Model: m}); len(res.Applied) != 0 ||
 		len(res.Queued) != 1 {
 		t.Errorf("with an unreachable threshold: applied %d, queued %d", len(res.Applied), len(res.Queued))

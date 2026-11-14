@@ -1,8 +1,32 @@
 # Implementation notes, OAM semantics and follow-up patches
 
+## Package layout
+
+The AI code is split by what each part does. A package may import only the
+packages above it in this list, so the layers cannot form cycles:
+
+| Package | Holds |
+| --- | --- |
+| `internal/ai/semantics` | The data files (relation semantics, vocabularies, lens rules, fingerprints) and the code that loads them. New behavior is added here as data, not code. |
+| `internal/ai/graph` | The read-only view of the asset database: `Asset`, `Relation`, the `Graph` interface and its bounded readers, the schema and semantics catalogs, and naming helpers. |
+| `internal/ai/llm` | Model providers (Anthropic, Ollama), structured output, tool specifications and usage metering. |
+| `internal/ai/lens` | Lenses computed in Go without a model: vendors, family, corporate group, group vendors, services, network infrastructure, duplicates, identity, person-named organizations, ownership gaps and signals. |
+| `internal/ai/review` | The proposal journal, evidence bundles, model ownership advice, rechecks, and the code that applies accepted merges, identity corrections and removals. |
+| `internal/ai` | Question planning and adaptive investigation: the `Agent`, query compilation, guided search, routing, narratives and the answer kinds that dispatch to the lenses. |
+| `internal/ai/oamrepo` | The `graph.Graph` implementation over Amass's asset database (SQLite, Postgres and Neo4j) and the writers used by review. |
+| `internal/ai/cli`, `internal/ai/mcp` | The `amass` subcommands and the MCP server. |
+| `internal/ai/classify` | Evidence classifiers and their training. |
+| `internal/ai/aitest` | In-memory graphs and fixtures shared by the tests; imported only by tests. |
+
+New work goes in the package its job belongs to: a new lens in `lens` with
+its rules in `semantics`, a new kind of proposal in `review`, a new provider in
+`llm`, and only the wiring (answer kind, `Agent` method, CLI command) in `ai`
+and `cli`. Engine plugins that collect data for the lenses stay under
+`engine/plugins`.
+
 ## Module integration
 
-The core package (`internal/ai`) has no external dependencies. Its `Graph`
+The core packages have no external dependencies. The `graph.Graph`
 interface is implemented by `internal/ai/oamrepo.Adapter`, which uses actual
 `repository.Repository` methods:
 

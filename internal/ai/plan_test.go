@@ -9,77 +9,15 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
-type planCatalog []RelationshipSchema
-
-func (c planCatalog) Relations() []RelationshipSchema { return c }
-
-func (c planCatalog) SearchFields() []AssetSearchSchema {
-	return []AssetSearchSchema{
-		{Type: "Organization", Fields: []string{"name", "legal_name", "unique_id"}},
-		{Type: "URL", Fields: []string{"url"}},
-		{Type: "FQDN", Fields: []string{"name"}},
-	}
-}
-
-var testOAMCatalog = planCatalog{
-	{SourceType: "Organization", Label: "subsidiary", RelationType: "SimpleRelation", DestinationType: "Organization"},
-	{SourceType: "Organization", Label: "website", RelationType: "SimpleRelation", DestinationType: "URL"},
-	{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
-}
-
-type plannedGraph struct{ fakeGraph }
-
-func (g plannedGraph) LookupOrganizations(_ context.Context, name string, _ int) ([]Asset, error) {
-	if name != "Acme Holdings Inc." {
-		return []Asset{}, nil
-	}
-
-	return []Asset{g.assets["parent"]}, nil
-}
-
-func (g plannedGraph) ResolveAsset(_ context.Context, selector AssetSelector, _ int) (AssetResolution, error) {
-	result := AssetResolution{Query: selector, Status: "not_found", Candidates: []OrganizationCandidate{}}
-	for _, asset := range g.assets {
-		if asset.Type != selector.Type {
-			continue
-		}
-		if selector.EntityID == asset.ID ||
-			selector.Type == "URL" && selector.Field == "url" && selector.Value == asset.Key ||
-			selector.Type == "FQDN" && selector.Field == "name" && selector.Value == asset.Key {
-			result.Candidates = append(result.Candidates,
-				OrganizationCandidate{
-					Asset:   asset,
-					Matches: []ResolutionMatch{{Field: selector.Field, Value: selector.Value}},
-				})
-		}
-	}
-	if len(result.Candidates) == 1 {
-		result.Status = "matched"
-	} else if len(result.Candidates) > 1 {
-		result.Status = "ambiguous"
-	}
-
-	return result, nil
-}
-
-func (g plannedGraph) ResolveOrganizations(_ context.Context, q OrganizationQuery, _ int) (OrganizationResolution, error) {
-	result := OrganizationResolution{Query: q, Status: "not_found", Candidates: []OrganizationCandidate{}}
-	if q.Name == "Acme Holdings Inc." || q.LegalName == "Acme Holdings Inc." ||
-		q.UniqueID == "synthetic-acme-holdings" {
-		result.Status = "matched"
-		result.Candidates = []OrganizationCandidate{
-			{Asset: g.assets["parent"], Matches: []ResolutionMatch{{Field: "name", Value: "Acme Holdings Inc."}}},
-		}
-	}
-
-	return result, nil
-}
-
-func examplePlannedGraph() plannedGraph {
-	return plannedGraph{fakeGraph{
-		assets: map[string]Asset{
+func examplePlannedGraph() aitest.PlannedGraph {
+	return aitest.PlannedGraph{FakeGraph: aitest.FakeGraph{
+		Assets: map[string]graph.Asset{
 			"parent": {
 				ID:      "parent",
 				Type:    "Organization",
@@ -117,7 +55,7 @@ func examplePlannedGraph() plannedGraph {
 				Content: map[string]any{"name": "tech.acme.example"},
 			},
 		},
-		links: []Relation{
+		Links: []graph.Relation{
 			{ID: "e1", FromID: "parent", ToID: "tech", Label: "subsidiary", Type: "SimpleRelation"},
 			{ID: "e2", FromID: "parent", ToID: "europe", Label: "subsidiary", Type: "SimpleRelation"},
 			{ID: "e3", FromID: "tech", ToID: "website-tech", Label: "website", Type: "SimpleRelation"},
@@ -132,9 +70,9 @@ type plannerModel struct {
 	replies []string
 }
 
-func (m *plannerModel) Generate(_ context.Context, _ []Message, specs []ToolSpec) (Response, error) {
+func (m *plannerModel) Generate(_ context.Context, _ []llm.Message, specs []llm.ToolSpec) (llm.Response, error) {
 	if len(specs) > 0 {
-		return Response{}, nil
+		return llm.Response{}, nil
 	}
 
 	i := m.calls
@@ -143,24 +81,24 @@ func (m *plannerModel) Generate(_ context.Context, _ []Message, specs []ToolSpec
 		i = len(m.replies) - 1
 	}
 
-	return Response{Text: m.replies[i]}, nil
+	return llm.Response{Text: m.replies[i]}, nil
 }
 
 type inspectingPlannerModel struct {
 	calls    int
-	requests [][]Message
+	requests [][]llm.Message
 	replies  []string
 }
 
-func (m *inspectingPlannerModel) Generate(_ context.Context, messages []Message, _ []ToolSpec) (Response, error) {
-	m.requests = append(m.requests, append([]Message{}, messages...))
+func (m *inspectingPlannerModel) Generate(_ context.Context, messages []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
+	m.requests = append(m.requests, append([]llm.Message{}, messages...))
 	i := m.calls
 	m.calls++
 	if i >= len(m.replies) {
 		i = len(m.replies) - 1
 	}
 
-	return Response{Text: m.replies[i]}, nil
+	return llm.Response{Text: m.replies[i]}, nil
 }
 
 // routeQuery builds a caller-supplied route Query, the replacement for the
@@ -185,7 +123,7 @@ func hop(direction, label, destination string) PlanHop {
 func askRoute(t *testing.T, q Query) Investigation {
 	t.Helper()
 
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}
 	out, err := (Agent{Runner: runner}).AskQuery(context.Background(), q, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -260,10 +198,10 @@ func TestRouteSingleHopNoMatchIsNotTruncated(t *testing.T) {
 const urlGoal = `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["URL"],` +
 	`"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`
 
-func compileWith(t *testing.T, model Model, question string) (Query, error) {
+func compileWith(t *testing.T, model llm.Model, question string) (Query, error) {
 	t.Helper()
 
-	agent := Agent{Model: model, Runner: ToolRunner{Limits: DefaultLimits(), Catalog: testOAMCatalog}}
+	agent := Agent{Model: model, Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}}
 	return agent.CompileQuestion(context.Background(), question)
 }
 
@@ -319,7 +257,7 @@ func TestGoalPlannerCorrectsUnexpectedFields(t *testing.T) {
 func TestGoalParserCanonicalizesSingleFieldObject(t *testing.T) {
 	goal, err := parseGoal(`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"}},`+
 		`"target_types":["FQDN"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`,
-		testOAMCatalog.SearchFields())
+		aitest.TestOAMCatalog.SearchFields())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +275,7 @@ func TestGoalParserRejectsUntrustedFieldCatalogs(t *testing.T) {
 		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"unexpected":true}`,
 		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"value":"https://elsewhere.example/"}`,
 	} {
-		if _, err := parseGoal(subject+rest, testOAMCatalog.SearchFields()); err == nil {
+		if _, err := parseGoal(subject+rest, aitest.TestOAMCatalog.SearchFields()); err == nil {
 			t.Fatalf("unexpectedly accepted malformed goal: %s", subject)
 		}
 	}
@@ -350,20 +288,20 @@ func TestPlannerRejectsInventedLabelBeforeDatabaseAccess(t *testing.T) {
 			{Direction: "out", Label: "hosted-on", RelationType: "SimpleRelation", DestinationType: "URL"},
 		},
 	}
-	if err := validatePlan(p, testOAMCatalog, DefaultLimits()); err == nil {
+	if err := validatePlan(p, aitest.TestOAMCatalog, graph.DefaultLimits()); err == nil {
 		t.Fatal("made-up label accepted")
 	}
 }
 
 func TestSchemaCatalogTool(t *testing.T) {
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: DefaultLimits(), Catalog: testOAMCatalog}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}
 	raw, err := runner.Run(context.Background(), "describe_oam_schema",
 		json.RawMessage(`{"source_type":"Organization"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var rows []RelationshipSchema
+	var rows []graph.RelationshipSchema
 	if err := json.Unmarshal(raw, &rows); err != nil {
 		t.Fatal(err)
 	}
@@ -376,13 +314,13 @@ func TestGenericSelectorRejectsUnsupportedFields(t *testing.T) {
 	if err := validatePlanWithSelectors(TypedPlan{
 		Subject: PlanSubject{Type: "FQDN", Field: "domain", Value: "tech.acme.example"},
 		Hops:    []PlanHop{{Direction: "in", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"}},
-	}, testOAMCatalog.Relations(), testOAMCatalog.SearchFields(), DefaultLimits()); err == nil {
+	}, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields(), graph.DefaultLimits()); err == nil {
 		t.Fatal("unsupported FQDN selector should fail validation")
 	}
 }
 
 func TestNormalizationDoesNotGuessUnsupportedSelectors(t *testing.T) {
-	schema := testOAMCatalog.SearchFields()
+	schema := aitest.TestOAMCatalog.SearchFields()
 	cases := []PlanSubject{
 		{Type: "URL", Name: "https://tech.acme.example/"},
 		{Type: "FQDN", Field: "url", Name: "tech.acme.example"},
@@ -398,7 +336,7 @@ func TestNormalizationDoesNotGuessUnsupportedSelectors(t *testing.T) {
 }
 
 func TestCompactCatalogPreservesAllTransitions(t *testing.T) {
-	rows := []RelationshipSchema{
+	rows := []graph.RelationshipSchema{
 		{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 		{
 			SourceType:      "Organization",
@@ -423,12 +361,12 @@ func TestCompactCatalogPreservesAllTransitions(t *testing.T) {
 		t.Fatalf("duplicate transition not grouped: %s", compact)
 	}
 
-	compactAgain := compactRelationshipCatalog([]RelationshipSchema{rows[2], rows[0], rows[3], rows[1]})
+	compactAgain := compactRelationshipCatalog([]graph.RelationshipSchema{rows[2], rows[0], rows[3], rows[1]})
 	if compactAgain != compact {
 		t.Fatalf("catalog output depends on relation order:\n%s\n%s", compact, compactAgain)
 	}
 
-	selector := compactSelectorCatalog([]AssetSearchSchema{
+	selector := compactSelectorCatalog([]graph.AssetSearchSchema{
 		{Type: "URL", Fields: []string{"scheme", "url"}},
 		{Type: "FQDN", Fields: []string{"name"}},
 	})
@@ -438,10 +376,10 @@ func TestCompactCatalogPreservesAllTransitions(t *testing.T) {
 }
 
 func TestFormattedMatchPreservesIncomingEdgeDirection(t *testing.T) {
-	graph := examplePlannedGraph()
-	incoming := PlanMatch{
-		Nodes: []Asset{graph.assets["fqdn-tech"], graph.assets["website-tech"]},
-		Edges: []Relation{
+	g := examplePlannedGraph()
+	incoming := graph.PlanMatch{
+		Nodes: []graph.Asset{g.Assets["fqdn-tech"], g.Assets["website-tech"]},
+		Edges: []graph.Relation{
 			{ID: "e5", FromID: "website-tech", ToID: "fqdn-tech", Label: "domain", Type: "SimpleRelation"},
 		},
 	}
@@ -450,8 +388,8 @@ func TestFormattedMatchPreservesIncomingEdgeDirection(t *testing.T) {
 		t.Fatalf("incoming graph edge rendered with wrong direction: %s", got)
 	}
 
-	outgoing := PlanMatch{
-		Nodes: []Asset{graph.assets["website-tech"], graph.assets["fqdn-tech"]},
+	outgoing := graph.PlanMatch{
+		Nodes: []graph.Asset{g.Assets["website-tech"], g.Assets["fqdn-tech"]},
 		Edges: incoming.Edges,
 	}
 	if got := formatMatch(outgoing); !strings.Contains(got, "--domain [edge e5]--> tech.acme.example") {

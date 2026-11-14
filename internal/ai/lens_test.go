@@ -10,237 +10,19 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
-// oamSemantics is every entry of semantics/oam_relations.yaml, so the
-// lenses are tested against the reviewed table rather than a hand-picked
-// subset. Regenerate it when the table changes.
-var oamSemantics = map[string]RelationMeaning{
-	"Account|id|SimpleRelation|Identifier":                             {"attribute", "identity", true},
-	"Account|user|SimpleRelation|Organization":                         {"controller", "identity", true},
-	"Account|user|SimpleRelation|Person":                               {"controller", "identity", true},
-	"AutnumRecord|abuse_contact|SimpleRelation|ContactRecord":          {"third_party", "registration", false},
-	"AutnumRecord|admin_contact|SimpleRelation|ContactRecord":          {"controller", "registration", true},
-	"AutnumRecord|rdap_url|SimpleRelation|URL":                         {"third_party", "registration", false},
-	"AutnumRecord|registrant|SimpleRelation|ContactRecord":             {"controller", "registration", true},
-	"AutnumRecord|technical_contact|SimpleRelation|ContactRecord":      {"third_party", "registration", true},
-	"AutnumRecord|whois_server|SimpleRelation|FQDN":                    {"third_party", "registration", false},
-	"AutonomousSystem|announces|SimpleRelation|Netblock":               {"infrastructure", "network", true},
-	"AutonomousSystem|registration|SimpleRelation|AutnumRecord":        {"same_subject", "registration", true},
-	"ContactRecord|fqdn|SimpleRelation|FQDN":                           {"attribute", "contact", true},
-	"ContactRecord|id|SimpleRelation|Identifier":                       {"attribute", "contact", true},
-	"ContactRecord|location|SimpleRelation|Location":                   {"attribute", "contact", true},
-	"ContactRecord|organization|SimpleRelation|Organization":           {"same_subject", "contact", true},
-	"ContactRecord|person|SimpleRelation|Person":                       {"same_subject", "contact", true},
-	"ContactRecord|phone|SimpleRelation|Phone":                         {"attribute", "contact", true},
-	"ContactRecord|url|SimpleRelation|URL":                             {"attribute", "contact", true},
-	"DomainRecord|admin_contact|SimpleRelation|ContactRecord":          {"controller", "registration", true},
-	"DomainRecord|billing_contact|SimpleRelation|ContactRecord":        {"controller", "registration", true},
-	"DomainRecord|name_server|SimpleRelation|FQDN":                     {"third_party", "dns", true},
-	"DomainRecord|registrant_contact|SimpleRelation|ContactRecord":     {"controller", "registration", true},
-	"DomainRecord|registrar_contact|SimpleRelation|ContactRecord":      {"third_party", "registration", true},
-	"DomainRecord|technical_contact|SimpleRelation|ContactRecord":      {"third_party", "registration", true},
-	"DomainRecord|whois_server|SimpleRelation|FQDN":                    {"third_party", "registration", false},
-	"FQDN|dns_record|BasicDNSRelation|FQDN":                            {"infrastructure", "dns", true},
-	"FQDN|dns_record|BasicDNSRelation|IPAddress":                       {"infrastructure", "dns", true},
-	"FQDN|dns_record|PrefDNSRelation|FQDN":                             {"infrastructure", "dns", true},
-	"FQDN|dns_record|SRVDNSRelation|FQDN":                              {"infrastructure", "dns", true},
-	"FQDN|node|SimpleRelation|FQDN":                                    {"same_subject", "hierarchy", true},
-	"FQDN|port|PortRelation|Service":                                   {"infrastructure", "network", true},
-	"FQDN|registration|SimpleRelation|DomainRecord":                    {"same_subject", "registration", true},
-	"FQDN|verified_for|SimpleRelation|Organization":                    {"third_party", "dns", true},
-	"FQDN|verified_for|SimpleRelation|Service":                         {"third_party", "dns", true},
-	"File|contains|SimpleRelation|ContactRecord":                       {"attribute", "web", true},
-	"File|contains|SimpleRelation|URL":                                 {"attribute", "web", true},
-	"File|url|SimpleRelation|URL":                                      {"attribute", "web", true},
-	"FundsTransfer|id|SimpleRelation|Identifier":                       {"attribute", "financial", true},
-	"FundsTransfer|recipient|SimpleRelation|Account":                   {"attribute", "financial", true},
-	"FundsTransfer|sender|SimpleRelation|Account":                      {"attribute", "financial", true},
-	"FundsTransfer|third_party|SimpleRelation|Organization":            {"third_party", "financial", true},
-	"IPAddress|port|PortRelation|Service":                              {"infrastructure", "network", true},
-	"IPAddress|ptr_record|SimpleRelation|FQDN":                         {"infrastructure", "dns", true},
-	"IPNetRecord|abuse_contact|SimpleRelation|ContactRecord":           {"third_party", "registration", false},
-	"IPNetRecord|admin_contact|SimpleRelation|ContactRecord":           {"controller", "registration", true},
-	"IPNetRecord|rdap_url|SimpleRelation|URL":                          {"third_party", "registration", false},
-	"IPNetRecord|registrant|SimpleRelation|ContactRecord":              {"controller", "registration", true},
-	"IPNetRecord|technical_contact|SimpleRelation|ContactRecord":       {"third_party", "registration", true},
-	"IPNetRecord|whois_server|SimpleRelation|FQDN":                     {"third_party", "registration", false},
-	"Identifier|issuing_agent|SimpleRelation|ContactRecord":            {"third_party", "identity", true},
-	"Identifier|issuing_authority|SimpleRelation|ContactRecord":        {"third_party", "identity", true},
-	"Identifier|registration_agency|SimpleRelation|ContactRecord":      {"third_party", "identity", true},
-	"Location|id|SimpleRelation|Identifier":                            {"attribute", "identity", true},
-	"Netblock|contains|SimpleRelation|IPAddress":                       {"same_subject", "network", true},
-	"Netblock|registration|SimpleRelation|IPNetRecord":                 {"same_subject", "registration", true},
-	"Organization|account|SimpleRelation|Account":                      {"controls", "identity", true},
-	"Organization|funding_source|SimpleRelation|Organization":          {"attribute", "financial", true},
-	"Organization|funding_source|SimpleRelation|Person":                {"attribute", "financial", true},
-	"Organization|hq_address|SimpleRelation|Location":                  {"attribute", "corporate", true},
-	"Organization|id|SimpleRelation|Identifier":                        {"attribute", "identity", true},
-	"Organization|legal_address|SimpleRelation|Location":               {"attribute", "corporate", true},
-	"Organization|location|SimpleRelation|Location":                    {"attribute", "corporate", true},
-	"Organization|member|SimpleRelation|Person":                        {"attribute", "corporate", true},
-	"Organization|org_unit|SimpleRelation|Organization":                {"controls", "corporate", true},
-	"Organization|social_media_profile|SimpleRelation|URL":             {"controls", "web", true},
-	"Organization|subsidiary|SimpleRelation|Organization":              {"controls", "corporate", true},
-	"Organization|website|SimpleRelation|URL":                          {"controls", "web", true},
-	"Person|account|SimpleRelation|Account":                            {"controls", "identity", true},
-	"Person|address|SimpleRelation|Location":                           {"attribute", "identity", true},
-	"Person|id|SimpleRelation|Identifier":                              {"attribute", "identity", true},
-	"Person|phone|SimpleRelation|Phone":                                {"attribute", "identity", true},
-	"Phone|account|SimpleRelation|Account":                             {"attribute", "identity", true},
-	"Phone|contact|SimpleRelation|ContactRecord":                       {"attribute", "contact", true},
-	"ProductRelease|id|SimpleRelation|Identifier":                      {"attribute", "product", true},
-	"ProductRelease|website|SimpleRelation|URL":                        {"controls", "web", true},
-	"Product|id|SimpleRelation|Identifier":                             {"attribute", "product", true},
-	"Product|manufacturer|SimpleRelation|Organization":                 {"controller", "product", true},
-	"Product|release|SimpleRelation|ProductRelease":                    {"controls", "product", true},
-	"Product|website|SimpleRelation|URL":                               {"controls", "web", true},
-	"Service|certificate|SimpleRelation|TLSCertificate":                {"same_subject", "certificate", true},
-	"Service|product_used|SimpleRelation|Product":                      {"third_party", "product", true},
-	"Service|product_used|SimpleRelation|ProductRelease":               {"third_party", "product", true},
-	"Service|provider|SimpleRelation|Organization":                     {"third_party", "network", true},
-	"Service|terms_of_service|SimpleRelation|File":                     {"attribute", "web", true},
-	"Service|terms_of_service|SimpleRelation|URL":                      {"attribute", "web", true},
-	"TLSCertificate|common_name|SimpleRelation|FQDN":                   {"same_subject", "certificate", true},
-	"TLSCertificate|issuer_contact|SimpleRelation|ContactRecord":       {"third_party", "certificate", true},
-	"TLSCertificate|issuing_certificate_url|SimpleRelation|URL":        {"third_party", "certificate", false},
-	"TLSCertificate|issuing_certificate|SimpleRelation|TLSCertificate": {"third_party", "certificate", false},
-	"TLSCertificate|ocsp_server|SimpleRelation|URL":                    {"third_party", "certificate", false},
-	"TLSCertificate|san_dns_name|SimpleRelation|FQDN":                  {"shared", "certificate", true},
-	"TLSCertificate|san_email_address|SimpleRelation|Identifier":       {"shared", "certificate", true},
-	"TLSCertificate|san_ip_address|SimpleRelation|IPAddress":           {"shared", "certificate", true},
-	"TLSCertificate|san_url|SimpleRelation|URL":                        {"shared", "certificate", true},
-	"TLSCertificate|subject_contact|SimpleRelation|ContactRecord":      {"controller", "certificate", true},
-	"URL|domain|SimpleRelation|FQDN":                                   {"same_subject", "web", true},
-	"URL|file|SimpleRelation|File":                                     {"attribute", "web", true},
-	"URL|ip_address|SimpleRelation|IPAddress":                          {"infrastructure", "network", true},
-	"URL|port|PortRelation|Service":                                    {"infrastructure", "network", true},
+func vendorAgent(model llm.Model) Agent {
+	return Agent{Model: model, Runner: ToolRunner{Graph: aitest.VendorFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}
 }
 
-// vendorCatalog is the full OAM semantics table with selectors.
-type vendorCatalog struct{ planCatalog }
-
-func (vendorCatalog) Attribution(src, label, rt, dst string) (string, bool) {
-	m, ok := oamSemantics[src+"|"+label+"|"+rt+"|"+dst]
-	return m.Attribution, ok
-}
-
-func (vendorCatalog) Meaning(src, label, rt, dst string) (RelationMeaning, bool) {
-	m, ok := oamSemantics[src+"|"+label+"|"+rt+"|"+dst]
-	return m, ok
-}
-
-// Relations returns every transition in the attribution table.
-func (vendorCatalog) Relations() []RelationshipSchema {
-	out := make([]RelationshipSchema, 0, len(oamSemantics))
-	for k := range oamSemantics {
-		p := strings.Split(k, "|")
-		out = append(out, RelationshipSchema{SourceType: p[0], Label: p[1], RelationType: p[2], DestinationType: p[3]})
-	}
-
-	return out
-}
-
-// vendorGraph resolves Colgate University and colgate.edu.
-type vendorGraph struct{ plannedGraph }
-
-func (g vendorGraph) ResolveOrganizations(_ context.Context, q OrganizationQuery, _ int) (OrganizationResolution, error) {
-	result := OrganizationResolution{Query: q, Status: "not_found", Candidates: []OrganizationCandidate{}}
-	if strings.EqualFold(q.Name, "Colgate University") {
-		result.Status = "matched"
-		result.Candidates = []OrganizationCandidate{{Asset: g.assets["colgate"]}}
-	}
-
-	return result, nil
-}
-
-// vendorFixture models a university: its registrant contact ties the
-// organization to colgate.edu and its own netblock. Outside parties are a
-// registrar, a DNS host, a mail provider (MX), a CDN network and a
-// certificate authority. A person shared with another college's contact
-// must not pull that college into the footprint.
-func vendorFixture() vendorGraph {
-	g := fakeGraph{assets: map[string]Asset{}}
-	add := func(id, typ, key string, content map[string]any) {
-		g.assets[id] = Asset{ID: id, Type: typ, Key: key, Content: content}
-	}
-	link := func(from, label, to, rt string) {
-		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
-			Type: rt})
-	}
-	named := func(id, typ, name string) { add(id, typ, name, map[string]any{"name": name}) }
-
-	named("colgate", "Organization", "Colgate University")
-	named("educause", "Organization", "EDUCAUSE")
-	named("digicert", "Organization", "DigiCert Inc")
-	named("hamilton", "Organization", "Hamilton College")
-	add("cr-colgate", "ContactRecord", "https://rdap.example/colgate", nil)
-	add("cr-educause", "ContactRecord", "https://whois.educause.edu/registrar", nil)
-	add("cr-digicert", "ContactRecord", "https://crt.example/issuer", nil)
-	add("cr-hamilton", "ContactRecord", "https://rdap.example/hamilton", nil)
-	add("person", "Person", "Shared Person", map[string]any{"full_name": "Shared Person"})
-	add("dr", "DomainRecord", "colgate.edu", map[string]any{"domain": "colgate.edu"})
-	add("dr-hamilton", "DomainRecord", "hamilton.edu", map[string]any{"domain": "hamilton.edu"})
-	for _, n := range []string{"colgate.edu", "www.colgate.edu", "portal.colgate.edu", "ns1.colgate.edu",
-		"pdns1.ultradns.net", "mx1.pphosted.com", "hamilton.edu", "www.hamilton.edu", "x.cloudflare.com"} {
-		named(n, "FQDN", n)
-	}
-
-	add("nb-own", "Netblock", "149.43.0.0/16", map[string]any{"cidr": "149.43.0.0/16"})
-	add("ipnet-own", "IPNetRecord", "149.43.0.0/16", map[string]any{"name": "COLGATE-UNIV"})
-	add("ip-own", "IPAddress", "149.43.1.1", map[string]any{"address": "149.43.1.1"})
-	add("nb-cdn", "Netblock", "151.101.0.0/16", map[string]any{"cidr": "151.101.0.0/16"})
-	add("as-cdn", "AutonomousSystem", "54113", map[string]any{"number": 54113})
-	add("autnum-cdn", "AutnumRecord", "AS54113", map[string]any{"handle": "AS54113", "name": "FASTLY"})
-	add("ip-cdn", "IPAddress", "151.101.1.1", map[string]any{"address": "151.101.1.1"})
-	add("cert", "TLSCertificate", "1234", map[string]any{"serial_number": "1234"})
-	add("as-own", "AutonomousSystem", "1289", map[string]any{"number": 1289})
-	add("autnum-own", "AutnumRecord", "AS1289", map[string]any{"handle": "AS1289", "name": "COLGATE-UNIVERSITY"})
-
-	link("cr-colgate", "organization", "colgate", "SimpleRelation")
-	link("cr-colgate", "person", "person", "SimpleRelation")
-	link("dr", "registrant_contact", "cr-colgate", "SimpleRelation")
-	link("dr", "registrar_contact", "cr-educause", "SimpleRelation")
-	link("cr-educause", "organization", "educause", "SimpleRelation")
-	link("dr", "name_server", "ns1.colgate.edu", "SimpleRelation")
-	link("dr", "name_server", "pdns1.ultradns.net", "SimpleRelation")
-	link("colgate.edu", "registration", "dr", "SimpleRelation")
-	link("colgate.edu", "node", "www.colgate.edu", "SimpleRelation")
-	link("colgate.edu", "node", "portal.colgate.edu", "SimpleRelation")
-	link("colgate.edu", "dns_record", "mx1.pphosted.com", "PrefDNSRelation")
-	link("www.colgate.edu", "dns_record", "ip-cdn", "BasicDNSRelation")
-	link("portal.colgate.edu", "dns_record", "ip-own", "BasicDNSRelation")
-	link("nb-own", "registration", "ipnet-own", "SimpleRelation")
-	link("ipnet-own", "registrant", "cr-colgate", "SimpleRelation")
-	link("nb-own", "contains", "ip-own", "SimpleRelation")
-	link("nb-cdn", "contains", "ip-cdn", "SimpleRelation")
-	link("as-own", "announces", "nb-own", "SimpleRelation")
-	link("as-own", "registration", "autnum-own", "SimpleRelation")
-	link("autnum-own", "registrant", "cr-colgate", "SimpleRelation")
-	link("as-cdn", "announces", "nb-cdn", "SimpleRelation")
-	link("as-cdn", "registration", "autnum-cdn", "SimpleRelation")
-	link("cert", "san_dns_name", "www.colgate.edu", "SimpleRelation")
-	link("cert", "issuer_contact", "cr-digicert", "SimpleRelation")
-	link("cr-digicert", "organization", "digicert", "SimpleRelation")
-
-	// Hamilton College shares a person with Colgate's contact and uses its
-	// own CDN; none of it belongs to Colgate.
-	link("cr-hamilton", "organization", "hamilton", "SimpleRelation")
-	link("cr-hamilton", "person", "person", "SimpleRelation")
-	link("dr-hamilton", "registrant_contact", "cr-hamilton", "SimpleRelation")
-	link("hamilton.edu", "registration", "dr-hamilton", "SimpleRelation")
-	link("hamilton.edu", "node", "www.hamilton.edu", "SimpleRelation")
-	link("www.hamilton.edu", "dns_record", "x.cloudflare.com", "BasicDNSRelation")
-
-	return vendorGraph{plannedGraph{fakeGraph: g}}
-}
-
-func vendorAgent(model Model) Agent {
-	return Agent{Model: model, Runner: ToolRunner{Graph: vendorFixture(), Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits()}}
-}
-
-func vendorNames(r *ThirdPartyReport) map[string]string {
+func vendorNames(r *lens.ThirdPartyReport) map[string]string {
 	out := map[string]string{}
 	for _, v := range r.Vendors {
 		out[v.Vendor] = v.Kind
@@ -259,7 +41,7 @@ func TestThirdPartyQuestionCompilesWithoutModel(t *testing.T) {
 			Type: "Organization", Name: "Colgate University"},
 	} {
 		q, ok := deterministicThirdPartyQuery(question)
-		if !ok || q.Lens != LensThirdParty || q.Subject != want {
+		if !ok || q.Lens != lens.LensThirdParty || q.Subject != want {
 			t.Errorf("%q compiled to %+v (ok=%v), want subject %+v", question, q, ok, want)
 		}
 	}
@@ -326,9 +108,9 @@ func TestThirdPartyLensFromDomainIncludesRegistrantNetworks(t *testing.T) {
 }
 
 func TestThirdPartyLensExplainsEmptyFootprint(t *testing.T) {
-	g := vendorFixture()
-	g.links = nil
-	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: vendorCatalog{testOAMCatalog}, Limits: DefaultLimits()}}
+	g := aitest.VendorFixture()
+	g.Links = nil
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
 
 	result, err := agent.AskQuery(context.Background(),
 		thirdPartyQuery("", PlanSubject{Type: "Organization", Name: "Colgate University"}, SourceCaller),
@@ -352,7 +134,7 @@ func TestModelThirdPartyAnswerCompilesToLens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Lens != LensThirdParty || q.Subject.Name != "Colgate University" || q.Subject.Field != "" {
+	if q.Lens != lens.LensThirdParty || q.Subject.Name != "Colgate University" || q.Subject.Field != "" {
 		t.Fatalf("third_party answer did not compile with organization resolution: %+v", q)
 	}
 }
@@ -375,7 +157,7 @@ func TestModelControlledAnswerFindsASN(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if model.calls != 1 || result.Query == nil || result.Query.Lens != LensControlled {
+	if model.calls != 1 || result.Query == nil || result.Query.Lens != lens.LensControlled {
 		t.Fatalf("calls=%d query=%+v, want one planning call and the controlled lens", model.calls, result.Query)
 	}
 
@@ -386,7 +168,7 @@ func TestModelControlledAnswerFindsASN(t *testing.T) {
 
 	last := r.Matches[0].Nodes[len(r.Matches[0].Nodes)-1]
 	if last.ID != "as-own" || len(r.Matches[0].Edges) != 3 {
-		t.Errorf("wrong ASN or path: %s", witnessChain(r.Matches[0]))
+		t.Errorf("wrong ASN or path: %s", lens.WitnessChain(r.Matches[0]))
 	}
 	if r.FootprintTypes["FQDN"] != 0 || r.FootprintTypes["URL"] != 0 {
 		t.Errorf("walk read assets that cannot lead to an ASN: %v", r.FootprintTypes)
@@ -403,7 +185,7 @@ func TestModelControlledAnswerFindsASN(t *testing.T) {
 func TestControlledLensExcludesThirdPartyNetworks(t *testing.T) {
 	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
 		Traversal: TraversalExplore, TargetTypes: []string{"Netblock", "AutonomousSystem"}, Direction: "both",
-		Purpose: "connected", Lens: LensControlled, Source: SourceCaller}
+		Purpose: "connected", Lens: lens.LensControlled, Source: SourceCaller}
 
 	result, err := vendorAgent(nil).AskQuery(context.Background(), q, AdaptiveOptions{})
 	if err != nil {
@@ -420,7 +202,7 @@ func TestControlledLensExcludesThirdPartyNetworks(t *testing.T) {
 }
 
 func TestControlledAnswerRequiresAttributableTypes(t *testing.T) {
-	cat := vendorCatalog{testOAMCatalog}
+	cat := aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 	for _, tc := range []struct {
 		targets []string
 		ok      bool
@@ -432,7 +214,7 @@ func TestControlledAnswerRequiresAttributableTypes(t *testing.T) {
 		{[]string{"Phone"}, false},
 	} {
 		goal := InvestigationGoal{Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
-			TargetTypes: tc.targets, Purpose: "connected", Answer: LensControlled}
+			TargetTypes: tc.targets, Purpose: "connected", Answer: lens.LensControlled}
 		if err := validateAnswer(goal, cat); (err == nil) != tc.ok {
 			t.Errorf("targets %v: err=%v, want ok=%v", tc.targets, err, tc.ok)
 		}
@@ -462,14 +244,14 @@ func TestPlannerCorrectsUnusableAnswerKind(t *testing.T) {
 }
 
 func TestGoalSchemaEnumeratesAnswerKinds(t *testing.T) {
-	s := goalJSONSchema(testOAMCatalog, testOAMCatalog.SearchFields())
+	s := goalJSONSchema(aitest.TestOAMCatalog, aitest.TestOAMCatalog.SearchFields())
 	props := s.Schema["properties"].(map[string]any)
 	enum := props["answer"].(map[string]any)["enum"].([]string)
 	if strings.Join(enum, ",") != strings.Join(answerKindNames(), ",") || len(enum) != len(answerKinds) {
 		t.Fatalf("answer enum %v does not match the registry", enum)
 	}
 
-	prompt := goalPlannerPrompt("anything", testOAMCatalog, testOAMCatalog.SearchFields(), false, nil).Text
+	prompt := goalPlannerPrompt("anything", aitest.TestOAMCatalog, aitest.TestOAMCatalog.SearchFields(), false, nil).Text
 	for _, k := range answerKinds {
 		if !strings.Contains(prompt, "- "+k.Name+" (") {
 			t.Errorf("planner prompt does not describe answer kind %s", k.Name)
@@ -480,23 +262,23 @@ func TestGoalSchemaEnumeratesAnswerKinds(t *testing.T) {
 // extendedCatalog adds transitions the lens code has never seen, as a
 // future OAM release might.
 type extendedCatalog struct {
-	vendorCatalog
-	extra map[string]RelationMeaning
+	aitest.VendorCatalog
+	extra map[string]graph.RelationMeaning
 }
 
-func (c extendedCatalog) Meaning(src, label, rt, dst string) (RelationMeaning, bool) {
+func (c extendedCatalog) Meaning(src, label, rt, dst string) (graph.RelationMeaning, bool) {
 	if m, ok := c.extra[src+"|"+label+"|"+rt+"|"+dst]; ok {
 		return m, true
 	}
 
-	return c.vendorCatalog.Meaning(src, label, rt, dst)
+	return c.VendorCatalog.Meaning(src, label, rt, dst)
 }
 
-func (c extendedCatalog) Relations() []RelationshipSchema {
-	out := c.vendorCatalog.Relations()
+func (c extendedCatalog) Relations() []graph.RelationshipSchema {
+	out := c.VendorCatalog.Relations()
 	for k := range c.extra {
 		p := strings.Split(k, "|")
-		out = append(out, RelationshipSchema{SourceType: p[0], Label: p[1], RelationType: p[2], DestinationType: p[3]})
+		out = append(out, graph.RelationshipSchema{SourceType: p[0], Label: p[1], RelationType: p[2], DestinationType: p[3]})
 	}
 
 	return out
@@ -505,27 +287,27 @@ func (c extendedCatalog) Relations() []RelationshipSchema {
 // A new asset type and relationships, annotated only in the semantics
 // table, take part in both lenses without code changes.
 func TestNewOAMRelationshipsJoinLensesWithoutCode(t *testing.T) {
-	cat := extendedCatalog{vendorCatalog: vendorCatalog{testOAMCatalog}, extra: map[string]RelationMeaning{
-		"FQDN|hosted_on|SimpleRelation|CloudResource":            {"infrastructure", "network", true},
-		"CloudResource|tenant_of|SimpleRelation|CloudAccount":    {"same_subject", "network", true},
-		"CloudAccount|operated_by|SimpleRelation|Organization":   {"controller", "network", true},
-		"Organization|cloud_account|SimpleRelation|CloudAccount": {"controls", "network", true},
-		"CloudAccount|billing_portal|SimpleRelation|URL":         {"third_party", "financial", false},
-		"CloudResource|managed_by|SimpleRelation|ContactRecord":  {"third_party", "network", true},
+	cat := extendedCatalog{VendorCatalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, extra: map[string]graph.RelationMeaning{
+		"FQDN|hosted_on|SimpleRelation|CloudResource":            {Attribution: "infrastructure", Purpose: "network", Vendor: true},
+		"CloudResource|tenant_of|SimpleRelation|CloudAccount":    {Attribution: "same_subject", Purpose: "network", Vendor: true},
+		"CloudAccount|operated_by|SimpleRelation|Organization":   {Attribution: "controller", Purpose: "network", Vendor: true},
+		"Organization|cloud_account|SimpleRelation|CloudAccount": {Attribution: "controls", Purpose: "network", Vendor: true},
+		"CloudAccount|billing_portal|SimpleRelation|URL":         {Attribution: "third_party", Purpose: "financial", Vendor: false},
+		"CloudResource|managed_by|SimpleRelation|ContactRecord":  {Attribution: "third_party", Purpose: "network", Vendor: true},
 	}}
 
-	g := vendorFixture()
-	g.assets["bucket"] = Asset{ID: "bucket", Type: "CloudResource", Key: "assets-bucket"}
-	g.assets["tenant"] = Asset{ID: "tenant", Type: "CloudAccount", Key: "tenant-1"}
-	g.assets["cloudco"] = Asset{ID: "cloudco", Type: "Organization", Key: "cloudco",
+	g := aitest.VendorFixture()
+	g.Assets["bucket"] = graph.Asset{ID: "bucket", Type: "CloudResource", Key: "assets-bucket"}
+	g.Assets["tenant"] = graph.Asset{ID: "tenant", Type: "CloudAccount", Key: "tenant-1"}
+	g.Assets["cloudco"] = graph.Asset{ID: "cloudco", Type: "Organization", Key: "cloudco",
 		Content: map[string]any{"name": "Example Cloud"}}
-	g.assets["own-acct"] = Asset{ID: "own-acct", Type: "CloudAccount", Key: "colgate-acct"}
-	g.links = append(g.links,
-		Relation{ID: "h1", FromID: "www.colgate.edu", ToID: "bucket", Label: "hosted_on", Type: "SimpleRelation"},
-		Relation{ID: "h2", FromID: "bucket", ToID: "tenant", Label: "tenant_of", Type: "SimpleRelation"},
-		Relation{ID: "h3", FromID: "tenant", ToID: "cloudco", Label: "operated_by", Type: "SimpleRelation"},
-		Relation{ID: "h4", FromID: "colgate", ToID: "own-acct", Label: "cloud_account", Type: "SimpleRelation"})
-	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: cat, Limits: DefaultLimits()}}
+	g.Assets["own-acct"] = graph.Asset{ID: "own-acct", Type: "CloudAccount", Key: "colgate-acct"}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "h1", FromID: "www.colgate.edu", ToID: "bucket", Label: "hosted_on", Type: "SimpleRelation"},
+		graph.Relation{ID: "h2", FromID: "bucket", ToID: "tenant", Label: "tenant_of", Type: "SimpleRelation"},
+		graph.Relation{ID: "h3", FromID: "tenant", ToID: "cloudco", Label: "operated_by", Type: "SimpleRelation"},
+		graph.Relation{ID: "h4", FromID: "colgate", ToID: "own-acct", Label: "cloud_account", Type: "SimpleRelation"})
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()}}
 
 	result, err := agent.AskQuery(context.Background(),
 		thirdPartyQuery("", PlanSubject{Type: "Organization", Name: "Colgate University"}, SourceCaller),
@@ -539,8 +321,8 @@ func TestNewOAMRelationshipsJoinLensesWithoutCode(t *testing.T) {
 
 	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
 		Traversal: TraversalExplore, TargetTypes: []string{"CloudAccount"}, Direction: "both",
-		Purpose: "connected", Lens: LensControlled, Source: SourceCaller}
-	if !controlledReachable(cat, q.TargetTypes) {
+		Purpose: "connected", Lens: lens.LensControlled, Source: SourceCaller}
+	if !lens.ControlledReachable(cat, q.TargetTypes) {
 		t.Fatal("new controls relationship does not make CloudAccount attributable")
 	}
 
@@ -566,7 +348,7 @@ func TestAttributableOrganizationGoalRunsControlledLens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Query == nil || result.Query.Lens != LensControlled || model.calls != 1 {
+	if result.Query == nil || result.Query.Lens != lens.LensControlled || model.calls != 1 {
 		t.Fatalf("calls=%d query=%+v, want the controlled lens after one planning call", model.calls, result.Query)
 	}
 }
@@ -576,17 +358,17 @@ func TestAttributableOrganizationGoalRunsControlledLens(t *testing.T) {
 // look one step from an owner, so a budgeted best-first search spent its
 // budget on colgate.edu's URLs and missed the registrant (eval 2026-11-09).
 func TestDomainOwnerFoundPastManyCertificates(t *testing.T) {
-	g := vendorFixture()
+	g := aitest.VendorFixture()
 	for i := 0; i < 60; i++ {
 		cert, url := fmt.Sprintf("cn-cert-%02d", i), fmt.Sprintf("url-%02d", i)
-		g.assets[cert] = Asset{ID: cert, Type: "TLSCertificate", Key: cert}
-		g.assets[url] = Asset{ID: url, Type: "URL", Key: "https://colgate.edu/" + url}
-		g.links = append(g.links,
-			Relation{ID: "cn-" + cert, FromID: cert, ToID: "colgate.edu", Label: "common_name", Type: "SimpleRelation"},
-			Relation{ID: "dom-" + url, FromID: url, ToID: "colgate.edu", Label: "domain", Type: "SimpleRelation"})
+		g.Assets[cert] = graph.Asset{ID: cert, Type: "TLSCertificate", Key: cert}
+		g.Assets[url] = graph.Asset{ID: url, Type: "URL", Key: "https://colgate.edu/" + url}
+		g.Links = append(g.Links,
+			graph.Relation{ID: "cn-" + cert, FromID: cert, ToID: "colgate.edu", Label: "common_name", Type: "SimpleRelation"},
+			graph.Relation{ID: "dom-" + url, FromID: url, ToID: "colgate.edu", Label: "domain", Type: "SimpleRelation"})
 	}
 
-	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: vendorCatalog{testOAMCatalog}, Limits: DefaultLimits()}}
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
 	result, err := agent.AskQuery(context.Background(),
 		thirdPartyQuery("", PlanSubject{Type: "FQDN", Field: "name", Value: "colgate.edu"}, SourceCaller),
 		AdaptiveOptions{})
@@ -603,38 +385,16 @@ func TestDomainOwnerFoundPastManyCertificates(t *testing.T) {
 	}
 }
 
-func TestTableColumnsAreValidated(t *testing.T) {
-	types := catalogTypes(vendorCatalog{testOAMCatalog}.Relations(), nil)
-	for _, tc := range []struct {
-		cols []TableColumn
-		ok   bool
-	}{
-		{[]TableColumn{{Type: "IPAddress"}, {Type: "Organization", Role: ColumnController}}, true},
-		{nil, false},
-		{[]TableColumn{{Type: "Website"}}, false},
-		{[]TableColumn{{Type: "IPAddress", Role: ColumnController}}, false},
-		{[]TableColumn{{Type: "IPAddress", Role: "owner"}}, false},
-		{[]TableColumn{{Type: "Organization", Role: ColumnController}, {Type: "Organization", Role: ColumnController}},
-			false},
-		{[]TableColumn{{Type: "IPAddress"}, {Type: "IPAddress"}}, false},
-		{[]TableColumn{{Type: "Organization", Role: ColumnController}}, true},
-	} {
-		if err := validateColumns(tc.cols, types); (err == nil) != tc.ok {
-			t.Errorf("columns %+v: err=%v, want ok=%v", tc.cols, err, tc.ok)
-		}
-	}
-}
-
 func TestTableAnswerNeedsAttributableRows(t *testing.T) {
 	goal := InvestigationGoal{Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
-		TargetTypes: []string{"Phone"}, Purpose: "connected", Answer: LensTable,
-		Columns: []TableColumn{{Type: "Organization", Role: ColumnController}}}
-	if err := validateAnswer(goal, vendorCatalog{testOAMCatalog}); err == nil {
+		TargetTypes: []string{"Phone"}, Purpose: "connected", Answer: lens.LensTable,
+		Columns: []lens.TableColumn{{Type: "Organization", Role: lens.ColumnController}}}
+	if err := validateAnswer(goal, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}); err == nil {
 		t.Fatal("a table of unattributable rows was accepted")
 	}
 
 	goal.TargetTypes = []string{"URL"}
-	if err := validateAnswer(goal, vendorCatalog{testOAMCatalog}); err != nil {
+	if err := validateAnswer(goal, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}); err != nil {
 		t.Fatalf("valid table rejected: %v", err)
 	}
 }
@@ -646,9 +406,9 @@ func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
 		`"target_types":["Organization"],"direction":"both","purpose":"connected","answer":"table",` +
 		`"columns":[{"type":"IPAddress","role":""},{"type":"Organization","role":"controller"}]}`
 	good := strings.Replace(bad, `"target_types":["Organization"]`, `"target_types":["URL"]`, 1)
-	agent := func(model Model) Agent {
-		return Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
-			Limits: DefaultLimits()}}
+	agent := func(model llm.Model) Agent {
+		return Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+			Limits: graph.DefaultLimits()}}
 	}
 
 	// The question names websites, so the controller row type is repaired
@@ -659,7 +419,7 @@ func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Lens != LensTable || q.TargetTypes[0] != "URL" || len(model.requests) != 1 {
+	if q.Lens != lens.LensTable || q.TargetTypes[0] != "URL" || len(model.requests) != 1 {
 		t.Fatalf("row type not repaired in one call: %+v after %d calls", q, len(model.requests))
 	}
 
@@ -702,14 +462,14 @@ func TestRepeatedControllerColumnsAreRepaired(t *testing.T) {
 		`"columns":[` + ctl + `,` + ctl + `,` + ctl + `]}`
 	model := &plannerModel{replies: []string{bad}}
 
-	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}.CompileQuestion(context.Background(),
 		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if model.calls != 1 || len(q.Columns) != 2 || q.Columns[0].Type != "IPAddress" ||
-		q.Columns[1].Role != ColumnController {
+		q.Columns[1].Role != lens.ColumnController {
 		t.Fatalf("calls=%d columns=%+v, want IPAddress then controller after one call", model.calls, q.Columns)
 	}
 }
@@ -717,13 +477,13 @@ func TestRepeatedControllerColumnsAreRepaired(t *testing.T) {
 // Live eval plan: "with URL, then IPAddress, then controlling Organization"
 // in a table of URLs; the URL column only repeats the row.
 func TestTableDropsColumnsRepeatingTheRow(t *testing.T) {
-	goal := InvestigationGoal{TargetTypes: []string{"URL"}, Columns: []TableColumn{{Type: "URL"}, {Type: "IPAddress"},
-		{Type: "Organization", Role: ColumnController}}}
+	goal := InvestigationGoal{TargetTypes: []string{"URL"}, Columns: []lens.TableColumn{{Type: "URL"}, {Type: "IPAddress"},
+		{Type: "Organization", Role: lens.ColumnController}}}
 	if cols := tableColumns(goal, nil); len(cols) != 2 || cols[0].Type != "IPAddress" {
 		t.Fatalf("columns = %+v, want IPAddress then controller", cols)
 	}
 
-	goal.Columns = []TableColumn{{Type: "URL"}}
+	goal.Columns = []lens.TableColumn{{Type: "URL"}}
 	if cols := tableColumns(goal, nil); len(cols) != 1 {
 		t.Fatalf("the only column was dropped: %+v", cols)
 	}
@@ -738,8 +498,8 @@ func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
 			`"target_types":["URL"],"direction":"both","purpose":"connected","answer":"table",` +
 			`"columns":[{"type":"Organization","role":"controller"}]}`,
 	}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits()}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}
 
 	result, err := agent.AskAdaptive(context.Background(),
 		"Please create a table with each website, it's IP address, and hosting provider that's within the Colgate "+
@@ -749,7 +509,7 @@ func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
 	}
 
 	cols := result.Query.Columns
-	if len(cols) != 2 || cols[0].Type != "IPAddress" || cols[1].Role != ColumnController {
+	if len(cols) != 2 || cols[0].Type != "IPAddress" || cols[1].Role != lens.ColumnController {
 		t.Fatalf("columns = %+v, want IPAddress then controller", cols)
 	}
 	if !strings.Contains(result.Answer, "| https://www.colgate.edu | 151.101.1.1 | FASTLY |") {
@@ -761,7 +521,7 @@ func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
 }
 
 func TestMentionedTypesPreferLongestPhrase(t *testing.T) {
-	cat := vendorCatalog{testOAMCatalog}
+	cat := aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
 	got := strings.Join(mentionedTypes("each website, it's IP address, and hosting provider", cat), ",")
 	if got != "IPAddress,URL" {
 		t.Errorf("mentioned = %q, want IPAddress and URL (website), not Location for \"address\"", got)
@@ -776,21 +536,21 @@ func TestMentionedTypesPreferLongestPhrase(t *testing.T) {
 // and records the schema of each call.
 type structuredPlanner struct {
 	replies []string
-	schemas []JSONSchema
+	schemas []llm.JSONSchema
 }
 
-func (m *structuredPlanner) Generate(context.Context, []Message, []ToolSpec) (Response, error) {
-	return Response{}, errors.New("structured generation expected")
+func (m *structuredPlanner) Generate(context.Context, []llm.Message, []llm.ToolSpec) (llm.Response, error) {
+	return llm.Response{}, errors.New("structured generation expected")
 }
 
-func (m *structuredPlanner) GenerateStructured(_ context.Context, _ []Message, s JSONSchema) (Response, error) {
+func (m *structuredPlanner) GenerateStructured(_ context.Context, _ []llm.Message, s llm.JSONSchema) (llm.Response, error) {
 	i := len(m.schemas)
 	m.schemas = append(m.schemas, s)
 	if i >= len(m.replies) {
 		i = len(m.replies) - 1
 	}
 
-	return Response{Text: m.replies[i]}, nil
+	return llm.Response{Text: m.replies[i]}, nil
 }
 
 // After a table with an invalid row type, the retry's schema allows only
@@ -806,15 +566,15 @@ func TestTableRetryNarrowsTheSchema(t *testing.T) {
 
 	// The question names no type an owner controls, so the row type cannot
 	// be repaired from it and the retry is needed.
-	q, err := Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(), Catalog: vendorCatalog{testOAMCatalog},
-		Limits: DefaultLimits()}}.CompileQuestion(context.Background(),
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}.CompileQuestion(context.Background(),
 		"Please create a table of Colgate University and its hosting providers")
-	if err != nil || q.Lens != LensTable || len(model.schemas) != 2 {
+	if err != nil || q.Lens != lens.LensTable || len(model.schemas) != 2 {
 		t.Fatalf("q=%+v err=%v calls=%d", q, err, len(model.schemas))
 	}
 
 	props := model.schemas[1].Schema["properties"].(map[string]any)
-	if enum := props["answer"].(map[string]any)["enum"].([]string); len(enum) != 1 || enum[0] != LensTable {
+	if enum := props["answer"].(map[string]any)["enum"].([]string); len(enum) != 1 || enum[0] != lens.LensTable {
 		t.Errorf("retry answer enum = %v, want [table]", enum)
 	}
 
@@ -841,8 +601,8 @@ func TestControlledRetryKeepsTheFullSchema(t *testing.T) {
 	good := strings.Replace(bad, `"answer":"controlled"`, `"answer":"paths"`, 1)
 	model := &structuredPlanner{replies: []string{bad, good}}
 
-	if _, err := (Agent{Model: model, Runner: ToolRunner{Graph: campusWebFixture(),
-		Catalog: vendorCatalog{testOAMCatalog}, Limits: DefaultLimits()}}).CompileQuestion(context.Background(),
+	if _, err := (Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(),
+		Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}).CompileQuestion(context.Background(),
 		"What phone numbers does Colgate list?"); err != nil {
 		t.Fatal(err)
 	}
@@ -853,19 +613,10 @@ func TestControlledRetryKeepsTheFullSchema(t *testing.T) {
 	}
 }
 
-func TestRepairColumnsReadsMisplacedControllersAsTypes(t *testing.T) {
-	got := repairColumns([]TableColumn{{Type: "Service", Role: ColumnController},
-		{Type: "Organization", Role: ColumnController}, {Type: "Organization", Role: ColumnController}})
-	want := []TableColumn{{Type: "Service"}, {Type: "Organization", Role: ColumnController}}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("repaired = %+v, want %+v", got, want)
-	}
-}
-
 // The schema allows exactly two column shapes, so a schema-enforcing
 // provider cannot pair the controller role with a non-organization type.
 func TestColumnSchemaAllowsTwoShapes(t *testing.T) {
-	props := goalJSONSchema(testOAMCatalog, testOAMCatalog.SearchFields()).Schema["properties"].(map[string]any)
+	props := goalJSONSchema(aitest.TestOAMCatalog, aitest.TestOAMCatalog.SearchFields()).Schema["properties"].(map[string]any)
 	shapes := props["columns"].(map[string]any)["items"].(map[string]any)["anyOf"].([]any)
 	if len(shapes) != 2 {
 		t.Fatalf("column shapes = %d, want 2", len(shapes))
@@ -875,29 +626,5 @@ func TestColumnSchemaAllowsTwoShapes(t *testing.T) {
 	if fmt.Sprint(controller["type"].(map[string]any)["enum"]) != "[Organization]" ||
 		fmt.Sprint(controller["role"].(map[string]any)["enum"]) != "[controller]" {
 		t.Errorf("controller shape = %v", controller)
-	}
-}
-
-func TestRelationDetailShowsPorts(t *testing.T) {
-	e := Relation{Label: "port", Content: map[string]any{"port_number": 443, "protocol": "tcp"}}
-	if got := relationDetail(e); got != "443/tcp" {
-		t.Errorf("detail = %q, want 443/tcp", got)
-	}
-	if got := relationDetail(Relation{Label: "node"}); got != "" {
-		t.Errorf("detail = %q for a relation without fields", got)
-	}
-
-	w := witnessOf(e, Asset{ID: "a", Type: "FQDN", Key: "www.example.com"}, Asset{ID: "b", Type: "Service", Key: "x"})
-	if line := (EvidenceItem{ID: "E1", WitnessEdge: w}).Line(); !strings.Contains(line, "--port 443/tcp-->") {
-		t.Errorf("evidence line lacks the port: %s", line)
-	}
-}
-
-func TestReservedName(t *testing.T) {
-	for name, want := range map[string]bool{"msv1.invalid": true, "host.test.": true, "localhost": true,
-		"www.example": true, "example.com": false, "invalidate.net": false} {
-		if got := reservedName(name); got != want {
-			t.Errorf("reservedName(%q) = %v, want %v", name, got, want)
-		}
 	}
 }

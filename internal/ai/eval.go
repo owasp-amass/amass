@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // The question evaluation set records user questions with what a correct
@@ -95,7 +97,7 @@ type evalSet struct {
 // LoadEvalCases parses an evaluation set and checks every case.
 func LoadEvalCases(data []byte) ([]EvalCase, error) {
 	var set evalSet
-	if err := decodeStrict(data, &set); err != nil {
+	if err := graph.DecodeStrict(data, &set); err != nil {
 		return nil, fmt.Errorf("parse evaluation set: %w", err)
 	}
 
@@ -145,7 +147,7 @@ func resultLabels(inv Investigation) []string {
 	var out []string
 	for _, m := range inv.Matches {
 		if len(m.Nodes) > 0 {
-			out = append(out, assetLabel(m.Nodes[len(m.Nodes)-1]))
+			out = append(out, graph.AssetLabel(m.Nodes[len(m.Nodes)-1]))
 		}
 	}
 	if r := inv.ThirdPartyReport; r != nil {
@@ -178,12 +180,12 @@ func resultLabels(inv Investigation) []string {
 	}
 	if r := inv.OrgGroupReport; r != nil {
 		for _, m := range r.Members {
-			out = append(out, fmt.Sprintf("%d %s", m.Depth, assetLabel(m.Organization)))
+			out = append(out, fmt.Sprintf("%d %s", m.Depth, graph.AssetLabel(m.Organization)))
 		}
 	}
 	if r := inv.FamilyReport; r != nil {
 		for _, m := range r.Members {
-			out = append(out, m.Relation+" "+assetLabel(m.Organization))
+			out = append(out, m.Relation+" "+graph.AssetLabel(m.Organization))
 		}
 		for _, d := range r.RelatedDomains {
 			out = append(out, "related "+d.Domain)

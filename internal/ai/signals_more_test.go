@@ -7,6 +7,9 @@ package ai
 import (
 	"slices"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 )
 
 // moreSignalsFixture adds evidence for the supporting, tiebreaker and
@@ -21,11 +24,11 @@ import (
 func moreSignalsFixture() valueGraph {
 	g := signalsFixture()
 	add := func(id, typ, key string, content map[string]any) {
-		g.assets[id] = Asset{ID: id, Type: typ, Key: key, Content: content}
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
 	}
 	named := func(id, typ, name string) { add(id, typ, name, map[string]any{"name": name}) }
 	link := func(from, label, to, rt string) {
-		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
 			Type: rt})
 	}
 	registered := func(domain string) {
@@ -65,15 +68,15 @@ func moreSignalsFixture() valueGraph {
 	registered("solo-site.org")
 	link("dr-solo-site.org", "name_server", "ada.ns.dnshost.example", "SimpleRelation")
 
-	jarm := Evidence{Kind: "SimpleProperty", Property: map[string]any{"property_name": "JARM",
+	jarm := graph.Evidence{Kind: "SimpleProperty", Property: map[string]any{"property_name": "JARM",
 		"property_value": "2ad2ad0002ad2ad0042d42d000000ad"}}
 	service("svc-www", nil)
 	link("www.colgate.edu", "port", "svc-www", "PortRelation")
-	g.evidence["svc-www"] = []Evidence{jarm}
+	g.EvidenceByID["svc-www"] = []graph.Evidence{jarm}
 	registered("jarm-twin.example")
 	service("svc-twin", nil)
 	link("jarm-twin.example", "port", "svc-twin", "PortRelation")
-	g.evidence["svc-twin"] = []Evidence{jarm}
+	g.EvidenceByID["svc-twin"] = []graph.Evidence{jarm}
 	return g
 }
 
@@ -81,7 +84,7 @@ func TestReverseDNSInTheNamespace(t *testing.T) {
 	r := signalsReport(t, moreSignalsFixture())
 	for _, id := range []string{"ip-ptr", "alumni-mail.net"} {
 		c := candidateByID(r, id)
-		if c == nil || !slices.Equal(signalIDs(c), []string{"reverse_dns_in_namespace"}) || c.Decision != GapWeak {
+		if c == nil || !slices.Equal(signalIDs(c), []string{"reverse_dns_in_namespace"}) || c.Decision != lens.GapWeak {
 			t.Errorf("%s = %+v", id, c)
 		}
 	}
@@ -115,58 +118,30 @@ func TestSameNameServerSet(t *testing.T) {
 func TestJARMIsATiebreaker(t *testing.T) {
 	r := signalsReport(t, moreSignalsFixture())
 	c := candidateByID(r, "jarm-twin.example")
-	if c == nil || !slices.Equal(signalIDs(c), []string{"tls_fingerprint_match"}) || c.Decision != GapWeak {
+	if c == nil || !slices.Equal(signalIDs(c), []string{"tls_fingerprint_match"}) || c.Decision != lens.GapWeak {
 		t.Fatalf("jarm-twin.example = %+v", c)
 	}
 
 	// A tiebreaker beside one strong signal still only needs review.
-	if _, d := scoreGap([]GapSignal{{Signal: "certificate_key_reuse"}, {Signal: "tls_fingerprint_match"}},
-		true); d != GapReview {
+	if _, d := lens.ScoreGap([]lens.GapSignal{{Signal: "certificate_key_reuse"}, {Signal: "tls_fingerprint_match"}},
+		true); d != lens.GapReview {
 		t.Errorf("strong + tiebreaker = %s", d)
 	}
-	if _, d := scoreGap([]GapSignal{{Signal: "certificate_key_reuse"}, {Signal: "hosting_in_footprint"}},
-		true); d != GapPropose {
+	if _, d := lens.ScoreGap([]lens.GapSignal{{Signal: "certificate_key_reuse"}, {Signal: "hosting_in_footprint"}},
+		true); d != lens.GapPropose {
 		t.Errorf("strong + supporting = %s", d)
 	}
 }
 
 func TestParkedPagesBlockProposals(t *testing.T) {
 	g := moreSignalsFixture()
-	g.assets["svc-park"] = Asset{ID: "svc-park", Type: "Service", Key: "svc-park", Content: map[string]any{
+	g.Assets["svc-park"] = graph.Asset{ID: "svc-park", Type: "Service", Key: "svc-park", Content: map[string]any{
 		"unique_id": "svc-park", "output": "<html><h1>This domain may be for sale!</h1></html>"}}
-	g.links = append(g.links, Relation{ID: "arts-port", FromID: "colgate-arts.org", ToID: "svc-park", Label: "port",
+	g.Links = append(g.Links, graph.Relation{ID: "arts-port", FromID: "colgate-arts.org", ToID: "svc-park", Label: "port",
 		Type: "PortRelation"})
 
 	c := candidateByID(signalsReport(t, g), "colgate-arts.org")
-	if c == nil || !slices.Contains(signalIDs(c), "parked_for_sale") || c.Decision != GapReview {
+	if c == nil || !slices.Contains(signalIDs(c), "parked_for_sale") || c.Decision != lens.GapReview {
 		t.Errorf("a parked candidate = %+v", c)
-	}
-}
-
-func TestNameTokensAreDistinctive(t *testing.T) {
-	def, _ := firstSignal(matchNameToken)
-	if got := nameTokens("Colgate University", def.Params); !slices.Equal(got, []string{"colgate"}) {
-		t.Errorf("tokens = %v", got)
-	}
-	if got := nameTokens("The OWASP Foundation, Inc.", def.Params); !slices.Equal(got, []string{"owasp"}) {
-		t.Errorf("tokens = %v (foundation is generic)", got)
-	}
-	if got := nameTokens("Acme Holdings Group", def.Params); len(got) != 0 {
-		t.Errorf("tokens = %v (acme is too short, the rest are generic)", got)
-	}
-}
-
-func TestRedirectHost(t *testing.T) {
-	cases := map[[2]string]string{
-		{"location", "https://www.colgate.edu/x"}:     "www.colgate.edu",
-		{"location", "/relative/path"}:                "",
-		{"refresh", "0; url=https://colgate.edu/"}:    "colgate.edu",
-		{"refresh", "5;URL='http://www.colgate.edu'"}: "www.colgate.edu",
-		{"refresh", "10"}:                             "",
-	}
-	for in, want := range cases {
-		if got := redirectHost(in[0], in[1]); got != want {
-			t.Errorf("redirectHost(%q, %q) = %q, want %q", in[0], in[1], got, want)
-		}
 	}
 }

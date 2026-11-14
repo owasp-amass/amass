@@ -8,6 +8,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // goodVendorNarrative cites the colgate.edu vendor bundle correctly.
@@ -16,7 +21,7 @@ const goodVendorNarrative = "colgate.edu receives mail through mx1.pphosted.com 
 	"whose registration names FASTLY [E6, E7, E8, E9]. Its certificate was issued by DigiCert Inc [E3, E4, E5]. " +
 	"The domain's registrar contact belongs to EDUCAUSE [E10, E11]."
 
-func vendorBundle(t *testing.T) (Investigation, EvidenceBundle) {
+func vendorBundle(t *testing.T) (Investigation, review.EvidenceBundle) {
 	t.Helper()
 
 	inv, err := vendorAgent(nil).AskQuery(context.Background(),
@@ -111,13 +116,13 @@ func TestNarrateRejectsAfterRetry(t *testing.T) {
 }
 
 func TestTableRowsCarryWitnessEdges(t *testing.T) {
-	g, cat := campusWeb()
+	g, cat := aitest.CampusWeb()
 	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
 		Traversal: TraversalExplore, TargetTypes: []string{"URL"}, Direction: "both", Purpose: "connected",
-		Lens: LensTable, Columns: []TableColumn{{Type: "IPAddress"}, {Type: "Organization", Role: ColumnController}},
+		Lens: lens.LensTable, Columns: []lens.TableColumn{{Type: "IPAddress"}, {Type: "Organization", Role: lens.ColumnController}},
 		Source: SourceCaller}
 
-	inv, err := Agent{Runner: ToolRunner{Graph: g, Catalog: cat, Limits: DefaultLimits()}}.AskQuery(
+	inv, err := Agent{Runner: ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()}}.AskQuery(
 		context.Background(), q, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)

@@ -9,27 +9,30 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 // Fixture uses exact stored edge orientation and unrelated graph neighbors.
 // The same compiler operates across FQDN, URL, Organization and IPAddress.
 type intentCatalog struct {
-	rels      []RelationshipSchema
-	selectors []AssetSearchSchema
+	rels      []graph.RelationshipSchema
+	selectors []graph.AssetSearchSchema
 }
 
-func (c intentCatalog) Relations() []RelationshipSchema { return c.rels }
+func (c intentCatalog) Relations() []graph.RelationshipSchema { return c.rels }
 
-func (c intentCatalog) SearchFields() []AssetSearchSchema { return c.selectors }
+func (c intentCatalog) SearchFields() []graph.AssetSearchSchema { return c.selectors }
 
 var typedIntentTestCatalog = intentCatalog{
-	rels: []RelationshipSchema{
+	rels: []graph.RelationshipSchema{
 		{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 		{SourceType: "Organization", Label: "website", RelationType: "SimpleRelation", DestinationType: "URL"},
 		{SourceType: "FQDN", Label: "dns_record", RelationType: "BasicDNSRelation", DestinationType: "IPAddress"},
 		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	},
-	selectors: []AssetSearchSchema{
+	selectors: []graph.AssetSearchSchema{
 		{Type: "FQDN", Fields: []string{"name"}},
 		{Type: "URL", Fields: []string{"url"}},
 		{Type: "IPAddress", Fields: []string{"address"}},
@@ -37,8 +40,8 @@ var typedIntentTestCatalog = intentCatalog{
 	},
 }
 
-func typedIntentGraph() plannedGraph {
-	g := fakeGraph{assets: map[string]Asset{
+func typedIntentGraph() aitest.PlannedGraph {
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{
 		"host": {
 			ID:      "host",
 			Type:    "FQDN",
@@ -59,7 +62,7 @@ func typedIntentGraph() plannedGraph {
 		},
 		"ip": {ID: "ip", Type: "IPAddress", Key: "192.0.2.10", Content: map[string]any{"address": "192.0.2.10"}},
 	}}
-	g.links = []Relation{
+	g.Links = []graph.Relation{
 		{ID: "edge-domain", FromID: "site", ToID: "host", Label: "domain", Type: "SimpleRelation"},
 		{ID: "edge-website", FromID: "company", ToID: "site", Label: "website", Type: "SimpleRelation"},
 		{ID: "edge-ip", FromID: "host", ToID: "ip", Label: "dns_record", Type: "BasicDNSRelation"},
@@ -68,12 +71,12 @@ func typedIntentGraph() plannedGraph {
 	// match-limit starvation from indiscriminate guided exploration.
 	for i := 0; i < 35; i++ {
 		id := fmt.Sprintf("noise-%02d", i)
-		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: fmt.Sprintf("noise-%02d.acme.example", i)}
-		g.links = append(g.links,
-			Relation{ID: "noise-edge-" + id, FromID: "host", ToID: id, Label: "node", Type: "SimpleRelation"})
+		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: fmt.Sprintf("noise-%02d.acme.example", i)}
+		g.Links = append(g.Links,
+			graph.Relation{ID: "noise-edge-" + id, FromID: "host", ToID: id, Label: "node", Type: "SimpleRelation"})
 	}
 
-	return plannedGraph{fakeGraph: g}
+	return aitest.PlannedGraph{FakeGraph: g}
 }
 
 func TestTypedRelationIntentUsesIncomingOAMEdgesAndNoLLM(t *testing.T) {
@@ -86,7 +89,7 @@ func TestTypedRelationIntentUsesIncomingOAMEdgesAndNoLLM(t *testing.T) {
 
 	model := &plannerModel{}
 	result, err := (Agent{Model: model, Runner: ToolRunner{
-		Graph: typedIntentGraph(), Catalog: typedIntentTestCatalog, Limits: DefaultLimits(),
+		Graph: typedIntentGraph(), Catalog: typedIntentTestCatalog, Limits: graph.DefaultLimits(),
 	}}).AskAdaptive(context.Background(), q, AdaptiveOptions{GuidanceRounds: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +120,7 @@ func TestTypedRelationIntentTwoHopsAcrossThreeAssetTypes(t *testing.T) {
 	}
 
 	g := typedIntentGraph()
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+	result, err := searchTypedRelationIntent(context.Background(), g, graph.DefaultLimits(), g.Assets["host"],
 		intent, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +142,7 @@ func TestTypedRelationIntentUsesOtherRegisteredAssetTypes(t *testing.T) {
 	}
 
 	g := typedIntentGraph()
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+	result, err := searchTypedRelationIntent(context.Background(), g, graph.DefaultLimits(), g.Assets["host"],
 		intent, AdaptiveOptions{})
 	if err != nil || result.Truncated || len(result.Matches) != 1 || result.Matches[0].Nodes[1].ID != "ip" {
 		t.Fatalf("wrong IP match: result=%+v err=%v", result, err)
@@ -155,7 +158,7 @@ func TestTypedRelationIntentPartialAnswersRemainHonest(t *testing.T) {
 		t.Fatal("typed FQDN node query not recognized")
 	}
 
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+	result, err := searchTypedRelationIntent(context.Background(), g, graph.DefaultLimits(), g.Assets["host"],
 		intent, AdaptiveOptions{MaxMatches: 4})
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +167,7 @@ func TestTypedRelationIntentPartialAnswersRemainHonest(t *testing.T) {
 		t.Fatalf("result must indicate limited inventory: %+v", result)
 	}
 
-	answer := typedRelationAnswer(g.assets["host"], intent, result.Matches, result.Truncated, result.Reason)
+	answer := typedRelationAnswer(g.Assets["host"], intent, result.Matches, result.Truncated, result.Reason)
 	if !strings.Contains(answer, "Found 4 FQDN asset(s)") || !strings.Contains(answer, "Results are partial") {
 		t.Fatalf("partial results were hidden: %s", answer)
 	}
@@ -185,8 +188,8 @@ func TestTypedRelationIntentRejectsAmbiguityAndInventedTaxonomy(t *testing.T) {
 	}
 
 	twoWays := typedIntentTestCatalog
-	twoWays.rels = append(append([]RelationshipSchema(nil), twoWays.rels...),
-		RelationshipSchema{SourceType: "FQDN", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"})
+	twoWays.rels = append(append([]graph.RelationshipSchema(nil), twoWays.rels...),
+		graph.RelationshipSchema{SourceType: "FQDN", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"})
 	if _, ok := deterministicTypedRelationIntent("Which URLs are connected to tech.acme.example via domain relationships?", twoWays); ok {
 		t.Fatal("ambiguous opposite edge directions must fall back to semantic planning")
 	}
@@ -195,19 +198,19 @@ func TestTypedRelationIntentRejectsAmbiguityAndInventedTaxonomy(t *testing.T) {
 func TestTypedRelationIntentFirstHopEmptyDoesNotInventOrganizationAbsence(t *testing.T) {
 	g := typedIntentGraph()
 	// Simulate FQDNs collected by subs, but without the URL -> domain edge.
-	edges := make([]Relation, 0, len(g.links))
-	for _, edge := range g.links {
+	edges := make([]graph.Relation, 0, len(g.Links))
+	for _, edge := range g.Links {
 		if edge.Label != "domain" {
 			edges = append(edges, edge)
 		}
 	}
 
-	g.links = edges
+	g.Links = edges
 	model := &plannerModel{}
 	q := "Which organizations are connected to tech.acme.example via domain and website relationships?"
 	got, err := (Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: g, Catalog: typedIntentTestCatalog, Limits: DefaultLimits()},
+		Runner: ToolRunner{Graph: g, Catalog: typedIntentTestCatalog, Limits: graph.DefaultLimits()},
 	}).
 		AskAdaptive(context.Background(), q, AdaptiveOptions{})
 	if err != nil {
@@ -240,21 +243,21 @@ func TestTypedRelationIntentFirstHopEmptyDoesNotInventOrganizationAbsence(t *tes
 
 func TestTypedRelationIntentReportsSecondHopWhenWebsiteRelationMissing(t *testing.T) {
 	g := typedIntentGraph()
-	edges := make([]Relation, 0, len(g.links))
-	for _, edge := range g.links {
+	edges := make([]graph.Relation, 0, len(g.Links))
+	for _, edge := range g.Links {
 		if edge.Label != "website" {
 			edges = append(edges, edge)
 		}
 	}
 
-	g.links = edges
+	g.Links = edges
 	q := "Which organizations are connected to tech.acme.example via domain and website relationships?"
 	intent, ok := deterministicTypedRelationIntent(q, typedIntentTestCatalog)
 	if !ok {
 		t.Fatal("expected a two-hop typed intent")
 	}
 
-	result, err := searchTypedRelationIntent(context.Background(), g, DefaultLimits(), g.assets["host"],
+	result, err := searchTypedRelationIntent(context.Background(), g, graph.DefaultLimits(), g.Assets["host"],
 		intent, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)

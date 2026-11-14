@@ -8,10 +8,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestRelationAliasGrounding(t *testing.T) {
-	cat := []RelationshipSchema{
+	cat := []graph.RelationshipSchema{
 		{SourceType: "FQDN", Label: "dns_record", RelationType: "BasicDNSRelation", DestinationType: "IPAddress"},
 		{SourceType: "FQDN", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 		{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
@@ -48,7 +50,7 @@ func TestRelationAliasGrounding(t *testing.T) {
 }
 
 func TestRelationAliasNeverInventsUnregisteredEdges(t *testing.T) {
-	cat := []RelationshipSchema{
+	cat := []graph.RelationshipSchema{
 		{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	}
 	if got := schemaRelationAliasCandidates("dns resolution", cat); len(got) != 0 {
@@ -60,7 +62,7 @@ func TestRelationAliasNeverInventsUnregisteredEdges(t *testing.T) {
 }
 
 func TestRelationAliasAmbiguityFailsClosed(t *testing.T) {
-	cat := []RelationshipSchema{
+	cat := []graph.RelationshipSchema{
 		{SourceType: "Organization", Label: "website", RelationType: "SimpleRelation", DestinationType: "URL"},
 		{SourceType: "FQDN", Label: "official_website", RelationType: "SimpleRelation", DestinationType: "URL"},
 	}
@@ -71,10 +73,10 @@ func TestRelationAliasAmbiguityFailsClosed(t *testing.T) {
 }
 
 func TestRelationshipAndFieldVocabularyScopesToCatalog(t *testing.T) {
-	cat := []RelationshipSchema{
+	cat := []graph.RelationshipSchema{
 		{SourceType: "FQDN", Label: "dns_record", RelationType: "BasicDNSRelation", DestinationType: "IPAddress"},
 	}
-	selectors := []AssetSearchSchema{{Type: "FQDN", Fields: []string{"name", "unique_id"}}}
+	selectors := []graph.AssetSearchSchema{{Type: "FQDN", Fields: []string{"name", "unique_id"}}}
 	relPrompt := compactRelationshipVocabulary(cat)
 	if !strings.Contains(relPrompt, "dns_record:") || strings.Contains(relPrompt, "subsidiary:") {
 		t.Fatalf("wrong relationship prompt scope: %q", relPrompt)
@@ -87,7 +89,7 @@ func TestRelationshipAndFieldVocabularyScopesToCatalog(t *testing.T) {
 }
 
 func TestRelationAliasCatalogWideDynamicNaming(t *testing.T) {
-	cat := []RelationshipSchema{
+	cat := []graph.RelationshipSchema{
 		{
 			SourceType:      "Account",
 			Label:           "account_linked_to",
@@ -104,7 +106,7 @@ func TestRelationAliasCatalogWideDynamicNaming(t *testing.T) {
 }
 
 func TestRegisteredRelationLabelsGeneratePluralNouns(t *testing.T) {
-	cat := []RelationshipSchema{
+	cat := []graph.RelationshipSchema{
 		{SourceType: "FQDN", Label: "custom_record", RelationType: "SimpleRelation", DestinationType: "URL"},
 		{SourceType: "FQDN", Label: "service_category", RelationType: "SimpleRelation", DestinationType: "Service"},
 	}
@@ -122,7 +124,7 @@ func TestRegisteredRelationLabelsGeneratePluralNouns(t *testing.T) {
 }
 
 func TestEveryIndexedFieldHasDynamicNaturalSpelling(t *testing.T) {
-	selectors := []AssetSearchSchema{{Type: "Location", Fields: []string{
+	selectors := []graph.AssetSearchSchema{{Type: "Location", Fields: []string{
 		"building_number", "street_name", "province", "custom_filter_key",
 	}}}
 	vocabulary := compactSearchVocabulary(selectors)

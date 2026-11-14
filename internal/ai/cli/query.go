@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 // maxQueryFileBytes bounds a -query file; real queries are a few KB.
@@ -31,20 +32,20 @@ type providerSettings struct {
 }
 
 // newProvider builds the configured model client and checks its endpoint.
-func newProvider(s providerSettings) (ai.Model, error) {
+func newProvider(s providerSettings) (llm.Model, error) {
 	providerName, endpoint, modelName, apiKey := s.Provider, s.Endpoint, s.Model, s.APIKey
 	timeout, maxTokens, temperature, allowHTTP := s.Timeout, s.MaxTokens, s.Temperature, s.AllowHTTP
-	var provider ai.Model
+	var provider llm.Model
 	switch providerName {
 	case "ollama":
 		if endpoint == "" {
 			endpoint = "http://127.0.0.1:11434"
 		}
-		if _, err := ai.OllamaChatURL(endpoint); err != nil {
+		if _, err := llm.OllamaChatURL(endpoint); err != nil {
 			return nil, err
 		}
 
-		m := ai.NewOllamaModel(endpoint, modelName, &http.Client{Timeout: timeout})
+		m := llm.NewOllamaModel(endpoint, modelName, &http.Client{Timeout: timeout})
 		m.Think, m.ContextTokens, m.MaxTokens, m.Temperature = s.Think, s.ContextTokens, maxTokens, temperature
 		provider = m
 	case "compatible":
@@ -65,7 +66,7 @@ func newProvider(s providerSettings) (ai.Model, error) {
 			endpoint = "https://api.anthropic.com/v1/messages"
 		}
 
-		provider = ai.AnthropicModel{
+		provider = llm.AnthropicModel{
 			Endpoint:    endpoint,
 			ModelName:   modelName,
 			APIKey:      apiKey,

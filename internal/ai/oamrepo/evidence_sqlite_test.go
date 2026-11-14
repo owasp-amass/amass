@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -62,9 +63,9 @@ func TestEdgeProvenanceDoesNotAliasEntityTagsOnSQLite(t *testing.T) {
 		t.Fatalf("edge tags misattributed to asset ID: %+v (asset ID %s, edge ID %s)", got, parent.ID, edge.ID)
 	}
 
-	dossier, err := ai.EvaluatePathEvidence(ctx, adapter, ai.DefaultLimits(), []ai.PlanMatch{{
-		Nodes: []ai.Asset{{ID: parent.ID, Type: "Organization"}, {ID: child.ID, Type: "Organization"}},
-		Edges: []ai.Relation{
+	dossier, err := ai.EvaluatePathEvidence(ctx, adapter, graph.DefaultLimits(), []graph.PlanMatch{{
+		Nodes: []graph.Asset{{ID: parent.ID, Type: "Organization"}, {ID: child.ID, Type: "Organization"}},
+		Edges: []graph.Relation{
 			{ID: edge.ID, FromID: parent.ID, ToID: child.ID, Label: "subsidiary", Type: "SimpleRelation"},
 		},
 	}})
@@ -116,9 +117,9 @@ func TestUntaggedEdgeReturnsEmptyEvidenceOnSQLite(t *testing.T) {
 	// The same untagged edge must produce a usable path dossier. The
 	// investigation should be able to answer from the stored graph even
 	// while flagging missing source support.
-	dossier, err := ai.EvaluatePathEvidence(ctx, adapter, ai.DefaultLimits(), []ai.PlanMatch{{
-		Nodes: []ai.Asset{{ID: from.ID, Type: "Organization"}, {ID: to.ID, Type: "Organization"}},
-		Edges: []ai.Relation{{ID: edge.ID, FromID: from.ID, ToID: to.ID, Label: "subsidiary", Type: "SimpleRelation"}},
+	dossier, err := ai.EvaluatePathEvidence(ctx, adapter, graph.DefaultLimits(), []graph.PlanMatch{{
+		Nodes: []graph.Asset{{ID: from.ID, Type: "Organization"}, {ID: to.ID, Type: "Organization"}},
+		Edges: []graph.Relation{{ID: edge.ID, FromID: from.ID, ToID: to.ID, Label: "subsidiary", Type: "SimpleRelation"}},
 	}})
 	if err != nil {
 		t.Fatal(err)

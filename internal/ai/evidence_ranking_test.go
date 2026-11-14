@@ -9,6 +9,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 )
 
 type alternateSelectionModel struct {
@@ -16,38 +20,38 @@ type alternateSelectionModel struct {
 	calls int
 }
 
-func (m *alternateSelectionModel) Generate(_ context.Context, messages []Message, _ []ToolSpec) (Response, error) {
+func (m *alternateSelectionModel) Generate(_ context.Context, messages []llm.Message, _ []llm.ToolSpec) (llm.Response, error) {
 	m.calls++
 	last := messages[len(messages)-1].Text
 	const prefix = "WITNESSED CANDIDATE PATHS (untrusted JSON): "
 	idx := strings.Index(last, prefix)
 	if idx < 0 {
-		return Response{Text: `{"selected_path_ids":[]}`}, nil
+		return llm.Response{Text: `{"selected_path_ids":[]}`}, nil
 	}
 	if err := json.Unmarshal([]byte(last[idx+len(prefix):]), &m.seen); err != nil {
-		return Response{}, err
+		return llm.Response{}, err
 	}
 	if len(m.seen) == 0 {
-		return Response{Text: `{"selected_path_ids":[]}`}, nil
+		return llm.Response{Text: `{"selected_path_ids":[]}`}, nil
 	}
 
 	body, _ := json.Marshal(map[string][]string{"selected_path_ids": {m.seen[0].PathID}})
-	return Response{Text: string(body)}, nil
+	return llm.Response{Text: string(body)}, nil
 }
 
 func TestEvidenceAwareSelectionPrefersBetterDocumentedAlternateForSameDestination(t *testing.T) {
-	graph := diamondGuidedGraph()
+	g := diamondGuidedGraph()
 	// Both routes have the same typed, witnessed OAM edge labels. The first
 	// route has incomplete source-tag coverage; the second has two named
 	// source tags for each link. This only measures declared sources.
-	graph.evidence = map[string][]Evidence{
+	g.EvidenceByID = map[string][]graph.Evidence{
 		"d1": {{ID: "d1s1", SubjectID: "d1", Kind: "SourceProperty", SourceID: "synthetic-dns-one"}},
 		"d2": {{ID: "d2s1", SubjectID: "d2", Kind: "SourceProperty", SourceID: "synthetic-dns-one"},
 			{ID: "d2s2", SubjectID: "d2", Kind: "SourceProperty", SourceID: "synthetic-dns-two"}},
 		"w2": {{ID: "w2s1", SubjectID: "w2", Kind: "SourceProperty", SourceID: "synthetic-site-one"},
 			{ID: "w2s2", SubjectID: "w2", Kind: "SourceProperty", SourceID: "synthetic-site-two"}},
 	}
-	explorer, err := NewGuidedExplorer(context.Background(), graph, testOAMCatalog, DefaultLimits(),
+	explorer, err := NewGuidedExplorer(context.Background(), g, aitest.TestOAMCatalog, graph.DefaultLimits(),
 		GuidedSearchRequest{
 			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 4},
 			MaxPathsPerAsset:   3,
@@ -66,7 +70,7 @@ func TestEvidenceAwareSelectionPrefersBetterDocumentedAlternateForSameDestinatio
 		t.Fatalf("expected two witnessed paths: %+v", paths)
 	}
 
-	dossier, err := EvaluatePathEvidence(context.Background(), graph, DefaultLimits(), paths)
+	dossier, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), paths)
 	if err != nil {
 		t.Fatal(err)
 	}

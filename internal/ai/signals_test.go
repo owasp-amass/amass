@@ -8,22 +8,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 )
 
 // valueGraph adds value searches to the campus fixture, over stored TXT
 // records (evidence) and asset content.
-type valueGraph struct{ vendorGraph }
+type valueGraph struct{ aitest.VendorGraph }
 
 func (g valueGraph) FindByTagValue(_ context.Context, assetType, name, value string, contains bool,
-	limit int) ([]Asset, bool, error) {
-	var out []Asset
-	for id, evs := range g.evidence {
-		a, ok := g.assets[id]
+	limit int) ([]graph.Asset, bool, error) {
+	var out []graph.Asset
+	for id, evs := range g.EvidenceByID {
+		a, ok := g.Assets[id]
 		if !ok || a.Type != assetType {
 			continue
 		}
@@ -44,7 +47,7 @@ func (g valueGraph) FindByTagValue(_ context.Context, assetType, name, value str
 		}
 	}
 
-	slices.SortFunc(out, func(a, b Asset) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(out, func(a, b graph.Asset) int { return strings.Compare(a.ID, b.ID) })
 	if len(out) > limit {
 		return out[:limit], true, nil
 	}
@@ -53,35 +56,30 @@ func (g valueGraph) FindByTagValue(_ context.Context, assetType, name, value str
 }
 
 func (g valueGraph) FindByAttribute(_ context.Context, assetType, key, value string, contains bool,
-	limit int) ([]Asset, bool, error) {
-	var out []Asset
-	for _, a := range g.assets {
+	limit int) ([]graph.Asset, bool, error) {
+	var out []graph.Asset
+	for _, a := range g.Assets {
 		if a.Type != assetType {
 			continue
 		}
 
-		text := contentString(a, key)
+		text := graph.ContentString(a, key)
 		if !contains && text == value {
 			out = append(out, a)
 		} else if contains {
-			data, _ := json.Marshal(contentValue(a, key))
+			data, _ := json.Marshal(lens.ContentValue(a, key))
 			if strings.Contains(strings.ToLower(string(data)), strings.ToLower(value)) {
 				out = append(out, a)
 			}
 		}
 	}
 
-	slices.SortFunc(out, func(a, b Asset) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(out, func(a, b graph.Asset) int { return strings.Compare(a.ID, b.ID) })
 	if len(out) > limit {
 		return out[:limit], true, nil
 	}
 
 	return out, false, nil
-}
-
-func txtRecord(data string) Evidence {
-	return Evidence{Kind: "DNSRecordProperty", Property: map[string]any{"property_name": "dns_record",
-		"header": map[string]any{"rr_type": rrTypeTXT, "class": 1}, "data": data}}
 }
 
 // signalsFixture extends the campus with evidence for each value signal:
@@ -92,14 +90,14 @@ func txtRecord(data string) Evidence {
 //     of Colgate's certificate;
 //   - hamco.org uses Colgate's name server.
 func signalsFixture() valueGraph {
-	g := valueGraph{campusGapsFixture()}
-	g.evidence = map[string][]Evidence{}
+	g := valueGraph{aitest.CampusGapsFixture()}
+	g.EvidenceByID = map[string][]graph.Evidence{}
 	add := func(id, typ, key string, content map[string]any) {
-		g.assets[id] = Asset{ID: id, Type: typ, Key: key, Content: content}
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
 	}
 	named := func(id, typ, name string) { add(id, typ, name, map[string]any{"name": name}) }
 	link := func(from, label, to, rt string, content any) {
-		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
 			Type: rt, Content: content})
 	}
 	registered := func(domain string) {
@@ -110,23 +108,23 @@ func signalsFixture() valueGraph {
 		link("dr-"+domain, "registrant_contact", "cr-"+domain, "SimpleRelation", nil)
 	}
 
-	g.evidence["colgate.edu"] = []Evidence{txtRecord("google-site-verification=colgate-token"),
-		txtRecord("v=spf1 include:_spf.google.com ~all")}
+	g.EvidenceByID["colgate.edu"] = []graph.Evidence{aitest.TXTRecord("google-site-verification=colgate-token"),
+		aitest.TXTRecord("v=spf1 include:_spf.google.com ~all")}
 
 	registered("colgate-arts.org")
-	g.evidence["colgate-arts.org"] = []Evidence{txtRecord("google-site-verification=colgate-token"),
-		txtRecord("v=spf1 include:_spf.colgate.edu ~all")}
+	g.EvidenceByID["colgate-arts.org"] = []graph.Evidence{aitest.TXTRecord("google-site-verification=colgate-token"),
+		aitest.TXTRecord("v=spf1 include:_spf.colgate.edu ~all")}
 
 	registered("colgate-news.org")
 	named("_dmarc.colgate-news.org", "FQDN", "_dmarc.colgate-news.org")
 	link("colgate-news.org", "node", "_dmarc.colgate-news.org", "SimpleRelation", nil)
-	g.evidence["_dmarc.colgate-news.org"] = []Evidence{txtRecord("v=DMARC1; p=none; rua=mailto:dmarc@colgate.edu")}
+	g.EvidenceByID["_dmarc.colgate-news.org"] = []graph.Evidence{aitest.TXTRecord("v=DMARC1; p=none; rua=mailto:dmarc@colgate.edu")}
 
 	// A look-alike that only contains the name never counts.
 	registered("notcolgate.edu.example")
-	g.evidence["notcolgate.edu.example"] = []Evidence{txtRecord("v=spf1 include:mail.notcolgate.edu ~all")}
+	g.EvidenceByID["notcolgate.edu.example"] = []graph.Evidence{aitest.TXTRecord("v=spf1 include:mail.notcolgate.edu ~all")}
 
-	g.assets["cert"] = Asset{ID: "cert", Type: "TLSCertificate", Key: "1234", Content: map[string]any{
+	g.Assets["cert"] = graph.Asset{ID: "cert", Type: "TLSCertificate", Key: "1234", Content: map[string]any{
 		"serial_number": "1234", "subject_key_id": "aa:bb", "authority_key_id": "ca:01",
 		"issuer_common_name": "Colgate Internal CA"}}
 	link("cert", "common_name", "www.colgate.edu", "SimpleRelation", nil)
@@ -146,14 +144,14 @@ func signalsFixture() valueGraph {
 	registered("hamco.org")
 	link("dr-hamco.org", "name_server", "ns1.colgate.edu", "SimpleRelation", nil)
 	link("hamco.org", "dns_record", "ns1.colgate.edu", "BasicDNSRelation",
-		map[string]any{"header": map[string]any{"rr_type": rrTypeNS}})
+		map[string]any{"header": map[string]any{"rr_type": lens.RRTypeNS}})
 	return g
 }
 
-func signalsReport(t *testing.T, g Graph) OwnershipGapReport {
+func signalsReport(t *testing.T, g graph.Graph) lens.OwnershipGapReport {
 	t.Helper()
 
-	r, err := searchOwnershipGaps(context.Background(), g, vendorCatalog{testOAMCatalog}, Asset{ID: "colgate",
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, graph.Asset{ID: "colgate",
 		Type: "Organization", Key: "Colgate University", Content: map[string]any{"name": "Colgate University"}})
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +162,7 @@ func signalsReport(t *testing.T, g Graph) OwnershipGapReport {
 
 // candidateByID finds a candidate by asset ID; a domain record and its
 // name share a label.
-func candidateByID(r OwnershipGapReport, id string) *GapCandidate {
+func candidateByID(r lens.OwnershipGapReport, id string) *lens.GapCandidate {
 	for i, c := range r.Candidates {
 		if c.AssetID == id {
 			return &r.Candidates[i]
@@ -174,7 +172,7 @@ func candidateByID(r OwnershipGapReport, id string) *GapCandidate {
 	return nil
 }
 
-func signalIDs(c *GapCandidate) []string {
+func signalIDs(c *lens.GapCandidate) []string {
 	var out []string
 	for _, s := range c.Signals {
 		if !slices.Contains(out, s.Signal) {
@@ -196,7 +194,7 @@ func TestVerificationTokenAndSPFPropose(t *testing.T) {
 		"txt_verification_token"}) {
 		t.Errorf("signals = %v", got)
 	}
-	if c.Decision != GapPropose || c.Attachment == nil ||
+	if c.Decision != lens.GapPropose || c.Attachment == nil ||
 		c.Attachment.String() != "ContactRecord https://rdap.example/colgate-arts.org --organization--> Organization Colgate University" {
 		t.Errorf("decision %s, attachment %v", c.Decision, c.Attachment)
 	}
@@ -225,7 +223,7 @@ func TestDMARCReportsNameTheDomainNotTheRecord(t *testing.T) {
 	// does not corroborate the strong signal into a proposal.
 	c := candidateByID(r, "colgate-news.org")
 	if c == nil || !slices.Equal(signalIDs(c), []string{"email_auth_reference", "name_token"}) ||
-		c.Decision != GapReview {
+		c.Decision != lens.GapReview {
 		t.Errorf("colgate-news.org = %+v", c)
 	}
 }
@@ -247,7 +245,7 @@ func TestCertificateKeyAndPrivateIssuer(t *testing.T) {
 		"private_ca_issuance"}) {
 		t.Errorf("signals = %v", got)
 	}
-	if c.Decision != GapPropose {
+	if c.Decision != lens.GapPropose {
 		t.Errorf("decision = %s", c.Decision)
 	}
 }
@@ -255,10 +253,10 @@ func TestCertificateKeyAndPrivateIssuer(t *testing.T) {
 func TestPublicIssuersAreNotPrivateCAs(t *testing.T) {
 	g := signalsFixture()
 	for _, id := range []string{"cert", "cert-portal"} {
-		a := g.assets[id]
+		a := g.Assets[id]
 		a.Content.(map[string]any)["issuer_common_name"] = "R3"
 		a.Content.(map[string]any)["subject_key_id"] = "key-" + id
-		g.assets[id] = a
+		g.Assets[id] = a
 	}
 
 	if c := candidateByID(signalsReport(t, g), "colgate-portal.net"); c != nil {
@@ -269,8 +267,8 @@ func TestPublicIssuersAreNotPrivateCAs(t *testing.T) {
 		public bool
 	}{{"R3", true}, {"Let's Encrypt Authority X3", true}, {"Partner3 Root", false}, {"Colgate Internal CA", false},
 		{"DigiCert Global G2 TLS RSA SHA256 2020 CA1", true}} {
-		def, _ := ownershipSignal("private_ca_issuance")
-		if got := publicIssuer(tc.issuer, def.Params.PublicIssuers); got != tc.public {
+		def, _ := lens.LookupOwnershipSignal("private_ca_issuance")
+		if got := lens.PublicIssuer(tc.issuer, def.Params.PublicIssuers); got != tc.public {
 			t.Errorf("publicIssuer(%q) = %v", tc.issuer, got)
 		}
 	}
@@ -292,21 +290,21 @@ func TestSelfHostedNameServers(t *testing.T) {
 
 func TestWidelySharedTokensDoNotCount(t *testing.T) {
 	g := signalsFixture()
-	for i := 0; i <= gapMaxShared; i++ {
+	for i := 0; i <= lens.GapMaxShared; i++ {
 		id := fmt.Sprintf("tenant%d.example", i)
-		g.assets[id] = Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
-		g.evidence[id] = []Evidence{txtRecord("google-site-verification=colgate-token")}
+		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
+		g.EvidenceByID[id] = []graph.Evidence{aitest.TXTRecord("google-site-verification=colgate-token")}
 	}
 
 	c := candidateByID(signalsReport(t, g), "colgate-arts.org")
 	if c == nil || slices.Contains(signalIDs(c), "txt_verification_token") {
-		t.Errorf("a token on %d domains still counted: %+v", gapMaxShared+1, c)
+		t.Errorf("a token on %d domains still counted: %+v", lens.GapMaxShared+1, c)
 	}
 }
 
 func TestValueSignalsNeedAValueSearcher(t *testing.T) {
 	g := signalsFixture()
-	r := signalsReport(t, g.vendorGraph)
+	r := signalsReport(t, g.VendorGraph)
 	if c := candidateByID(r, "colgate-arts.org"); c != nil {
 		t.Errorf("value signals ran without value searches: %+v", c)
 	}
@@ -315,70 +313,10 @@ func TestValueSignalsNeedAValueSearcher(t *testing.T) {
 	}
 }
 
-func TestDelegatesTo(t *testing.T) {
-	cases := map[string]string{
-		"v=spf1 include:_spf.example.com ~all":                        "include:_spf.example.com",
-		"v=spf1 ip4:192.0.2.0/24 redirect=example.com":                "redirect:example.com",
-		"v=spf1 +include:example.com -all":                            "include:example.com",
-		"v=spf1 include:notexample.com ~all":                          "",
-		"v=DMARC1; p=reject; rua=mailto:d@example.com,mailto:x@y.org": "rua:example.com",
-		"v=DMARC1; p=none; ruf=mailto:f@reports.example.com!10m":      "ruf:reports.example.com",
-		"v=DMARC1; p=none; rua=mailto:d@vendor.example":               "",
-		"google-site-verification=example.com":                        "",
-	}
-	for txt, want := range cases {
-		if got := delegatesTo(txt, "example.com"); got != want {
-			t.Errorf("delegatesTo(%q) = %q, want %q", txt, got, want)
-		}
-	}
-}
-
-func TestSignalCatalogIsValid(t *testing.T) {
-	signals := OwnershipSignals()
-	if len(signals) < 8 {
-		t.Fatalf("catalog has %d signals", len(signals))
-	}
-	for _, s := range signals {
-		if len(s.Guards) == 0 || len(s.CounterIndications) == 0 {
-			t.Errorf("signal %s documents no guards or counter-indications", s.ID)
-		}
-	}
-	for _, id := range []string{sigSharedRegistrant, sigHosting, sigColisting, sigSelfHostedDNS} {
-		if _, ok := ownershipSignal(id); !ok {
-			t.Errorf("signal %s used in code is missing from the catalog", id)
-		}
-	}
-	if err := validateSignals(append(slices.Clone(signals), signals[0])); err == nil {
-		t.Error("a repeated signal id was accepted")
-	}
-}
-
-// TestSignalsDocIsCurrent keeps docs/ai/SIGNALS.md generated from the
-// catalog. Regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run
-// TestSignalsDocIsCurrent ./internal/ai/.
-func TestSignalsDocIsCurrent(t *testing.T) {
-	path := filepath.Join("..", "..", "docs", "ai", "SIGNALS.md")
-	want := SignalsMarkdown()
-	if os.Getenv("AMASS_UPDATE_SIGNALS_DOC") != "" {
-		if err := os.WriteFile(path, []byte(want), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != want {
-		t.Error("docs/ai/SIGNALS.md is out of date; regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run " +
-			"TestSignalsDocIsCurrent ./internal/ai/")
-	}
-}
-
 func TestProposalsExplainTheirSignals(t *testing.T) {
 	r := signalsReport(t, signalsFixture())
-	var p *OwnershipProposal
-	for _, q := range OwnershipProposals(r) {
+	var p *review.OwnershipProposal
+	for _, q := range review.OwnershipProposals(r) {
 		if q.AssetID == "colgate-arts.org" {
 			p = &q
 		}
@@ -387,7 +325,7 @@ func TestProposalsExplainTheirSignals(t *testing.T) {
 		t.Fatal("no proposal for colgate-arts.org's contact")
 	}
 
-	text := FormatOwnershipEntries([]OwnershipEntry{{Proposal: *p, Status: ProposalPending}})
+	text := review.FormatOwnershipEntries([]review.OwnershipEntry{{Proposal: *p, Status: review.ProposalPending}})
 	for _, want := range []string{"why: Shared DNS verification token (strong):",
 		"why: Email authentication delegated to the organization (strong):"} {
 		if !strings.Contains(text, want) {
@@ -405,12 +343,12 @@ func TestProposalsExplainTheirSignals(t *testing.T) {
 func TestPublicIntermediatesAreFoundThroughTheChain(t *testing.T) {
 	g := signalsFixture()
 	add := func(id, cn, issuer string) {
-		g.assets[id] = Asset{ID: id, Type: "TLSCertificate", Key: id, Content: map[string]any{"serial_number": id,
+		g.Assets[id] = graph.Asset{ID: id, Type: "TLSCertificate", Key: id, Content: map[string]any{"serial_number": id,
 			"subject_common_name": cn, "issuer_common_name": issuer, "authority_key_id": "AA:BB:CC",
 			"subject_key_id": id}}
 	}
 	link := func(from, label, to string) {
-		g.links = append(g.links, Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
 			Type: "SimpleRelation"})
 	}
 
@@ -419,7 +357,7 @@ func TestPublicIntermediatesAreFoundThroughTheChain(t *testing.T) {
 	link("cert-cal", "common_name", "portal.colgate.edu")
 	link("cert-cal", "issuing_certificate", "we1")
 	add("cert-owasp", "owasp.org", "WE1")
-	g.assets["owasp.org"] = Asset{ID: "owasp.org", Type: "FQDN", Key: "owasp.org",
+	g.Assets["owasp.org"] = graph.Asset{ID: "owasp.org", Type: "FQDN", Key: "owasp.org",
 		Content: map[string]any{"name": "owasp.org"}}
 	link("cert-owasp", "common_name", "owasp.org")
 
@@ -430,9 +368,9 @@ func TestPublicIntermediatesAreFoundThroughTheChain(t *testing.T) {
 
 func TestNamesUnderOwnedDomainsAreOwned(t *testing.T) {
 	g := signalsFixture()
-	g.assets["csvm02"] = Asset{ID: "csvm02", Type: "FQDN", Key: "csvm02.colgate.edu",
+	g.Assets["csvm02"] = graph.Asset{ID: "csvm02", Type: "FQDN", Key: "csvm02.colgate.edu",
 		Content: map[string]any{"name": "csvm02.colgate.edu"}}
-	g.links = append(g.links, Relation{ID: "csvm02-dns", FromID: "csvm02", ToID: "ip-own", Label: "dns_record",
+	g.Links = append(g.Links, graph.Relation{ID: "csvm02-dns", FromID: "csvm02", ToID: "ip-own", Label: "dns_record",
 		Type: "BasicDNSRelation"})
 
 	if c := candidateByID(signalsReport(t, g), "csvm02"); c != nil {

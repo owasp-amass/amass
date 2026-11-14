@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/ai/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -75,7 +75,7 @@ func TestIdentityReviewFlow(t *testing.T) {
 		t.Fatalf("recording: %s", errout.String())
 	}
 
-	entries, err := (&ai.Journal{Path: journal}).IdentityEntries()
+	entries, err := (&review.Journal{Path: journal}).IdentityEntries()
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("entries = %+v, %v", entries, err)
 	}

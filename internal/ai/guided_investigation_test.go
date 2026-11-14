@@ -9,24 +9,27 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
+	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 )
 
 func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
-	g := fakeGraph{assets: map[string]Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
 	for i := 0; i < 15; i++ {
 		id := fmt.Sprintf("url-%02d", i)
-		g.assets[id] = Asset{ID: id, Type: "URL", Key: "https://example.org/" + id}
-		g.links = append(g.links, Relation{ID: fmt.Sprintf("e%02d",
+		g.Assets[id] = graph.Asset{ID: id, Type: "URL", Key: "https://example.org/" + id}
+		g.Links = append(g.Links, graph.Relation{ID: fmt.Sprintf("e%02d",
 			i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
 	}
 
 	model := &plannerModel{replies: []string{`{"preferred_labels":["website"],"priority_asset_ids":[]}`}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: testOAMCatalog, Limits: DefaultLimits()}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
 	var investigation Investigation
 	result, err := agent.guidedInvestigation(context.Background(),
 		"Which websites belong to this organization?",
 		InvestigationGoal{Purpose: "connected", TargetTypes: []string{"URL"}, Direction: "both"},
-		g.assets["root"], AdaptiveOptions{MaxDepth: 2, MaxMatches: 20, GuidanceRounds: 1}, &investigation)
+		g.Assets["root"], AdaptiveOptions{MaxDepth: 2, MaxMatches: 20, GuidanceRounds: 1}, &investigation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,20 +43,20 @@ func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
 }
 
 func TestGuidedInvestigationInvalidAdviceCannotInventGraphLabels(t *testing.T) {
-	g := fakeGraph{assets: map[string]Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
+	g := aitest.FakeGraph{Assets: map[string]graph.Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
 	for i := 0; i < 15; i++ {
 		id := fmt.Sprintf("url-%02d", i)
-		g.assets[id] = Asset{ID: id, Type: "URL", Key: id}
-		g.links = append(g.links,
-			Relation{ID: fmt.Sprint(i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
+		g.Assets[id] = graph.Asset{ID: id, Type: "URL", Key: id}
+		g.Links = append(g.Links,
+			graph.Relation{ID: fmt.Sprint(i), FromID: "root", ToID: id, Label: "website", Type: "SimpleRelation"})
 	}
 
 	model := &plannerModel{replies: []string{`{"preferred_labels":["nonexistent-ownership"],"priority_asset_ids":[]}`}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: testOAMCatalog, Limits: DefaultLimits()}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
 	var inv Investigation
 	result, err := agent.guidedInvestigation(context.Background(), "List URLs",
 		InvestigationGoal{Purpose: "connected", TargetTypes: []string{"URL"}, Direction: "both"},
-		g.assets["root"], AdaptiveOptions{MaxDepth: 2, MaxMatches: 20, GuidanceRounds: 1}, &inv)
+		g.Assets["root"], AdaptiveOptions{MaxDepth: 2, MaxMatches: 20, GuidanceRounds: 1}, &inv)
 	if err != nil {
 		t.Fatal(err)
 	}
