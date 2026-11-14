@@ -82,7 +82,7 @@ func TestFindServices(t *testing.T) {
 	text := FormatServicesReport(r)
 	for _, want := range []string{"2 service(s) on 3 host(s)", "What stands out:",
 		"ssh service on unusual port 2222/TCP", "expired certificate for www.colgate.edu",
-		"self-issued certificate for portal.colgate.edu", "server: nginx/1.18.0", "products: nginx"} {
+		"self-issued certificate for portal.colgate.edu", "server: nginx/1.18.0", "stored products: nginx", "runs nginx 1.18.0", "Identified software: nginx 1.18.0 1"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("report lacks %q:\n%s", want, text)
 		}
@@ -98,5 +98,51 @@ func TestFindServicesWithNone(t *testing.T) {
 	}
 	if len(r.Services) != 0 || !strings.Contains(FormatServicesReport(r), "No service is stored") {
 		t.Errorf("report = %s", FormatServicesReport(r))
+	}
+}
+
+func TestIdentifyProducts(t *testing.T) {
+	svc := func(kind, output string, headers map[string]any) Asset {
+		return Asset{ID: "s", Type: "Service", Content: map[string]any{"service_type": kind, "output": output,
+			"attributes": headers}}
+	}
+	for _, c := range []struct {
+		svc  Asset
+		want string
+	}{
+		{svc("web-service", "", map[string]any{"Server": []any{"nginx/1.24.0 (Ubuntu)"}}), "nginx 1.24.0"},
+		{svc("web-service", "", map[string]any{"Server": []any{"nginx"}}), "nginx"},
+		{svc("web-service", "", map[string]any{"Server": []any{"Apache/2.4.58 (Unix) OpenSSL/3.0.13"}}),
+			"Apache HTTP Server 2.4.58"},
+		{svc("web-service", "", map[string]any{"Server": []any{"Microsoft-IIS/10.0"},
+			"X-Powered-By": []any{"ASP.NET"}, "X-AspNet-Version": []any{"4.0.30319"}}),
+			"Microsoft IIS 10.0,ASP.NET 4.0.30319"},
+		{svc("web-service", "", map[string]any{"x-powered-by": []any{"PHP/8.2.12"}}), "PHP 8.2.12"},
+		{svc("ssh", "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5\r\n", nil), "OpenSSH 9.6p1"},
+		// A banner fingerprint reads only its service types.
+		{svc("web-service", "SSH-2.0-OpenSSH_9.6p1", nil), ""},
+		{svc("web-service", "", map[string]any{"Server": []any{"cloudflare"}}), ""},
+	} {
+		var got []string
+		for _, p := range identifyProducts(c.svc) {
+			got = append(got, strings.TrimSpace(p.Product+" "+p.Version))
+			if p.Evidence == "" || !strings.HasPrefix(p.Source, "https://") {
+				t.Errorf("%s has no evidence or source: %+v", p.Product, p)
+			}
+		}
+		if strings.Join(got, ",") != c.want {
+			t.Errorf("identified %q, want %q", strings.Join(got, ","), c.want)
+		}
+	}
+}
+
+func TestProductFingerprintCatalog(t *testing.T) {
+	bad := productFingerprints{Fingerprints: []productFingerprint{{Product: "x", Header: "server",
+		Pattern: "^x$", Version: 1, Source: "https://example.com"}}}
+	if err := bad.validate(); err == nil {
+		t.Error("a version group outside the pattern was accepted")
+	}
+	if len(loadProductFingerprints().Fingerprints) == 0 {
+		t.Error("the catalog is empty")
 	}
 }

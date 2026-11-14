@@ -1,0 +1,30 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the services lens identifies the software a stored service runs from what its probe stored. A fingerprint matches either the value of a response header (header, compared without case) or the banner a service sent (banner: true, the service's stored output, read only for the listed service_types). pattern is a regular expression matched without case; version names the capture group holding the version, 0 when the pattern captures none. Each fingerprint cites the documentation that describes what the software sends. Identification is computed when asked and never written to the Asset Database: the stored header or banner is the evidence, and software can hide or fake it. Add values here, not in Go code.",
+  "fingerprints": [
+    {"product": "nginx", "vendor": "F5, Inc.", "header": "server",
+      "pattern": "^nginx(?:/([0-9][0-9A-Za-z.]*))?", "version": 1,
+      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/nginx/"},
+    {"product": "Apache HTTP Server", "vendor": "Apache Software Foundation", "header": "server",
+      "pattern": "^Apache(?:/([0-9][0-9A-Za-z.]*))?", "version": 1,
+      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/apache2/"},
+    {"product": "Microsoft IIS", "vendor": "Microsoft Corporation", "header": "server",
+      "pattern": "^Microsoft-IIS(?:/([0-9][0-9.]*))?", "version": 1,
+      "source": "https://techcommunity.microsoft.com/blog/iis-support-blog/remove-unwanted-http-response-headers/369710"},
+    {"product": "ASP.NET", "vendor": "Microsoft Corporation", "header": "x-powered-by",
+      "pattern": "^ASP\\.NET$", "version": 0,
+      "source": "https://techcommunity.microsoft.com/blog/iis-support-blog/remove-unwanted-http-response-headers/369710"},
+    {"product": "ASP.NET", "vendor": "Microsoft Corporation", "header": "x-aspnet-version",
+      "pattern": "^([0-9][0-9.]*)$", "version": 1,
+      "source": "https://techcommunity.microsoft.com/blog/iis-support-blog/remove-unwanted-http-response-headers/369710"},
+    {"product": "PHP", "vendor": "The PHP Group", "header": "x-powered-by",
+      "pattern": "^PHP(?:/([0-9][0-9A-Za-z.\\-]*))?", "version": 1,
+      "source": "https://php.net/manual/en/security.hiding.php"},
+    {"product": "Express", "vendor": "OpenJS Foundation", "header": "x-powered-by",
+      "pattern": "^Express$", "version": 0,
+      "source": "https://expressjs.com/en/advanced/best-practice-security.html"},
+    {"product": "OpenSSH", "vendor": "OpenBSD Project", "banner": true, "service_types": ["ssh"],
+      "pattern": "^SSH-[0-9.]+-OpenSSH_([0-9][0-9A-Za-z.]*)", "version": 1,
+      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/openssh-server/"}
+  ]
+}

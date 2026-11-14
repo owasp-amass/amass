@@ -61,12 +61,15 @@ type ServiceCertificate struct {
 
 // ExposedService is one stored service and where it listens.
 type ExposedService struct {
-	Service      Asset                `json:"service"`
-	ServiceType  string               `json:"service_type,omitempty"`
-	Endpoints    []string             `json:"endpoints"`
-	Ports        []string             `json:"ports"`
-	Software     []string             `json:"software,omitempty"`
-	Products     []string             `json:"products,omitempty"`
+	Service     Asset    `json:"service"`
+	ServiceType string   `json:"service_type,omitempty"`
+	Endpoints   []string `json:"endpoints"`
+	Ports       []string `json:"ports"`
+	Software    []string `json:"software,omitempty"`
+	Products    []string `json:"products,omitempty"`
+	// Identified is software the stored headers or banner name, matched by
+	// the fingerprint catalog; Products are the products stored for it.
+	Identified   []IdentifiedProduct  `json:"identified,omitempty"`
 	Certificates []ServiceCertificate `json:"certificates,omitempty"`
 	// UnusualPorts are ports outside expected_ports for the service type.
 	UnusualPorts []string `json:"unusual_ports,omitempty"`
@@ -80,10 +83,13 @@ type ServicesReport struct {
 	Hosts     int              `json:"hosts"`
 	Services  []ExposedService `json:"services"`
 	ByType    map[string]int   `json:"by_type"`
-	ByPort    map[string]int   `json:"by_port"`
-	Reads     int              `json:"reads"`
-	Truncated bool             `json:"truncated"`
-	Reason    string           `json:"reason,omitempty"`
+	// ByProduct counts the services each identified product and version
+	// runs on ("nginx 1.18.0").
+	ByProduct map[string]int `json:"by_product"`
+	ByPort    map[string]int `json:"by_port"`
+	Reads     int            `json:"reads"`
+	Truncated bool           `json:"truncated"`
+	Reason    string         `json:"reason,omitempty"`
 }
 
 // FindServices lists the services stored for the names, addresses and URLs
@@ -93,7 +99,7 @@ type ServicesReport struct {
 // the controlled footprint as the vendors lens does and reads only.
 func FindServices(ctx context.Context, graph Graph, schema SchemaCatalog, root Asset,
 	limits LensLimits) (ServicesReport, error) {
-	out := ServicesReport{Root: root, ByType: map[string]int{}, ByPort: map[string]int{}}
+	out := ServicesReport{Root: root, ByType: map[string]int{}, ByPort: map[string]int{}, ByProduct: map[string]int{}}
 	meaning := meaningsOf(schema)
 	if schema == nil || meaning == nil {
 		return out, errors.New("the services lens requires relationship semantics")
@@ -187,6 +193,9 @@ func FindServices(ctx context.Context, graph Graph, schema SchemaCatalog, root A
 		for _, p := range svc.Ports {
 			out.ByPort[p]++
 		}
+		for _, p := range svc.Identified {
+			out.ByProduct[strings.TrimSpace(p.Product+" "+p.Version)]++
+		}
 	}
 	sort.SliceStable(out.Services, func(i, j int) bool {
 		a, b := out.Services[i], out.Services[j]
@@ -210,6 +219,7 @@ func FindServices(ctx context.Context, graph Graph, schema SchemaCatalog, root A
 func describeService(w *lensWalker, svc Asset, rules serviceRules) (*ExposedService, error) {
 	out := &ExposedService{Service: svc, ServiceType: contentString(svc, "service_type")}
 	out.Software = softwareHeaders(svc, rules.SoftwareHeaders)
+	out.Identified = identifyProducts(svc)
 
 	steps, err := w.steps(svc)
 	if err != nil {
@@ -340,6 +350,9 @@ func FormatServicesReport(r ServicesReport) string {
 	}
 	counts("By type", r.ByType)
 	counts("By port", r.ByPort)
+	if len(r.ByProduct) > 0 {
+		counts("Identified software", r.ByProduct)
+	}
 
 	var notes []string
 	for _, s := range r.Services {
@@ -379,8 +392,15 @@ func FormatServicesReport(r ServicesReport) string {
 		if len(s.Software) > 0 {
 			fmt.Fprintf(&b, "; %s", strings.Join(s.Software, "; "))
 		}
+		if len(s.Identified) > 0 {
+			names := make([]string, 0, len(s.Identified))
+			for _, p := range s.Identified {
+				names = append(names, strings.TrimSpace(p.Product+" "+p.Version))
+			}
+			fmt.Fprintf(&b, "; runs %s", strings.Join(names, ", "))
+		}
 		if len(s.Products) > 0 {
-			fmt.Fprintf(&b, "; products: %s", strings.Join(s.Products, ", "))
+			fmt.Fprintf(&b, "; stored products: %s", strings.Join(s.Products, ", "))
 		}
 		for _, c := range s.Certificates {
 			fmt.Fprintf(&b, "; certificate %s", c.Subject)
@@ -394,7 +414,8 @@ func FormatServicesReport(r ServicesReport) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("These are services stored by past probes, not a live scan.")
+	b.WriteString("These are services stored by past probes, not a live scan. Identified software is read from " +
+		"stored headers and banners, which software can hide or fake.")
 	if r.Truncated {
 		fmt.Fprintf(&b, " Results are partial (%s); raise -max-assets or -max-reads to cover more.", r.Reason)
 	}
