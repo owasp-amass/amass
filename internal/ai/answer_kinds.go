@@ -144,6 +144,20 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
+		Name: lens.LensNetwork,
+		Description: "Show the network infrastructure of what a domain or organization controls: the netblocks " +
+			"and autonomous systems registered to it, where each of its names resolves (its own address space or " +
+			"a hosting provider's), what is stored inside its own space, and netblocks none of its names use. " +
+			"From stored registrations and resolutions, not a live scan. Read-only; nothing is written.",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"What network infrastructure does <organization> have?",
+			"Which IP ranges and autonomous systems belong to <domain>?",
+			"Where is <domain> hosted: its own networks or a cloud provider?",
+		},
+	},
+	{
 		Name: lens.LensGroupVendors,
 		Description: "List the outside parties a whole corporate group depends on: the vendors of each " +
 			"organization in the group (parent, subsidiaries and units) merged, with how many and which group " +
@@ -246,7 +260,8 @@ func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
 				strings.Join(lens.OwnedTypes(schema), ", "), AnswerPaths)
 		}
-	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors:
+	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
+		lens.LensNetwork:
 		if graph.MeaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -288,7 +303,8 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.
 			Lens: lens.LensControlled, Source: SourceModelGoal}
 	case lens.LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-	case lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors:
+	case lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
+		lens.LensNetwork:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
 	case lens.LensTable:
@@ -518,7 +534,8 @@ func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaC
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
 	case lens.LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors:
+	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
+		lens.LensNetwork:
 		props["target_types"] = none
 	case lens.LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)

@@ -173,6 +173,17 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
 		}
 	}
+	if r := inv.NetworkReport; r != nil {
+		for _, n := range r.Networks {
+			out = append(out, n.CIDR)
+		}
+		for _, a := range r.ASNs {
+			out = append(out, a.Number)
+		}
+		for _, h := range r.Hosting {
+			out = append(out, "hosted by "+h.Party)
+		}
+	}
 	if r := inv.GroupVendorReport; r != nil {
 		for _, v := range r.Vendors {
 			out = append(out, v.Vendor)

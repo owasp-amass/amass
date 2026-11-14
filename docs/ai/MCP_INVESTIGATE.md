@@ -12,7 +12,7 @@ evidence. Arguments:
 | Field | Meaning |
 | --- | --- |
 | `subject` | The starting asset: an indexed selector (`{"type":"FQDN","field":"name","value":"example.com"}`) or an Organization name |
-| `answer` | `hierarchy`, `controlled`, `third_party`, `table`, `ownership_gaps`, `family`, `org_group`, `services`, `group_vendors`, `route` or `paths` |
+| `answer` | `hierarchy`, `controlled`, `third_party`, `table`, `ownership_gaps`, `family`, `org_group`, `services`, `network`, `group_vendors`, `route` or `paths` |
 | `target_types` | Asset types to list; a table's single row type; a route's last hop type |
 | `columns` | Table columns: `{"type":"IPAddress","role":""}`, `{"type":"Organization","role":"controller"}` |
 | `hops` | Route hops: `{"direction","label","relation_type","destination_type"}`, up to 3 |

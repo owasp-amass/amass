@@ -37,9 +37,29 @@ func TestAskServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors} {
+	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors, lens.LensNetwork} {
 		if !strings.Contains(string(raw), `"`+kind+`"`) {
 			t.Errorf("the goal schema does not offer the %s answer", kind)
 		}
+	}
+}
+
+// A question about network infrastructure is planned as the network answer
+// and answered by the lens.
+func TestAskNetwork(t *testing.T) {
+	g := aitest.VendorFixture()
+	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
+		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"network","columns":[]}`
+	model := &plannerModel{replies: []string{reply}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}
+
+	res, err := agent.AskAdaptive(context.Background(), "Which IP ranges belong to colgate.edu?", AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NetworkReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "149.43.0.0/16") ||
+		!strings.Contains(res.Answer, "FASTLY") {
+		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 }

@@ -63,6 +63,7 @@ meaning rather than by wording rules:
 | `family` | FQDN | organization family lens (`amass lens family`) |
 | `org_group` | Organization or FQDN | corporate group lens (`amass lens org-group`) |
 | `services` | Organization or FQDN | services lens (`amass lens services`): services, identified software, certificates |
+| `network` | Organization or FQDN | network lens (`amass lens network`): netblocks, autonomous systems, hosting, unused space |
 | `group_vendors` | Organization or FQDN | vendors across the corporate group (`amass lens group-vendors`) |
 
 `validateAnswer` rejects a kind that does not fit the subject, targets or

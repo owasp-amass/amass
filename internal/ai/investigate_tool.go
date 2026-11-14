@@ -331,6 +331,10 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 	if r := inv.GroupVendorReport; r != nil {
 		out["group_vendors"], out["group_internal"] = r.Vendors, r.Internal
 	}
+	if r := inv.NetworkReport; r != nil {
+		out["networks"], out["autonomous_systems"], out["hosting"] = r.Networks, r.ASNs, r.Hosting
+		out["unused_networks"], out["unresolved_names"] = r.Unused, r.Unresolved
+	}
 	if r := inv.TableReport; r != nil {
 		rows := r.Rows
 		if len(rows) > investigateMaxRows {

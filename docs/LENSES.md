@@ -18,6 +18,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
 | `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
+| `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, and address space none of its names use |
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
@@ -173,6 +174,27 @@ never sends a command or credential. Its ports and greeting patterns, each citin
 protocol's RFC, are in
 `engine/plugins/service_discovery/banner_probes/protocols.json`. The header names, expected
 ports and warning period are in `internal/ai/semantics/services.json`.
+
+## Network infrastructure
+
+```bash
+amass lens network -d colgate.edu
+amass lens network -org "Colgate University"
+```
+
+Shows the address space of what the domain or organization controls (the
+same footprint the vendors lens walks): the netblocks registered to it, by IP
+version, with how many of its names resolve into each, how many of its
+addresses and services are stored inside, and which of its autonomous systems
+announce it; and the autonomous systems registered to it, with any prefixes
+they announce that are not its own (a customer's or a provider's space). It
+then shows where each name that has a stored address is hosted: its own
+networks, or the party holding the provider's netblock or autonomous system,
+with the share of names each hosts. An address with no stored netblock counts
+as its own when it falls inside one of its netblocks' ranges. Finally it lists
+the netblocks registered to it that none of its names resolve into, which are
+worth checking for forgotten or unmonitored space. These come from stored
+registrations (RDAP and WHOIS) and DNS resolutions, not a live scan.
 
 ## Vendors across a corporate group
 
