@@ -331,6 +331,11 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 	if r := inv.GroupVendorReport; r != nil {
 		out["group_vendors"], out["group_internal"] = r.Vendors, r.Internal
 	}
+	if r := inv.ChangesReport; r != nil {
+		out["changes_since"] = r.Since
+		out["new_assets"], out["new_relations"] = r.NewAssets, r.NewRelations
+		out["quiet_assets"], out["quiet_relations"] = r.QuietAssets, r.QuietRelations
+	}
 	if r := inv.DanglingReport; r != nil {
 		out["dangling_dns"] = r.Findings
 	}

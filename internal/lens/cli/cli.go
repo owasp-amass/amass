@@ -28,7 +28,7 @@ import (
 // LensDescription and ReviewDescription describe the amass lens and amass
 // review commands.
 const (
-	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, dangling DNS, duplicates, identities and person-named organizations"
+	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, dangling DNS, recent changes, duplicates, identities and person-named organizations"
 	ReviewDescription = "Review and apply inferred changes: ownership, merges of duplicates, identity corrections"
 )
 
@@ -46,6 +46,7 @@ var lensOps = map[string]string{
 	"services":      "services",
 	"network":       "network",
 	"dangling":      "dangling",
+	"changes":       "changes",
 }
 
 // reviewOps are the amass review commands. Only approve and retract change
@@ -156,7 +157,7 @@ var boolFlags = map[string]bool{"h": true, "help": true}
 func run(group string, _ io.Reader, out, errout io.Writer, args []string) error {
 	fs := flag.NewFlagSet(group, flag.ContinueOnError)
 	fs.SetOutput(errout)
-	var dir, configPath, journalPath, outputFormat, domainName, orgName, proposalID, reviewer string
+	var dir, configPath, journalPath, outputFormat, domainName, orgName, proposalID, reviewer, since string
 	var lensAssets, lensReads int
 	var timeout time.Duration
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
@@ -167,7 +168,9 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	fs.StringVar(&domainName, "domain", "", "Enumerated domain the lens starts from")
 	fs.StringVar(&domainName, "d", "", "Enumerated domain the lens starts from (same as -domain)")
 	fs.StringVar(&orgName, "org", "",
-		"Organization name for the org-group, group-vendors, services, network and dangling lenses (or use -d for a domain)")
+		"Organization name for the org-group, group-vendors, services, network, dangling and changes lenses (or use -d for a domain)")
+	fs.StringVar(&since, "since", "",
+		"Start of the changes lens window: a date (2026-11-01), an RFC 3339 time, or an age such as 7d or 72h (default 30d)")
 	fs.StringVar(&proposalID, "proposal", "", "Proposal ID for approve, reject or retract")
 	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve, reject or retract decision")
 	fs.IntVar(&lensAssets, "max-assets", 0, fmt.Sprintf("Maximum controlled assets a lens follows "+
@@ -274,6 +277,12 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listNetwork(ctx, g, domainName, orgName, limits, format, true, out)
 	case "dangling":
 		return listDangling(ctx, g, domainName, orgName, limits, format, true, out)
+	case "changes":
+		from, err := parseSince(since, time.Now())
+		if err != nil {
+			return err
+		}
+		return listChanges(ctx, g, domainName, orgName, from, limits, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
 	}

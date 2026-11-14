@@ -20,6 +20,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
 | `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, address space none of its names use, and other domains in its space |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
+| `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
@@ -233,6 +234,25 @@ Findings come from stored records, so each is a lead to confirm with a live
 lookup before acting. The claimable services, each citing the provider's
 documentation of the risk, and the periods are in
 `internal/semantics/dangling_dns.json`.
+
+## Changes since a time
+
+```bash
+amass lens changes -d colgate.edu -since 2026-11-01
+amass lens changes -org "Colgate University" -since 7d
+```
+
+Compares what the domain or organization controls with an earlier time,
+using the times every stored asset and relationship was first stored and
+last seen. It lists what was first stored since then, assets by type and
+relationships by purpose (new names, addresses, certificates, hosting and
+DNS providers, registrants), and what later enumerations stopped seeing:
+assets and relationships last seen before the time while the subject itself
+was seen after it. Something quiet was not observed again, which is not
+proof that it was removed. When no enumeration has seen the subject since
+the time, nothing is reported as quiet. `-since` takes a date, an RFC 3339
+time or an age (`7d`, `72h`); without it, and for questions asked in plain
+language, the window is the last 30 days (`internal/semantics/changes.json`).
 
 ## Vendors across a corporate group
 

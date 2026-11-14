@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // The question evaluation set records user questions with what a correct
@@ -171,6 +172,13 @@ func resultLabels(inv Investigation) []string {
 				out = append(out, strings.TrimSpace("runs "+p.Product+" "+p.Version))
 			}
 			out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
+		}
+	}
+	if r := inv.ChangesReport; r != nil {
+		for _, groups := range [][]lens.ChangeGroup{r.NewAssets, r.NewRelations, r.QuietAssets, r.QuietRelations} {
+			for _, g := range groups {
+				out = append(out, g.Examples...)
+			}
 		}
 	}
 	if r := inv.DanglingReport; r != nil {

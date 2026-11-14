@@ -145,10 +145,8 @@ var answerKinds = []AnswerKind{
 	},
 	{
 		Name: lens.LensNetwork,
-		Description: "Show the network infrastructure of what a domain or organization controls: the netblocks " +
-			"and autonomous systems registered to it, where each of its names resolves (its own address space or " +
-			"a hosting provider's), what is stored inside its own space, and netblocks none of its names use. " +
-			"From stored registrations and resolutions, not a live scan. Read-only; nothing is written.",
+		Description: "Show the network infrastructure of what a domain or organization controls: its netblocks and " +
+			"autonomous systems, where its names are hosted, unused space, other domains in its space. Read-only",
 		Subjects: []string{"Organization", "FQDN"},
 		Targets:  "[]",
 		Examples: []string{
@@ -158,12 +156,21 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
+		Name: lens.LensChanges,
+		Description: "Show what changed recently in what a domain or organization controls: records first stored in the last " +
+			"30 days, and records later enumerations stopped seeing. Read-only",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"What changed recently for <domain>?",
+			"What new assets does <organization> have this month?",
+			"Which of <domain>'s records disappeared lately?",
+		},
+	},
+	{
 		Name: lens.LensDangling,
-		Description: "Find the DNS records of what a domain or organization controls that may point at something " +
-			"it no longer holds: aliases (CNAMEs) to names with no stored address, especially on cloud services " +
-			"where anyone can claim the name (subdomain takeover), aliases and name servers in domains whose " +
-			"registration expired or expires soon, alias loops, and address records not seen again. From stored " +
-			"records, not a live lookup. Read-only; nothing is written.",
+		Description: "Find DNS records of what a domain or organization controls that may point at something it no longer " +
+			"holds: aliases to deleted cloud resources (subdomain takeover), lapsed domains, stale addresses. Read-only",
 		Subjects: []string{"Organization", "FQDN"},
 		Targets:  "[]",
 		Examples: []string{
@@ -276,7 +283,7 @@ func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 				strings.Join(lens.OwnedTypes(schema), ", "), AnswerPaths)
 		}
 	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork, lens.LensDangling:
+		lens.LensNetwork, lens.LensDangling, lens.LensChanges:
 		if graph.MeaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -319,7 +326,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.
 	case lens.LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 	case lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork, lens.LensDangling:
+		lens.LensNetwork, lens.LensDangling, lens.LensChanges:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
 	case lens.LensTable:
@@ -550,7 +557,7 @@ func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaC
 	case lens.LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
 	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork, lens.LensDangling:
+		lens.LensNetwork, lens.LensDangling, lens.LensChanges:
 		props["target_types"] = none
 	case lens.LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)

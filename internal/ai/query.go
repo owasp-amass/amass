@@ -126,6 +126,8 @@ func (q Query) Describe() string {
 		return fmt.Sprintf("Show the corporate group (ultimate parent, subsidiaries and units) of %s.", subject)
 	case lens.LensServices:
 		return fmt.Sprintf("List the services, software and certificates stored for what %s controls.", subject)
+	case lens.LensChanges:
+		return fmt.Sprintf("Show what changed recently in what %s controls.", subject)
 	case lens.LensDangling:
 		return fmt.Sprintf("Find the DNS records of what %s controls that may point at something it no longer holds.", subject)
 	case lens.LensNetwork:
@@ -258,7 +260,7 @@ func ValidateQuery(q Query, catalog []graph.RelationshipSchema, selectors []grap
 	switch q.Lens {
 	case "":
 	case lens.LensThirdParty, lens.LensControlled, lens.LensTable, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices,
-		lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling:
+		lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling, lens.LensChanges:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}

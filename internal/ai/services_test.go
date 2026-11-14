@@ -37,7 +37,7 @@ func TestAskServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling} {
+	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling, lens.LensChanges} {
 		if !strings.Contains(string(raw), `"`+kind+`"`) {
 			t.Errorf("the goal schema does not offer the %s answer", kind)
 		}
@@ -79,6 +79,25 @@ func TestAskDanglingDNS(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.DanglingReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "Dangling DNS of colgate.edu") {
+		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
+	}
+}
+
+// A question about recent changes is planned as the changes answer and
+// answered by the lens over the default window.
+func TestAskChanges(t *testing.T) {
+	g := graphtest.VendorFixture()
+	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
+		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"changes","columns":[]}`
+	model := &plannerModel{replies: []string{reply}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}
+
+	res, err := agent.AskAdaptive(context.Background(), "What changed recently for colgate.edu?", AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ChangesReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "Changes to colgate.edu and Colgate University since") {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 }

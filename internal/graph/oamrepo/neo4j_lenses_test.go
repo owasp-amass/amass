@@ -41,6 +41,7 @@ func TestLensesOnNeo4j(t *testing.T) {
 		{"services", checkServices},
 		{"network", checkNetworkInfrastructure},
 		{"dangling DNS", checkDanglingDNS},
+		{"changes", checkChanges},
 		{"person-named removal", checkPersonNamedRemoval},
 		{"duplicates", findGlobalSignDuplicates},
 		{"identity", identityConflicts},

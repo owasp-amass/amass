@@ -1,0 +1,6 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the changes lens compares a footprint with an earlier time. Every stored asset and relation records when it was first stored and last seen; what was first stored after the time appeared since, and what was not seen again after it, while the subject itself was, has gone quiet. default_window_days is the period a question without a time covers; examples is how many examples each group lists. Add values here, not in Go code.",
+  "default_window_days": 30,
+  "examples": 3
+}

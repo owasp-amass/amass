@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLensAndReviewCommands(t *testing.T) {
@@ -39,7 +40,7 @@ func TestLensAndReviewCommands(t *testing.T) {
 		t.Errorf("flags first: %q", out.String())
 	}
 
-	if err := RunLens(nil, &out, &errout, nil); err == nil || !strings.Contains(err.Error(), "dangling|duplicates|family|group-vendors|identity|network|org-group|person-named|services|vendors") {
+	if err := RunLens(nil, &out, &errout, nil); err == nil || !strings.Contains(err.Error(), "changes|dangling|duplicates|family|group-vendors|identity|network|org-group|person-named|services|vendors") {
 		t.Errorf("lens without a name: %v", err)
 	}
 	if err := RunLens(nil, &out, &errout, []string{"ask"}); err == nil {
@@ -47,5 +48,24 @@ func TestLensAndReviewCommands(t *testing.T) {
 	}
 	if err := RunReview(nil, &out, &errout, []string{"family"}); err == nil {
 		t.Error("amass review ran a lens")
+	}
+}
+
+func TestParseSince(t *testing.T) {
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	for in, want := range map[string]time.Time{
+		"":                     {},
+		"2026-11-01":           time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+		"2026-11-01T08:00:00Z": time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC),
+		"7d":                   now.AddDate(0, 0, -7),
+		"72h":                  now.Add(-72 * time.Hour),
+	} {
+		got, err := parseSince(in, now)
+		if err != nil || !got.Equal(want) {
+			t.Errorf("parseSince(%q) = %s, %v; want %s", in, got, err, want)
+		}
+	}
+	if _, err := parseSince("last week", now); err == nil {
+		t.Error("an unreadable -since was accepted")
 	}
 }
