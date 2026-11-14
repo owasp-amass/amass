@@ -16,7 +16,11 @@
   ],
   "expected_ports": {
     "web-service": [80, 443, 8080, 8443],
-    "ssh": [22]
+    "ssh": [22],
+    "smtp": [25, 465, 587],
+    "ftp": [21],
+    "pop3": [110, 995],
+    "imap": [143, 993]
   },
   "certificate_warning_days": 30
 }

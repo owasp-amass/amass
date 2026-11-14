@@ -25,6 +25,21 @@
       "source": "https://expressjs.com/en/advanced/best-practice-security.html"},
     {"product": "OpenSSH", "vendor": "OpenBSD Project", "banner": true, "service_types": ["ssh"],
       "pattern": "^SSH-[0-9.]+-OpenSSH_([0-9][0-9A-Za-z.]*)", "version": 1,
-      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/openssh-server/"}
+      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/openssh-server/"},
+    {"product": "Postfix", "vendor": "Postfix project", "banner": true, "service_types": ["smtp"],
+      "pattern": "^220[ -]\\S+ ESMTP Postfix", "version": 0,
+      "source": "https://man.archlinux.org/man/extra/postfix/smtpd.8.en"},
+    {"product": "Exim", "vendor": "Exim project", "banner": true, "service_types": ["smtp"],
+      "pattern": "^220[ -]\\S+ ESMTP Exim ([0-9][0-9.]*)", "version": 1,
+      "source": "https://lists.exim.org/lurker/message/20041222.120546.5dda7cb4.pl.html"},
+    {"product": "Microsoft Exchange Server", "vendor": "Microsoft Corporation", "banner": true,
+      "service_types": ["smtp"], "pattern": "^220[ -]\\S+ Microsoft ESMTP MAIL service ready", "version": 0,
+      "source": "https://learn.microsoft.com/en-us/exchange/mail-flow/connectors/modify-smtp-banners"},
+    {"product": "vsftpd", "vendor": "vsftpd project", "banner": true, "service_types": ["ftp"],
+      "pattern": "^220 \\(vsFTPd ([0-9][0-9.]*)\\)", "version": 1,
+      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/vsftpd/"},
+    {"product": "Dovecot", "vendor": "Open-Xchange", "banner": true, "service_types": ["pop3", "imap"],
+      "pattern": "Dovecot( \\([^)]*\\))? ready", "version": 0,
+      "source": "https://dovecot.org/doc/dovecot-example.conf"}
   ]
 }

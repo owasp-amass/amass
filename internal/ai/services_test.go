@@ -119,6 +119,13 @@ func TestIdentifyProducts(t *testing.T) {
 			"Microsoft IIS 10.0,ASP.NET 4.0.30319"},
 		{svc("web-service", "", map[string]any{"x-powered-by": []any{"PHP/8.2.12"}}), "PHP 8.2.12"},
 		{svc("ssh", "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5\r\n", nil), "OpenSSH 9.6p1"},
+		{svc("smtp", "220 mx.example.com ESMTP Postfix\r\n", nil), "Postfix"},
+		{svc("smtp", "220 mx.example.com ESMTP Exim 4.97 Sat, 14 Nov 2026 00:00:00 +0000", nil), "Exim 4.97"},
+		{svc("smtp", "220 EX01.corp.example Microsoft ESMTP MAIL service ready at Sat, 14 Nov 2026", nil),
+			"Microsoft Exchange Server"},
+		{svc("ftp", "220 (vsFTPd 3.0.5)", nil), "vsftpd 3.0.5"},
+		{svc("imap", "* OK [CAPABILITY IMAP4rev1 LITERAL+] Dovecot (Ubuntu) ready.", nil), "Dovecot"},
+		{svc("pop3", "+OK Dovecot ready.", nil), "Dovecot"},
 		// A banner fingerprint reads only its service types.
 		{svc("web-service", "SSH-2.0-OpenSSH_9.6p1", nil), ""},
 		{svc("web-service", "", map[string]any{"Server": []any{"cloudflare"}}), ""},

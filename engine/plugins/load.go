@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
+	bannerp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/banner_probes"
 	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	hp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/http_probes"
 	sshp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/ssh_probes"
@@ -55,6 +56,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
 	sshp.NewSSHProbing,
+	bannerp.NewBannerProbing,
 	rdap.NewRDAP,
 	scrape.NewBing,
 	scrape.NewDNSHistory,

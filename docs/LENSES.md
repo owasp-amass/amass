@@ -156,15 +156,20 @@ organization controls (the same footprint the vendors lens walks): where each
 listens, its type, the software its response headers name (such as
 `server: nginx/1.18.0`), the certificates it presented and any products stored
 for it. It also identifies the software a service runs from its stored
-headers and SSH banner (`nginx 1.24.0`, `OpenSSH 9.6p1`) by the fingerprints in
+headers and banners (`nginx 1.24.0`, `OpenSSH 9.6p1`, `Exim 4.97`) by the fingerprints in
 `internal/ai/semantics/product_fingerprints.json`, each citing the
 documentation that describes what the software sends, and counts the services
 per product and version. Identification is computed when asked and never
 written: the header or banner is the evidence, and software can hide or fake
 it. It reports first what stands out: services on ports their type does not
 usually use, and certificates that have expired, expire within 30 days or were
-issued by their own subject. Services are what the HTTP and SSH probes stored
-during past active enumerations, not a live scan. The header names, expected
+issued by their own subject. Services are what the HTTP, SSH and banner probes
+stored during past active enumerations, not a live scan. The Banner-Probes
+engine plugin connects to in-scope addresses on the SMTP, FTP, POP3 and IMAP
+ports and stores the greeting the server sends first; it reads only and never
+sends a command or credential. Its ports and greeting patterns, each citing the
+protocol's RFC, are in
+`engine/plugins/service_discovery/banner_probes/protocols.json`. The header names, expected
 ports and warning period are in `internal/ai/semantics/services.json`.
 
 ## Vendors across a corporate group
