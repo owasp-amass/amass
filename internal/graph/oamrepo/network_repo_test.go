@@ -83,6 +83,10 @@ func checkNetworkInfrastructure(t *testing.T, repo repository.Repository) {
 	f.edge(apex, www, "node", "DNS")
 	f.edge(own, resolve(www, "192.0.2.10"), "contains", "DNS")
 
+	// A partner's name on an address in the university's space.
+	partner := f.asset(&oamdns.FQDN{Name: "portal.partner-co.com"})
+	f.edge(own, resolve(partner, "192.0.2.77"), "contains", "DNS")
+
 	// A name hosted by a provider in the provider's own space.
 	cdnBlock := netblock("198.51.100.0/24")
 	cdnAS, _ := as(64501, "EXAMPLE-CDN")
@@ -117,6 +121,9 @@ func checkNetworkInfrastructure(t *testing.T, repo repository.Repository) {
 	}
 	if len(r.ASNs) != 1 || r.ASNs[0].Number != "AS64500" {
 		t.Errorf("autonomous systems = %+v\n%s", r.ASNs, text)
+	}
+	if len(r.Foreign) != 1 || r.Foreign[0].Domain != "partner-co.com" {
+		t.Errorf("foreign names = %+v\n%s", r.Foreign, text)
 	}
 	hosts := map[string]int{}
 	for _, h := range r.Hosting {

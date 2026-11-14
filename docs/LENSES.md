@@ -18,7 +18,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
 | `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
-| `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, and address space none of its names use |
+| `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, address space none of its names use, and other domains in its space |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
@@ -198,7 +198,11 @@ domain. The record types and chain limit are in
 `internal/semantics/dns.json`. An address with no stored netblock counts
 as its own when it falls inside one of its netblocks' ranges. Finally it lists
 the netblocks registered to it that none of its names resolve into, which are
-worth checking for forgotten or unmonitored space. These come from stored
+worth checking for forgotten or unmonitored space, and the names of other
+domains found on addresses inside its netblocks, by an address or pointer
+record: tenants, partners, or something left behind. Its own names and
+systems are read first; the contents of its netblocks, which can be large,
+take what the read limit leaves. These come from stored
 registrations (RDAP and WHOIS) and DNS resolutions, not a live scan.
 
 ## Dangling DNS

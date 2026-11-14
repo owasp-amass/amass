@@ -337,6 +337,7 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 	if r := inv.NetworkReport; r != nil {
 		out["networks"], out["autonomous_systems"], out["hosting"] = r.Networks, r.ASNs, r.Hosting
 		out["unused_networks"], out["unresolved_names"] = r.Unused, r.Unresolved
+		out["foreign_names"] = r.Foreign
 	}
 	if r := inv.TableReport; r != nil {
 		rows := r.Rows

@@ -58,6 +58,17 @@ func networkFixture() graphtest.VendorGraph {
 	link("as-aws", "announces", "nb-aws")
 	link("as-aws", "registration", "autnum-aws")
 
+	// A partner's name on an address in the university's space, by an
+	// address record and by a pointer record.
+	add("ip-tenant", "IPAddress", "149.43.5.5", map[string]any{"address": "149.43.5.5"})
+	link("nb-own", "contains", "ip-tenant")
+	for _, n := range []string{"portal.partner-co.com", "mail.partner-co.com"} {
+		add(n, "FQDN", n, map[string]any{"name": n})
+	}
+	g.Links = append(g.Links, graph.Relation{ID: "tenant-a", FromID: "portal.partner-co.com", ToID: "ip-tenant",
+		Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+	link("ip-tenant", "ptr_record", "mail.partner-co.com")
+
 	add("nb-spare", "Netblock", "2620:0:2810::/48", map[string]any{"cidr": "2620:0:2810::/48"})
 	add("ipnet-spare", "IPNetRecord", "2620:0:2810::/48", map[string]any{"name": "COLGATE-V6"})
 	link("nb-spare", "registration", "ipnet-spare")
@@ -73,8 +84,12 @@ func TestFindNetworkInfrastructure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(r.Networks) != 2 || r.Networks[0].CIDR != "149.43.0.0/16" || r.Networks[0].Names != 2 ||
-		r.Networks[0].Addresses != 1 || strings.Join(r.Networks[0].Announced, ",") != "AS1289" {
+		r.Networks[0].Addresses != 2 || strings.Join(r.Networks[0].Announced, ",") != "AS1289" {
 		t.Fatalf("networks = %+v", r.Networks)
+	}
+	if len(r.Foreign) != 1 || r.Foreign[0].Domain != "partner-co.com" || r.Foreign[0].Names != 2 ||
+		strings.Join(r.Foreign[0].Addresses, ",") != "149.43.5.5" {
+		t.Errorf("foreign names = %+v", r.Foreign)
 	}
 	if strings.Join(r.Unused, ",") != "2620:0:2810::/48" || r.Networks[1].Version != 6 {
 		t.Errorf("unused = %v, networks = %+v", r.Unused, r.Networks)
@@ -114,7 +129,7 @@ func TestFindNetworkInfrastructure(t *testing.T) {
 	text := FormatNetworkReport(r)
 	for _, want := range []string{"1 IPv4 and 1 IPv6 netblock(s)", "announced by AS1289",
 		"its own networks: 2 (40%)", "FASTLY: 1 (20%)", "(2 through an alias)", "none of its names use (1): 2620:0:2810::/48",
-		"Names with no stored address: 1"} {
+		"Names with no stored address: 1", "partner-co.com: 2 name(s) on 149.43.5.5"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("report lacks %q:\n%s", want, text)
 		}

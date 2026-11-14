@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 
@@ -47,6 +48,15 @@ type OwnAS struct {
 	Foreign   []string `json:"foreign,omitempty"`
 }
 
+// ForeignNames are the names of another domain found on addresses in the
+// subject's own netblocks: a tenant, a partner or something left behind.
+type ForeignNames struct {
+	Domain    string   `json:"domain"`
+	Names     int      `json:"names"`
+	Addresses []string `json:"addresses"`
+	Examples  []string `json:"examples"`
+}
+
 // HostingShare is where some of the subject's names resolve.
 type HostingShare struct {
 	Party    string   `json:"party"`
@@ -73,10 +83,13 @@ type NetworkReport struct {
 	Unresolved int `json:"unresolved"`
 	// Unused are the subject's netblocks no name of the subject resolves
 	// into.
-	Unused    []string `json:"unused,omitempty"`
-	Reads     int      `json:"reads"`
-	Truncated bool     `json:"truncated"`
-	Reason    string   `json:"reason,omitempty"`
+	Unused []string `json:"unused,omitempty"`
+	// Foreign are other domains' names on addresses in the subject's
+	// netblocks, by an address record or a pointer record.
+	Foreign   []ForeignNames `json:"foreign,omitempty"`
+	Reads     int            `json:"reads"`
+	Truncated bool           `json:"truncated"`
+	Reason    string         `json:"reason,omitempty"`
 }
 
 // netHostingExamples bounds the example names per hosting party.
@@ -139,27 +152,33 @@ func FindNetworkInfrastructure(ctx context.Context, g graph.Graph, schema graph.
 		}
 	}
 
-	for _, id := range order {
-		if err := ctx.Err(); err != nil {
-			return out, err
-		}
-		if report.Reads >= w.maxReads {
-			w.truncate("database read limit")
-			break
-		}
+	// The subject's own names and systems come first; the contents of its
+	// netblocks, which can be large, take what the read budget leaves.
+	for pass := 0; pass < 2; pass++ {
+		for _, id := range order {
+			if err := ctx.Err(); err != nil {
+				return out, err
+			}
+			if report.Reads >= w.maxReads {
+				w.truncate("database read limit")
+				break
+			}
 
-		a := owned[id]
-		var err error
-		switch a.Type {
-		case "FQDN":
-			err = n.resolve(a, &out)
-		case "IPAddress":
-			err = n.inside(a)
-		case "AutonomousSystem":
-			err = n.autonomousSystem(a, &out)
-		}
-		if err != nil {
-			return out, err
+			a := owned[id]
+			var err error
+			switch {
+			case pass == 0 && a.Type == "FQDN":
+				err = n.resolve(a, &out)
+			case pass == 0 && a.Type == "IPAddress":
+				err = n.inside(a)
+			case pass == 0 && a.Type == "AutonomousSystem":
+				err = n.autonomousSystem(a, &out)
+			case pass == 1 && a.Type == "Netblock":
+				err = n.contents(a)
+			}
+			if err != nil {
+				return out, err
+			}
 		}
 	}
 
@@ -178,6 +197,17 @@ func FindNetworkInfrastructure(ctx context.Context, g graph.Graph, schema graph.
 		return a.CIDR < b.CIDR
 	})
 	sort.Strings(out.Unused)
+	for _, f := range n.foreign {
+		sort.Strings(f.Addresses)
+		out.Foreign = append(out.Foreign, *f)
+	}
+	sort.Slice(out.Foreign, func(i, j int) bool {
+		a, b := out.Foreign[i], out.Foreign[j]
+		if a.Names != b.Names {
+			return a.Names > b.Names
+		}
+		return a.Domain < b.Domain
+	})
 	for _, h := range n.hosting {
 		sort.Strings(h.Networks)
 		out.Hosting = append(out.Hosting, *h)
@@ -210,6 +240,11 @@ type networkScan struct {
 	blockParty map[string]*HostingShare
 	// hosted marks each party and name counted in hosting.
 	hosted map[string]bool
+	// counted marks the addresses counted in a netblock.
+	counted map[string]bool
+	// foreign collects other domains' names on the subject's addresses.
+	foreign     map[string]*ForeignNames
+	foreignSeen map[string]bool
 }
 
 func (n *networkScan) addNetwork(a graph.Asset) {
@@ -371,30 +406,115 @@ func (n *networkScan) share(party, id string, own bool, cidr string, name graph.
 	}
 }
 
-// inside counts an address stored in one of the subject's netblocks and
-// the services stored on it.
+// contents counts the addresses stored inside one of the subject's
+// netblocks, whoever's names they carry.
+func (n *networkScan) contents(block graph.Asset) error {
+	net, ok := n.nets[block.ID]
+	if !ok {
+		return nil
+	}
+	steps, err := n.w.steps(block)
+	if err != nil {
+		return err
+	}
+
+	dns := loadDNSRules()
+	for _, s := range steps {
+		if s.forward && slices.Contains(dns.AddressTypes, s.other.Type) {
+			if err := n.address(s.other, net); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// inside counts an address of the footprint in one of the subject's
+// netblocks, when the netblock does not list it.
 func (n *networkScan) inside(ip graph.Asset) error {
+	if n.counted[ip.ID] {
+		return nil
+	}
 	steps, err := n.w.steps(ip)
 	if err != nil {
 		return err
 	}
 
 	var block graph.Asset
-	services := 0
 	for _, s := range steps {
-		switch {
-		case !s.forward && s.other.Type == "Netblock":
+		if !s.forward && s.other.Type == "Netblock" {
 			block = s.other
-		case s.forward && s.other.Type == "Service":
-			services++
 		}
 	}
 	if net := n.ownNetwork(ip, block); net != nil {
-		net.Addresses++
-		net.Services += services
+		return n.address(ip, net)
 	}
 
 	return nil
+}
+
+// address counts an address in net, the services stored on it and the
+// names of other domains it carries.
+func (n *networkScan) address(ip graph.Asset, net *OwnNetwork) error {
+	if n.counted == nil {
+		n.counted = map[string]bool{}
+	}
+	if n.counted[ip.ID] {
+		return nil
+	}
+	n.counted[ip.ID] = true
+
+	steps, err := n.w.steps(ip)
+	if err != nil {
+		return err
+	}
+
+	dns := loadDNSRules()
+	net.Addresses++
+	for _, s := range steps {
+		switch {
+		case s.forward && s.other.Type == "Service":
+			net.Services++
+		case s.purpose == dns.DNSPurpose && s.other.Type == "FQDN":
+			// An address record names it from the name's side; a pointer
+			// record from the address's side.
+			n.foreignName(ip, s.other)
+		}
+	}
+
+	return nil
+}
+
+// foreignName records name when it belongs to another domain than the
+// subject's.
+func (n *networkScan) foreignName(ip, name graph.Asset) {
+	host := graph.FQDNName(name)
+	domain := graph.RegisteredDomain(host)
+	if domain == "" || n.d.ownDomains[domain] || reverseZone(domain) || reservedName(host) {
+		return
+	}
+	if _, mine := n.owned[name.ID]; mine {
+		return
+	}
+	if n.foreign == nil {
+		n.foreign, n.foreignSeen = map[string]*ForeignNames{}, map[string]bool{}
+	}
+	f, ok := n.foreign[domain]
+	if !ok {
+		f = &ForeignNames{Domain: domain}
+		n.foreign[domain] = f
+	}
+	if len(f.Addresses) < netHostingExamples {
+		graph.AddUnique(&f.Addresses, graph.ContentString(ip, "address"))
+	}
+	if !n.foreignSeen[name.ID] {
+		n.foreignSeen[name.ID] = true
+		f.Names++
+		if len(f.Examples) < netHostingExamples {
+			graph.AddUnique(&f.Examples, host)
+		}
+	}
 }
 
 // autonomousSystem records an AS the subject holds and the prefixes it
@@ -502,6 +622,15 @@ func FormatNetworkReport(r NetworkReport) string {
 	if len(r.Unused) > 0 {
 		fmt.Fprintf(&b, "\nNetblocks registered to it that none of its names use (%d): %s\n", len(r.Unused),
 			strings.Join(r.Unused, ", "))
+	}
+
+	if len(r.Foreign) > 0 {
+		fmt.Fprintf(&b, "\nNames of %d other domain(s) on addresses in its netblocks (tenants, partners or "+
+			"leftovers):\n", len(r.Foreign))
+		for _, f := range r.Foreign {
+			fmt.Fprintf(&b, "  %s: %d name(s) on %s, e.g. %s\n", f.Domain, f.Names, strings.Join(f.Addresses, ", "),
+				strings.Join(f.Examples, ", "))
+		}
 	}
 
 	b.WriteString("These are stored registrations and resolutions, not a live scan.")
