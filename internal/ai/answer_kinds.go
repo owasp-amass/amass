@@ -611,6 +611,20 @@ func lensKind(name string) string {
 	return name
 }
 
+// SubjectAnswerKinds returns the answer kinds answered from a subject alone,
+// with no target types: what an assistant can ask about a domain or an
+// organization by name.
+func SubjectAnswerKinds() []AnswerKind {
+	var out []AnswerKind
+	for _, k := range answerKinds {
+		if k.Targets == "[]" {
+			out = append(out, k)
+		}
+	}
+
+	return out
+}
+
 // The registered subject lenses are answer kinds too.
 func init() {
 	for _, l := range lens.SubjectLenses() {

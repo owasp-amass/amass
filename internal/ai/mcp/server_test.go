@@ -101,3 +101,33 @@ func TestMCPToolErrorsAreResults(t *testing.T) {
 		t.Fatalf("tool error not returned as a result: %s", out)
 	}
 }
+
+// With a catalog, the server offers instructions and a prompt per answer
+// kind that needs only a subject, which tells the assistant how to call
+// investigate.
+func TestMCPPrompts(t *testing.T) {
+	server := Server{Runner: ai.ToolRunner{Limits: graph.DefaultLimits(), Catalog: nodeCatalog{}}}
+	out := exchange(t, server, initRequest, initializedNote,
+		`{"jsonrpc":"2.0","id":2,"method":"prompts/list"}`,
+		`{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{"name":"amass_exposure",`+
+			`"arguments":{"subject":"Example.COM"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"amass_attack_surface_overview",`+
+			`"arguments":{"subject":"Example University"}}}`,
+		`{"jsonrpc":"2.0","id":5,"method":"prompts/get","params":{"name":"amass_exposure","arguments":{}}}`)
+	for _, want := range []string{
+		`"instructions":"Amass MCP server`,
+		`"name":"amass_exposure"`, `"name":"amass_family"`, `"name":"amass_attack_surface_overview"`,
+		`{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"example.com\"}`,
+		`answer: \"exposure\"`,
+		`{\"type\":\"Organization\",\"name\":\"Example University\"}`,
+		`answer: \"third_party\"`, `answer: \"dangling_dns\"`,
+		"subject argument",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %s:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, `"name":"amass_table"`) {
+		t.Error("a kind that needs target types was offered as a prompt")
+	}
+}

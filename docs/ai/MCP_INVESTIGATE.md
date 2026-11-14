@@ -47,6 +47,23 @@ items. The last 64 investigations are kept in memory.
 The client writes its summary citing `[E#]` items and calls
 `verify_citations` before presenting it.
 
+## Instructions and prompts
+
+At connection both servers send instructions that tell the assistant what
+the database holds, to prefer `investigate`, to cite evidence and verify its
+prose, and that nothing is written or collected. With the catalog loaded
+they also offer one prompt per answer kind answered from a subject alone
+(`amass_exposure`, `amass_email`, `amass_family`, ...; generated from the
+answer-kind registry, so a new subject lens gets a prompt), and
+`amass_attack_surface_overview`, which asks for several kinds at once.
+Each takes one `subject` argument, a domain or an organization's name, and
+expands into the investigate calls to make. Clients that show MCP prompts
+as commands (Claude Code, VS Code, Gemini CLI and others) list them by
+name.
+
+Connecting an assistant to the Compose environment is covered by
+`scripts/ai-connect.sh` in amass-docker-compose (see its `AI.md`).
+
 ## Transport
 
 Both servers use the official MCP Go SDK

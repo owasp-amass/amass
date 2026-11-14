@@ -120,8 +120,8 @@ bidirectional search and a query-plan cost estimator.
   multi-process writers and tamper-evident review history.
 - Add actual event-to-candidate queue integration with idempotent work keys,
   backpressure, retries, and deadlines outside the collection hot path.
-- Test the MCP server against current MCP inspectors/clients; the current
-  implementation supports the 2025-11-25 legacy stdio flow, not 2026-07-28.
+- Test the MCP server against current MCP clients. The MCP Go SDK
+  (v1.7.0) negotiates protocol versions up to 2026-07-28.
 
 ## Evaluation
 

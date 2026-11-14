@@ -86,7 +86,7 @@ func (nopWriteCloser) Close() error { return nil }
 // tools and the investigation tools.
 func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
-		&mcp.ServerOptions{GetSessionID: newSessionID})
+		&mcp.ServerOptions{GetSessionID: newSessionID, Instructions: serverInstructions})
 	for _, spec := range toolSpecs(runner) {
 		name := spec.Name
 		server.AddTool(&mcp.Tool{Name: name, Description: spec.Description, InputSchema: spec.Parameters},
@@ -113,6 +113,10 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 			})
 	}
 
+	if runner.Catalog != nil {
+		// The prompts ask for the investigate tool, which needs the catalog.
+		addPrompts(server)
+	}
 	return server
 }
 
