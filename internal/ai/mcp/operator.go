@@ -77,8 +77,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 	mode := map[string]any{"type": "string", "enum": []string{string(collect.Passive), string(collect.Active)},
 		"description": "passive (default) queries data sources only; active also probes the target's hosts"}
 	obj := func(required []string, props map[string]any) map[string]any {
-		return map[string]any{"type": "object", "properties": props, "required": required,
-			"additionalProperties": false}
+		schema := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+		if len(required) > 0 {
+			// Clients reject a null required list.
+			schema["required"] = required
+		}
+		return schema
 	}
 
 	add := func(name, title, desc string, schema map[string]any, ann *mcp.ToolAnnotations,

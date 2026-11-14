@@ -194,6 +194,28 @@ func TestOperatorToolsNeedTheOperatorToken(t *testing.T) {
 	}
 }
 
+// Every tool's input schema is one strict clients accept: an object whose
+// required list, when present, is an array.
+func TestToolSchemasAreValid(t *testing.T) {
+	fx := newOperatorFixture(t)
+	res, err := connect(t, fx.url, operatorToken, nil).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		data, _ := json.Marshal(tool.InputSchema)
+		var schema map[string]any
+		if err := json.Unmarshal(data, &schema); err != nil || schema["type"] != "object" {
+			t.Errorf("%s schema = %s", tool.Name, data)
+		}
+		if req, ok := schema["required"]; ok {
+			if _, isArray := req.([]any); !isArray {
+				t.Errorf("%s required = %v", tool.Name, req)
+			}
+		}
+	}
+}
+
 func TestStartEnumerationAsksTheUser(t *testing.T) {
 	fx := newOperatorFixture(t)
 	var asked []string
