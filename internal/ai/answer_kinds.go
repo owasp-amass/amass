@@ -228,8 +228,10 @@ func answerKindNames() []string {
 	return names
 }
 
-// answerKindCatalog renders the answer kinds for the planner prompt.
-func answerKindCatalog(owned []string) string {
+// answerKindCatalog renders the answer kinds for the planner prompt. A
+// sliced prompt leaves out the examples: the catalog is in every prompt, so
+// it grows with every lens.
+func answerKindCatalog(owned []string, sliced bool) string {
 	var b strings.Builder
 	for _, k := range answerKinds {
 		subjects := "any subject type"
@@ -241,7 +243,7 @@ func answerKindCatalog(owned []string) string {
 		if k.OwnedTargets && len(owned) > 0 {
 			fmt.Fprintf(&b, " Types an owner can control: %s.", strings.Join(owned, ", "))
 		}
-		if len(k.Examples) > 0 {
+		if len(k.Examples) > 0 && !sliced {
 			fmt.Fprintf(&b, " Examples: %s", strings.Join(k.Examples, " | "))
 		}
 
@@ -268,7 +270,7 @@ func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 		return fmt.Errorf("answer %q needs a %s subject, not %s", k.Name, strings.Join(k.Subjects, " or "),
 			goal.Subject.Type)
 	}
-	switch k.Name {
+	switch lensKind(k.Name) {
 	case AnswerHierarchy:
 		if len(goal.TargetTypes) > 1 || (len(goal.TargetTypes) == 1 && goal.TargetTypes[0] != "FQDN") {
 			return fmt.Errorf("answer %q lists FQDNs; use target_types [\"FQDN\"]", k.Name)
@@ -282,8 +284,7 @@ func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
 				strings.Join(lens.OwnedTypes(schema), ", "), AnswerPaths)
 		}
-	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork, lens.LensDangling, lens.LensChanges:
+	case lens.LensThirdParty, subjectLensKind:
 		if graph.MeaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -316,7 +317,7 @@ func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 // without model path selection.
 func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.SchemaCatalog) Query {
 	q := QueryFromGoal(goal, question, SourceModelGoal)
-	switch goal.Answer {
+	switch lensKind(goal.Answer) {
 	case AnswerHierarchy:
 		hierarchyQuery(&q)
 	case lens.LensControlled:
@@ -325,8 +326,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.
 			Lens: lens.LensControlled, Source: SourceModelGoal}
 	case lens.LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-	case lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork, lens.LensDangling, lens.LensChanges:
+	case subjectLensKind:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
 	case lens.LensTable:
@@ -551,13 +551,12 @@ func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaC
 	}
 
 	owned := lens.OwnedTypes(schema)
-	switch kind.Name {
+	switch lensKind(kind.Name) {
 	case AnswerHierarchy:
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
 	case lens.LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork, lens.LensDangling, lens.LensChanges:
+	case lens.LensThirdParty, subjectLensKind:
 		props["target_types"] = none
 	case lens.LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)
@@ -583,4 +582,42 @@ func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaC
 	out["properties"] = props
 	return llm.JSONSchema{Name: base.Name, Description: base.Description + " Answer kind: " + kind.Name + ".",
 		Schema: out}
+}
+
+// subjectLens lists the lenses answered from their subject alone, with no
+// target types, hops or columns, besides the third-party lens: the ones
+// wired here and every registered lens.SubjectLens.
+var subjectLens = map[string]bool{lens.LensOwnershipGaps: true, LensFamily: true, lens.LensOrgGroup: true,
+	lens.LensServices: true, lens.LensGroupVendors: true, lens.LensNetwork: true, lens.LensDangling: true,
+	lens.LensChanges: true}
+
+// subjectLensKind stands for every subject lens in switches that treat
+// them alike.
+const subjectLensKind = "\x00subject-lens"
+
+func isSubjectLens(name string) bool {
+	if subjectLens[name] {
+		return true
+	}
+	l, ok := lens.SubjectLensNamed(name)
+	return ok && l.Name == name && !l.NeedsOther
+}
+
+// lensKind maps a subject lens to subjectLensKind and leaves any other name.
+func lensKind(name string) string {
+	if isSubjectLens(name) {
+		return subjectLensKind
+	}
+	return name
+}
+
+// The registered subject lenses are answer kinds too.
+func init() {
+	for _, l := range lens.SubjectLenses() {
+		if l.NeedsOther {
+			continue
+		}
+		answerKinds = append(answerKinds, AnswerKind{Name: l.Name, Description: l.Description,
+			Subjects: []string{"Organization", "FQDN"}, Targets: "[]", Examples: l.Examples})
+	}
 }

@@ -1,0 +1,8 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the geography lens places a footprint. location_types are the assets that record a postal location; country_field and city_field name their fields. Its own locations are those of the controlled assets (the organization's addresses, the contacts of its registrations). Where it is hosted comes from the network lens: each hosting party's own stored location, weighted by the names it hosts. Registration addresses say where a party is registered, not where its servers run. Add values here, not in Go code.",
+  "location_types": ["Location"],
+  "country_field": "country",
+  "city_field": "city",
+  "unknown": "unknown"
+}

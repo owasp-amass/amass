@@ -113,6 +113,9 @@ func (q Query) Describe() string {
 	if len(q.TargetTypes) > 0 {
 		targets = strings.Join(q.TargetTypes, ", ")
 	}
+	if l, ok := lens.SubjectLensNamed(q.Lens); ok && l.Name == q.Lens {
+		return fmt.Sprintf("Run the %s lens (amass lens %s) for what %s controls.", l.Name, l.Command, subject)
+	}
 	switch q.Lens {
 	case lens.LensThirdParty:
 		return fmt.Sprintf("List the third-party vendors used by the assets %s controls.", subject)
@@ -257,10 +260,9 @@ func ValidateQuery(q Query, catalog []graph.RelationshipSchema, selectors []grap
 	default:
 		return fmt.Errorf("traversal must be %s, %s or %s", TraversalExplore, TraversalRoute, TraversalHierarchy)
 	}
-	switch q.Lens {
+	switch lensKind(q.Lens) {
 	case "":
-	case lens.LensThirdParty, lens.LensControlled, lens.LensTable, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices,
-		lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling, lens.LensChanges:
+	case lens.LensThirdParty, lens.LensControlled, lens.LensTable, subjectLensKind:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}

@@ -723,6 +723,9 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 	case lens.LensChanges:
 		return a.changesLens(ctx, root, out)
 	}
+	if l, ok := lens.SubjectLensNamed(q.Lens); ok && !l.NeedsOther {
+		return a.reportLens(ctx, l, root, out)
+	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {
 		out.Incomplete = true

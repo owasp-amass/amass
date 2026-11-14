@@ -112,7 +112,7 @@ func InvestigationSpecs(schema graph.SchemaCatalog) []llm.ToolSpec {
 	})
 
 	var kindText strings.Builder
-	for _, line := range strings.Split(strings.TrimSpace(answerKindCatalog(lens.OwnedTypes(schema))), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(answerKindCatalog(lens.OwnedTypes(schema), false)), "\n") {
 		kindText.WriteString(line + "\n")
 	}
 
@@ -330,6 +330,9 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 	}
 	if r := inv.GroupVendorReport; r != nil {
 		out["group_vendors"], out["group_internal"] = r.Vendors, r.Internal
+	}
+	if r := inv.LensReport; r != nil {
+		out["lens_report"] = r
 	}
 	if r := inv.ChangesReport; r != nil {
 		out["changes_since"] = r.Since

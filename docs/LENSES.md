@@ -21,6 +21,14 @@ evidence does and nothing is left behind to clean up.
 | `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, address space none of its names use, and other domains in its space |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
+| `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
+| `amass lens domains -d <domain>` or `-org <name>` | Its registered domains: registrar, expiry, transfer lock, DNSSEC and DNS providers |
+| `amass lens email -d <domain>` or `-org <name>` | Its mail providers and SPF, DMARC and DKIM records, and which domains can be spoofed |
+| `amass lens exposure -d <domain>` or `-org <name>` | What it exposes that deserves attention: remote access, databases, file sharing, management interfaces, login pages |
+| `amass lens concentration -d <domain>` or `-org <name>` | How much it relies on single providers for DNS, registration, certificates, hosting and mail |
+| `amass lens coverage -d <domain>` or `-org <name>` | How complete the stored data is, and what collection would fill each gap |
+| `amass lens geography -d <domain>` or `-org <name>` | The countries of its stored addresses and of the parties hosting its names |
+| `amass lens compare -d <domain>` or `-org <name>`, `-with <domain>` or `-with-org <name>` | What two domains or organizations share: assets and outside parties |
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
@@ -253,6 +261,117 @@ proof that it was removed. When no enumeration has seen the subject since
 the time, nothing is reported as quiet. `-since` takes a date, an RFC 3339
 time or an age (`7d`, `72h`); without it, and for questions asked in plain
 language, the window is the last 30 days (`internal/semantics/changes.json`).
+
+## Certificates
+
+```bash
+amass lens certificates -d colgate.edu
+```
+
+Lists the certificates presented by the services, or covering the names,
+of what the domain or organization controls, and the authorities that
+issued them. It reports first those that expired or expire within 30 days,
+then those signed with a weak algorithm (SHA-1, MD5), issued by their own
+subject, valid longer than the CA/Browser Forum allowed on the day they
+were issued (398 days from September 2020, 200 from March 2026, then 100
+and 47), wildcards and the hosts they cover, and certificates that also
+cover other domains' names. The rules are in
+`internal/semantics/certificates.json`.
+
+## Domain portfolio
+
+```bash
+amass lens domains -org "Colgate University"
+```
+
+Lists the registered domains of what the domain or organization controls,
+each with its registrar, creation and expiry dates, status, DNSSEC and DNS
+providers, with registrars and DNS providers counted. It reports domains
+whose registration expired or expires within 60 days, domains with no
+transfer lock among their EPP or RDAP statuses, domains with no stored
+registration and domains not signed with DNSSEC
+(`internal/semantics/domains.json`).
+
+## Email security
+
+```bash
+amass lens email -d colgate.edu
+```
+
+For each registered domain, shows who handles its mail (MX), its SPF
+policy, its DMARC policy and the DKIM keys stored for it, and reports what
+lets it be spoofed: an SPF record that lets anyone send (`+all`, `?all`), no
+SPF, a softfail (`~all`), no DMARC record, a DMARC policy of `p=none` or one
+applied to part of the mail, and domains with no mail server that do not
+publish `v=spf1 -all` and a DMARC reject policy. A DMARC or DKIM record is
+only stored when the enumeration queried its name, so "no DMARC record
+stored" can mean it was never looked up (`internal/semantics/email.json`).
+
+## Exposure
+
+```bash
+amass lens exposure -d colgate.edu
+```
+
+Groups what the domain or organization exposes into classes that deserve
+attention: remote access and shells (SSH, RDP, Telnet, VNC), databases,
+file sharing, infrastructure management interfaces, login and
+administration pages, services on unusual ports and services with expired
+or self-issued certificates. Each class says why it matters and lists
+examples. The classes, ports and URL patterns are in
+`internal/semantics/exposure.json`.
+
+## Provider concentration
+
+```bash
+amass lens concentration -d colgate.edu
+```
+
+Measures how the domain or organization's DNS providers, registrars,
+certificate authorities, hosting and mail providers are spread, from the
+domains, certificates, network and email lenses. A category whose outside
+providers are one is a single point of failure; one whose largest provider
+serves 80% or more is concentrated. Its own infrastructure is never counted
+as a concern (`internal/semantics/concentration.json`).
+
+## Data coverage
+
+```bash
+amass lens coverage -d colgate.edu
+```
+
+Counts the controlled assets by type and measures what is missing: names
+with no stored address, registered domains with no registration record,
+netblocks with no registration, addresses not placed in a netblock, and
+assets not seen within 30 days of the subject's latest sighting. Each gap
+says what collection would fill it (`internal/semantics/coverage.json`).
+
+## Geography
+
+```bash
+amass lens geography -org "Colgate University"
+```
+
+Shows the countries of the stored addresses of what the domain or
+organization controls (its organizations, the contacts of its
+registrations) and the countries the parties hosting its names are
+registered in, weighted by the names they host. A registration address says
+where a party is registered, not where its servers run
+(`internal/semantics/geography.json`).
+
+## Compare two subjects
+
+```bash
+amass lens compare -d colgate.edu -with hamilton.edu
+amass lens compare -org "Colgate University" -with-org "Hamilton College"
+```
+
+Compares the controlled footprints of two domains or organizations and the
+outside parties each depends on, and reports what they share: the same
+netblocks, certificates, contacts or organizations, and the same vendors.
+Sharing is a lead to a relationship (one organization, an affiliate, a
+common supplier), not proof of one. Plain-language questions cannot name
+two subjects, so this is a command only.
 
 ## Vendors across a corporate group
 

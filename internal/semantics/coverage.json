@@ -1,0 +1,13 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the coverage lens measures what is known about a footprint. It counts the controlled assets by type and checks each kind of gap named in gaps: names with no stored address or alias, registered domains with no stored registration record, netblocks with no registration, addresses not placed in a netblock, and assets not seen within stale_days of the last time the subject was seen. Each gap says what collection would fill it. Add values here, not in Go code.",
+  "stale_days": 30,
+  "registration_purpose": "registration",
+  "gaps": {
+    "names_without_address": "Names were stored without being resolved; an enumeration that resolves DNS (active or passive DNS sources) fills them.",
+    "domains_without_registration": "No RDAP or WHOIS record was stored for these domains; enabling the registration (RDAP/WHOIS) data sources fills them.",
+    "netblocks_without_registration": "No RDAP record names who holds these netblocks; the RDAP data sources fill them.",
+    "addresses_without_netblock": "These addresses were never placed in a netblock or autonomous system; network (ASN/BGP) data sources fill them.",
+    "stale_assets": "These were not seen again by the latest enumeration of the subject; re-enumerating shows whether they are gone."
+  }
+}

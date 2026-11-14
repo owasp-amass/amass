@@ -31,20 +31,22 @@ type Observation struct {
 }
 
 type Investigation struct {
-	Query              *Query                        `json:"query,omitempty"`
-	Usage              *llm.ModelUsage               `json:"model_usage,omitempty"`
-	ThirdParties       []ThirdPartyConnection        `json:"third_parties,omitempty"`
-	ThirdPartyReport   *lens.ThirdPartyReport        `json:"third_party_report,omitempty"`
-	ControlledReport   *lens.ControlledReport        `json:"controlled_report,omitempty"`
-	TableReport        *lens.TableReport             `json:"table_report,omitempty"`
-	GapReport          *lens.OwnershipGapReport      `json:"ownership_gap_report,omitempty"`
-	FamilyReport       *lens.FamilyReport            `json:"family_report,omitempty"`
-	OrgGroupReport     *lens.GroupReport             `json:"org_group_report,omitempty"`
-	ServicesReport     *lens.ServicesReport          `json:"services_report,omitempty"`
-	GroupVendorReport  *lens.GroupVendorReport       `json:"group_vendor_report,omitempty"`
-	NetworkReport      *lens.NetworkReport           `json:"network_report,omitempty"`
-	DanglingReport     *lens.DanglingReport          `json:"dangling_report,omitempty"`
-	ChangesReport      *lens.ChangesReport           `json:"changes_report,omitempty"`
+	Query             *Query                   `json:"query,omitempty"`
+	Usage             *llm.ModelUsage          `json:"model_usage,omitempty"`
+	ThirdParties      []ThirdPartyConnection   `json:"third_parties,omitempty"`
+	ThirdPartyReport  *lens.ThirdPartyReport   `json:"third_party_report,omitempty"`
+	ControlledReport  *lens.ControlledReport   `json:"controlled_report,omitempty"`
+	TableReport       *lens.TableReport        `json:"table_report,omitempty"`
+	GapReport         *lens.OwnershipGapReport `json:"ownership_gap_report,omitempty"`
+	FamilyReport      *lens.FamilyReport       `json:"family_report,omitempty"`
+	OrgGroupReport    *lens.GroupReport        `json:"org_group_report,omitempty"`
+	ServicesReport    *lens.ServicesReport     `json:"services_report,omitempty"`
+	GroupVendorReport *lens.GroupVendorReport  `json:"group_vendor_report,omitempty"`
+	NetworkReport     *lens.NetworkReport      `json:"network_report,omitempty"`
+	DanglingReport    *lens.DanglingReport     `json:"dangling_report,omitempty"`
+	ChangesReport     *lens.ChangesReport      `json:"changes_report,omitempty"`
+	// LensReport is the report of a registered subject lens.
+	LensReport         lens.Report                   `json:"lens_report,omitempty"`
 	Narrative          *Narrative                    `json:"narrative,omitempty"`
 	Goal               *InvestigationGoal            `json:"goal,omitempty"`
 	Search             *GraphSearchResult            `json:"search,omitempty"`

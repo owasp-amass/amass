@@ -49,6 +49,13 @@ var lensOps = map[string]string{
 	"changes":       "changes",
 }
 
+// The registered subject lenses are amass lens commands too.
+func init() {
+	for _, l := range lens.SubjectLenses() {
+		lensOps[l.Command] = l.Command
+	}
+}
+
 // reviewOps are the amass review commands. Only approve and retract change
 // the Asset Database, and only for a proposal a reviewer names.
 var reviewOps = map[string]string{
@@ -158,6 +165,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	fs := flag.NewFlagSet(group, flag.ContinueOnError)
 	fs.SetOutput(errout)
 	var dir, configPath, journalPath, outputFormat, domainName, orgName, proposalID, reviewer, since string
+	var withDomain, withOrg string
 	var lensAssets, lensReads int
 	var timeout time.Duration
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
@@ -168,9 +176,11 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	fs.StringVar(&domainName, "domain", "", "Enumerated domain the lens starts from")
 	fs.StringVar(&domainName, "d", "", "Enumerated domain the lens starts from (same as -domain)")
 	fs.StringVar(&orgName, "org", "",
-		"Organization name for the org-group, group-vendors, services, network, dangling and changes lenses (or use -d for a domain)")
+		"Organization the lens starts from (or use -d for a domain)")
 	fs.StringVar(&since, "since", "",
 		"Start of the changes lens window: a date (2026-11-01), an RFC 3339 time, or an age such as 7d or 72h (default 30d)")
+	fs.StringVar(&withDomain, "with", "", "Second domain for the compare lens")
+	fs.StringVar(&withOrg, "with-org", "", "Second organization for the compare lens")
 	fs.StringVar(&proposalID, "proposal", "", "Proposal ID for approve, reject or retract")
 	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve, reject or retract decision")
 	fs.IntVar(&lensAssets, "max-assets", 0, fmt.Sprintf("Maximum controlled assets a lens follows "+
@@ -285,6 +295,38 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listChanges(ctx, g, domainName, orgName, from, limits, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
+	}
+
+	if l, ok := lens.SubjectLensNamed(operation); ok {
+		root, err := groupRoot(ctx, g, domainName, orgName)
+		if err != nil {
+			return err
+		}
+		opts := lens.Options{Limits: limits}
+		if opts.Since, err = parseSince(since, time.Now()); err != nil {
+			return err
+		}
+		if l.NeedsOther {
+			if withDomain == "" && withOrg == "" {
+				return fmt.Errorf("the %s lens needs a second subject: -with <domain> or -with-org <name>", l.Command)
+			}
+			if opts.Other, err = groupRoot(ctx, g, withDomain, withOrg); err != nil {
+				return err
+			}
+		}
+
+		r, err := l.Find(ctx, g, oamrepo.Catalog{}, root, opts)
+		if err != nil {
+			return err
+		}
+		switch format {
+		case "text":
+			_, err := fmt.Fprint(out, r.Text())
+			return err
+		case "json":
+			return writeJSON(out, r)
+		}
+		return fmt.Errorf("%s format %q: use text or json", l.Command, format)
 	}
 
 	return fmt.Errorf("unknown operation %q", operation)

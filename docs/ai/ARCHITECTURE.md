@@ -26,12 +26,13 @@ A package imports only those above it in its list:
 | `internal/ai/mcp` | The MCP server. |
 | `internal/ai/cli` | `amass ai`, which still runs the lens and review commands by their old names, with a note. |
 
-New work goes in the package its job belongs to: a new lens in
-`internal/lens` with its rules in `internal/semantics` and its command in
-`internal/lens/cli`, a new kind of proposal in `internal/review`, a new
-provider in `internal/ai/llm`, and only the wiring for questions (answer kind,
-`Agent` method) in `internal/ai`. Engine plugins that collect data for the
-lenses stay under `engine/plugins`.
+New work goes in the package its job belongs to. A new lens goes in
+`internal/lens` with its rules in `internal/semantics`; one answered from its
+subject alone is registered in `lens.SubjectLenses`, which makes it an
+`amass lens` command and an answer kind for questions with no other wiring.
+A new kind of proposal goes in `internal/review` and a new model provider in
+`internal/ai/llm`. Engine plugins that collect data for the lenses stay
+under `engine/plugins`.
 
 ## Module integration
 

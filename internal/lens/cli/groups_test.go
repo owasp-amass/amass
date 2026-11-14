@@ -40,8 +40,14 @@ func TestLensAndReviewCommands(t *testing.T) {
 		t.Errorf("flags first: %q", out.String())
 	}
 
-	if err := RunLens(nil, &out, &errout, nil); err == nil || !strings.Contains(err.Error(), "changes|dangling|duplicates|family|group-vendors|identity|network|org-group|person-named|services|vendors") {
-		t.Errorf("lens without a name: %v", err)
+	if err := RunLens(nil, &out, &errout, nil); err == nil {
+		t.Error("amass lens ran without a name")
+	} else {
+		for name := range lensOps {
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("lens usage lacks %s: %v", name, err)
+			}
+		}
 	}
 	if err := RunLens(nil, &out, &errout, []string{"ask"}); err == nil {
 		t.Error("amass lens ran an AI operation")

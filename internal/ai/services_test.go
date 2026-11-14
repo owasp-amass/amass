@@ -101,3 +101,31 @@ func TestAskChanges(t *testing.T) {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 }
+
+// Every registered subject lens is an answer kind the planner can choose,
+// answered through the registry.
+func TestAskRegisteredLenses(t *testing.T) {
+	for _, l := range lens.SubjectLenses() {
+		if l.NeedsOther {
+			if _, ok := answerKind(l.Name); ok {
+				t.Errorf("%s needs a second subject but is an answer kind", l.Name)
+			}
+			continue
+		}
+		g := graphtest.VendorFixture()
+		reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
+			`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"` + l.Name +
+			`","columns":[]}`
+		model := &plannerModel{replies: []string{reply}}
+		agent := Agent{Model: model, Runner: ToolRunner{Graph: g,
+			Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
+
+		res, err := agent.AskAdaptive(context.Background(), "Tell me about colgate.edu's "+l.Name, AdaptiveOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", l.Name, err)
+		}
+		if res.LensReport == nil || model.calls != 1 || res.Answer == "" {
+			t.Errorf("%s: calls %d, answer:\n%s", l.Name, model.calls, res.Answer)
+		}
+	}
+}

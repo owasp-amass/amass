@@ -174,6 +174,9 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
 		}
 	}
+	if r := inv.LensReport; r != nil {
+		out = append(out, r.Facts()...)
+	}
 	if r := inv.ChangesReport; r != nil {
 		for _, groups := range [][]lens.ChangeGroup{r.NewAssets, r.NewRelations, r.QuietAssets, r.QuietRelations} {
 			for _, g := range groups {

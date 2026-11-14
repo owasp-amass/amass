@@ -1,0 +1,43 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the exposure lens groups what a footprint exposes to the internet. It reads the services the services lens finds and the URLs of the footprint, and puts each in the first class whose ports (the port numbers the IANA registry assigns the protocol), service_types or url_patterns (regular expressions over the URL) match. Each class says why reaching it from the internet matters. Services on unusual ports and certificates that expired or were self-issued are reported from the services lens as well. Add classes and values here, not in Go code.",
+  "port_source": "https://www.iana.org/assignments/service-names-port-numbers",
+  "url_types": ["URL"],
+  "url_field": "url",
+  "classes": [
+    {
+      "name": "remote_access",
+      "title": "Remote access and shells",
+      "ports": [22, 23, 3389, 5900, 5985, 5986],
+      "service_types": ["ssh", "telnet", "rdp", "vnc"],
+      "rationale": "remote logins are the first thing password guessing and exploits target; Telnet sends passwords in the clear"
+    },
+    {
+      "name": "databases",
+      "title": "Databases and data stores",
+      "ports": [1433, 1521, 3306, 5432, 5984, 6379, 9042, 9200, 9300, 11211, 27017],
+      "service_types": ["mysql", "postgresql", "mssql", "redis", "mongodb", "elasticsearch", "memcached"],
+      "rationale": "data stores reachable from the internet are a common source of data exposure"
+    },
+    {
+      "name": "file_sharing",
+      "title": "File sharing and transfer",
+      "ports": [21, 69, 139, 445, 873, 2049],
+      "service_types": ["ftp", "smb", "nfs", "rsync"],
+      "rationale": "file shares and plaintext file transfer leak data and credentials"
+    },
+    {
+      "name": "management",
+      "title": "Infrastructure management interfaces",
+      "ports": [161, 623, 2375, 2379, 6443, 8500, 10250],
+      "service_types": ["snmp", "ipmi"],
+      "rationale": "device, container and cluster management interfaces give control of the systems behind them"
+    },
+    {
+      "name": "login_pages",
+      "title": "Login and administration pages",
+      "url_patterns": ["(?i)/(admin|administrator|wp-admin|wp-login\\.php|phpmyadmin|login|signin|sso|manager/html|console|jenkins|webmail|owa)(/|\\?|$)"],
+      "rationale": "login and administration pages are targeted by credential stuffing and are often left unprotected by mistake"
+    }
+  ]
+}

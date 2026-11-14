@@ -21,6 +21,7 @@ type dnsRules struct {
 	AddressTypes      []string `json:"address_types"`
 	AliasRRTypes      []int    `json:"alias_rr_types"`
 	DelegationRRTypes []int    `json:"delegation_rr_types"`
+	MailRRTypes       []int    `json:"mail_rr_types"`
 	MaxAliasDepth     int      `json:"max_alias_depth"`
 }
 
@@ -108,6 +109,11 @@ func resolveName(w *lensWalker, name graph.Asset) (resolution, error) {
 		out.Aliases = append(out.Aliases, *next)
 		cur = *next
 	}
+}
+
+// mailRR reports whether a relation names a mail server (MX).
+func mailRR(e graph.Relation) bool {
+	return slices.Contains(loadDNSRules().MailRRTypes, relationRRType(e))
 }
 
 // delegationRR reports whether a relation is a delegation record (NS).

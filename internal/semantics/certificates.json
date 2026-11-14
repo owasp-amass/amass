@@ -1,0 +1,25 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the certificates lens reads the certificates of a footprint. A certificate is an asset of certificate_types reached from a controlled asset by a relation whose purpose is certificate_purpose (a service presenting it, a name it covers); certificate authority certificates (ca_field true) are skipped. fields names the content fields read. name_types are the assets a certificate covers. A certificate is reported when it has expired or expires within expiry_warning_days, when it was issued by its own subject, when its signature algorithm is one of weak_signature_algorithms (names as Go's crypto/x509 prints them; SHA-1 and MD5 signatures are no longer accepted by browsers), when its validity is longer than max_validity allows for the date it was issued (the CA/Browser Forum's Baseline Requirements cap it, on a schedule), and, for review, when it is a wildcard or covers names of other domains. Add values here, not in Go code.",
+  "certificate_purpose": "certificate",
+  "certificate_types": ["TLSCertificate"],
+  "name_types": ["FQDN"],
+  "service_types": ["Service"],
+  "fields": {
+    "subject": "subject_common_name",
+    "issuer": "issuer_common_name",
+    "not_before": "not_before",
+    "not_after": "not_after",
+    "signature_algorithm": "signature_algorithm",
+    "ca": "is_ca"
+  },
+  "expiry_warning_days": 30,
+  "weak_signature_algorithms": ["MD2-RSA", "MD5-RSA", "SHA1-RSA", "DSA-SHA1", "ECDSA-SHA1", "SHA1-RSAPSS"],
+  "max_validity": [
+    {"issued_from": "2020-09-01", "days": 398},
+    {"issued_from": "2026-03-15", "days": 200},
+    {"issued_from": "2027-03-15", "days": 100},
+    {"issued_from": "2029-03-15", "days": 47}
+  ],
+  "max_validity_source": "https://www.digicert.com/blog/tls-certificate-lifetimes-will-officially-reduce-to-47-days"
+}
