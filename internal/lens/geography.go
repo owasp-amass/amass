@@ -66,6 +66,8 @@ var loadGeographyRules = sync.OnceValue(func() geographyRules {
 // locations and of the parties hosting its names. It reads only.
 func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 	limits LensLimits) (GeographyReport, error) {
+	// The lenses this one builds on walk the same footprint; read it once.
+	g = graph.Cached(g)
 	var out GeographyReport
 	s, err := newScope(ctx, g, schema, root, limits, "geography")
 	if err != nil {

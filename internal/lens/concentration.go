@@ -86,6 +86,8 @@ var loadConcentrationRules = sync.OnceValue(func() concentrationRules {
 // network and email lenses. It reads only.
 func FindConcentration(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 	limits LensLimits) (ConcentrationReport, error) {
+	// The lenses this one builds on walk the same footprint; read it once.
+	g = graph.Cached(g)
 	var out ConcentrationReport
 	domains, err := FindDomains(ctx, g, schema, root, limits)
 	if err != nil {

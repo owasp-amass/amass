@@ -119,6 +119,8 @@ const exposureExamples = 5
 // certificate problems the services lens reports. It reads only.
 func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 	limits LensLimits) (ExposureReport, error) {
+	// The lenses this one builds on walk the same footprint; read it once.
+	g = graph.Cached(g)
 	var out ExposureReport
 	services, err := FindServices(ctx, g, schema, root, limits)
 	if err != nil {
