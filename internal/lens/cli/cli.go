@@ -28,7 +28,7 @@ import (
 // LensDescription and ReviewDescription describe the amass lens and amass
 // review commands.
 const (
-	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, duplicates, identities and person-named organizations"
+	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, dangling DNS, duplicates, identities and person-named organizations"
 	ReviewDescription = "Review and apply inferred changes: ownership, merges of duplicates, identity corrections"
 )
 
@@ -45,6 +45,7 @@ var lensOps = map[string]string{
 	"vendors":       "vendors",
 	"services":      "services",
 	"network":       "network",
+	"dangling":      "dangling",
 }
 
 // reviewOps are the amass review commands. Only approve and retract change
@@ -166,7 +167,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	fs.StringVar(&domainName, "domain", "", "Enumerated domain the lens starts from")
 	fs.StringVar(&domainName, "d", "", "Enumerated domain the lens starts from (same as -domain)")
 	fs.StringVar(&orgName, "org", "",
-		"Organization name for the org-group, group-vendors, services and network lenses (or use -d for a domain)")
+		"Organization name for the org-group, group-vendors, services, network and dangling lenses (or use -d for a domain)")
 	fs.StringVar(&proposalID, "proposal", "", "Proposal ID for approve, reject or retract")
 	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve, reject or retract decision")
 	fs.IntVar(&lensAssets, "max-assets", 0, fmt.Sprintf("Maximum controlled assets a lens follows "+
@@ -271,6 +272,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listServices(ctx, g, domainName, orgName, limits, format, true, out)
 	case "network":
 		return listNetwork(ctx, g, domainName, orgName, limits, format, true, out)
+	case "dangling":
+		return listDangling(ctx, g, domainName, orgName, limits, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
 	}

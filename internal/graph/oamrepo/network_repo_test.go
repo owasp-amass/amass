@@ -91,6 +91,16 @@ func checkNetworkInfrastructure(t *testing.T, repo repository.Repository) {
 	f.edge(apex, cdn, "node", "DNS")
 	f.edge(cdnBlock, resolve(cdn, "198.51.100.7"), "contains", "DNS")
 
+	// A name hosted by the provider through an alias.
+	assets := f.asset(&oamdns.FQDN{Name: "assets.example.edu"})
+	f.edge(apex, assets, "node", "DNS")
+	edge := f.asset(&oamdns.FQDN{Name: "edge.example-cdn.net"})
+	if _, err := repo.CreateEdge(ctx, &dbt.Edge{FromEntity: assets, ToEntity: edge,
+		Relation: &oamdns.BasicDNSRelation{Name: "dns_record", Header: oamdns.RRHeader{RRType: 5, Class: 1}}}); err != nil {
+		t.Fatal(err)
+	}
+	f.edge(cdnBlock, resolve(edge, "198.51.100.8"), "contains", "DNS")
+
 	adapter := Adapter{Repo: repo}
 	root, err := adapter.GetAsset(ctx, apex.ID)
 	if err != nil {
@@ -112,7 +122,7 @@ func checkNetworkInfrastructure(t *testing.T, repo repository.Repository) {
 	for _, h := range r.Hosting {
 		hosts[h.Party] = h.Names
 	}
-	if r.Resolved != 2 || hosts["own"] != 1 || hosts["EXAMPLE-CDN"] != 1 {
+	if r.Resolved != 3 || r.Aliased != 1 || hosts["own"] != 1 || hosts["EXAMPLE-CDN"] != 2 {
 		t.Errorf("hosting = %+v\n%s", r.Hosting, text)
 	}
 }

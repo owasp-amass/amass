@@ -39,7 +39,7 @@ func TestLensAndReviewCommands(t *testing.T) {
 		t.Errorf("flags first: %q", out.String())
 	}
 
-	if err := RunLens(nil, &out, &errout, nil); err == nil || !strings.Contains(err.Error(), "family|group-vendors|identity|network|org-group|person-named|services|vendors") {
+	if err := RunLens(nil, &out, &errout, nil); err == nil || !strings.Contains(err.Error(), "dangling|duplicates|family|group-vendors|identity|network|org-group|person-named|services|vendors") {
 		t.Errorf("lens without a name: %v", err)
 	}
 	if err := RunLens(nil, &out, &errout, []string{"ask"}); err == nil {

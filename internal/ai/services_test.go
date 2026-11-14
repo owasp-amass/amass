@@ -37,7 +37,7 @@ func TestAskServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors, lens.LensNetwork} {
+	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling} {
 		if !strings.Contains(string(raw), `"`+kind+`"`) {
 			t.Errorf("the goal schema does not offer the %s answer", kind)
 		}
@@ -60,6 +60,25 @@ func TestAskNetwork(t *testing.T) {
 	}
 	if res.NetworkReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "149.43.0.0/16") ||
 		!strings.Contains(res.Answer, "FASTLY") {
+		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
+	}
+}
+
+// A question about dangling DNS is planned as the dangling_dns answer and
+// answered by the lens.
+func TestAskDanglingDNS(t *testing.T) {
+	g := graphtest.VendorFixture()
+	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
+		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"dangling_dns","columns":[]}`
+	model := &plannerModel{replies: []string{reply}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+		Limits: graph.DefaultLimits()}}
+
+	res, err := agent.AskAdaptive(context.Background(), "Could any colgate.edu subdomain be taken over?", AdaptiveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.DanglingReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "Dangling DNS of colgate.edu") {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 }

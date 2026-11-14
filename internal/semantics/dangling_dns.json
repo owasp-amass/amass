@@ -1,0 +1,66 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the dangling DNS lens reads stored records for ones that point at something the subject may no longer hold. A name's alias chain is followed as dns.json says. claimable_services are hosted services whose resource names anyone can claim once the owner deletes the resource, so an alias to a name on one with no stored address is the classic subdomain takeover: each has the patterns (regular expressions over the alias target) that name its resources and a source documenting the risk. delegation_labels are the relations that delegate a domain to name servers besides NS records (a registration record's name servers). A domain whose stored registration record has an expiry field from expiry_fields in the past can be registered by anyone; within expiry_warning_days it is reported as expiring. An address record not seen again within stale_record_days of the last time its name was seen may point at an address since released. Findings are leads to verify with a live lookup, not proof. Add values here, not in Go code.",
+  "registration_purpose": "registration",
+  "expiry_fields": ["expiration_date"],
+  "expiry_warning_days": 30,
+  "delegation_labels": ["name_server"],
+  "stale_record_days": 30,
+  "claimable_services": [
+    {
+      "service": "Azure App Service",
+      "patterns": ["\\.azurewebsites\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure Front Door",
+      "patterns": ["\\.azurefd\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure Blob Storage",
+      "patterns": ["\\.blob\\.core\\.windows\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure CDN",
+      "patterns": ["\\.azureedge\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure public IP address",
+      "patterns": ["\\.cloudapp\\.azure\\.com$", "\\.cloudapp\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure Traffic Manager",
+      "patterns": ["\\.trafficmanager\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure Container Instances",
+      "patterns": ["\\.azurecontainer\\.io$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Azure API Management",
+      "patterns": ["\\.azure-api\\.net$"],
+      "source": "https://learn.microsoft.com/azure/security/fundamentals/subdomain-takeover"
+    },
+    {
+      "service": "Amazon S3 (global bucket namespace)",
+      "patterns": ["\\.s3[.-]([a-z0-9-]+\\.)?amazonaws\\.com$", "\\.s3-website[.-][a-z0-9-]+\\.amazonaws\\.com$"],
+      "source": "https://aws.amazon.com/blogs/security/threat-tactic-spotlight-subdomain-takeover/"
+    },
+    {
+      "service": "AWS Elastic Beanstalk",
+      "patterns": ["\\.elasticbeanstalk\\.com$"],
+      "source": "https://aws.amazon.com/blogs/security/threat-tactic-spotlight-subdomain-takeover/"
+    },
+    {
+      "service": "GitHub Pages",
+      "patterns": ["\\.github\\.io$"],
+      "source": "https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/verifying-your-custom-domain-for-github-pages"
+    }
+  ]
+}

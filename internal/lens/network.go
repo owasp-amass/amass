@@ -65,9 +65,11 @@ type NetworkReport struct {
 	Networks  []OwnNetwork   `json:"networks"`
 	ASNs      []OwnAS        `json:"asns"`
 	Hosting   []HostingShare `json:"hosting"`
-	// Resolved counts the subject's names with a stored address;
-	// Unresolved those without one.
+	// Resolved counts the subject's names with a stored address or an
+	// alias (CNAME) to another name, Aliased those reached through an
+	// alias, and Unresolved those with neither.
 	Resolved   int `json:"resolved"`
+	Aliased    int `json:"aliased"`
 	Unresolved int `json:"unresolved"`
 	// Unused are the subject's netblocks no name of the subject resolves
 	// into.
@@ -206,6 +208,8 @@ type networkScan struct {
 	hosting    map[string]*HostingShare
 	// blockParty caches the party holding a netblock outside the footprint.
 	blockParty map[string]*HostingShare
+	// hosted marks each party and name counted in hosting.
+	hosted map[string]bool
 }
 
 func (n *networkScan) addNetwork(a graph.Asset) {
@@ -245,26 +249,45 @@ func (n *networkScan) ownNetwork(ip, block graph.Asset) *OwnNetwork {
 	return best
 }
 
-// resolve records where a name's stored addresses are: one of the subject's
-// netblocks, or the network of the party holding the address.
+// resolve records where a name is hosted. It follows the name's alias
+// (CNAME) chain to the addresses stored for it; each is in one of the
+// subject's netblocks or the network of the party holding it. An alias to
+// a name with no stored address is hosted by whoever controls the target.
 func (n *networkScan) resolve(name graph.Asset, out *NetworkReport) error {
-	steps, err := n.w.steps(name)
+	res, err := resolveName(n.w, name)
 	if err != nil {
 		return err
 	}
 
-	resolved := false
-	for _, s := range steps {
-		if !s.forward || s.other.Type != "IPAddress" || s.purpose != "dns" {
-			continue
-		}
-		resolved = true
-
-		block, err := n.blockOf(s.other)
+	switch {
+	case len(res.Addresses) > 0:
+		out.Resolved++
+	case res.Aliased():
+		out.Resolved++
+		target := res.Target(name)
+		party, id, own, _, err := n.d.party(target)
 		if err != nil {
 			return err
 		}
-		if net := n.ownNetwork(s.other, block); net != nil {
+		if own {
+			party = "own"
+		} else if party == "" {
+			party = vendorNameOf(graph.RegisteredDomain(graph.FQDNName(target)))
+		}
+		n.share(party, id, own, "", name)
+	default:
+		out.Unresolved++
+	}
+	if res.Aliased() {
+		out.Aliased++
+	}
+
+	for _, addr := range res.Addresses {
+		block, err := n.blockOf(addr)
+		if err != nil {
+			return err
+		}
+		if net := n.ownNetwork(addr, block); net != nil {
 			if n.blockNames[net.ID] == nil {
 				n.blockNames[net.ID] = map[string]bool{}
 			}
@@ -273,18 +296,11 @@ func (n *networkScan) resolve(name graph.Asset, out *NetworkReport) error {
 			continue
 		}
 
-		party, id, own, err := n.party(block, s.other)
+		party, id, own, err := n.party(block, addr)
 		if err != nil {
 			return err
 		}
-		cidr := graph.ContentString(block, "cidr")
-		n.share(party, id, own, cidr, name)
-	}
-
-	if resolved {
-		out.Resolved++
-	} else {
-		out.Unresolved++
+		n.share(party, id, own, graph.ContentString(block, "cidr"), name)
 	}
 	return nil
 }
@@ -332,19 +348,27 @@ func (n *networkScan) party(block, ip graph.Asset) (string, string, bool, error)
 	return name, id, own, nil
 }
 
+// share counts name as hosted by party, once however many of its
+// addresses the party holds.
 func (n *networkScan) share(party, id string, own bool, cidr string, name graph.Asset) {
 	h, ok := n.hosting[party]
 	if !ok {
 		h = &HostingShare{Party: party, PartyID: id, Own: own}
 		n.hosting[party] = h
 	}
-	if len(h.Examples) < netHostingExamples {
-		graph.AddUnique(&h.Examples, graph.FQDNName(name))
-	}
 	if cidr != "" {
 		graph.AddUnique(&h.Networks, cidr)
 	}
-	h.Names++
+	if n.hosted == nil {
+		n.hosted = map[string]bool{}
+	}
+	if key := party + "\x00" + name.ID; !n.hosted[key] {
+		n.hosted[key] = true
+		h.Names++
+		if len(h.Examples) < netHostingExamples {
+			graph.AddUnique(&h.Examples, graph.FQDNName(name))
+		}
+	}
 }
 
 // inside counts an address stored in one of the subject's netblocks and
@@ -454,7 +478,11 @@ func FormatNetworkReport(r NetworkReport) string {
 	}
 
 	if total := r.Resolved; total > 0 {
-		fmt.Fprintf(&b, "\nWhere its %d resolving name(s) are hosted:\n", total)
+		fmt.Fprintf(&b, "\nWhere its %d resolving name(s) are hosted", total)
+		if r.Aliased > 0 {
+			fmt.Fprintf(&b, " (%d through an alias)", r.Aliased)
+		}
+		b.WriteString(":\n")
 		for _, h := range r.Hosting {
 			party := h.Party
 			if h.Own {

@@ -718,6 +718,8 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		return a.groupVendorsLens(ctx, root, out)
 	case lens.LensNetwork:
 		return a.networkLens(ctx, root, out)
+	case lens.LensDangling:
+		return a.danglingLens(ctx, root, out)
 	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {

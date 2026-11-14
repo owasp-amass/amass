@@ -43,6 +43,7 @@ type Investigation struct {
 	ServicesReport     *lens.ServicesReport          `json:"services_report,omitempty"`
 	GroupVendorReport  *lens.GroupVendorReport       `json:"group_vendor_report,omitempty"`
 	NetworkReport      *lens.NetworkReport           `json:"network_report,omitempty"`
+	DanglingReport     *lens.DanglingReport          `json:"dangling_report,omitempty"`
 	Narrative          *Narrative                    `json:"narrative,omitempty"`
 	Goal               *InvestigationGoal            `json:"goal,omitempty"`
 	Search             *GraphSearchResult            `json:"search,omitempty"`

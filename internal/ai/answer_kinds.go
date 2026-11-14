@@ -158,6 +158,21 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
+		Name: lens.LensDangling,
+		Description: "Find the DNS records of what a domain or organization controls that may point at something " +
+			"it no longer holds: aliases (CNAMEs) to names with no stored address, especially on cloud services " +
+			"where anyone can claim the name (subdomain takeover), aliases and name servers in domains whose " +
+			"registration expired or expires soon, alias loops, and address records not seen again. From stored " +
+			"records, not a live lookup. Read-only; nothing is written.",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"Does <domain> have dangling DNS records?",
+			"Which of <organization>'s subdomains could be taken over?",
+			"Do any of <domain>'s CNAMEs point at deleted cloud resources?",
+		},
+	},
+	{
 		Name: lens.LensGroupVendors,
 		Description: "List the outside parties a whole corporate group depends on: the vendors of each " +
 			"organization in the group (parent, subsidiaries and units) merged, with how many and which group " +
@@ -261,7 +276,7 @@ func validateAnswer(goal InvestigationGoal, schema graph.SchemaCatalog) error {
 				strings.Join(lens.OwnedTypes(schema), ", "), AnswerPaths)
 		}
 	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork:
+		lens.LensNetwork, lens.LensDangling:
 		if graph.MeaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -304,7 +319,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.
 	case lens.LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 	case lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork:
+		lens.LensNetwork, lens.LensDangling:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
 	case lens.LensTable:
@@ -535,7 +550,7 @@ func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaC
 	case lens.LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
 	case lens.LensThirdParty, lens.LensOwnershipGaps, LensFamily, lens.LensOrgGroup, lens.LensServices, lens.LensGroupVendors,
-		lens.LensNetwork:
+		lens.LensNetwork, lens.LensDangling:
 		props["target_types"] = none
 	case lens.LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)

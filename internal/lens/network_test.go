@@ -32,6 +32,32 @@ func networkFixture() graphtest.VendorGraph {
 	g.Links = append(g.Links, graph.Relation{ID: "mail-a", FromID: "mail.colgate.edu", ToID: "ip-loose",
 		Label: "dns_record", Type: "BasicDNSRelation"})
 
+	// Names hosted through aliases: one to a provider name with a stored
+	// address, one to a provider name with none.
+	cname := func(from, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-cname", FromID: from, ToID: to, Label: "dns_record",
+			Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 5}}})
+	}
+	for _, n := range []string{"cdn.colgate.edu", "d1.cloudfront.net", "shop.colgate.edu", "colgate.myshopify.com"} {
+		add(n, "FQDN", n, map[string]any{"name": n})
+	}
+	link("colgate.edu", "node", "cdn.colgate.edu")
+	link("colgate.edu", "node", "shop.colgate.edu")
+	cname("cdn.colgate.edu", "d1.cloudfront.net")
+	cname("shop.colgate.edu", "colgate.myshopify.com")
+	add("ip-aws", "IPAddress", "13.32.1.1", map[string]any{"address": "13.32.1.1"})
+	add("ip-aws2", "IPAddress", "13.32.1.2", map[string]any{"address": "13.32.1.2"})
+	add("nb-aws", "Netblock", "13.32.0.0/15", map[string]any{"cidr": "13.32.0.0/15"})
+	add("as-aws", "AutonomousSystem", "16509", map[string]any{"number": 16509})
+	add("autnum-aws", "AutnumRecord", "AS16509", map[string]any{"handle": "AS16509", "name": "AMAZON-02"})
+	for _, ip := range []string{"ip-aws", "ip-aws2"} {
+		g.Links = append(g.Links, graph.Relation{ID: "cf-" + ip, FromID: "d1.cloudfront.net", ToID: ip,
+			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+		link("nb-aws", "contains", ip)
+	}
+	link("as-aws", "announces", "nb-aws")
+	link("as-aws", "registration", "autnum-aws")
+
 	add("nb-spare", "Netblock", "2620:0:2810::/48", map[string]any{"cidr": "2620:0:2810::/48"})
 	add("ipnet-spare", "IPNetRecord", "2620:0:2810::/48", map[string]any{"name": "COLGATE-V6"})
 	link("nb-spare", "registration", "ipnet-spare")
@@ -57,22 +83,37 @@ func TestFindNetworkInfrastructure(t *testing.T) {
 		len(r.ASNs[0].Foreign) != 0 {
 		t.Errorf("autonomous systems = %+v", r.ASNs)
 	}
-	if r.Resolved != 3 || r.Unresolved != 1 || len(r.Hosting) != 2 {
+	if r.Resolved != 5 || r.Aliased != 2 || r.Unresolved != 1 || len(r.Hosting) != 4 {
 		t.Fatalf("resolved %d, unresolved %d, hosting %+v", r.Resolved, r.Unresolved, r.Hosting)
 	}
 	// mail.colgate.edu resolves to an address with no stored netblock; its
 	// range puts it in the university's own space.
-	own, cdn := r.Hosting[0], r.Hosting[1]
+	byParty := map[string]HostingShare{}
+	for _, h := range r.Hosting {
+		byParty[h.Party] = h
+	}
+	own, cdn := byParty["own"], byParty["FASTLY"]
 	if !own.Own || own.Names != 2 || !strings.Contains(strings.Join(own.Examples, ","), "mail.colgate.edu") {
 		t.Errorf("own hosting = %+v", own)
 	}
 	if cdn.Own || cdn.Party != "FASTLY" || cdn.Names != 1 || strings.Join(cdn.Networks, ",") != "151.101.0.0/16" {
 		t.Errorf("provider hosting = %+v", cdn)
 	}
+	// An alias is hosted where its target's addresses are, counted once
+	// however many addresses there are.
+	if aws := byParty["AMAZON-02"]; aws.Names != 1 || strings.Join(aws.Examples, ",") != "cdn.colgate.edu" ||
+		strings.Join(aws.Networks, ",") != "13.32.0.0/15" {
+		t.Errorf("alias hosting = %+v", r.Hosting)
+	}
+	// An alias to a name with no stored address is hosted by the target's
+	// domain.
+	if shop := byParty["myshopify.com"]; shop.Names != 1 {
+		t.Errorf("alias without an address = %+v", r.Hosting)
+	}
 
 	text := FormatNetworkReport(r)
 	for _, want := range []string{"1 IPv4 and 1 IPv6 netblock(s)", "announced by AS1289",
-		"its own networks: 2 (67%)", "FASTLY: 1 (33%)", "none of its names use (1): 2620:0:2810::/48",
+		"its own networks: 2 (40%)", "FASTLY: 1 (20%)", "(2 through an alias)", "none of its names use (1): 2620:0:2810::/48",
 		"Names with no stored address: 1"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("report lacks %q:\n%s", want, text)

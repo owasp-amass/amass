@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	// dnsRecordProperty is the property name of stored DNS records.
+	// DNSRecordProperty is the property name of stored DNS records.
 	DNSRecordProperty = "dns_record"
 )
 

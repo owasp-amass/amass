@@ -19,6 +19,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
 | `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
 | `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, and address space none of its names use |
+| `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
@@ -188,13 +189,46 @@ version, with how many of its names resolve into each, how many of its
 addresses and services are stored inside, and which of its autonomous systems
 announce it; and the autonomous systems registered to it, with any prefixes
 they announce that are not its own (a customer's or a provider's space). It
-then shows where each name that has a stored address is hosted: its own
-networks, or the party holding the provider's netblock or autonomous system,
-with the share of names each hosts. An address with no stored netblock counts
+then shows where each of its names is hosted: its own networks, or the
+party holding the provider's netblock or autonomous system, with the share
+of names each hosts. A name that is an alias (CNAME) is followed, as a
+resolver would, to the addresses stored for the end of its chain; an alias
+to a name with no stored address is hosted by whoever controls that name's
+domain. The record types and chain limit are in
+`internal/semantics/dns.json`. An address with no stored netblock counts
 as its own when it falls inside one of its netblocks' ranges. Finally it lists
 the netblocks registered to it that none of its names resolve into, which are
 worth checking for forgotten or unmonitored space. These come from stored
 registrations (RDAP and WHOIS) and DNS resolutions, not a live scan.
+
+## Dangling DNS
+
+```bash
+amass lens dangling -d colgate.edu
+amass lens dangling -org "Colgate University"
+```
+
+Checks the DNS records of every name the domain or organization controls
+for ones that may point at something it no longer holds, most severe first:
+
+- **Claimable aliases:** an alias (CNAME) to a name on a hosted service where
+  anyone can claim a deleted resource's name, such as Azure App Service, an
+  S3 bucket or GitHub Pages, with no address stored for it. This is the
+  classic subdomain takeover.
+- **Expired and expiring domains:** an alias target or a name server (an NS
+  record or a registration's name servers) in another domain whose stored
+  registration has expired, or expires within 30 days. Anyone may register
+  an expired domain and answer for the name.
+- **Unresolved aliases:** an alias to an outside name with no stored address.
+- **Alias loops:** chains that return to themselves or never end.
+- **Stale addresses:** an address record outside the subject's own networks
+  not seen again within 30 days of the last time its name was seen. The
+  address may have been released to someone else.
+
+Findings come from stored records, so each is a lead to confirm with a live
+lookup before acting. The claimable services, each citing the provider's
+documentation of the risk, and the periods are in
+`internal/semantics/dangling_dns.json`.
 
 ## Vendors across a corporate group
 
