@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 // Fixture uses exact stored edge orientation and unrelated graph neighbors.
@@ -40,8 +40,8 @@ var typedIntentTestCatalog = intentCatalog{
 	},
 }
 
-func typedIntentGraph() aitest.PlannedGraph {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{
+func typedIntentGraph() graphtest.PlannedGraph {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{
 		"host": {
 			ID:      "host",
 			Type:    "FQDN",
@@ -76,7 +76,7 @@ func typedIntentGraph() aitest.PlannedGraph {
 			graph.Relation{ID: "noise-edge-" + id, FromID: "host", ToID: id, Label: "node", Type: "SimpleRelation"})
 	}
 
-	return aitest.PlannedGraph{FakeGraph: g}
+	return graphtest.PlannedGraph{FakeGraph: g}
 }
 
 func TestTypedRelationIntentUsesIncomingOAMEdgesAndNoLLM(t *testing.T) {

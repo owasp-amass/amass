@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
-func diamondGuidedGraph() aitest.FakeGraph {
-	return aitest.FakeGraph{Assets: map[string]graph.Asset{
+func diamondGuidedGraph() graphtest.FakeGraph {
+	return graphtest.FakeGraph{Assets: map[string]graph.Asset{
 		"f":   {ID: "f", Type: "FQDN", Key: "demo.example"},
 		"u1":  {ID: "u1", Type: "URL", Key: "https://demo.example/a"},
 		"u2":  {ID: "u2", Type: "URL", Key: "https://demo.example/b"},
@@ -31,7 +31,7 @@ func diamondGuidedGraph() aitest.FakeGraph {
 
 func TestGuidedSearchRetainsAlternativePathsToSameAsset(t *testing.T) {
 	limits := graph.DefaultLimits()
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), aitest.TestOAMCatalog, limits, GuidedSearchRequest{
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), graphtest.TestOAMCatalog, limits, GuidedSearchRequest{
 		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
 		MaxPathsPerAsset:   3,
 	})
@@ -71,7 +71,7 @@ func TestGuidedSearchRetainsAlternativePathsToSameAsset(t *testing.T) {
 }
 
 func TestGuidedSearchCannotUseInventedRelationPriorities(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GuidedSearchRequest{
 			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}},
 		})
@@ -107,7 +107,7 @@ func TestGuidedSearchCannotUseInventedRelationPriorities(t *testing.T) {
 }
 
 func TestGuidedSearchMarksAlternativeRouteLimitAsPartial(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GuidedSearchRequest{
 			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
 			MaxPathsPerAsset:   1,
@@ -128,7 +128,7 @@ func TestGuidedSearchMarksAlternativeRouteLimitAsPartial(t *testing.T) {
 }
 
 func TestGuidedSearchHonorsStageAndExpansionLimits(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GuidedSearchRequest{
 			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
 			MaxExpansions:      1,
@@ -157,8 +157,8 @@ func TestGuidedSearchHonorsStageAndExpansionLimits(t *testing.T) {
 }
 
 func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T) {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{}, Links: []graph.Relation{}}
-	catalog := aitest.PlanCatalog{{
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}, Links: []graph.Relation{}}
+	catalog := graphtest.PlanCatalog{{
 		SourceType:      "FQDN",
 		Label:           "related",
 		RelationType:    "SimpleRelation",
@@ -212,7 +212,7 @@ func TestGuidedSearchSupportsMoreThanTenHops(t *testing.T) {
 }
 
 func TestGuidedSelectionRequiresPathIDForAmbiguousAsset(t *testing.T) {
-	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
+	e, err := NewGuidedExplorer(context.Background(), diamondGuidedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GuidedSearchRequest{
 			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 5},
 		})
@@ -239,7 +239,7 @@ func TestGuidedSelectionRequiresPathIDForAmbiguousAsset(t *testing.T) {
 
 func TestGuidedExplorationStopsOnContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	e, err := NewGuidedExplorer(ctx, diamondGuidedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(), GuidedSearchRequest{
+	e, err := NewGuidedExplorer(ctx, diamondGuidedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(), GuidedSearchRequest{
 		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}},
 	})
 	if err != nil {

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 type recordingWriter struct {
@@ -25,17 +25,17 @@ func (w *recordingWriter) ApplyOwnership(_ context.Context, e lens.ProposedEdge,
 	return "edge-1", false, nil
 }
 
-func attribute(t *testing.T, w OwnershipWriter, j *review.Journal, mode string) AttributionResult {
+func attribute(t *testing.T, w review.OwnershipWriter, j *review.Journal, mode string) review.AttributionResult {
 	t.Helper()
 
-	return attributeWith(t, w, j, AttributionPolicy{Mode: mode})
+	return attributeWith(t, w, j, review.AttributionPolicy{Mode: mode})
 }
 
-func attributeWith(t *testing.T, w OwnershipWriter, j *review.Journal, policy AttributionPolicy) AttributionResult {
+func attributeWith(t *testing.T, w review.OwnershipWriter, j *review.Journal, policy review.AttributionPolicy) review.AttributionResult {
 	t.Helper()
 
-	g := aitest.CampusGapsFixture()
-	res, err := AttributeOwnership(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"], w, j,
+	g := graphtest.CampusGapsFixture()
+	res, err := review.AttributeOwnership(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate"], w, j,
 		policy)
 	if err != nil {
 		t.Fatal(err)
@@ -105,9 +105,9 @@ func TestAttributeOwnershipWritesPendingProposalsInAutoMode(t *testing.T) {
 }
 
 func TestAttributeOwnershipNeedsAJournal(t *testing.T) {
-	g := aitest.CampusGapsFixture()
-	if _, err := AttributeOwnership(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"],
-		&recordingWriter{}, nil, AttributionPolicy{Mode: "auto"}); err == nil {
+	g := graphtest.CampusGapsFixture()
+	if _, err := review.AttributeOwnership(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate"],
+		&recordingWriter{}, nil, review.AttributionPolicy{Mode: "auto"}); err == nil {
 		t.Error("attribution ran without a journal")
 	}
 }
@@ -118,7 +118,7 @@ func TestAttributionOnlyForAnchoredOrganizations(t *testing.T) {
 
 	// Colgate's footprint holds colgate.edu: an enumeration of colgate.edu
 	// (or a name below it) attributes for Colgate.
-	if res := attributeWith(t, w, j, AttributionPolicy{Mode: "auto", Anchors: []string{"www.colgate.edu"}}); res.Unanchored ||
+	if res := attributeWith(t, w, j, review.AttributionPolicy{Mode: "auto", Anchors: []string{"www.colgate.edu"}}); res.Unanchored ||
 		len(res.Applied) != 1 {
 		t.Fatalf("anchored run = %+v", res)
 	}
@@ -126,7 +126,7 @@ func TestAttributionOnlyForAnchoredOrganizations(t *testing.T) {
 	// An enumeration of another domain never attributes for Colgate, as for
 	// a vendor pulled into its scope.
 	j2 := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
-	res := attributeWith(t, &recordingWriter{}, j2, AttributionPolicy{Mode: "auto", Anchors: []string{"digicert.com"}})
+	res := attributeWith(t, &recordingWriter{}, j2, review.AttributionPolicy{Mode: "auto", Anchors: []string{"digicert.com"}})
 	if !res.Unanchored || len(res.Applied) != 0 || len(res.Queued) != 0 {
 		t.Errorf("unanchored run = %+v", res)
 	}

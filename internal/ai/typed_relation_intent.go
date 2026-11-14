@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // TypedRelationIntent compiles an unambiguous, user-named OAM relationship
@@ -211,7 +211,7 @@ func compileCatalogHopsDirected(root, target string, hint explicitRelationHint, 
 
 func deterministicTypedRelationIntent(question string, catalog graph.SchemaCatalog) (TypedRelationIntent, bool) {
 	var zero TypedRelationIntent
-	selectors, ok := catalog.(AssetSearchCatalog)
+	selectors, ok := catalog.(graph.AssetSearchCatalog)
 	if !ok {
 		return zero, false
 	}

@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // planningFocus is the part of the OAM catalog a question mentions: asset

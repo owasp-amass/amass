@@ -11,14 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 func vendorAgent(model llm.Model) Agent {
-	return Agent{Model: model, Runner: ToolRunner{Graph: aitest.VendorFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	return Agent{Model: model, Runner: ToolRunner{Graph: graphtest.VendorFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}
 }
 
@@ -108,9 +108,9 @@ func TestThirdPartyLensFromDomainIncludesRegistrantNetworks(t *testing.T) {
 }
 
 func TestThirdPartyLensExplainsEmptyFootprint(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	g.Links = nil
-	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
 
 	result, err := agent.AskQuery(context.Background(),
 		thirdPartyQuery("", PlanSubject{Type: "Organization", Name: "Colgate University"}, SourceCaller),
@@ -202,7 +202,7 @@ func TestControlledLensExcludesThirdPartyNetworks(t *testing.T) {
 }
 
 func TestControlledAnswerRequiresAttributableTypes(t *testing.T) {
-	cat := aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	cat := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 	for _, tc := range []struct {
 		targets []string
 		ok      bool
@@ -244,14 +244,14 @@ func TestPlannerCorrectsUnusableAnswerKind(t *testing.T) {
 }
 
 func TestGoalSchemaEnumeratesAnswerKinds(t *testing.T) {
-	s := goalJSONSchema(aitest.TestOAMCatalog, aitest.TestOAMCatalog.SearchFields())
+	s := goalJSONSchema(graphtest.TestOAMCatalog, graphtest.TestOAMCatalog.SearchFields())
 	props := s.Schema["properties"].(map[string]any)
 	enum := props["answer"].(map[string]any)["enum"].([]string)
 	if strings.Join(enum, ",") != strings.Join(answerKindNames(), ",") || len(enum) != len(answerKinds) {
 		t.Fatalf("answer enum %v does not match the registry", enum)
 	}
 
-	prompt := goalPlannerPrompt("anything", aitest.TestOAMCatalog, aitest.TestOAMCatalog.SearchFields(), false, nil).Text
+	prompt := goalPlannerPrompt("anything", graphtest.TestOAMCatalog, graphtest.TestOAMCatalog.SearchFields(), false, nil).Text
 	for _, k := range answerKinds {
 		if !strings.Contains(prompt, "- "+k.Name+" (") {
 			t.Errorf("planner prompt does not describe answer kind %s", k.Name)
@@ -262,7 +262,7 @@ func TestGoalSchemaEnumeratesAnswerKinds(t *testing.T) {
 // extendedCatalog adds transitions the lens code has never seen, as a
 // future OAM release might.
 type extendedCatalog struct {
-	aitest.VendorCatalog
+	graphtest.VendorCatalog
 	extra map[string]graph.RelationMeaning
 }
 
@@ -287,7 +287,7 @@ func (c extendedCatalog) Relations() []graph.RelationshipSchema {
 // A new asset type and relationships, annotated only in the semantics
 // table, take part in both lenses without code changes.
 func TestNewOAMRelationshipsJoinLensesWithoutCode(t *testing.T) {
-	cat := extendedCatalog{VendorCatalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, extra: map[string]graph.RelationMeaning{
+	cat := extendedCatalog{VendorCatalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, extra: map[string]graph.RelationMeaning{
 		"FQDN|hosted_on|SimpleRelation|CloudResource":            {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 		"CloudResource|tenant_of|SimpleRelation|CloudAccount":    {Attribution: "same_subject", Purpose: "network", Vendor: true},
 		"CloudAccount|operated_by|SimpleRelation|Organization":   {Attribution: "controller", Purpose: "network", Vendor: true},
@@ -296,7 +296,7 @@ func TestNewOAMRelationshipsJoinLensesWithoutCode(t *testing.T) {
 		"CloudResource|managed_by|SimpleRelation|ContactRecord":  {Attribution: "third_party", Purpose: "network", Vendor: true},
 	}}
 
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	g.Assets["bucket"] = graph.Asset{ID: "bucket", Type: "CloudResource", Key: "assets-bucket"}
 	g.Assets["tenant"] = graph.Asset{ID: "tenant", Type: "CloudAccount", Key: "tenant-1"}
 	g.Assets["cloudco"] = graph.Asset{ID: "cloudco", Type: "Organization", Key: "cloudco",
@@ -358,7 +358,7 @@ func TestAttributableOrganizationGoalRunsControlledLens(t *testing.T) {
 // look one step from an owner, so a budgeted best-first search spent its
 // budget on colgate.edu's URLs and missed the registrant (eval 2026-11-09).
 func TestDomainOwnerFoundPastManyCertificates(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	for i := 0; i < 60; i++ {
 		cert, url := fmt.Sprintf("cn-cert-%02d", i), fmt.Sprintf("url-%02d", i)
 		g.Assets[cert] = graph.Asset{ID: cert, Type: "TLSCertificate", Key: cert}
@@ -368,7 +368,7 @@ func TestDomainOwnerFoundPastManyCertificates(t *testing.T) {
 			graph.Relation{ID: "dom-" + url, FromID: url, ToID: "colgate.edu", Label: "domain", Type: "SimpleRelation"})
 	}
 
-	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
+	agent := Agent{Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
 	result, err := agent.AskQuery(context.Background(),
 		thirdPartyQuery("", PlanSubject{Type: "FQDN", Field: "name", Value: "colgate.edu"}, SourceCaller),
 		AdaptiveOptions{})
@@ -389,12 +389,12 @@ func TestTableAnswerNeedsAttributableRows(t *testing.T) {
 	goal := InvestigationGoal{Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
 		TargetTypes: []string{"Phone"}, Purpose: "connected", Answer: lens.LensTable,
 		Columns: []lens.TableColumn{{Type: "Organization", Role: lens.ColumnController}}}
-	if err := validateAnswer(goal, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}); err == nil {
+	if err := validateAnswer(goal, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}); err == nil {
 		t.Fatal("a table of unattributable rows was accepted")
 	}
 
 	goal.TargetTypes = []string{"URL"}
-	if err := validateAnswer(goal, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}); err != nil {
+	if err := validateAnswer(goal, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}); err != nil {
 		t.Fatalf("valid table rejected: %v", err)
 	}
 }
@@ -407,7 +407,7 @@ func TestTableRowTypeCorrectionListsControllableTypes(t *testing.T) {
 		`"columns":[{"type":"IPAddress","role":""},{"type":"Organization","role":"controller"}]}`
 	good := strings.Replace(bad, `"target_types":["Organization"]`, `"target_types":["URL"]`, 1)
 	agent := func(model llm.Model) Agent {
-		return Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+		return Agent{Model: model, Runner: ToolRunner{Graph: graphtest.CampusWebFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 			Limits: graph.DefaultLimits()}}
 	}
 
@@ -462,7 +462,7 @@ func TestRepeatedControllerColumnsAreRepaired(t *testing.T) {
 		`"columns":[` + ctl + `,` + ctl + `,` + ctl + `]}`
 	model := &plannerModel{replies: []string{bad}}
 
-	q, err := Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: graphtest.CampusWebFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}.CompileQuestion(context.Background(),
 		"Please create a table with each website, it's IP address, and hosting provider within Colgate University?")
 	if err != nil {
@@ -498,7 +498,7 @@ func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
 			`"target_types":["URL"],"direction":"both","purpose":"connected","answer":"table",` +
 			`"columns":[{"type":"Organization","role":"controller"}]}`,
 	}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: graphtest.CampusWebFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}
 
 	result, err := agent.AskAdaptive(context.Background(),
@@ -521,7 +521,7 @@ func TestTableAddsColumnsTheQuestionMentions(t *testing.T) {
 }
 
 func TestMentionedTypesPreferLongestPhrase(t *testing.T) {
-	cat := aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	cat := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 	got := strings.Join(mentionedTypes("each website, it's IP address, and hosting provider", cat), ",")
 	if got != "IPAddress,URL" {
 		t.Errorf("mentioned = %q, want IPAddress and URL (website), not Location for \"address\"", got)
@@ -566,7 +566,7 @@ func TestTableRetryNarrowsTheSchema(t *testing.T) {
 
 	// The question names no type an owner controls, so the row type cannot
 	// be repaired from it and the retry is needed.
-	q, err := Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	q, err := Agent{Model: model, Runner: ToolRunner{Graph: graphtest.CampusWebFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}.CompileQuestion(context.Background(),
 		"Please create a table of Colgate University and its hosting providers")
 	if err != nil || q.Lens != lens.LensTable || len(model.schemas) != 2 {
@@ -601,8 +601,8 @@ func TestControlledRetryKeepsTheFullSchema(t *testing.T) {
 	good := strings.Replace(bad, `"answer":"controlled"`, `"answer":"paths"`, 1)
 	model := &structuredPlanner{replies: []string{bad, good}}
 
-	if _, err := (Agent{Model: model, Runner: ToolRunner{Graph: aitest.CampusWebFixture(),
-		Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}).CompileQuestion(context.Background(),
+	if _, err := (Agent{Model: model, Runner: ToolRunner{Graph: graphtest.CampusWebFixture(),
+		Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}).CompileQuestion(context.Background(),
 		"What phone numbers does Colgate list?"); err != nil {
 		t.Fatal(err)
 	}
@@ -616,7 +616,7 @@ func TestControlledRetryKeepsTheFullSchema(t *testing.T) {
 // The schema allows exactly two column shapes, so a schema-enforcing
 // provider cannot pair the controller role with a non-organization type.
 func TestColumnSchemaAllowsTwoShapes(t *testing.T) {
-	props := goalJSONSchema(aitest.TestOAMCatalog, aitest.TestOAMCatalog.SearchFields()).Schema["properties"].(map[string]any)
+	props := goalJSONSchema(graphtest.TestOAMCatalog, graphtest.TestOAMCatalog.SearchFields()).Schema["properties"].(map[string]any)
 	shapes := props["columns"].(map[string]any)["items"].(map[string]any)["anyOf"].([]any)
 	if len(shapes) != 2 {
 		t.Fatalf("column shapes = %d, want 2", len(shapes))

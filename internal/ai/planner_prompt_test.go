@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 

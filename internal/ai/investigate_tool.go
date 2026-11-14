@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // Investigation tools let an MCP client, which is itself the model, use the
@@ -98,7 +98,7 @@ func InvestigationSpecs(schema graph.SchemaCatalog) []llm.ToolSpec {
 	}
 
 	var selectors []graph.AssetSearchSchema
-	if sc, ok := schema.(AssetSearchCatalog); ok {
+	if sc, ok := schema.(graph.AssetSearchCatalog); ok {
 		selectors = sc.SearchFields()
 	}
 
@@ -158,7 +158,7 @@ type investigateArgs struct {
 // for.
 func queryFromArgs(a investigateArgs, schema graph.SchemaCatalog) (Query, error) {
 	var selectors []graph.AssetSearchSchema
-	if sc, ok := schema.(AssetSearchCatalog); ok {
+	if sc, ok := schema.(graph.AssetSearchCatalog); ok {
 		selectors = sc.SearchFields()
 	}
 

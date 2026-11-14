@@ -9,17 +9,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func TestAskGroupVendors(t *testing.T) {
-	g := aitest.GroupVendorFixture()
+	g := graphtest.GroupVendorFixture()
 	reply := `{"subject":{"type":"Organization","field":"name","value":"Colgate University"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"group_vendors",` +
 		`"columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(),

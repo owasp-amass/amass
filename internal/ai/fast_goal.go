@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // This fast path intentionally recognizes only a narrow, explicitly
@@ -49,7 +49,7 @@ func deterministicExplicitOrganizationGoal(question string, catalog graph.Schema
 		return zero, false
 	}
 
-	selectors, ok := catalog.(AssetSearchCatalog)
+	selectors, ok := catalog.(graph.AssetSearchCatalog)
 	if !ok {
 		return zero, false
 	}

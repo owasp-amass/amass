@@ -12,15 +12,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // valueGraph adds value searches to the campus fixture, over stored TXT
 // records (evidence) and asset content.
-type valueGraph struct{ aitest.VendorGraph }
+type valueGraph struct{ graphtest.VendorGraph }
 
 func (g valueGraph) FindByTagValue(_ context.Context, assetType, name, value string, contains bool,
 	limit int) ([]graph.Asset, bool, error) {
@@ -90,7 +90,7 @@ func (g valueGraph) FindByAttribute(_ context.Context, assetType, key, value str
 //     of Colgate's certificate;
 //   - hamco.org uses Colgate's name server.
 func signalsFixture() valueGraph {
-	g := valueGraph{aitest.CampusGapsFixture()}
+	g := valueGraph{graphtest.CampusGapsFixture()}
 	g.EvidenceByID = map[string][]graph.Evidence{}
 	add := func(id, typ, key string, content map[string]any) {
 		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
@@ -108,21 +108,21 @@ func signalsFixture() valueGraph {
 		link("dr-"+domain, "registrant_contact", "cr-"+domain, "SimpleRelation", nil)
 	}
 
-	g.EvidenceByID["colgate.edu"] = []graph.Evidence{aitest.TXTRecord("google-site-verification=colgate-token"),
-		aitest.TXTRecord("v=spf1 include:_spf.google.com ~all")}
+	g.EvidenceByID["colgate.edu"] = []graph.Evidence{graphtest.TXTRecord("google-site-verification=colgate-token"),
+		graphtest.TXTRecord("v=spf1 include:_spf.google.com ~all")}
 
 	registered("colgate-arts.org")
-	g.EvidenceByID["colgate-arts.org"] = []graph.Evidence{aitest.TXTRecord("google-site-verification=colgate-token"),
-		aitest.TXTRecord("v=spf1 include:_spf.colgate.edu ~all")}
+	g.EvidenceByID["colgate-arts.org"] = []graph.Evidence{graphtest.TXTRecord("google-site-verification=colgate-token"),
+		graphtest.TXTRecord("v=spf1 include:_spf.colgate.edu ~all")}
 
 	registered("colgate-news.org")
 	named("_dmarc.colgate-news.org", "FQDN", "_dmarc.colgate-news.org")
 	link("colgate-news.org", "node", "_dmarc.colgate-news.org", "SimpleRelation", nil)
-	g.EvidenceByID["_dmarc.colgate-news.org"] = []graph.Evidence{aitest.TXTRecord("v=DMARC1; p=none; rua=mailto:dmarc@colgate.edu")}
+	g.EvidenceByID["_dmarc.colgate-news.org"] = []graph.Evidence{graphtest.TXTRecord("v=DMARC1; p=none; rua=mailto:dmarc@colgate.edu")}
 
 	// A look-alike that only contains the name never counts.
 	registered("notcolgate.edu.example")
-	g.EvidenceByID["notcolgate.edu.example"] = []graph.Evidence{aitest.TXTRecord("v=spf1 include:mail.notcolgate.edu ~all")}
+	g.EvidenceByID["notcolgate.edu.example"] = []graph.Evidence{graphtest.TXTRecord("v=spf1 include:mail.notcolgate.edu ~all")}
 
 	g.Assets["cert"] = graph.Asset{ID: "cert", Type: "TLSCertificate", Key: "1234", Content: map[string]any{
 		"serial_number": "1234", "subject_key_id": "aa:bb", "authority_key_id": "ca:01",
@@ -151,7 +151,7 @@ func signalsFixture() valueGraph {
 func signalsReport(t *testing.T, g graph.Graph) lens.OwnershipGapReport {
 	t.Helper()
 
-	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, graph.Asset{ID: "colgate",
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, graph.Asset{ID: "colgate",
 		Type: "Organization", Key: "Colgate University", Content: map[string]any{"name": "Colgate University"}})
 	if err != nil {
 		t.Fatal(err)
@@ -293,7 +293,7 @@ func TestWidelySharedTokensDoNotCount(t *testing.T) {
 	for i := 0; i <= lens.GapMaxShared; i++ {
 		id := fmt.Sprintf("tenant%d.example", i)
 		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
-		g.EvidenceByID[id] = []graph.Evidence{aitest.TXTRecord("google-site-verification=colgate-token")}
+		g.EvidenceByID[id] = []graph.Evidence{graphtest.TXTRecord("google-site-verification=colgate-token")}
 	}
 
 	c := candidateByID(signalsReport(t, g), "colgate-arts.org")

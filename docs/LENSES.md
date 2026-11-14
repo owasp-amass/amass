@@ -124,8 +124,8 @@ enumeration finishes. Neither is ever applied automatically:
 
 Affiliates are only reported: OAM has no affiliate relationship, and the
 lens finds them again from the evidence whenever it is asked. The words, thresholds and
-sample sizes are in `internal/ai/semantics/family.json`, address spellings
-in `internal/ai/semantics/address_terms.json`.
+sample sizes are in `internal/semantics/family.json`, address spellings
+in `internal/semantics/address_terms.json`.
 
 ## Corporate group
 
@@ -159,7 +159,7 @@ listens, its type, the software its response headers name (such as
 `server: nginx/1.18.0`), the certificates it presented and any products stored
 for it. It also identifies the software a service runs from its stored
 headers and banners (`nginx 1.24.0`, `OpenSSH 9.6p1`, `Exim 4.97`) by the fingerprints in
-`internal/ai/semantics/product_fingerprints.json`, each citing the
+`internal/semantics/product_fingerprints.json`, each citing the
 documentation that describes what the software sends, and counts the services
 per product and version. Identification is computed when asked and never
 written: the header or banner is the evidence, and software can hide or fake
@@ -173,7 +173,7 @@ greeting the server sends first, with the certificate a TLS port presented; it
 never sends a command or credential. Its ports and greeting patterns, each citing the
 protocol's RFC, are in
 `engine/plugins/service_discovery/banner_probes/protocols.json`. The header names, expected
-ports and warning period are in `internal/ai/semantics/services.json`.
+ports and warning period are in `internal/semantics/services.json`.
 
 ## Network infrastructure
 
@@ -232,7 +232,7 @@ name:
   relationships the DNS-SD plugin stores. They are read by label, so they
   appear even for a domain with more relationships than the lens reads;
 - the mail senders its SPF record authorizes, from
-  `internal/ai/semantics/txt_vendors.json`. Each entry is the include the
+  `internal/semantics/txt_vendors.json`. Each entry is the include the
   vendor's own documentation tells customers to publish, with that page as
   its `source`.
 
@@ -248,7 +248,7 @@ reached through (a URL by its host's), or an autonomous system by its number
 not reported, an address inside one of the organization's netblocks counts as
 its own, other bare addresses are grouped as having no recorded network owner,
 and providers whose names span many domains (such as Amazon Route 53's
-`awsdns-NN` name servers) are grouped by `internal/ai/semantics/vendor_names.json`.
+`awsdns-NN` name servers) are grouped by `internal/semantics/vendor_names.json`.
 A registration contact with no organization is the institution's own when its
 email is in one of the institution's domains, and is named by its email domain
 otherwise.
@@ -286,7 +286,7 @@ The vendors lens follows at most 2,000 controlled assets and makes at most
 20,000 database reads per run. URLs are followed last, after every name,
 certificate and network the lens can reach: they are numerous and mostly lead
 back to names it already follows (`follow_last` in
-`internal/ai/semantics/lens.json`). A large institution can reach either; raise
+`internal/semantics/lens.json`). A large institution can reach either; raise
 them for one run with `-max-assets` (up to 100,000) and `-max-reads` (up to
 1,000,000). A larger run takes longer and may need a longer
 `-investigation-timeout` (8 minutes by default, up to 30):
@@ -333,7 +333,7 @@ name matches none of the names other sources gave it. Approving removes
 what only the enrichment source recorded and clears the legal fields;
 retracting restores them. Corrections are never applied automatically,
 because companies do rename and relocate. The enrichment sources and what
-they record are in `internal/ai/semantics/identity_checks.json`.
+they record are in `internal/semantics/identity_checks.json`.
 
 ## Organizations recorded under a person's name
 

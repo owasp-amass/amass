@@ -20,7 +20,7 @@
 
 # Jetbrains IDE configuration files
 .idea
-# Embedded data: AI semantics, the question evaluation set and probe catalogs
-!internal/ai/semantics/*.json
+# Embedded data: lens and AI semantics, the question evaluation set and probe catalogs
+!internal/semantics/*.json
 !internal/ai/questions/*.json
 !engine/plugins/service_discovery/banner_probes/*.json

@@ -14,8 +14,8 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // scan uses deterministic candidate selection before calling the LLM. It
@@ -98,7 +98,7 @@ func scan(ctx context.Context, graph oamrepo.Adapter, model llm.Model, modelName
 			summary.Escalated++
 		}
 		if routing.Decision == "review" {
-			if err := store.SubmitTriage(candidate, routing); err != nil {
+			if err := ai.SubmitTriage(store, candidate, routing); err != nil {
 				return err
 			}
 

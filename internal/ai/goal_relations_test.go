@@ -8,8 +8,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func TestGoalRelationshipsAnyAllOrderedAndDirections(t *testing.T) {
@@ -54,15 +54,15 @@ func TestGoalRelationshipsAnyAllOrderedAndDirections(t *testing.T) {
 		}, "any") {
 		t.Fatal("inverse traversal was incorrectly treated as inverse stored assertion")
 	}
-	if err := validGoalRelations([]GoalRelation{domain, website}, "ordered", aitest.TestOAMCatalog.Relations()); err != nil {
+	if err := validGoalRelations([]GoalRelation{domain, website}, "ordered", graphtest.TestOAMCatalog.Relations()); err != nil {
 		t.Fatal(err)
 	}
 	if err := validGoalRelations([]GoalRelation{
 		{SourceType: "URL", Label: "unknown", RelationType: "SimpleRelation", DestinationType: "FQDN"},
-	}, "any", aitest.TestOAMCatalog.Relations()); err == nil {
+	}, "any", graphtest.TestOAMCatalog.Relations()); err == nil {
 		t.Fatal("unregistered relation accepted")
 	}
-	if err := validGoalRelations([]GoalRelation{domain}, "everything", aitest.TestOAMCatalog.Relations()); err == nil {
+	if err := validGoalRelations([]GoalRelation{domain}, "everything", graphtest.TestOAMCatalog.Relations()); err == nil {
 		t.Fatal("unsupported quantifier accepted")
 	}
 
@@ -88,7 +88,7 @@ func TestGuidedGraphRespectsExactRelationshipGoal(t *testing.T) {
 		},
 		PathRule: "ordered", MaxPathsPerAsset: 3,
 	}
-	e, err := NewGuidedExplorer(context.Background(), g, aitest.TestOAMCatalog, graph.DefaultLimits(), req)
+	e, err := NewGuidedExplorer(context.Background(), g, graphtest.TestOAMCatalog, graph.DefaultLimits(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestGuidedGraphRespectsExactRelationshipGoal(t *testing.T) {
 func TestUnspecifiedGoalMaintainsLegacySemantics(t *testing.T) {
 	goal := InvestigationGoal{Subject: PlanSubject{Type: "FQDN", Field: "name", Value: "tech.acme.example"},
 		TargetTypes: []string{"Organization"}, Direction: "both", Purpose: "connected"}
-	if err := validateGoal(goal, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields()); err != nil {
+	if err := validateGoal(goal, graphtest.TestOAMCatalog.Relations(), graphtest.TestOAMCatalog.SearchFields()); err != nil {
 		t.Fatal(err)
 	}
 	if !pathSatisfiesGoal(graph.PlanMatch{}, nil, "") {

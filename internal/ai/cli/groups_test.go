@@ -6,50 +6,16 @@ package cli
 
 import (
 	"bytes"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
 )
 
-func TestLensAndReviewCommands(t *testing.T) {
+// amass ai still runs the operations that moved to amass lens and amass
+// review, by their old names, with a note.
+func TestMovedOperationsStillRun(t *testing.T) {
 	var out, errout bytes.Buffer
-	if err := RunReview(nil, &out, &errout, []string{"signals"}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "Why it counts") || errout.Len() != 0 {
-		t.Errorf("review signals: out %q, errout %q", out.String()[:min(80, out.Len())], errout.String())
-	}
-
-	// Flags come after the name.
-	out.Reset()
-	journal := filepath.Join(t.TempDir(), "review.jsonl")
-	if err := RunReview(nil, &out, &errout, []string{"proposals", "-journal", journal}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "No ownership proposals") {
-		t.Errorf("review proposals: %q", out.String())
-	}
-
-	// Flags may also come first, as compose passes -config.
-	out.Reset()
-	if err := RunReview(nil, &out, &errout, []string{"-journal", journal, "-format", "text", "proposals"}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "No ownership proposals") {
-		t.Errorf("flags first: %q", out.String())
-	}
-
-	if err := RunLens(nil, &out, &errout, nil); err == nil || !strings.Contains(err.Error(), "family|group-vendors|identity|network|org-group|person-named|services|vendors") {
-		t.Errorf("lens without a name: %v", err)
-	}
-	if err := RunLens(nil, &out, &errout, []string{"ask"}); err == nil {
-		t.Error("amass lens ran an AI operation")
-	}
-	if err := RunReview(nil, &out, &errout, []string{"family"}); err == nil {
-		t.Error("amass review ran a lens")
-	}
-
 	// amass ai takes the operation first or last.
 	out.Reset()
 	if err := Run(nil, &out, &errout, []string{"signals", "-format", "text"}); err != nil {
@@ -70,14 +36,12 @@ func TestLensAndReviewCommands(t *testing.T) {
 	}
 }
 
-// Every amass lens and amass review name must run a known operation; a name
-// missing from operations fails only when it is used.
-func TestGroupNamesRunKnownOperations(t *testing.T) {
-	for group, ops := range map[string]map[string]string{"lens": lensOps, "review": reviewOps} {
-		for name, op := range ops {
-			if !slices.Contains(operations, op) {
-				t.Errorf("amass %s %s runs %q, which is not a known operation", group, name, op)
-			}
+// No amass ai operation may shadow one that moved to amass lens or review.
+func TestOperationsDoNotShadowMovedOnes(t *testing.T) {
+	moved := lenscli.Operations()
+	for _, op := range operations {
+		if _, ok := moved[op]; ok {
+			t.Errorf("amass ai %s is also %s", op, moved[op])
 		}
 	}
 }

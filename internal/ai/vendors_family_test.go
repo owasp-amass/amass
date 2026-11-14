@@ -11,16 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // A domain with more subdomains than one read returns still shows the
 // vendors its other relationships name, and the report names the label
 // that stayed partial.
 func TestThirdPartyLensReadsBusyAssetsByLabel(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	var nodes []graph.Relation
 	for i := 0; i < graph.MaxEdgeRead+100; i++ {
 		name := fmt.Sprintf("h%d.colgate.edu", i)
@@ -32,7 +32,7 @@ func TestThirdPartyLensReadsBusyAssetsByLabel(t *testing.T) {
 	// the first read.
 	g.Links = append(nodes, g.Links...)
 
-	r, err := lens.SearchThirdParties(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"])
+	r, err := lens.SearchThirdParties(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +50,8 @@ func TestThirdPartyLensCapsPagedLabels(t *testing.T) {
 	lens.LensMaxPerLabel = 550
 
 	pages := 0
-	g := aitest.PagedVendorGraph{VendorGraph: aitest.BusyColgate(graph.MaxEdgeRead + 100), Pages: &pages}
-	r, err := lens.SearchThirdParties(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"])
+	g := graphtest.PagedVendorGraph{VendorGraph: graphtest.BusyColgate(graph.MaxEdgeRead + 100), Pages: &pages}
+	r, err := lens.SearchThirdParties(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,13 +66,13 @@ func TestThirdPartyLensCapsPagedLabels(t *testing.T) {
 // URLs are followed after every other controlled asset, so a run that
 // reaches its asset limit spends it on names and networks first.
 func TestFootprintFollowsURLsLast(t *testing.T) {
-	base := aitest.VendorFixture()
-	want, err := lens.SearchThirdParties(context.Background(), base, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, base.Assets["colgate.edu"])
+	base := graphtest.VendorFixture()
+	want, err := lens.SearchThirdParties(context.Background(), base, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, base.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	var urls []graph.Relation
 	for i := 0; i < 50; i++ {
 		u := fmt.Sprintf("https://colgate.edu/page%d", i)
@@ -83,7 +83,7 @@ func TestFootprintFollowsURLsLast(t *testing.T) {
 	// Stored first, so a walk in stored order would admit the URLs first.
 	g.Links = append(urls, g.Links...)
 
-	r, err := lens.SearchThirdPartiesWithin(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	r, err := lens.SearchThirdPartiesWithin(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		g.Assets["colgate.edu"], lens.LensLimits{MaxAssets: want.Footprint + 5})
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestFootprintFollowsURLsLast(t *testing.T) {
 // email is in one of the subject's domains, and is named by its email
 // domain otherwise, never by its RDAP URL.
 func TestThirdPartyLensNamesContactsByEmail(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	add := func(id, typ string, content map[string]any) {
 		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: id, Content: content}
 	}
@@ -123,7 +123,7 @@ func TestThirdPartyLensNamesContactsByEmail(t *testing.T) {
 	link("https://rdap.arin.net/registry/entity/NOC1-ARIN", "id", "email-out")
 	link("dr", "technical_contact", "https://rdap.arin.net/registry/entity/NONE-ARIN")
 
-	r, err := lens.SearchThirdParties(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"])
+	r, err := lens.SearchThirdParties(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestThirdPartyLensNamesContactsByEmail(t *testing.T) {
 // A redacted WHOIS contact with no organization or email does not name a
 // party by its record's key; the domain it is the contact for does.
 func TestThirdPartyLensSkipsAnonymousContacts(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	add := func(id, typ string, content map[string]any) {
 		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: id, Content: content}
 	}
@@ -164,7 +164,7 @@ func TestThirdPartyLensSkipsAnonymousContacts(t *testing.T) {
 	link("cdn.example", "registration", "dr-cdn", "SimpleRelation")
 	link("dr-cdn", "admin_contact", key, "SimpleRelation")
 
-	r, err := lens.SearchThirdParties(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"])
+	r, err := lens.SearchThirdParties(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestThirdPartyLensSkipsAnonymousContacts(t *testing.T) {
 
 // descentCounter counts the paged reads of one asset's outgoing node edges.
 type descentCounter struct {
-	aitest.PagedVendorGraph
+	graphtest.PagedVendorGraph
 	id    string
 	reads *int
 }
@@ -200,7 +200,7 @@ func TestThirdPartyLensDoesNotDescendOutsideTheFootprint(t *testing.T) {
 	defer func(n int) { lens.LensMaxPerLabel = n }(lens.LensMaxPerLabel)
 	lens.LensMaxPerLabel = 550
 
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	add := func(name string) {
 		g.Assets[name] = graph.Asset{ID: name, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
 	}
@@ -216,9 +216,9 @@ func TestThirdPartyLensDoesNotDescendOutsideTheFootprint(t *testing.T) {
 	g.Links = append(links, g.Links...)
 
 	reads := 0
-	pg := descentCounter{PagedVendorGraph: aitest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}, id: "pphosted.com",
+	pg := descentCounter{PagedVendorGraph: graphtest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}, id: "pphosted.com",
 		reads: &reads}
-	r, err := lens.SearchThirdParties(context.Background(), pg, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"])
+	r, err := lens.SearchThirdParties(context.Background(), pg, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}

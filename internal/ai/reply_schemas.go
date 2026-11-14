@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // enumArray is a schema for an array of at most max distinct strings drawn

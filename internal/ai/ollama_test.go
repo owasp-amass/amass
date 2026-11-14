@@ -8,19 +8,19 @@ import (
 	"context"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func TestGoalSchemaEnumeratesCatalogAndMetersUsage(t *testing.T) {
-	schema := goalJSONSchema(aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields())
+	schema := goalJSONSchema(graphtest.TestOAMCatalog.Relations(), graphtest.TestOAMCatalog.SearchFields())
 	props := schema.Schema["properties"].(map[string]any)
 	allowed := props["relationships"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
-	if len(allowed) != len(aitest.TestOAMCatalog) {
+	if len(allowed) != len(graphtest.TestOAMCatalog) {
 		t.Fatalf("each catalog transition must be one allowed value: %v", allowed)
 	}
-	for i, want := range aitest.TestOAMCatalog {
+	for i, want := range graphtest.TestOAMCatalog {
 		got := allowed[i].(map[string]any)
 		if got["source_type"] != want.SourceType || got["label"] != want.Label ||
 			got["relation_type"] != want.RelationType || got["destination_type"] != want.DestinationType {
@@ -32,7 +32,7 @@ func TestGoalSchemaEnumeratesCatalogAndMetersUsage(t *testing.T) {
 	model := &structuredRecorder{
 		reply: `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.example"},"target_types":["URL"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`,
 	}
-	agent := Agent{Model: model, Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}}
+	agent := Agent{Model: model, Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: graphtest.TestOAMCatalog}}
 	agent, meter := agent.metered()
 	q, err := agent.CompileQuestion(context.Background(), "Tell me about the URLs near tech.acme.example")
 	if err != nil {

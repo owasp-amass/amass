@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // GraphSearchRequest asks for witnessed paths through stored OAM relationships.
@@ -131,7 +131,7 @@ func SearchGraph(ctx context.Context, g graph.Graph, catalog graph.SchemaCatalog
 		knownTypes[t.SourceType] = true
 		knownTypes[t.DestinationType] = true
 	}
-	if selectors, ok := catalog.(AssetSearchCatalog); ok {
+	if selectors, ok := catalog.(graph.AssetSearchCatalog); ok {
 		for _, s := range selectors.SearchFields() {
 			knownTypes[s.Type] = true
 		}

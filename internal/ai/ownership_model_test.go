@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 func TestOwnershipFeaturesFromSignals(t *testing.T) {
@@ -114,18 +114,18 @@ func TestAttributeOwnershipDecidesWithTheModel(t *testing.T) {
 	m := trainedOwnershipModel(t)
 	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	w := &recordingWriter{}
-	res := attributeWith(t, w, j, AttributionPolicy{Mode: "auto", Model: m})
+	res := attributeWith(t, w, j, review.AttributionPolicy{Mode: "auto", Model: OwnershipModel{m}})
 	if len(res.Applied) != 1 || res.Applied[0].Proposal.ModelID != "test-model" {
 		t.Fatalf("applied = %+v", res.Applied)
 	}
-	if c := ProposalConfidence(res.Applied[0].Proposal); c != int(res.Applied[0].Proposal.ModelScore*100+0.5) {
+	if c := review.ProposalConfidence(res.Applied[0].Proposal); c != int(res.Applied[0].Proposal.ModelScore*100+0.5) {
 		t.Errorf("confidence %d does not come from the model score %.3f", c, res.Applied[0].Proposal.ModelScore)
 	}
 
 	// A model that has learned to distrust everything writes nothing.
 	m.ReviewThreshold = 1
 	j2 := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
-	if res := attributeWith(t, &recordingWriter{}, j2, AttributionPolicy{Mode: "auto", Model: m}); len(res.Applied) != 0 ||
+	if res := attributeWith(t, &recordingWriter{}, j2, review.AttributionPolicy{Mode: "auto", Model: OwnershipModel{m}}); len(res.Applied) != 0 ||
 		len(res.Queued) != 1 {
 		t.Errorf("with an unreachable threshold: applied %d, queued %d", len(res.Applied), len(res.Queued))
 	}
@@ -141,5 +141,17 @@ func TestOwnershipModelRefusesIndistinctReviews(t *testing.T) {
 	rows, spec := OwnershipTrainingSet(entries)
 	if _, _, err := TrainOwnershipModel(rows, spec, "confused"); err == nil {
 		t.Error("a model was trained from contradictory reviews")
+	}
+}
+
+// Department (org_unit) decisions are made on other evidence than
+// ownership signals, so they never become training rows.
+func TestOwnershipTrainingSetSkipsDepartments(t *testing.T) {
+	entries := reviewedJournal(3)
+	for i := range entries {
+		entries[i].Proposal.Kind = review.ProposalKindOrgUnit
+	}
+	if rows, _ := OwnershipTrainingSet(entries); len(rows) != 0 {
+		t.Errorf("department decisions became %d training row(s)", len(rows))
 	}
 }

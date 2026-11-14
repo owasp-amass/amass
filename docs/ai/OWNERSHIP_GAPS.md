@@ -25,7 +25,7 @@ sent).
 
 Every signal, with what it finds, why it counts, the guards that stop it
 misfiring and when it can still mislead, is defined in
-`internal/ai/semantics/ownership_signals.json` and documented in
+`internal/semantics/ownership_signals.json` and documented in
 [Ownership signals](SIGNALS.md), which is generated from that file. `amass
 review signals` prints the same text, and `amass review proposals` shows the
 rationale of each signal behind a proposal. Signals that compare values

@@ -9,17 +9,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 // The planner's group answer runs the lens without another model call.
 func TestAskCorporateGroup(t *testing.T) {
-	g := aitest.GroupFixture()
+	g := graphtest.GroupFixture()
 	reply := `{"subject":{"type":"Organization","field":"name","value":"Spotify USA Inc."},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"org_group","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(), "Who owns Spotify USA Inc.?", AdaptiveOptions{})

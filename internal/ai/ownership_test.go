@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 // testAttribution mirrors the reviewed entries of oam_relations.yaml that
@@ -41,21 +41,21 @@ var reviewedAttribution = testAttribution{
 // Encrypt through a certificate SAN and the certificate's issuer.
 func issuerPath() graph.PlanMatch {
 	return graph.PlanMatch{PathID: "p-issuer",
-		Nodes: []graph.Asset{aitest.Asset("fqdn", "FQDN", "owasp.org"), aitest.Asset("cert", "TLSCertificate", "4566311"),
-			aitest.Asset("issuer", "ContactRecord", "Issuer"), aitest.Asset("le", "Organization", "let's encrypt")},
-		Edges: []graph.Relation{aitest.Edge("e1", "cert", "fqdn", "san_dns_name"), aitest.Edge("e2", "cert", "issuer", "issuer_contact"),
-			aitest.Edge("e3", "issuer", "le", "organization")}}
+		Nodes: []graph.Asset{graphtest.Asset("fqdn", "FQDN", "owasp.org"), graphtest.Asset("cert", "TLSCertificate", "4566311"),
+			graphtest.Asset("issuer", "ContactRecord", "Issuer"), graphtest.Asset("le", "Organization", "let's encrypt")},
+		Edges: []graph.Relation{graphtest.Edge("e1", "cert", "fqdn", "san_dns_name"), graphtest.Edge("e2", "cert", "issuer", "issuer_contact"),
+			graphtest.Edge("e3", "issuer", "le", "organization")}}
 }
 
 // owasp.org -> registration -> DomainRecord -> registrant -> contact -> OWASP
 // Foundation, whose parent is a holding organization.
 func registrantPath() graph.PlanMatch {
 	return graph.PlanMatch{PathID: "p-owner",
-		Nodes: []graph.Asset{aitest.Asset("fqdn", "FQDN", "owasp.org"), aitest.Asset("dr", "DomainRecord", "owasp.org"),
-			aitest.Asset("reg", "ContactRecord", "Registrant"), aitest.Asset("owasp", "Organization", "OWASP Foundation"),
-			aitest.Asset("parent", "Organization", "Example Holdings")},
-		Edges: []graph.Relation{aitest.Edge("e4", "fqdn", "dr", "registration"), aitest.Edge("e5", "dr", "reg", "registrant_contact"),
-			aitest.Edge("e6", "reg", "owasp", "organization"), aitest.Edge("e7", "parent", "owasp", "subsidiary")}}
+		Nodes: []graph.Asset{graphtest.Asset("fqdn", "FQDN", "owasp.org"), graphtest.Asset("dr", "DomainRecord", "owasp.org"),
+			graphtest.Asset("reg", "ContactRecord", "Registrant"), graphtest.Asset("owasp", "Organization", "OWASP Foundation"),
+			graphtest.Asset("parent", "Organization", "Example Holdings")},
+		Edges: []graph.Relation{graphtest.Edge("e4", "fqdn", "dr", "registration"), graphtest.Edge("e5", "dr", "reg", "registrant_contact"),
+			graphtest.Edge("e6", "reg", "owasp", "organization"), graphtest.Edge("e7", "parent", "owasp", "subsidiary")}}
 }
 
 func TestOwnerAttributionStepRules(t *testing.T) {
@@ -66,22 +66,22 @@ func TestOwnerAttributionStepRules(t *testing.T) {
 		"issuer is not an owner":  {issuerPath(), false},
 		"registrant is the owner": {registrantPath(), true},
 		"certificate subject is the owner": {graph.PlanMatch{
-			Nodes: []graph.Asset{aitest.Asset("f", "FQDN", "a.example"), aitest.Asset("c", "TLSCertificate", "1"), aitest.Asset("s",
-				"ContactRecord", "Subject"), aitest.Asset("o", "Organization", "Acme")},
-			Edges: []graph.Relation{aitest.Edge("1", "c", "f", "common_name"), aitest.Edge("2", "c", "s",
-				"subject_contact"), aitest.Edge("3", "s", "o", "organization")}}, true},
+			Nodes: []graph.Asset{graphtest.Asset("f", "FQDN", "a.example"), graphtest.Asset("c", "TLSCertificate", "1"), graphtest.Asset("s",
+				"ContactRecord", "Subject"), graphtest.Asset("o", "Organization", "Acme")},
+			Edges: []graph.Relation{graphtest.Edge("1", "c", "f", "common_name"), graphtest.Edge("2", "c", "s",
+				"subject_contact"), graphtest.Edge("3", "s", "o", "organization")}}, true},
 		"organization website, traversed backward": {graph.PlanMatch{
-			Nodes: []graph.Asset{aitest.Asset("f", "FQDN", "a.example"), aitest.Asset("u", "URL",
-				"https://a.example/"), aitest.Asset("o", "Organization", "Acme")},
-			Edges: []graph.Relation{aitest.Edge("1", "u", "f", "domain"), aitest.Edge("2", "o", "u", "website")}}, true},
+			Nodes: []graph.Asset{graphtest.Asset("f", "FQDN", "a.example"), graphtest.Asset("u", "URL",
+				"https://a.example/"), graphtest.Asset("o", "Organization", "Acme")},
+			Edges: []graph.Relation{graphtest.Edge("1", "u", "f", "domain"), graphtest.Edge("2", "o", "u", "website")}}, true},
 		"controller followed backward does not attribute": {graph.PlanMatch{
-			Nodes: []graph.Asset{aitest.Asset("o", "Organization", "Acme"), aitest.Asset("s", "ContactRecord",
-				"Subject"), aitest.Asset("c", "TLSCertificate", "1"), aitest.Asset("x", "Organization", "Other")},
-			Edges: []graph.Relation{aitest.Edge("1", "s", "o", "organization"), aitest.Edge("2", "c", "s",
-				"subject_contact"), aitest.Edge("3", "c", "x", "issuer_contact")}}, false},
+			Nodes: []graph.Asset{graphtest.Asset("o", "Organization", "Acme"), graphtest.Asset("s", "ContactRecord",
+				"Subject"), graphtest.Asset("c", "TLSCertificate", "1"), graphtest.Asset("x", "Organization", "Other")},
+			Edges: []graph.Relation{graphtest.Edge("1", "s", "o", "organization"), graphtest.Edge("2", "c", "s",
+				"subject_contact"), graphtest.Edge("3", "c", "x", "issuer_contact")}}, false},
 		"unknown relationship never attributes": {graph.PlanMatch{
-			Nodes: []graph.Asset{aitest.Asset("f", "FQDN", "a.example"), aitest.Asset("o", "Organization", "Acme")},
-			Edges: []graph.Relation{aitest.Edge("1", "f", "o", "verified_for")}}, false},
+			Nodes: []graph.Asset{graphtest.Asset("f", "FQDN", "a.example"), graphtest.Asset("o", "Organization", "Acme")},
+			Edges: []graph.Relation{graphtest.Edge("1", "f", "o", "verified_for")}}, false},
 	}
 	for name, tc := range cases {
 		if got, _, _ := ownerAttributed(reviewedAttribution, tc.path); got != tc.want {

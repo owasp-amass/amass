@@ -9,15 +9,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // owaspCertificateFixture holds owasp.org with no documented owner and a
 // certificate that lists it, issued by Let's Encrypt.
-func owaspCertificateFixture() aitest.VendorGraph {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{
+func owaspCertificateFixture() graphtest.VendorGraph {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{
 		"owasp": {ID: "owasp", Type: "FQDN", Key: "owasp.org", Content: map[string]any{"name": "owasp.org"}},
 		"cert": {ID: "cert", Type: "TLSCertificate", Key: "4566311",
 			Content: map[string]any{"subject_common_name": "owasp.org"}},
@@ -29,26 +29,26 @@ func owaspCertificateFixture() aitest.VendorGraph {
 		{ID: "e3", FromID: "issuer", ToID: "le", Label: "organization", Type: "SimpleRelation"},
 	}}
 
-	return aitest.VendorGraph{PlannedGraph: aitest.PlannedGraph{FakeGraph: g}}
+	return graphtest.VendorGraph{PlannedGraph: graphtest.PlannedGraph{FakeGraph: g}}
 }
 
 func campus() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.VendorFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return graphtest.VendorFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 func campusDNS() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.LargeFQDNInventoryFixture(), aitest.FQDNInventoryCatalog
+	return graphtest.LargeFQDNInventoryFixture(), graphtest.FQDNInventoryCatalog
 }
 
 func owaspCerts() (graph.Graph, graph.SchemaCatalog) {
-	return owaspCertificateFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return owaspCertificateFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // sunyitServicesFixture is a namespace whose names reach services directly
 // (www over a port relation), through an IP address (mail), or not at all
 // (vpn). It has no documented owner.
-func sunyitServicesFixture() aitest.VendorGraph {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{}}
+func sunyitServicesFixture() graphtest.VendorGraph {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}}
 	named := func(id, typ, name string) {
 		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: name, Content: map[string]any{"name": name}}
 	}
@@ -73,15 +73,15 @@ func sunyitServicesFixture() aitest.VendorGraph {
 			Type: "BasicDNSRelation"},
 		graph.Relation{ID: "p-mail", FromID: "ip-mail", ToID: "svc-smtp", Label: "port", Type: "PortRelation",
 			Content: map[string]any{"label": "port", "port_number": 25, "protocol": "tcp"}})
-	return aitest.VendorGraph{PlannedGraph: aitest.PlannedGraph{FakeGraph: g}}
+	return graphtest.VendorGraph{PlannedGraph: graphtest.PlannedGraph{FakeGraph: g}}
 }
 
 func campusGaps() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.CampusGapsFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return graphtest.CampusGapsFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 func sunyitServices() (graph.Graph, graph.SchemaCatalog) {
-	return sunyitServicesFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return sunyitServicesFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // campusTXT adds what colgate.edu's DNS TXT records show to the campus
@@ -89,7 +89,7 @@ func sunyitServices() (graph.Graph, graph.SchemaCatalog) {
 // entry knows, a verification token the DNS-SD plugin stored as a
 // verified_for relationship to Google, and one it did not recognize.
 func campusTXT() (graph.Graph, graph.SchemaCatalog) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	g.Assets["google"] = graph.Asset{ID: "google", Type: "Organization", Key: "Google LLC",
 		Content: map[string]any{"name": "Google LLC"}}
 	g.Links = append(g.Links, graph.Relation{ID: "colgate.edu-verified_for-google", FromID: "colgate.edu",
@@ -103,33 +103,33 @@ func campusTXT() (graph.Graph, graph.SchemaCatalog) {
 		txt("t2", "acme-domain-verification=1"),
 	}}
 
-	return g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // institutionFamily is the Johns Hopkins shaped family fixture.
 func institutionFamily() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.VendorGraph{PlannedGraph: aitest.PlannedGraph{FakeGraph: aitest.FamilyGraph()}}, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return graphtest.VendorGraph{PlannedGraph: graphtest.PlannedGraph{FakeGraph: graphtest.FamilyGraph()}}, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // corporateGroup is a GLEIF-shaped corporate group.
 func corporateGroup() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.GroupFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return graphtest.GroupFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // campusServices adds probe-stored services to the campus vendor fixture.
 func campusServices() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.ServicesFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return graphtest.ServicesFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // collegeGroup puts two colleges under one parent.
 func collegeGroup() (graph.Graph, graph.SchemaCatalog) {
-	return aitest.GroupVendorFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}
+	return graphtest.GroupVendorFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 }
 
 // evalFixtures are the graphs offline evaluation cases name.
 var evalFixtures = map[string]func() (graph.Graph, graph.SchemaCatalog){
 	"campus":             campus,
-	"campus-web":         aitest.CampusWeb,
+	"campus-web":         graphtest.CampusWeb,
 	"campus-dns":         campusDNS,
 	"owasp-certificate":  owaspCerts,
 	"sunyit-services":    sunyitServices,
@@ -193,7 +193,7 @@ func TestLoadEvalCasesRejectsBadSets(t *testing.T) {
 
 func TestEvalFailuresAreReported(t *testing.T) {
 	agent := Agent{Model: &plannerModel{replies: []string{"{}"}},
-		Runner: ToolRunner{Graph: aitest.VendorFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
+		Runner: ToolRunner{Graph: graphtest.VendorFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, Limits: graph.DefaultLimits()}}
 	zero := 0
 	c := EvalCase{ID: "x", Question: "Which third-party vendors are used by colgate.edu?",
 		Expect: EvalExpect{Answer: lens.LensControlled, MaxModelCalls: &zero}}

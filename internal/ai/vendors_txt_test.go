@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 func TestFindVendorsReportsVerificationsAndUnrecognizedRecords(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	g.Assets["google"] = graph.Asset{ID: "google", Type: "Organization", Key: "Google LLC",
 		Content: map[string]any{"name": "Google LLC"}}
 	g.Links = append(g.Links, graph.Relation{ID: "colgate.edu-verified_for-google", FromID: "colgate.edu", ToID: "google",
@@ -32,7 +32,7 @@ func TestFindVendorsReportsVerificationsAndUnrecognizedRecords(t *testing.T) {
 	}}
 
 	known := func(r string) bool { return strings.HasPrefix(r, "google-site-verification=") }
-	r, err := lens.FindVendors(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"],
+	r, err := lens.FindVendors(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"],
 		lens.VendorOptions{KnownVerification: known})
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func TestFindVendorsReportsVerificationsAndUnrecognizedRecords(t *testing.T) {
 // own netblock is controlled, other bare addresses are grouped, and a
 // provider's many name server domains are one vendor.
 func TestThirdPartyLensNamesUnattributedParties(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	add := func(id, typ string, content map[string]any) {
 		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: id, Content: content}
 	}
@@ -103,7 +103,7 @@ func TestThirdPartyLensNamesUnattributedParties(t *testing.T) {
 	link("dr", "name_server", "ns-2048.awsdns-64.com", "SimpleRelation")
 	link("dr", "name_server", "ns-2051.awsdns-67.co.uk", "SimpleRelation")
 
-	r, err := lens.SearchThirdParties(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate.edu"])
+	r, err := lens.SearchThirdParties(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"])
 	if err != nil {
 		t.Fatal(err)
 	}

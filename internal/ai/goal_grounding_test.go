@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 const alternateFixtureQuestion = "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
@@ -21,7 +21,7 @@ func TestExplicitRelationGroundingRecoversHallucinatedRegistration(t *testing.T)
 	}}
 	agent := Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()},
+		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: graphtest.TestOAMCatalog, Limits: graph.DefaultLimits()},
 	}
 	goal, err := agent.planGoal(context.Background(), alternateFixtureQuestion)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestExplicitRelationGroundingRecoversHallucinatedRegistration(t *testing.T)
 		goal.Relationships[1].DestinationType != "URL" {
 		t.Fatalf("recovery invented or reordered the OAM schema path: %+v", goal.Relationships)
 	}
-	if err := validateGoal(goal, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields()); err != nil {
+	if err := validateGoal(goal, graphtest.TestOAMCatalog.Relations(), graphtest.TestOAMCatalog.SearchFields()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,19 +53,19 @@ func TestExplicitRelationGroundingRecoversHallucinatedRegistration(t *testing.T)
 
 func TestExplicitRelationGroundingPreservesOrderedUserIntent(t *testing.T) {
 	question := "Starting from tech.acme.example, find organizations via domain then website relationships in that order"
-	hint, ok := explicitRelationLabels(question, aitest.TestOAMCatalog.Relations())
+	hint, ok := explicitRelationLabels(question, graphtest.TestOAMCatalog.Relations())
 	if !ok || hint.Rule != "ordered" {
 		t.Fatalf("ordered labels were not detected: %+v", hint)
 	}
 
-	rels, ok := groundedRelationshipGoal(hint, "FQDN", "Organization", aitest.TestOAMCatalog.Relations())
+	rels, ok := groundedRelationshipGoal(hint, "FQDN", "Organization", graphtest.TestOAMCatalog.Relations())
 	if !ok || len(rels) != 2 || rels[0].Label != "domain" || rels[1].Label != "website" {
 		t.Fatalf("ordered schema route not grounded: %+v", rels)
 	}
 }
 
 func TestExplicitRelationGroundingRejectsAmbiguousTaxonomy(t *testing.T) {
-	catalog := aitest.PlanCatalog{
+	catalog := graphtest.PlanCatalog{
 		{SourceType: "FQDN", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"},
 		{SourceType: "URL", Label: "website", RelationType: "SimpleRelation", DestinationType: "Organization"},
 		{SourceType: "FQDN", Label: "domain", RelationType: "SimpleRelation", DestinationType: "Service"},
@@ -86,7 +86,7 @@ func TestExplicitRelationGroundingFailsClosedWhenTargetTypeHallucinated(t *testi
 	}}
 	agent := Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()},
+		Runner: ToolRunner{Graph: examplePlannedGraph(), Catalog: graphtest.TestOAMCatalog, Limits: graph.DefaultLimits()},
 	}
 	_, err := agent.planGoal(context.Background(), alternateFixtureQuestion)
 	if err == nil || !strings.Contains(err.Error(), "unknown OAM target type") {
@@ -96,7 +96,7 @@ func TestExplicitRelationGroundingFailsClosedWhenTargetTypeHallucinated(t *testi
 
 func TestNonExplicitQuestionDoesNotTriggerRelationRepair(t *testing.T) {
 	hint, ok := explicitRelationLabels("What organization is associated with tech.acme.example?",
-		aitest.TestOAMCatalog.Relations())
+		graphtest.TestOAMCatalog.Relations())
 	if ok || len(hint.Labels) != 0 {
 		t.Fatalf("association question was incorrectly constrained: %+v", hint)
 	}

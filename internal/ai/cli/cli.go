@@ -12,6 +12,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
 	"io"
 	"net/http"
 	"net/url"
@@ -24,24 +25,22 @@ import (
 	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
 	"github.com/owasp-amass/amass/v5/internal/ai/mcp"
-	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
 const Description = "Ask questions with a language model, MCP tools, and model-assisted review"
 
-// operations are the amass ai subcommands. Only approve and retract change
-// the Asset Database, and only for a proposal a reviewer names: an
-// ownership relationship, or a merge of duplicate organizations. Automatic
-// attribution during enumeration runs in the engine.
+// operations are the amass ai subcommands. The lenses and the review of
+// their proposals are amass lens and amass review (package internal/lens/cli);
+// amass ai still runs them by their old names, with a note.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"proposals", "approve", "reject", "retract", "train-attribution", "review", "signals", "duplicates", "duplicate-signals",
-	"identity-conflicts", "family", "vendors", "org-group", "group-vendors", "services", "network", "person-named"}
+	"train-attribution", "review"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -53,6 +52,18 @@ func CLIWorkflow(_ string, args []string) {
 // Run runs amass ai. Operations that moved to amass lens or amass review
 // still run, with a note naming the new command.
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
+	moved := lenscli.Operations()
+	for _, at := range []int{0, len(args) - 1} {
+		if at < 0 || at >= len(args) {
+			continue
+		}
+		if now, ok := moved[args[at]]; ok {
+			_, _ = fmt.Fprintf(errout, "note: amass ai %s is now %s\n", args[at], now)
+			rest := append(append([]string{}, args[:at]...), args[at+1:]...)
+			return lenscli.RunOperation(args[at], in, out, errout, rest)
+		}
+	}
+
 	return run("ai", in, out, errout, args)
 }
 
@@ -61,10 +72,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.SetOutput(errout)
 	var dir, configPath, endpoint, providerName, modelName, keyEnv, question, journalPath, candidatePath, classifierPath, classifierEndpoint, aliasesPath string
 	var scanLimit int
-	var lensAssets, lensReads int
-	var orgName string
-	var queryPath, evalPath, proposalID, reviewer, modelOutput string
-	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince, domainName string
+	var queryPath, evalPath, proposalID, modelOutput string
+	var subjectType, subjectField, subjectValue, subjectID, targetTypes, graphDirection, outputFormat, collectionApproval, graphSince string
 	var graphDepth, graphMatches, graphAlternates, graphExpansions, guidanceRounds, inventoryNames int
 	var modelTimeout, investigationTimeout time.Duration
 	var maxTokens, contextTokens int
@@ -81,9 +90,6 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
 	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
-	fs.StringVar(&domainName, "domain", "", "Enumerated domain for the family and vendors lenses")
-	fs.StringVar(&domainName, "d", "", "Enumerated domain for the family and vendors lenses (same as -domain)")
-	fs.StringVar(&orgName, "org", "", "Organization name for the org-group, group-vendors, services and network lenses (or use -d for a domain)")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
 	fs.StringVar(&queryPath, "query", "",
@@ -111,10 +117,9 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		"Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
 	fs.StringVar(&journalPath, "journal", "",
 		"Review journal path (default: the attribution journal, ai-review.jsonl in the output directory)")
-	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID for approve, reject or retract")
+	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID to ask model advice on (review)")
 	fs.StringVar(&modelOutput, "model-output", "",
 		"Where train-attribution writes the ownership model (default: attribution-model.json beside the journal)")
-	fs.StringVar(&reviewer, "reviewer", "", "Name recorded with an approve, reject or retract decision")
 	fs.StringVar(&candidatePath, "candidate", "", "JSON file with Candidate input for inference")
 	fs.StringVar(&aliasesPath, "organization-aliases", "",
 		"Optional JSON file with explicitly sourced organization alias mappings (read-only)")
@@ -125,10 +130,6 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.BoolVar(&classifierReview, "classifier-review", true,
 		"Enable default OAM evidence-first classifier review triage; never inserts OAM edges")
 	fs.IntVar(&scanLimit, "scan-limit", 10, "Maximum candidate pairs to infer, or proposals to review")
-	fs.IntVar(&lensAssets, "max-assets", 0, fmt.Sprintf("Maximum controlled assets the vendors lens follows "+
-		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", lens.LensMaxAssetsLimit))
-	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one vendors lens run "+
-		"(default 20000, up to %d)", lens.LensMaxReadsLimit))
 	fs.IntVar(&maxTokens, "max-tokens", 0,
 		"Maximum tokens per model reply (0 = provider default; Anthropic default 4096)")
 	fs.StringVar(&temperatureFlag, "temperature", "",
@@ -160,9 +161,6 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	operation := fs.Arg(0)
 	if !slices.Contains(operations, operation) {
 		return fmt.Errorf("unknown operation %q", operation)
-	}
-	if moved, ok := movedOps[operation]; ok && group == "ai" {
-		_, _ = fmt.Fprintf(errout, "note: amass ai %s is now %s\n", operation, moved)
 	}
 
 	cfg := config.NewConfig()
@@ -305,14 +303,6 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 
 	// Listing and rejecting proposals read and append to the journal only.
 	switch operation {
-	case "signals":
-		return listSignals(outputFormat, explicitFlags["format"], out)
-	case "duplicate-signals":
-		return listDuplicateSignals(outputFormat, explicitFlags["format"], out)
-	case "proposals":
-		return listProposals(journalPath, outputFormat, explicitFlags["format"], out)
-	case "reject":
-		return rejectProposal(journalPath, proposalID, reviewer, out)
 	case "train-attribution":
 		return trainAttribution(journalPath, modelOutput, out)
 	case "review":
@@ -351,14 +341,14 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	}
 
 	defer repo.Close()
-	var aliases []ai.OrganizationAlias
+	var aliases []graph.OrganizationAlias
 	if aliasesPath != "" {
 		f, err := os.Open(aliasesPath)
 		if err != nil {
 			return fmt.Errorf("open organization aliases: %w", err)
 		}
 
-		aliases, err = ai.LoadOrganizationAliases(f)
+		aliases, err = graph.LoadOrganizationAliases(f)
 		_ = f.Close()
 		if err != nil {
 			return fmt.Errorf("load organization aliases: %w", err)
@@ -370,52 +360,6 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		KnownVerification: dnssd.IsVerificationRecord}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
-	switch operation {
-	case "approve":
-		if isPersonNamedProposal(proposalID) {
-			return approvePersonNamed(ctx, g, journalPath, proposalID, reviewer, out)
-		}
-		if isIdentityProposal(proposalID) {
-			return approveIdentity(ctx, g, journalPath, proposalID, reviewer, out)
-		}
-		if isMergeProposal(proposalID) {
-			return approveMerge(ctx, g, journalPath, proposalID, reviewer, out)
-		}
-		return approveProposal(ctx, g, journalPath, proposalID, reviewer, out)
-	case "retract":
-		if isPersonNamedProposal(proposalID) {
-			return retractPersonNamed(ctx, g, journalPath, proposalID, reviewer, out)
-		}
-		if isIdentityProposal(proposalID) {
-			return retractIdentity(ctx, g, journalPath, proposalID, reviewer, out)
-		}
-		if isMergeProposal(proposalID) {
-			return retractMerge(ctx, g, journalPath, proposalID, reviewer, out)
-		}
-		return retractProposal(ctx, g, journalPath, proposalID, reviewer, out)
-	case "duplicates":
-		return listDuplicates(ctx, g, journalPath, outputFormat, explicitFlags["format"], out, errout)
-	case "identity-conflicts":
-		return listIdentityConflicts(ctx, g, journalPath, outputFormat, explicitFlags["format"], out, errout)
-	case "person-named":
-		return listPersonNamed(ctx, g, journalPath, outputFormat, explicitFlags["format"], out, errout)
-	case "vendors":
-		return listVendors(ctx, g, domainName, lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads},
-			outputFormat, explicitFlags["format"], out)
-	case "family":
-		return listFamily(ctx, g, domainName, journalPath, outputFormat, explicitFlags["format"], out, errout)
-	case "org-group":
-		return listGroup(ctx, g, domainName, orgName, outputFormat, explicitFlags["format"], out)
-	case "services":
-		return listServices(ctx, g, domainName, orgName,
-			lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
-	case "network":
-		return listNetwork(ctx, g, domainName, orgName,
-			lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
-	case "group-vendors":
-		return listGroupVendors(ctx, g, domainName, orgName,
-			lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}, outputFormat, explicitFlags["format"], out)
-	}
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
 		cancel()
@@ -652,7 +596,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 
 		journal := &review.Journal{Path: journalPath}
 		if routing.Decision == "review" {
-			if err := journal.SubmitTriage(c, routing); err != nil {
+			if err := ai.SubmitTriage(journal, c, routing); err != nil {
 				return err
 			}
 		}

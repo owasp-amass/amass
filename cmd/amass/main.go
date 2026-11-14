@@ -37,6 +37,7 @@ import (
 	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
 	"github.com/owasp-amass/amass/v5/internal/assoc"
 	"github.com/owasp-amass/amass/v5/internal/enum"
+	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
 	"github.com/owasp-amass/amass/v5/internal/subs"
 	"github.com/owasp-amass/amass/v5/internal/tools"
 	"github.com/owasp-amass/amass/v5/internal/track"
@@ -62,8 +63,8 @@ var subcommands = []subDesc{
 	{"assoc", assoc.Description},
 	{"engine", ae.Description},
 	{"enum", enum.Description},
-	{"lens", aicli.LensDescription},
-	{"review", aicli.ReviewDescription},
+	{"lens", lenscli.LensDescription},
+	{"review", lenscli.ReviewDescription},
 	{"subs", subs.Description},
 	{"track", track.Description},
 	{"viz", viz.Description},
@@ -164,9 +165,9 @@ func main() {
 
 		enum.CLIWorkflow(cmdName, os.Args[2:])
 	case "lens":
-		aicli.LensWorkflow(cmdName, os.Args[2:])
+		lenscli.LensWorkflow(cmdName, os.Args[2:])
 	case "review":
-		aicli.ReviewWorkflow(cmdName, os.Args[2:])
+		lenscli.ReviewWorkflow(cmdName, os.Args[2:])
 	case "subs":
 		subs.CLIWorkflow(cmdName, os.Args[2:])
 	case "track":

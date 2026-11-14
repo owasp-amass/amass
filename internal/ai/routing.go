@@ -11,8 +11,31 @@ import (
 	"sort"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
+
+// RoutingResult is how a candidate was routed: the classifier's prediction,
+// the provenance it saw, and the proposal a generative model made, if any.
+type RoutingResult struct {
+	Decision            string                 `json:"decision"` // needs_evidence, review, skip, escalate, proposed, no_proposal
+	Reason              string                 `json:"reason"`
+	Prediction          *classify.Prediction   `json:"prediction,omitempty"`
+	Provenance          review.EvidenceSummary `json:"provenance"`
+	Proposal            *review.Proposal       `json:"proposal,omitempty"`
+	UsedGenerativeModel bool                   `json:"used_generative_model"`
+}
+
+// SubmitTriage records in j a classifier's review-only decision on c. It
+// creates no proposal.
+func SubmitTriage(j *review.Journal, c review.Candidate, r RoutingResult) error {
+	if r.Decision != "review" || r.Prediction == nil {
+		return errors.New("invalid review-only triage event")
+	}
+
+	return j.RecordTriage(review.TriageEvent{SubjectID: c.SubjectID, ObjectID: c.ObjectID,
+		EvidenceIDs: r.Provenance.EvidenceIDs, SourceIDs: r.Provenance.SourceIDs,
+		ModelID: r.Prediction.ModelID, FeatureVersion: r.Prediction.FeatureVersion})
+}
 
 const OrganizationFeatureVersion = "oam-provenance-v1"
 const OrganizationClassificationTask = "organization_relation"
@@ -105,8 +128,8 @@ type RoutingPolicy struct {
 // AnalyzeRouted runs cheap classification first, escalating when needed.
 // It never inserts OAM relationships. The caller decides how to persist a
 // review-only routing result or an LLM proposal.
-func (i Inferrer) AnalyzeRouted(ctx context.Context, c review.Candidate, classifier classify.Classifier, policy RoutingPolicy) (review.RoutingResult, error) {
-	var out review.RoutingResult
+func (i Inferrer) AnalyzeRouted(ctx context.Context, c review.Candidate, classifier classify.Classifier, policy RoutingPolicy) (RoutingResult, error) {
+	var out RoutingResult
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}

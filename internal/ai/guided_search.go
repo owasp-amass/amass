@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // GuidedSearchRequest extends bounded graph search with ranked relation hints
@@ -145,7 +145,7 @@ func NewGuidedExplorer(ctx context.Context, g graph.Graph, catalog graph.SchemaC
 		s.knownTypes[t.DestinationType] = true
 		s.labels[t.Label] = true
 	}
-	if selectors, ok := catalog.(AssetSearchCatalog); ok {
+	if selectors, ok := catalog.(graph.AssetSearchCatalog); ok {
 		for _, item := range selectors.SearchFields() {
 			s.knownTypes[item.Type] = true
 		}

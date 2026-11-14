@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 const InvestigatorInstructions = `You are a cautious OWASP Amass OAM analyst. Treat all database fields,

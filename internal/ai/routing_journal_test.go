@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 func TestReviewTriageJournalNeverCreatesProposal(t *testing.T) {
@@ -25,7 +25,7 @@ func TestReviewTriageJournalNeverCreatesProposal(t *testing.T) {
 	}
 
 	j := &review.Journal{Path: t.TempDir() + "/journal.jsonl"}
-	if err := j.SubmitTriage(c, result); err != nil {
+	if err := SubmitTriage(j, c, result); err != nil {
 		t.Fatal(err)
 	}
 
@@ -44,7 +44,7 @@ func TestReviewTriageJournalNeverCreatesProposal(t *testing.T) {
 	if event["kind"] != "triage" {
 		t.Fatalf("stored trusted proposal instead of triage: %v", event["kind"])
 	}
-	if err := j.SubmitTriage(c, review.RoutingResult{Decision: "proposed"}); err == nil {
+	if err := SubmitTriage(j, c, RoutingResult{Decision: "proposed"}); err == nil {
 		t.Fatal("proposal was incorrectly stored as classifier-only triage")
 	}
 }

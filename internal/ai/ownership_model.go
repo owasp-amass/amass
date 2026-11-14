@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // The ownership model learns how much each kind of signal counts from
@@ -146,6 +146,21 @@ func LoadAttributionModel(path string) (*classify.LinearModel, error) {
 
 	return m, nil
 }
+
+// OwnershipModel decides automatic attribution with a trained ownership
+// model.
+type OwnershipModel struct{ *classify.LinearModel }
+
+// ModelName implements OwnershipScorer.
+func (m OwnershipModel) ModelName() string { return m.ModelID }
+
+// Probability implements OwnershipScorer.
+func (m OwnershipModel) Probability(p review.OwnershipProposal) (float64, error) {
+	return ownershipProbability(m.LinearModel, p)
+}
+
+// Threshold implements OwnershipScorer.
+func (m OwnershipModel) Threshold() float64 { return m.ReviewThreshold }
 
 // ownershipProbability scores p with m, ignoring features m never saw.
 func ownershipProbability(m *classify.LinearModel, p review.OwnershipProposal) (float64, error) {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 type alternateSelectionModel struct {
@@ -51,7 +51,7 @@ func TestEvidenceAwareSelectionPrefersBetterDocumentedAlternateForSameDestinatio
 		"w2": {{ID: "w2s1", SubjectID: "w2", Kind: "SourceProperty", SourceID: "synthetic-site-one"},
 			{ID: "w2s2", SubjectID: "w2", Kind: "SourceProperty", SourceID: "synthetic-site-two"}},
 	}
-	explorer, err := NewGuidedExplorer(context.Background(), g, aitest.TestOAMCatalog, graph.DefaultLimits(),
+	explorer, err := NewGuidedExplorer(context.Background(), g, graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GuidedSearchRequest{
 			GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 4},
 			MaxPathsPerAsset:   3,

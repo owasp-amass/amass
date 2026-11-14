@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func websiteRouteQuery() Query {
@@ -31,7 +31,7 @@ func websiteRouteQuery() Query {
 }
 
 func TestValidateQuery(t *testing.T) {
-	catalog, selectors, limits := aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields(), graph.DefaultLimits()
+	catalog, selectors, limits := graphtest.TestOAMCatalog.Relations(), graphtest.TestOAMCatalog.SearchFields(), graph.DefaultLimits()
 	if err := ValidateQuery(websiteRouteQuery(), catalog, selectors, limits); err != nil {
 		t.Fatalf("valid route rejected: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestValidateQuery(t *testing.T) {
 		"route exclusion": func(q *Query) { q.ExcludeRoot = true },
 		"route purpose":   func(q *Query) { q.Purpose = "ultimate_parent" },
 		"mismatched rels": func(q *Query) {
-			q.Relationships = []GoalRelation{GoalRelation(aitest.TestOAMCatalog[0])}
+			q.Relationships = []GoalRelation{GoalRelation(graphtest.TestOAMCatalog[0])}
 			q.PathRule = "ordered"
 		},
 		"unknown subject": func(q *Query) { q.Subject = PlanSubject{Type: "Spaceship", Field: "name", Value: "x"} },
@@ -81,7 +81,7 @@ func TestValidateQuery(t *testing.T) {
 }
 
 func TestValidateHierarchyQuery(t *testing.T) {
-	cat := aitest.FQDNInventoryCatalog
+	cat := graphtest.FQDNInventoryCatalog
 	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "FQDN", Field: "name", Value: "owasp.org"},
 		Traversal: TraversalHierarchy, TargetTypes: []string{"FQDN"}, Direction: "out", Purpose: "connected",
 		Relationships: []GoalRelation{
@@ -99,7 +99,7 @@ func TestValidateHierarchyQuery(t *testing.T) {
 }
 
 func TestCompileQuestionDeterministicRoutes(t *testing.T) {
-	agent := Agent{Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: aitest.FQDNInventoryCatalog}}
+	agent := Agent{Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: graphtest.FQDNInventoryCatalog}}
 	q, err := agent.CompileQuestion(context.Background(), "Which subdomains are associated with owasp.org?")
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestCompileQuestionTypedRoute(t *testing.T) {
 }
 
 func TestAskQueryRouteNeedsNoModel(t *testing.T) {
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: graphtest.TestOAMCatalog}
 	out, err := (Agent{Runner: runner}).AskQuery(context.Background(), websiteRouteQuery(), AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestAskQueryRouteNeedsNoModel(t *testing.T) {
 }
 
 func TestAskQueryExploreRequiresModelAndValidQuery(t *testing.T) {
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: graphtest.TestOAMCatalog}
 	explore := QueryFromGoal(InvestigationGoal{Subject: PlanSubject{Type: "Organization", Name: "Acme Holdings Inc."},
 		TargetTypes: []string{"URL"}, Direction: "both", Purpose: "connected"}, "", SourceCaller)
 	if _, err := (Agent{Runner: runner}).AskQuery(context.Background(), explore, AdaptiveOptions{}); err == nil {

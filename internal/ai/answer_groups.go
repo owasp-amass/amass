@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // AnswerGroup keeps the preferred explanation separate from all alternative

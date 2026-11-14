@@ -7,6 +7,11 @@ on:
   pull_request:
     paths:
       - 'internal/ai/**'
+      - 'internal/graph/**'
+      - 'internal/lens/**'
+      - 'internal/review/**'
+      - 'internal/semantics/**'
+      - 'engine/plugins/attribution/**'
       - 'internal/subs/**'
       - 'cmd/amass-ai-mcp/**'
       - 'cmd/amass-ai-mcp-http/**'
@@ -31,21 +36,21 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Check gofmt on AI packages
+      - name: Check gofmt on AI, lens and review packages
         run: |
-          unformatted=$(gofmt -l internal/ai config cmd/amass-ai-*)
+          unformatted=$(gofmt -l internal/ai internal/graph internal/lens internal/review internal/semantics config cmd/amass-ai-*)
           if [ -n "$unformatted" ]; then
             echo "Run gofmt -w on:"; echo "$unformatted"; exit 1
           fi
-      - name: Check the Amass copyright header on AI Go files
+      - name: Check the Amass copyright header on AI, lens and review Go files
         run: |
-          missing=$(for f in $(git ls-files 'internal/ai/*.go' 'config/ai*.go' 'cmd/amass-ai-*/*.go'); do
+          missing=$(for f in $(git ls-files 'internal/ai/*.go' 'internal/graph/*.go' 'internal/lens/*.go' 'internal/review/*.go' 'internal/semantics/*.go' 'config/ai*.go' 'cmd/amass-ai-*/*.go'); do
             head -1 "$f" | grep -q '^// Copyright © by Jeff Foley' || echo "$f"; done)
           if [ -n "$missing" ]; then
             echo "Add the standard Amass header to:"; echo "$missing"; exit 1
           fi
-      - name: AI, configuration and CLI tests
-        run: go test -race ./config ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
+      - name: AI, lens, review, configuration and CLI tests
+        run: go test -race ./config ./internal/ai/... ./internal/graph/... ./internal/lens/... ./internal/review/... ./internal/semantics/... ./engine/plugins/attribution ./cmd/amass ./cmd/amass-ai-mcp
       - name: Default evidence-first classifier regression
         run: go test ./internal/ai ./internal/ai/classify ./internal/ai/cli -run "TestDefaultEvidenceClassifier|TestHTTPClassifier|TestClassifierServiceEndpointGuard|TestTrainer" -count=1
       - name: FQDN inventory and subdomain summary regressions
@@ -60,8 +65,8 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go build ./...
-      - name: Vet AI integration
-        run: go vet ./internal/ai/... ./cmd/amass ./cmd/amass-ai-mcp
+      - name: Vet AI, lens and review packages
+        run: go vet ./internal/ai/... ./internal/graph/... ./internal/lens/... ./internal/review/... ./internal/semantics/... ./engine/plugins/attribution ./cmd/amass ./cmd/amass-ai-mcp
 
   image:
     runs-on: ubuntu-latest
@@ -91,7 +96,7 @@ jobs:
       - name: Verify against bounded-query Asset Database branch
         run: |
           go mod edit -replace=github.com/owasp-amass/asset-db=./asset-db
-          go test -v ./internal/ai/oamrepo -run '^TestAdapterBoundedTraversalOnSQLite$' -count=1
+          go test -v ./internal/graph/oamrepo -run '^TestAdapterBoundedTraversalOnSQLite$' -count=1
           go test ./config ./internal/ai/...
 
   neo4j-adapter:
@@ -121,4 +126,4 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Lenses, review and bounded traversal on Neo4j through the AI adapter
-        run: go test -v ./internal/ai/oamrepo -run 'Neo4j' -count=1
+        run: go test -v ./internal/graph/oamrepo -run 'Neo4j' -count=1

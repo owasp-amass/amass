@@ -26,9 +26,9 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/oamrepo"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -285,8 +285,11 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 			continue
 		}
 
-		res, err := ai.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal,
-			ai.AttributionPolicy{Mode: t.mode, Model: t.model, Anchors: t.sess.Config().Domains()})
+		policy := review.AttributionPolicy{Mode: t.mode, Anchors: t.sess.Config().Domains()}
+		if t.model != nil {
+			policy.Model = ai.OwnershipModel{LinearModel: t.model}
+		}
+		res, err := review.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal, policy)
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", graph.AssetLabel(org), err))
 		}
@@ -296,7 +299,7 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 		for _, a := range res.Applied {
 			if !a.Existed {
 				t.sess.Log().Info(fmt.Sprintf("AI attribution recorded %s %s as owned by %s (confidence %d, proposal %s)",
-					a.Proposal.AssetType, a.Proposal.Asset, a.Proposal.Owner, ai.ProposalConfidence(a.Proposal),
+					a.Proposal.AssetType, a.Proposal.Asset, a.Proposal.Owner, review.ProposalConfidence(a.Proposal),
 					a.Proposal.ID))
 			}
 

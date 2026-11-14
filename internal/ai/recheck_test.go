@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 type fakeRetractor struct{ retracted []string }
@@ -23,7 +23,7 @@ func (f *fakeRetractor) RetractOwnership(_ context.Context, id string) (bool, er
 }
 
 func TestRecheckAttributions(t *testing.T) {
-	g := aitest.NewOrgGraph()
+	g := graphtest.NewOrgGraph()
 	g.Org("colgate", "colgate university", "", "", "")
 	g.Graph.Assets["cr-a"] = graph.Asset{ID: "cr-a", Type: "ContactRecord"}
 	g.Graph.Assets["cr-b"] = graph.Asset{ID: "cr-b", Type: "ContactRecord"}

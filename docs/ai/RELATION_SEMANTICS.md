@@ -1,6 +1,6 @@
 # OAM relationship semantics
 
-`internal/ai/semantics/oam_relations.yaml` records what every Open Asset
+`internal/semantics/oam_relations.yaml` records what every Open Asset
 Model relationship means for AI investigations. It is keyed exactly like
 OAM's relationship table (source type, label, relation type, destination
 type) so it can move into open-asset-model unchanged. A CI test fails when

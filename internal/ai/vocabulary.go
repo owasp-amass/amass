@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/semantics"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 )
 
 // The user-language vocabulary lives in data next to the relationship

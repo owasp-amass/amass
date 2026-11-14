@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
-func examplePlannedGraph() aitest.PlannedGraph {
-	return aitest.PlannedGraph{FakeGraph: aitest.FakeGraph{
+func examplePlannedGraph() graphtest.PlannedGraph {
+	return graphtest.PlannedGraph{FakeGraph: graphtest.FakeGraph{
 		Assets: map[string]graph.Asset{
 			"parent": {
 				ID:      "parent",
@@ -123,7 +123,7 @@ func hop(direction, label, destination string) PlanHop {
 func askRoute(t *testing.T, q Query) Investigation {
 	t.Helper()
 
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: graphtest.TestOAMCatalog}
 	out, err := (Agent{Runner: runner}).AskQuery(context.Background(), q, AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ const urlGoal = `{"subject":{"type":"FQDN","field":"name","value":"tech.acme.exa
 func compileWith(t *testing.T, model llm.Model, question string) (Query, error) {
 	t.Helper()
 
-	agent := Agent{Model: model, Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}}
+	agent := Agent{Model: model, Runner: ToolRunner{Limits: graph.DefaultLimits(), Catalog: graphtest.TestOAMCatalog}}
 	return agent.CompileQuestion(context.Background(), question)
 }
 
@@ -257,7 +257,7 @@ func TestGoalPlannerCorrectsUnexpectedFields(t *testing.T) {
 func TestGoalParserCanonicalizesSingleFieldObject(t *testing.T) {
 	goal, err := parseGoal(`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"}},`+
 		`"target_types":["FQDN"],"direction":"both","purpose":"connected","relationships":[],"path_rule":""}`,
-		aitest.TestOAMCatalog.SearchFields())
+		graphtest.TestOAMCatalog.SearchFields())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestGoalParserRejectsUntrustedFieldCatalogs(t *testing.T) {
 		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"unexpected":true}`,
 		`{"subject":{"type":"URL","fields":{"url":"https://tech.acme.example/"},"value":"https://elsewhere.example/"}`,
 	} {
-		if _, err := parseGoal(subject+rest, aitest.TestOAMCatalog.SearchFields()); err == nil {
+		if _, err := parseGoal(subject+rest, graphtest.TestOAMCatalog.SearchFields()); err == nil {
 			t.Fatalf("unexpectedly accepted malformed goal: %s", subject)
 		}
 	}
@@ -288,13 +288,13 @@ func TestPlannerRejectsInventedLabelBeforeDatabaseAccess(t *testing.T) {
 			{Direction: "out", Label: "hosted-on", RelationType: "SimpleRelation", DestinationType: "URL"},
 		},
 	}
-	if err := validatePlan(p, aitest.TestOAMCatalog, graph.DefaultLimits()); err == nil {
+	if err := validatePlan(p, graphtest.TestOAMCatalog, graph.DefaultLimits()); err == nil {
 		t.Fatal("made-up label accepted")
 	}
 }
 
 func TestSchemaCatalogTool(t *testing.T) {
-	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: aitest.TestOAMCatalog}
+	runner := ToolRunner{Graph: examplePlannedGraph(), Limits: graph.DefaultLimits(), Catalog: graphtest.TestOAMCatalog}
 	raw, err := runner.Run(context.Background(), "describe_oam_schema",
 		json.RawMessage(`{"source_type":"Organization"}`))
 	if err != nil {
@@ -314,13 +314,13 @@ func TestGenericSelectorRejectsUnsupportedFields(t *testing.T) {
 	if err := validatePlanWithSelectors(TypedPlan{
 		Subject: PlanSubject{Type: "FQDN", Field: "domain", Value: "tech.acme.example"},
 		Hops:    []PlanHop{{Direction: "in", Label: "domain", RelationType: "SimpleRelation", DestinationType: "URL"}},
-	}, aitest.TestOAMCatalog.Relations(), aitest.TestOAMCatalog.SearchFields(), graph.DefaultLimits()); err == nil {
+	}, graphtest.TestOAMCatalog.Relations(), graphtest.TestOAMCatalog.SearchFields(), graph.DefaultLimits()); err == nil {
 		t.Fatal("unsupported FQDN selector should fail validation")
 	}
 }
 
 func TestNormalizationDoesNotGuessUnsupportedSelectors(t *testing.T) {
-	schema := aitest.TestOAMCatalog.SearchFields()
+	schema := graphtest.TestOAMCatalog.SearchFields()
 	cases := []PlanSubject{
 		{Type: "URL", Name: "https://tech.acme.example/"},
 		{Type: "FQDN", Field: "url", Name: "tech.acme.example"},

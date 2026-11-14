@@ -10,19 +10,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // A question about exposed services is planned as the services answer and
 // answered by the lens, with the identified software in the answer.
 func TestAskServices(t *testing.T) {
-	g := aitest.ServicesFixture()
+	g := graphtest.ServicesFixture()
 	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"services","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(), "What services does colgate.edu expose?", AdaptiveOptions{})
@@ -33,7 +33,7 @@ func TestAskServices(t *testing.T) {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 
-	raw, err := json.Marshal(goalJSONSchema(aitest.TestOAMCatalog.Relations(), nil))
+	raw, err := json.Marshal(goalJSONSchema(graphtest.TestOAMCatalog.Relations(), nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,11 +47,11 @@ func TestAskServices(t *testing.T) {
 // A question about network infrastructure is planned as the network answer
 // and answered by the lens.
 func TestAskNetwork(t *testing.T) {
-	g := aitest.VendorFixture()
+	g := graphtest.VendorFixture()
 	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"network","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(), "Which IP ranges belong to colgate.edu?", AdaptiveOptions{})

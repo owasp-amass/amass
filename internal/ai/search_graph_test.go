@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func TestGraphSearchVariableLengthBeyondTen(t *testing.T) {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{}, Links: []graph.Relation{}}
-	catalog := aitest.PlanCatalog{
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}, Links: []graph.Relation{}}
+	catalog := graphtest.PlanCatalog{
 		{SourceType: "FQDN", Label: "next", RelationType: "SimpleRelation", DestinationType: "Service"},
 		{SourceType: "Service", Label: "next", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 	}
@@ -62,7 +62,7 @@ func TestGraphSearchVariableLengthBeyondTen(t *testing.T) {
 }
 
 func TestGraphSearchDiscoversIncomingPaths(t *testing.T) {
-	result, err := SearchGraph(context.Background(), examplePlannedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
+	result, err := SearchGraph(context.Background(), examplePlannedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GraphSearchRequest{
 			StartID: "fqdn-tech", TargetTypes: []string{"Organization"}, MaxDepth: 3,
 		})
@@ -82,7 +82,7 @@ func TestGraphSearchDiscoversIncomingPaths(t *testing.T) {
 func TestGraphSearchDistinguishesTruncation(t *testing.T) {
 	limits := graph.DefaultLimits()
 	limits.MaxPerNode = 1
-	result, err := SearchGraph(context.Background(), examplePlannedGraph(), aitest.TestOAMCatalog, limits, GraphSearchRequest{
+	result, err := SearchGraph(context.Background(), examplePlannedGraph(), graphtest.TestOAMCatalog, limits, GraphSearchRequest{
 		StartID: "parent", TargetTypes: []string{"FQDN"}, MaxDepth: 3,
 	})
 	if err != nil || !result.Truncated || result.Exhausted {
@@ -91,7 +91,7 @@ func TestGraphSearchDistinguishesTruncation(t *testing.T) {
 }
 
 func TestGraphSearchRejectsUnknownTypes(t *testing.T) {
-	_, err := SearchGraph(context.Background(), examplePlannedGraph(), aitest.TestOAMCatalog, graph.DefaultLimits(),
+	_, err := SearchGraph(context.Background(), examplePlannedGraph(), graphtest.TestOAMCatalog, graph.DefaultLimits(),
 		GraphSearchRequest{
 			StartID: "fqdn-tech", TargetTypes: []string{"Imaginary"},
 		})

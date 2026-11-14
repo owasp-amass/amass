@@ -1,6 +1,6 @@
 # Duplicate organizations
 
-<!-- Generated from internal/ai/semantics/duplicate_signals.json by `amass review duplicate-signals -format markdown`. Edit that file, not this one. -->
+<!-- Generated from internal/semantics/duplicate_signals.json by `amass review duplicate-signals -format markdown`. Edit that file, not this one. -->
 
 Sources record one company several times: a certificate, an RDAP lookup and GLEIF can each create an organization under a different spelling. Amass proposes merging two stored organizations only from stored evidence. Each kind of evidence is a signal, listed here with why it counts, what stops it from misfiring, and when it can still mislead. The same text is shown by `amass review duplicate-signals`.
 

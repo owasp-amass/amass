@@ -9,9 +9,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // schemaModel records the schema it was asked to honor and returns reply.

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // GoalRelation is one exact, oriented OAM taxonomy transition.

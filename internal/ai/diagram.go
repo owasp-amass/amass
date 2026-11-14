@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // Mermaid converts an already-bounded graph walk to a safe static diagram.

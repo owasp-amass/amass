@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 type graphSearchOptions struct {

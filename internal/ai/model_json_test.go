@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 func TestInferrerAcceptsFencedProposal(t *testing.T) {

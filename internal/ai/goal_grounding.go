@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // namedRelationshipPhrase requires the user to explicitly name OAM

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // goodVendorNarrative cites the colgate.edu vendor bundle correctly.
@@ -116,7 +116,7 @@ func TestNarrateRejectsAfterRetry(t *testing.T) {
 }
 
 func TestTableRowsCarryWitnessEdges(t *testing.T) {
-	g, cat := aitest.CampusWeb()
+	g, cat := graphtest.CampusWeb()
 	q := Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
 		Traversal: TraversalExplore, TargetTypes: []string{"URL"}, Direction: "both", Purpose: "connected",
 		Lens: lens.LensTable, Columns: []lens.TableColumn{{Type: "IPAddress"}, {Type: "Organization", Role: lens.ColumnController}},

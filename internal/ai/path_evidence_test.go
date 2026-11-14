@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func provenancePath() graph.PlanMatch {
@@ -29,7 +29,7 @@ func provenancePath() graph.PlanMatch {
 
 func TestPathEvidenceDistinguishesSourcedFromUnsupportedLinks(t *testing.T) {
 	path := provenancePath()
-	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
+	g := graphtest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
 		"dns": {{ID: "dns-a", SubjectID: "dns", SourceID: "synthetic-dns-a", Kind: "SourceProperty"}},
 		"web": {{ID: "web-a", SubjectID: "web", SourceID: "synthetic-site-a", Kind: "SourceProperty"},
 			{ID: "web-b", SubjectID: "web", SourceID: "synthetic-site-b", Kind: "SourceProperty"}},
@@ -63,7 +63,7 @@ func TestPathEvidenceDistinguishesSourcedFromUnsupportedLinks(t *testing.T) {
 
 func TestPathEvidenceDoesNotMistakeGenericTagsForIndependentSources(t *testing.T) {
 	path := provenancePath()
-	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
+	g := graphtest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
 		"dns": {{ID: "tag1", SubjectID: "dns", Kind: "SimpleProperty"},
 			{ID: "tag2", SubjectID: "dns", Kind: "SimpleProperty"}},
 		"web": {{ID: "tag3", SubjectID: "web", SourceID: "same-upstream", Kind: "SourceProperty"},
@@ -85,7 +85,7 @@ func TestPathEvidenceDoesNotMistakeGenericTagsForIndependentSources(t *testing.T
 }
 
 func TestPathEvidenceRejectsMisattachedSourceTags(t *testing.T) {
-	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
+	g := graphtest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{
 		"dns": {{ID: "tag", SubjectID: "not-dns", SourceID: "synthetic-incorrect", Kind: "SourceProperty"}},
 	}}
 	_, err := EvaluatePathEvidence(context.Background(), g, graph.DefaultLimits(), []graph.PlanMatch{provenancePath()})
@@ -96,7 +96,7 @@ func TestPathEvidenceRejectsMisattachedSourceTags(t *testing.T) {
 
 func TestPathEvidenceReportsLookupBudgetAndNoFictitiousCoverage(t *testing.T) {
 	p := graph.PlanMatch{}
-	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{}}
+	g := graphtest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{}}
 	for i := 0; i <= 42; i++ {
 		p.Nodes = append(p.Nodes, graph.Asset{ID: fmt.Sprintf("n%d", i), Type: "FQDN"})
 	}
@@ -118,7 +118,7 @@ func TestPathEvidenceReportsLookupBudgetAndNoFictitiousCoverage(t *testing.T) {
 }
 
 func TestPathEvidenceReportsPerEdgeRecordTruncation(t *testing.T) {
-	g := aitest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{}}
+	g := graphtest.FakeGraph{EvidenceByID: map[string][]graph.Evidence{}}
 	for i := 0; i < 10; i++ {
 		g.EvidenceByID["dns"] = append(g.EvidenceByID["dns"], graph.Evidence{ID: fmt.Sprintf("t%d",
 			i), SubjectID: "dns", SourceID: fmt.Sprintf("src%d", i), Kind: "SourceProperty"})

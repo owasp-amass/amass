@@ -7,9 +7,9 @@ package ai
 import (
 	"sort"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // goalJSONSchema describes the planner's InvestigationGoal reply. Asset

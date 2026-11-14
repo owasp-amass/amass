@@ -8,8 +8,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 // The real Qwen3 acceptance question previously needed ~98s of goal
@@ -18,7 +18,7 @@ import (
 func TestExplicitOrganizationQuestionUsesZeroModelCalls(t *testing.T) {
 	model := &plannerModel{replies: []string{}}
 	agent := Agent{Model: model, Runner: ToolRunner{
-		Graph: examplePlannedGraph(), Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits(),
+		Graph: examplePlannedGraph(), Catalog: graphtest.TestOAMCatalog, Limits: graph.DefaultLimits(),
 	}}
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
 	result, err := agent.AskAdaptive(context.Background(), question, AdaptiveOptions{MaxDepth: 8, GuidanceRounds: 0})
@@ -65,7 +65,7 @@ func TestDeterministicGoalFastPathFailsClosedForAmbiguity(t *testing.T) {
 		"Which organization is connected to tech.acme.example?",
 	}
 	for _, question := range cases {
-		_, ok := deterministicExplicitOrganizationGoal(question, aitest.TestOAMCatalog)
+		_, ok := deterministicExplicitOrganizationGoal(question, graphtest.TestOAMCatalog)
 		if ok {
 			t.Errorf("ambiguous question incorrectly bypassed model: %s", question)
 		}
@@ -74,7 +74,7 @@ func TestDeterministicGoalFastPathFailsClosedForAmbiguity(t *testing.T) {
 
 func TestDeterministicGoalAcceptsRealWorldTwoLabelFQDN(t *testing.T) {
 	question := "Which organization is connected to owasp.org through domain and website relationships?"
-	goal, ok := deterministicExplicitOrganizationGoal(question, aitest.TestOAMCatalog)
+	goal, ok := deterministicExplicitOrganizationGoal(question, graphtest.TestOAMCatalog)
 	if !ok || goal.Subject.Type != "FQDN" || goal.Subject.Value != "owasp.org" ||
 		goal.Purpose != "connected" || len(goal.Relationships) != 2 {
 		t.Fatalf("explicit two-label domain was not grounded: goal=%+v ok=%t", goal, ok)
@@ -84,7 +84,7 @@ func TestDeterministicGoalAcceptsRealWorldTwoLabelFQDN(t *testing.T) {
 func BenchmarkDeterministicExplicitOrganizationGoal(b *testing.B) {
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
 	for i := 0; i < b.N; i++ {
-		if _, ok := deterministicExplicitOrganizationGoal(question, aitest.TestOAMCatalog); !ok {
+		if _, ok := deterministicExplicitOrganizationGoal(question, graphtest.TestOAMCatalog); !ok {
 			b.Fatal("explicit question unexpectedly fell back to the model")
 		}
 	}
@@ -94,7 +94,7 @@ func BenchmarkDeterministicExplicitOrganizationGoal(b *testing.B) {
 // fixture: two equivalent direct routes, two routes to the parent, and two
 // routes to the sibling. The better-tagged URL path must win without Qwen.
 func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.T) {
-	g := aitest.FakeGraph{
+	g := graphtest.FakeGraph{
 		Assets: map[string]graph.Asset{
 			"f":       {ID: "f", Type: "FQDN", Key: "tech.acme.example"},
 			"u1":      {ID: "u1", Type: "URL", Key: "https://tech.acme.example/"},
@@ -126,8 +126,8 @@ func TestSixPathAlternativeQuestionSelectsOneDirectRouteWithoutModel(t *testing.
 	model := &plannerModel{replies: []string{}}
 	// Use the same test resolver as the other end-to-end adaptive tests.
 	// fakeGraph alone supports traversal but not indexed ResolveAsset.
-	resolved := aitest.PlannedGraph{FakeGraph: g}
-	a := Agent{Model: model, Runner: ToolRunner{Graph: resolved, Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
+	resolved := graphtest.PlannedGraph{FakeGraph: g}
+	a := Agent{Model: model, Runner: ToolRunner{Graph: resolved, Catalog: graphtest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
 	question := "Which organization is connected to tech.acme.example through website and domain relationships, and which witnessed route has better named source-tag coverage?"
 	out, err := a.AskAdaptive(context.Background(), question,
 		AdaptiveOptions{MaxDepth: 8, MaxPathsPerAsset: 3, GuidanceRounds: 0})

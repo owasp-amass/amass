@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // LensFamily asks for the organization family of an enumerated domain: the

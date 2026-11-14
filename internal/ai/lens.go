@@ -7,8 +7,8 @@ package ai
 import (
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // deterministicThirdPartyQuery compiles an explicit vendor question about

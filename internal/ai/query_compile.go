@@ -9,8 +9,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // CompileQuestion turns a natural-language question into a validated Query.
@@ -42,7 +42,7 @@ func (a Agent) CompileQuestion(ctx context.Context, question string) (Query, err
 	}
 
 	var selectors []graph.AssetSearchSchema
-	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
+	if c, ok := a.Runner.Catalog.(graph.AssetSearchCatalog); ok {
 		selectors = c.SearchFields()
 	}
 	if err := ValidateQuery(q, a.Runner.Catalog.Relations(), selectors, a.Runner.Limits); err != nil {

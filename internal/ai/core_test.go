@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 func TestRunnerRejectsUnknownFields(t *testing.T) {
-	runner := ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()}
+	runner := ToolRunner{Graph: graphtest.SampleGraph(), Limits: graph.DefaultLimits()}
 	_, err := runner.Run(context.Background(), "get_asset", json.RawMessage(`{"id":"a","injection":"x"}`))
 	if err == nil {
 		t.Fatal("unknown field accepted")
@@ -85,7 +85,7 @@ func TestAgent(t *testing.T) {
 	model := &fakeModel{}
 	out, err := (Agent{
 		Model:  model,
-		Runner: ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()},
+		Runner: ToolRunner{Graph: graphtest.SampleGraph(), Limits: graph.DefaultLimits()},
 	}).Ask(context.Background(), "What is a?")
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestAgentRequiresToolEvidence(t *testing.T) {
 	m := inferenceModel{answer: "The domain belongs to the organization."}
 	_, err := (Agent{
 		Model:  m,
-		Runner: ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()},
+		Runner: ToolRunner{Graph: graphtest.SampleGraph(), Limits: graph.DefaultLimits()},
 	}).Ask(context.Background(), "Who owns the domain?")
 	if err == nil {
 		t.Fatal("ungrounded answer accepted")
@@ -164,14 +164,14 @@ func TestAgentRejectsAnswerAfterFailedTools(t *testing.T) {
 	m := &failedToolModel{}
 	_, err := (Agent{
 		Model:  m,
-		Runner: ToolRunner{Graph: aitest.SampleGraph(), Limits: graph.DefaultLimits()},
+		Runner: ToolRunner{Graph: graphtest.SampleGraph(), Limits: graph.DefaultLimits()},
 	}).Ask(context.Background(), "Who owns the domain?")
 	if err == nil {
 		t.Fatal("model supplied ungrounded answer following failed tool")
 	}
 }
 
-type collidingEvidenceGraph struct{ aitest.FakeGraph }
+type collidingEvidenceGraph struct{ graphtest.FakeGraph }
 
 func (g collidingEvidenceGraph) Evidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
 	return []graph.Evidence{{ID: "asset-tag", SubjectID: id, SourceID: "asset-only", Kind: "SourceProperty"}}, nil
@@ -182,7 +182,7 @@ func (g collidingEvidenceGraph) EdgeEvidence(ctx context.Context, id string, lim
 }
 
 func TestGetEdgeEvidenceUsesExactRelationNamespace(t *testing.T) {
-	runner := ToolRunner{Graph: collidingEvidenceGraph{FakeGraph: aitest.SampleGraph()}, Limits: graph.DefaultLimits()}
+	runner := ToolRunner{Graph: collidingEvidenceGraph{FakeGraph: graphtest.SampleGraph()}, Limits: graph.DefaultLimits()}
 	raw, err := runner.Run(context.Background(), "get_edge_evidence", json.RawMessage(`{"id":"1","limit":8}`))
 	if err != nil {
 		t.Fatal(err)

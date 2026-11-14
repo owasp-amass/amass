@@ -8,19 +8,19 @@ import (
 	"context"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 // A domain with more direct subdomains than one read returns is listed in
 // full, up to the inventory's name limit, when the graph pages.
 func TestInventoryPagesBusyNames(t *testing.T) {
 	n := graph.MaxEdgeRead + 100
-	g := aitest.BusyColgate(n)
+	g := graphtest.BusyColgate(n)
 	root := g.Assets["colgate.edu"]
 	opts := AdaptiveOptions{MaxInventory: 1000}
 
-	paged := aitest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}
+	paged := graphtest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}
 	r, err := searchFQDNInventory(context.Background(), paged, graph.DefaultLimits(), root, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -43,8 +43,8 @@ func TestInventoryPagesBusyNames(t *testing.T) {
 // A typed relationship answer returns as many matches as were asked for,
 // past the per-node limit meant for model context.
 func TestTypedRelationReadsRequestedMatches(t *testing.T) {
-	g := aitest.BusyColgate(100)
-	paged := aitest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}
+	g := graphtest.BusyColgate(100)
+	paged := graphtest.PagedVendorGraph{VendorGraph: g, Pages: new(int)}
 	intent := TypedRelationIntent{Goal: InvestigationGoal{Subject: PlanSubject{Type: "FQDN", Field: "name",
 		Value: "colgate.edu"}, TargetTypes: []string{"FQDN"}},
 		Hops: []PlanHop{{Direction: "out", Label: "node", RelationType: "SimpleRelation", DestinationType: "FQDN"}}}

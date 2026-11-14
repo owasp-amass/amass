@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // scriptedModel replies with each text in turn.

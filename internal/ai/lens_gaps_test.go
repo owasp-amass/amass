@@ -10,16 +10,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 func gapReport(t *testing.T) lens.OwnershipGapReport {
 	t.Helper()
 
-	r, err := lens.SearchOwnershipGaps(context.Background(), aitest.CampusGapsFixture(), aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
-		aitest.CampusGapsFixture().Assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), graphtest.CampusGapsFixture(), graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+		graphtest.CampusGapsFixture().Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestAssetsControlledElsewhereAreNotGaps(t *testing.T) {
 }
 
 func TestGapAnswerAndEvidence(t *testing.T) {
-	inv, err := (Agent{Runner: ToolRunner{Graph: aitest.CampusGapsFixture(), Catalog: aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog},
+	inv, err := (Agent{Runner: ToolRunner{Graph: graphtest.CampusGapsFixture(), Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		Limits: graph.DefaultLimits()}}).AskQuery(context.Background(),
 		Query{Version: QueryVersion, Subject: PlanSubject{Type: "Organization", Name: "Colgate University"},
 			Traversal: TraversalExplore, Direction: "both", Purpose: "connected", Lens: lens.LensOwnershipGaps,
@@ -108,13 +108,13 @@ func TestGapAnswerAndEvidence(t *testing.T) {
 }
 
 func TestRedactedValuesGiveNoIdentitySignal(t *testing.T) {
-	g := aitest.CampusGapsFixture()
+	g := graphtest.CampusGapsFixture()
 	g.Assets["loc"] = graph.Asset{ID: "loc", Type: "Location", Key: "REDACTED FOR PRIVACY",
 		Content: map[string]any{"address": "REDACTED FOR PRIVACY"}}
 	g.Assets["phone"] = graph.Asset{ID: "phone", Type: "Phone", Key: "REDACTED FOR PRIVACY",
 		Content: map[string]any{"e164": "REDACTED FOR PRIVACY"}}
 
-	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,13 +124,13 @@ func TestRedactedValuesGiveNoIdentitySignal(t *testing.T) {
 }
 
 func TestReverseLookupNamesAreNotCandidates(t *testing.T) {
-	g := aitest.CampusGapsFixture()
+	g := graphtest.CampusGapsFixture()
 	g.Assets["rev"] = graph.Asset{ID: "rev", Type: "FQDN", Key: "1.1.43.149.in-addr.arpa",
 		Content: map[string]any{"name": "1.1.43.149.in-addr.arpa"}}
 	g.Links = append(g.Links, graph.Relation{ID: "rev-ip", FromID: "rev", ToID: "ip-own", Label: "dns_record",
 		Type: "BasicDNSRelation"})
 
-	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestReverseLookupNamesAreNotCandidates(t *testing.T) {
 }
 
 func TestLargeGainsAreCounted(t *testing.T) {
-	g := aitest.CampusGapsFixture()
+	g := graphtest.CampusGapsFixture()
 	for i := 0; i < lens.GapMaxGains+5; i++ {
 		id := fmt.Sprintf("alumni-%02d.colgatealumni.org", i)
 		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: id, Content: map[string]any{"name": id}}
@@ -151,7 +151,7 @@ func TestLargeGainsAreCounted(t *testing.T) {
 			Type: "SimpleRelation"})
 	}
 
-	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestLargeGainsAreCounted(t *testing.T) {
 }
 
 func TestAddressesInOwnedNetblocksAreOwned(t *testing.T) {
-	g := aitest.CampusGapsFixture()
+	g := graphtest.CampusGapsFixture()
 	// An address in Colgate's 149.43.0.0/16 that the lens never read as
 	// contained (a large netblock), and one outside it.
 	for id, addr := range map[string]string{"ip-unread": "149.43.200.9", "ip-outside": "198.51.100.9"} {
@@ -173,7 +173,7 @@ func TestAddressesInOwnedNetblocksAreOwned(t *testing.T) {
 			Type: "SimpleRelation"})
 	}
 
-	r, err := lens.SearchOwnershipGaps(context.Background(), g, aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog}, g.Assets["colgate"])
+	r, err := lens.SearchOwnershipGaps(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate"])
 	if err != nil {
 		t.Fatal(err)
 	}

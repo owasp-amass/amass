@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // AdviseOwnership asks the model to recommend approving or rejecting p and

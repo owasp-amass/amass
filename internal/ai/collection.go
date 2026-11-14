@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // CollectionPlan is a proposal, never permission. Its ID is a deterministic

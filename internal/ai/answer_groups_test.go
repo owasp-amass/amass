@@ -8,8 +8,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func TestAnswerGroupingCollapsesEquivalentRoutesWithoutModelCall(t *testing.T) {
@@ -21,7 +21,7 @@ func TestAnswerGroupingCollapsesEquivalentRoutesWithoutModelCall(t *testing.T) {
 		"w2": {{ID: "w2-s1", SubjectID: "w2", Kind: "SourceProperty", SourceID: "source-a"},
 			{ID: "w2-s2", SubjectID: "w2", Kind: "SourceProperty", SourceID: "source-b"}},
 	}
-	exp, err := NewGuidedExplorer(context.Background(), g, aitest.TestOAMCatalog, graph.DefaultLimits(), GuidedSearchRequest{
+	exp, err := NewGuidedExplorer(context.Background(), g, graphtest.TestOAMCatalog, graph.DefaultLimits(), GuidedSearchRequest{
 		GraphSearchRequest: GraphSearchRequest{StartID: "f", TargetTypes: []string{"Organization"}, MaxDepth: 4},
 	})
 	if err != nil {
@@ -73,7 +73,7 @@ func TestAnswerGroupingKeepsIndirectOrganizationsAsContext(t *testing.T) {
 			{SourceType: "URL", Label: "domain", RelationType: "SimpleRelation", DestinationType: "FQDN"},
 			{SourceType: "Organization", Label: "website", RelationType: "SimpleRelation", DestinationType: "URL"},
 		}, PathRule: "all"}
-	exp, err := NewGuidedExplorer(context.Background(), gr, aitest.TestOAMCatalog, graph.DefaultLimits(), GuidedSearchRequest{
+	exp, err := NewGuidedExplorer(context.Background(), gr, graphtest.TestOAMCatalog, graph.DefaultLimits(), GuidedSearchRequest{
 		GraphSearchRequest: GraphSearchRequest{StartID: "fqdn-tech", TargetTypes: goal.TargetTypes, MaxDepth: 8},
 		Relationships:      goal.Relationships, PathRule: goal.PathRule,
 	})

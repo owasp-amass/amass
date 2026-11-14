@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
 func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
 	for i := 0; i < 15; i++ {
 		id := fmt.Sprintf("url-%02d", i)
 		g.Assets[id] = graph.Asset{ID: id, Type: "URL", Key: "https://example.org/" + id}
@@ -24,7 +24,7 @@ func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
 	}
 
 	model := &plannerModel{replies: []string{`{"preferred_labels":["website"],"priority_asset_ids":[]}`}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
 	var investigation Investigation
 	result, err := agent.guidedInvestigation(context.Background(),
 		"Which websites belong to this organization?",
@@ -43,7 +43,7 @@ func TestGuidedInvestigationRequestsValidModelPriorities(t *testing.T) {
 }
 
 func TestGuidedInvestigationInvalidAdviceCannotInventGraphLabels(t *testing.T) {
-	g := aitest.FakeGraph{Assets: map[string]graph.Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{"root": {ID: "root", Type: "Organization", Key: "root-org"}}}
 	for i := 0; i < 15; i++ {
 		id := fmt.Sprintf("url-%02d", i)
 		g.Assets[id] = graph.Asset{ID: id, Type: "URL", Key: id}
@@ -52,7 +52,7 @@ func TestGuidedInvestigationInvalidAdviceCannotInventGraphLabels(t *testing.T) {
 	}
 
 	model := &plannerModel{replies: []string{`{"preferred_labels":["nonexistent-ownership"],"priority_asset_ids":[]}`}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: aitest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.TestOAMCatalog, Limits: graph.DefaultLimits()}}
 	var inv Investigation
 	result, err := agent.guidedInvestigation(context.Background(), "List URLs",
 		InvestigationGoal{Purpose: "connected", TargetTypes: []string{"URL"}, Direction: "both"},

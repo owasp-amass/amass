@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 func TestOAMIntentVocabularyCanonicalSynonyms(t *testing.T) {

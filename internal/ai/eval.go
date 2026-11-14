@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 // The question evaluation set records user questions with what a correct

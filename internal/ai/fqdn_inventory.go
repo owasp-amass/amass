@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 func deterministicFQDNInventoryGoal(question string, catalog graph.SchemaCatalog) (InvestigationGoal, bool) {
@@ -28,7 +28,7 @@ func deterministicFQDNInventoryGoal(question string, catalog graph.SchemaCatalog
 		return zero, false
 	}
 
-	selector, ok := catalog.(AssetSearchCatalog)
+	selector, ok := catalog.(graph.AssetSearchCatalog)
 	if !ok {
 		return zero, false
 	}

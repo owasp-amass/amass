@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
 type ToolRunner struct {
@@ -77,7 +77,7 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 			return nil, err
 		}
 
-		catalog, ok := r.Catalog.(AssetSearchCatalog)
+		catalog, ok := r.Catalog.(graph.AssetSearchCatalog)
 		if !ok {
 			return nil, errors.New("asset selector catalog unavailable")
 		}
@@ -92,7 +92,7 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 			return nil, err
 		}
 
-		catalog, ok := r.Catalog.(AssetSearchCatalog)
+		catalog, ok := r.Catalog.(graph.AssetSearchCatalog)
 		if !ok {
 			return nil, errors.New("asset selector catalog unavailable")
 		}
@@ -106,7 +106,7 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 			return nil, errors.New("asset lookup limit exceeds policy")
 		}
 
-		resolver, ok := r.Graph.(AssetResolver)
+		resolver, ok := r.Graph.(graph.AssetResolver)
 		if !ok {
 			return nil, errors.New("asset resolver unavailable")
 		}

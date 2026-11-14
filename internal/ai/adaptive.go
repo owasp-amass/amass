@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
 	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // InvestigationGoal describes a requested result, not a predicted fixed-hop path.
@@ -143,7 +143,7 @@ func (a Agent) planGoal(ctx context.Context, question string) (InvestigationGoal
 func (a Agent) planGoalCorrected(ctx context.Context, question string) (InvestigationGoal, []string, error) {
 	var zero InvestigationGoal
 	var corrections []string
-	sc, ok := a.Runner.Catalog.(AssetSearchCatalog)
+	sc, ok := a.Runner.Catalog.(graph.AssetSearchCatalog)
 	if !ok {
 		return zero, nil, errors.New("OAM indexed selector catalog is required")
 	}
@@ -602,7 +602,7 @@ func (a Agent) AskQuery(ctx context.Context, q Query, opts AdaptiveOptions) (out
 	}
 
 	var selectors []graph.AssetSearchSchema
-	if c, ok := a.Runner.Catalog.(AssetSearchCatalog); ok {
+	if c, ok := a.Runner.Catalog.(graph.AssetSearchCatalog); ok {
 		selectors = c.SearchFields()
 	}
 	if err := ValidateQuery(q, a.Runner.Catalog.Relations(), selectors, a.Runner.Limits); err != nil {

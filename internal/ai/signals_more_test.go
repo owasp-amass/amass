@@ -8,8 +8,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // moreSignalsFixture adds evidence for the supporting, tiebreaker and

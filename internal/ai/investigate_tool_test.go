@@ -10,16 +10,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/owasp-amass/amass/v5/internal/ai/aitest"
-	"github.com/owasp-amass/amass/v5/internal/ai/graph"
-	"github.com/owasp-amass/amass/v5/internal/ai/lens"
-	"github.com/owasp-amass/amass/v5/internal/ai/review"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 func investigate(t *testing.T, store *EvidenceStore, args string) map[string]any {
 	t.Helper()
 
-	g, cat := aitest.CampusWeb()
+	g, cat := graphtest.CampusWeb()
 	raw, err := RunInvestigationTool(context.Background(), ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()},
 		nil, store, ToolInvestigate, json.RawMessage(args))
 	if err != nil {
@@ -84,7 +84,7 @@ func TestInvestigateTable(t *testing.T) {
 }
 
 func TestInvestigateRejectsBadRequests(t *testing.T) {
-	g, cat := aitest.CampusWeb()
+	g, cat := graphtest.CampusWeb()
 	runner := ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()}
 	for args, want := range map[string]string{
 		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"answer":"paths","target_types":["Organization"]}`: "needs a model",
@@ -103,7 +103,7 @@ func TestInvestigateRejectsBadRequests(t *testing.T) {
 }
 
 func TestInvestigationSpecsEnumerateAnswerKinds(t *testing.T) {
-	specs := InvestigationSpecs(aitest.VendorCatalog{PlanCatalog: aitest.TestOAMCatalog})
+	specs := InvestigationSpecs(graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog})
 	if len(specs) != 2 || specs[0].Name != ToolInvestigate {
 		t.Fatalf("specs = %+v", specs)
 	}

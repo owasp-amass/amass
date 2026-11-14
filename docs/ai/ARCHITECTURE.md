@@ -2,32 +2,41 @@
 
 ## Package layout
 
-The AI code is split by what each part does. A package may import only the
-packages above it in this list, so the layers cannot form cycles:
+Only what can use a model lives under `internal/ai`. The graph view, the
+lenses, review and the semantics data run during ordinary enumerations and
+from `amass lens` and `amass review` with no model configured, so they live
+outside it and never import it (a test in `internal/graph` checks this).
+A package imports only those above it in its list:
 
 | Package | Holds |
 | --- | --- |
-| `internal/ai/semantics` | The data files (relation semantics, vocabularies, lens rules, fingerprints) and the code that loads them. New behavior is added here as data, not code. |
-| `internal/ai/graph` | The read-only view of the asset database: `Asset`, `Relation`, the `Graph` interface and its bounded readers, the schema and semantics catalogs, and naming helpers. |
-| `internal/ai/llm` | Model providers (Anthropic, Ollama), structured output, tool specifications and usage metering. |
-| `internal/ai/lens` | Lenses computed in Go without a model: vendors, family, corporate group, group vendors, services, network infrastructure, duplicates, identity, person-named organizations, ownership gaps and signals. |
-| `internal/ai/review` | The proposal journal, evidence bundles, model ownership advice, rechecks, and the code that applies accepted merges, identity corrections and removals. |
-| `internal/ai` | Question planning and adaptive investigation: the `Agent`, query compilation, guided search, routing, narratives and the answer kinds that dispatch to the lenses. |
-| `internal/ai/oamrepo` | The `graph.Graph` implementation over Amass's asset database (SQLite, Postgres and Neo4j) and the writers used by review. |
-| `internal/ai/cli`, `internal/ai/mcp` | The `amass` subcommands and the MCP server. |
-| `internal/ai/classify` | Evidence classifiers and their training. |
-| `internal/ai/aitest` | In-memory graphs and fixtures shared by the tests; imported only by tests. |
+| `internal/semantics` | The data files (relation semantics, vocabularies, lens rules, fingerprints) and their loaders. New behavior is added here as data, not code. |
+| `internal/graph` | The read-only view of the Asset Database: `Asset`, `Relation`, the `Graph` interface and its bounded readers, the schema and semantics catalogs, organization aliases, naming helpers. |
+| `internal/lens` | Lenses computed in Go: vendors, family, corporate group, group vendors, services, network infrastructure, duplicates, identity, person-named organizations, ownership gaps and signals. |
+| `internal/review` | The proposal journal, evidence bundles, automatic attribution, rechecks, and the code that applies accepted ownership, merges, identity corrections and removals. |
+| `internal/graph/oamrepo` | `graph.Graph` over Amass's asset database (SQLite, Postgres and Neo4j) and the writers review uses. |
+| `internal/lens/cli` | `amass lens` and `amass review`. |
+| `internal/graph/graphtest` | In-memory graphs and fixtures shared by the tests; imported only by tests. |
 
-New work goes in the package its job belongs to: a new lens in `lens` with
-its rules in `semantics`, a new kind of proposal in `review`, a new provider in
-`llm`, and only the wiring (answer kind, `Agent` method, CLI command) in `ai`
-and `cli`. Engine plugins that collect data for the lenses stay under
-`engine/plugins`.
+| Under `internal/ai` (may use a model) | Holds |
+| --- | --- |
+| `internal/ai/llm` | Model providers (Anthropic, Ollama), structured output, tool specifications and usage metering. |
+| `internal/ai/classify` | Trained evidence classifiers and their training. |
+| `internal/ai` | Question planning and adaptive investigation: the `Agent`, query compilation, guided search, routing, narratives, the answer kinds that dispatch to the lenses, and training the ownership model that may decide automatic attribution. |
+| `internal/ai/mcp` | The MCP server. |
+| `internal/ai/cli` | `amass ai`, which still runs the lens and review commands by their old names, with a note. |
+
+New work goes in the package its job belongs to: a new lens in
+`internal/lens` with its rules in `internal/semantics` and its command in
+`internal/lens/cli`, a new kind of proposal in `internal/review`, a new
+provider in `internal/ai/llm`, and only the wiring for questions (answer kind,
+`Agent` method) in `internal/ai`. Engine plugins that collect data for the
+lenses stay under `engine/plugins`.
 
 ## Module integration
 
-The core packages have no external dependencies. The `graph.Graph`
-interface is implemented by `internal/ai/oamrepo.Adapter`, which uses actual
+The graph, lens and review packages depend on no model. The `graph.Graph`
+interface is implemented by `internal/graph/oamrepo.Adapter`, which uses actual
 `repository.Repository` methods:
 
 - `FindEntityById(ctx, id)`
