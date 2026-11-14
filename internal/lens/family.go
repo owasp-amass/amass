@@ -757,14 +757,31 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 			familyShare = float64(n) / float64(total)
 		}
 		held := false
+		holderDomains := map[string]bool{}
 		for _, h := range s.holders[b] {
 			if len(direct[h]) > 0 || kin[h] {
 				held = true
 			}
+			if p := s.profiles[h]; p != nil {
+				for dom := range p.registers {
+					holderDomains[graph.RegisteredDomain(dom)] = true
+				}
+			}
 		}
+		// A network whose holder has no tie of its own to the domain is not
+		// the domain's when an unrelated registered domain has at least as
+		// many of its stored names: a hosting provider's network serving
+		// several customers is not any one customer's, however few names
+		// were stored for it.
+		rival := false
+		for dom, n := range d {
+			if !domains[dom] && !holderDomains[dom] && n >= d[domain] {
+				rival = true
+			}
+		}
+		byShare := (share >= s.rules.DedicatedShare || familyShare >= s.rules.DedicatedShare) && !rival
 
-		net := FamilyNetwork{CIDR: s.cidrs[b], Names: s.netNames[b], Share: share,
-			Dedicated: held || share >= s.rules.DedicatedShare || familyShare >= s.rules.DedicatedShare}
+		net := FamilyNetwork{CIDR: s.cidrs[b], Names: s.netNames[b], Share: share, Dedicated: held || byShare}
 		if hs := s.holders[b]; len(hs) > 0 {
 			if p, ok := s.profiles[hs[0]]; ok {
 				net.Holder, net.HolderID = graph.AssetLabel(p.asset), p.asset.ID

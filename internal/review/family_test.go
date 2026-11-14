@@ -130,6 +130,25 @@ func TestFamilyNetworksServingSeveralBrandDomains(t *testing.T) {
 	}
 }
 
+// A domain with no registrant stored has half the few names stored for a
+// hosting provider's network, but another customer's domain has more: the
+// provider is not the domain's institution.
+func TestFamilyHostingProviderIsNotTheInstitution(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("host", "wphost", "", "", "")
+	g.Network("nb-host", "10.9.0.0/24", "host")
+	g.Serve("hotels.example", "nb-host", "h", 6, 1)
+	g.Serve("clinic.example", "nb-host", "c", 8, 2)
+
+	r, rel, dedicated := familyOf(t, g.Graph, "hotels.example")
+	if dedicated["10.9.0.0/24"] || r.Main != nil {
+		t.Errorf("the provider's network made it the institution: main %+v, networks %+v", r.Main, r.Networks)
+	}
+	if rel["host"] == lens.FamilySame {
+		t.Errorf("members = %v", rel)
+	}
+}
+
 // automattic.com: the company named like the domain holds the network its
 // names use, which serves its other brands' names more.
 func TestFamilyOrganizationNamedLikeTheDomain(t *testing.T) {
