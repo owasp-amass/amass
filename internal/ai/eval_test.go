@@ -121,6 +121,14 @@ func institutionFamily() (Graph, SchemaCatalog) {
 // corporateGroup is a GLEIF-shaped corporate group.
 func corporateGroup() (Graph, SchemaCatalog) { return groupFixture(), vendorCatalog{testOAMCatalog} }
 
+// campusServices adds probe-stored services to the campus vendor fixture.
+func campusServices() (Graph, SchemaCatalog) { return servicesFixture(), vendorCatalog{testOAMCatalog} }
+
+// collegeGroup puts two colleges under one parent.
+func collegeGroup() (Graph, SchemaCatalog) {
+	return groupVendorFixture(), vendorCatalog{testOAMCatalog}
+}
+
 // evalFixtures are the graphs offline evaluation cases name.
 var evalFixtures = map[string]func() (Graph, SchemaCatalog){
 	"campus":             campus,
@@ -132,6 +140,8 @@ var evalFixtures = map[string]func() (Graph, SchemaCatalog){
 	"campus-txt":         campusTXT,
 	"institution-family": institutionFamily,
 	"corporate-group":    corporateGroup,
+	"campus-services":    campusServices,
+	"college-group":      collegeGroup,
 }
 
 // Every reported question runs here on each CI build.

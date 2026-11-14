@@ -10,7 +10,30 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
+
+// LensGroupVendors asks for the outside parties a whole corporate group
+// depends on. The answer is built in Go; nothing is written.
+const LensGroupVendors = "group_vendors"
+
+// groupVendorsLens answers a group_vendors lens query.
+func (a Agent) groupVendorsLens(ctx context.Context, root Asset, out Investigation) (Investigation, error) {
+	started := time.Now()
+	report, err := FindGroupVendors(ctx, a.Runner.Graph, a.Runner.Catalog, root, LensLimits{})
+	out.recordTrace(started, InvestigationTraceEvent{Stage: "group_vendors_lens", OutputPaths: len(report.Vendors),
+		Incomplete: err != nil || report.Truncated, Detail: report.Reason})
+	if err != nil {
+		out.Incomplete = true
+		return out, err
+	}
+
+	out.ToolCalls++
+	out.GroupVendorReport = &report
+	out.Incomplete = report.Truncated
+	out.Answer = strings.TrimRight(FormatGroupVendorReport(report), "\n")
+	return out, nil
+}
 
 // Group vendor rollup bounds.
 const (

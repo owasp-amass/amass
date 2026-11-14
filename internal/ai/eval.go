@@ -163,6 +163,19 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, c.Decision+" "+c.Type+" "+c.Asset)
 		}
 	}
+	if r := inv.ServicesReport; r != nil {
+		for _, s := range r.Services {
+			for _, p := range s.Identified {
+				out = append(out, strings.TrimSpace("runs "+p.Product+" "+p.Version))
+			}
+			out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
+		}
+	}
+	if r := inv.GroupVendorReport; r != nil {
+		for _, v := range r.Vendors {
+			out = append(out, v.Vendor)
+		}
+	}
 	if r := inv.OrgGroupReport; r != nil {
 		for _, m := range r.Members {
 			out = append(out, fmt.Sprintf("%d %s", m.Depth, assetLabel(m.Organization)))

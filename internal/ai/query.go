@@ -121,6 +121,10 @@ func (q Query) Describe() string {
 		return fmt.Sprintf("Show the organizations, networks and related domains in the family of %s.", subject)
 	case LensOrgGroup:
 		return fmt.Sprintf("Show the corporate group (ultimate parent, subsidiaries and units) of %s.", subject)
+	case LensServices:
+		return fmt.Sprintf("List the services, software and certificates stored for what %s controls.", subject)
+	case LensGroupVendors:
+		return fmt.Sprintf("List the vendors used across the corporate group of %s.", subject)
 	case LensTable:
 		cols := make([]string, 0, len(q.Columns))
 		for _, c := range q.Columns {
@@ -246,7 +250,8 @@ func ValidateQuery(q Query, catalog []RelationshipSchema, selectors []AssetSearc
 	}
 	switch q.Lens {
 	case "":
-	case LensThirdParty, LensControlled, LensTable, LensOwnershipGaps, LensFamily, LensOrgGroup:
+	case LensThirdParty, LensControlled, LensTable, LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices,
+		LensGroupVendors:
 		if q.Traversal != TraversalExplore || len(q.Hops) != 0 {
 			return errors.New("lens queries use the explore traversal without hops")
 		}

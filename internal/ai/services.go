@@ -92,6 +92,29 @@ type ServicesReport struct {
 	Reason    string         `json:"reason,omitempty"`
 }
 
+// LensServices asks for the services stored for what a domain or
+// organization controls, with the software they run and their
+// certificates. The answer is built in Go; nothing is written.
+const LensServices = "services"
+
+// servicesLens answers a services lens query.
+func (a Agent) servicesLens(ctx context.Context, root Asset, out Investigation) (Investigation, error) {
+	started := time.Now()
+	report, err := FindServices(ctx, a.Runner.Graph, a.Runner.Catalog, root, LensLimits{})
+	out.recordTrace(started, InvestigationTraceEvent{Stage: "services_lens", OutputPaths: len(report.Services),
+		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
+	if err != nil {
+		out.Incomplete = true
+		return out, err
+	}
+
+	out.ToolCalls++
+	out.ServicesReport = &report
+	out.Incomplete = report.Truncated
+	out.Answer = strings.TrimRight(FormatServicesReport(report), "\n")
+	return out, nil
+}
+
 // FindServices lists the services stored for the names, addresses and URLs
 // a domain or organization controls, with their ports, the software their
 // responses name, their certificates and products, and what stands out:

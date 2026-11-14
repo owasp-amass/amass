@@ -708,6 +708,10 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		return a.familyLens(ctx, root, out)
 	case LensOrgGroup:
 		return a.orgGroupLens(ctx, root, out)
+	case LensServices:
+		return a.servicesLens(ctx, root, out)
+	case LensGroupVendors:
+		return a.groupVendorsLens(ctx, root, out)
 	}
 
 	if a.Runner.Limits.MaxToolCalls < 2 {

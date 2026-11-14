@@ -310,6 +310,22 @@ func investigateResult(id string, q Query, inv Investigation, b EvidenceBundle) 
 		}
 		out["org_group"] = members
 	}
+	if r := inv.ServicesReport; r != nil {
+		services := make([]map[string]any, 0, len(r.Services))
+		for i, s := range r.Services {
+			if i == investigateMaxRows {
+				out["services_truncated"] = true
+				break
+			}
+			services = append(services, map[string]any{"type": s.ServiceType, "endpoints": s.Endpoints,
+				"ports": s.Ports, "software": s.Software, "identified": s.Identified, "certificates": s.Certificates,
+				"unusual_ports": s.UnusualPorts})
+		}
+		out["services"], out["services_by_product"] = services, r.ByProduct
+	}
+	if r := inv.GroupVendorReport; r != nil {
+		out["group_vendors"], out["group_internal"] = r.Vendors, r.Internal
+	}
 	if r := inv.TableReport; r != nil {
 		rows := r.Rows
 		if len(rows) > investigateMaxRows {

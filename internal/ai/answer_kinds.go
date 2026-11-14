@@ -126,6 +126,33 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
+		Name: LensServices,
+		Description: "List the services stored for what a domain or organization controls: where each listens, " +
+			"its type, the software its responses name (identified product and version), its certificates, and " +
+			"what stands out (unusual ports, expired or self-issued certificates). Services come from past probes, " +
+			"not a live scan. Read-only; nothing is written.",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"What services does <domain> expose?",
+			"Which software and versions run on <organization>'s servers?",
+			"Does <domain> have expired certificates or services on unusual ports?",
+		},
+	},
+	{
+		Name: LensGroupVendors,
+		Description: "List the outside parties a whole corporate group depends on: the vendors of each " +
+			"organization in the group (parent, subsidiaries and units) merged, with how many and which group " +
+			"organizations use each, and services one group organization provides another set apart. From a " +
+			"domain, the group of its main organization. Read-only; nothing is written.",
+		Subjects: []string{"Organization", "FQDN"},
+		Targets:  "[]",
+		Examples: []string{
+			"Which vendors does <organization>'s corporate group depend on?",
+			"What third parties do <organization> and its subsidiaries use?",
+		},
+	},
+	{
 		Name: LensOwnershipGaps,
 		Description: "Find assets with no documented owner that share identity (contact details), hosting (resolving " +
 			"into its networks) or certificate signals with what the subject controls, each scored, with the OAM " +
@@ -215,7 +242,7 @@ func validateAnswer(goal InvestigationGoal, schema SchemaCatalog) error {
 				"Types an owner can control: %s. Otherwise use answer %q", k.Name, goal.TargetTypes,
 				strings.Join(ownedTypes(schema), ", "), AnswerPaths)
 		}
-	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup:
+	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices, LensGroupVendors:
 		if meaningsOf(schema) == nil {
 			return fmt.Errorf("answer %q needs relationship semantics", k.Name)
 		}
@@ -257,7 +284,7 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema Schema
 			Lens: LensControlled, Source: SourceModelGoal}
 	case LensThirdParty:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
-	case LensOwnershipGaps, LensFamily, LensOrgGroup:
+	case LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices, LensGroupVendors:
 		q = thirdPartyQuery(question, goal.Subject, SourceModelGoal)
 		q.Lens = goal.Answer
 	case LensTable:
@@ -505,7 +532,7 @@ func narrowGoalSchema(base JSONSchema, kind AnswerKind, schema SchemaCatalog) JS
 		props["target_types"] = enumArray([]string{"FQDN"}, 0, 1)
 	case LensControlled:
 		props["target_types"] = enumArray(owned, 0, 0)
-	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup:
+	case LensThirdParty, LensOwnershipGaps, LensFamily, LensOrgGroup, LensServices, LensGroupVendors:
 		props["target_types"] = none
 	case LensTable:
 		props["target_types"] = enumArray(owned, 1, 1)

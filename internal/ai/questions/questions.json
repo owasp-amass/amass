@@ -139,6 +139,22 @@
       "expect": {"answer": "org_group", "subject_type": "Organization", "max_model_calls": 1},
       "offline": {"fixture": "corporate-group", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Spotify USA Inc.\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"org_group\",\"columns\":[]}"], "checks": {"results_include": ["0 Spotify Technology S.A.", "1 Spotify AB", "2 Spotify USA Inc.", "2 Spotify Security"], "results_exclude": ["Fans Club"], "answer_contains": ["Ultimate parent: Spotify Technology S.A."], "complete": true}},
       "live": {"answer_contains": ["Corporate group of"]}
+    },
+    {
+      "id": "colgate-exposed-services",
+      "question": "What services does colgate.edu expose, and what software do they run?",
+      "note": "The services answer kind: services stored by the probes for the domain's names, the software identified from a stored server header (with the fingerprint's source), and what stands out: an SSH service on an unusual port with a self-issued certificate.",
+      "expect": {"answer": "services", "subject_type": "FQDN", "max_model_calls": 1},
+      "offline": {"fixture": "campus-services", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"colgate.edu\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"services\",\"columns\":[]}"], "checks": {"results_include": ["runs nginx 1.18.0", "ssh portal.colgate.edu:2222"], "answer_contains": ["What stands out:", "unusual port 2222/TCP"], "complete": true}},
+      "live": {"answer_contains": ["Services exposed by"]}
+    },
+    {
+      "id": "college-group-vendors",
+      "question": "Which vendors do Colgate University and the rest of its corporate group depend on?",
+      "note": "The group_vendors answer kind: each group organization scanned on its own, a registrar both colleges use counted once per college, and a group organization acting as a contact for another set apart from outside vendors.",
+      "expect": {"answer": "group_vendors", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "college-group", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Colgate University\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"group_vendors\",\"columns\":[]}"], "checks": {"results_include": ["EDUCAUSE", "cloudflare.com"], "results_exclude": ["Colgate University"], "answer_contains": ["EDUCAUSE: used by 2 of 3", "Services one group organization provides another"], "complete": true}},
+      "live": {"answer_contains": ["Vendors across the corporate group of"]}
     }
   ]
 }

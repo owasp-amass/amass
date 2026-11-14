@@ -62,6 +62,8 @@ meaning rather than by wording rules:
 | `ownership_gaps` | Organization or FQDN | ownership gaps lens |
 | `family` | FQDN | organization family lens (`amass lens family`) |
 | `org_group` | Organization or FQDN | corporate group lens (`amass lens org-group`) |
+| `services` | Organization or FQDN | services lens (`amass lens services`): services, identified software, certificates |
+| `group_vendors` | Organization or FQDN | vendors across the corporate group (`amass lens group-vendors`) |
 
 `validateAnswer` rejects a kind that does not fit the subject, targets or
 purpose (for example `controlled` with a type that the semantics table
