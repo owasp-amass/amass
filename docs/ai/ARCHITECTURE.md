@@ -14,6 +14,7 @@ A package imports only those above it in its list:
 | `internal/graph` | The read-only view of the Asset Database: `Asset`, `Relation`, the `Graph` interface and its bounded readers, the schema and semantics catalogs, organization aliases, naming helpers. |
 | `internal/lens` | Lenses computed in Go: vendors, family, corporate group, group vendors, services, network infrastructure, duplicates, identity, person-named organizations, ownership gaps and signals. |
 | `internal/review` | The proposal journal, evidence bundles, automatic attribution, rechecks, and the code that applies accepted ownership, merges, identity corrections and removals. |
+| `internal/collect` | Enumeration plans (passive and active) for an exact scope, the engine sessions that run them and their supervision, and data source credential status and storage. |
 | `internal/graph/oamrepo` | `graph.Graph` over Amass's asset database (SQLite, Postgres and Neo4j) and the writers review uses. |
 | `internal/lens/cli` | `amass lens` and `amass review`. |
 | `internal/graph/graphtest` | In-memory graphs and fixtures shared by the tests; imported only by tests. |
@@ -23,7 +24,7 @@ A package imports only those above it in its list:
 | `internal/ai/llm` | Model providers (Anthropic, Ollama), structured output, tool specifications and usage metering. |
 | `internal/ai/classify` | Trained evidence classifiers and their training. |
 | `internal/ai` | Question planning and adaptive investigation: the `Agent`, query compilation, guided search, routing, narratives, the answer kinds that dispatch to the lenses, and training the ownership model that may decide automatic attribution. |
-| `internal/ai/mcp` | The MCP server. |
+| `internal/ai/mcp` | The MCP server: read-only tools and prompts, and, with the operator token, the tools that start enumerations, review proposals and manage data sources. |
 | `internal/ai/cli` | `amass ai`, which still runs the lens and review commands by their old names, with a note. |
 
 New work goes in the package its job belongs to. A new lens goes in

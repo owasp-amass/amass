@@ -13,14 +13,14 @@ import (
 	"testing"
 )
 
-// The graph view, the lenses, review and the semantics data run during
-// enumerations and from amass lens and amass review, with no language model
-// configured. None of them, tests included, may import internal/ai, which
+// The graph view, the lenses, review, collection and the semantics data run
+// during enumerations and from amass lens and amass review, with no language
+// model configured. None of them, tests included, may import internal/ai, which
 // holds what needs a model; internal/ai builds on them, not the reverse.
 func TestModelFreePackagesDoNotImportAI(t *testing.T) {
 	const ai = "github.com/owasp-amass/amass/v5/internal/ai"
 	fset := token.NewFileSet()
-	for _, dir := range []string{".", "../lens", "../review", "../semantics"} {
+	for _, dir := range []string{".", "../lens", "../review", "../semantics", "../collect"} {
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
 				return err

@@ -10,16 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/netip"
-	"strconv"
 
 	"github.com/owasp-amass/amass/v5/config"
 	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
 	"github.com/owasp-amass/amass/v5/internal/ai"
-	oam "github.com/owasp-amass/open-asset-model"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/amass/v5/internal/collect"
 )
 
 type collectionResponse struct {
@@ -43,75 +38,12 @@ func collectTarget(ctx context.Context, cfg *config.Config, plan ai.CollectionPl
 	if approved == "" || approved != plan.ID {
 		return errors.New("collection requires -approve-collection matching the exact plan id")
 	}
-	if cfg == nil {
-		return errors.New("collection configuration is required")
+	asset, err := collect.Configure(cfg, plan)
+	if err != nil {
+		return err
 	}
 
-	// No inherited scope, IPs, domains, seed names, active techniques, or
-	// expansion are permitted. Only the approved scope becomes a session seed.
-	cfg.Scope = &config.Scope{Ports: []int{80, 443}}
-	cfg.Seed = cfg.Scope
-	cfg.ProvidedNames = nil
-	cfg.Active = false
-	cfg.Passive = true
-	cfg.BruteForcing = false
-	cfg.Alterations = false
-	cfg.Recursive = false
-	cfg.Rigid = true
-	var asset oam.Asset
-	switch plan.ScopeType {
-	case "domain":
-		cfg.AddDomain(plan.ScopeValue)
-		if len(cfg.Scope.Domains) != 1 || cfg.Scope.Domains[0] != plan.ScopeValue {
-			return errors.New("failed to set exact FQDN scope")
-		}
-
-		asset = oamdns.FQDN{Name: plan.ScopeValue}
-	case "ip":
-		ip := net.ParseIP(plan.ScopeValue)
-		addr, err := netip.ParseAddr(plan.ScopeValue)
-		if err != nil || ip == nil {
-			return errors.New("invalid approved IP")
-		}
-
-		cfg.Scope.Addresses = []net.IP{ip}
-		kind := "IPv4"
-		if addr.Is6() {
-			kind = "IPv6"
-		}
-
-		asset = oamnet.IPAddress{Address: addr, Type: kind}
-	case "cidr":
-		_, cidr, err := net.ParseCIDR(plan.ScopeValue)
-		addr, perr := netip.ParsePrefix(plan.ScopeValue)
-		if err != nil || perr != nil {
-			return errors.New("invalid approved CIDR")
-		}
-
-		cfg.Scope.CIDRs = []*net.IPNet{cidr}
-		kind := "IPv4"
-		if addr.Addr().Is6() {
-			kind = "IPv6"
-		}
-
-		asset = oamnet.Netblock{CIDR: addr, Type: kind}
-	case "asn":
-		num, err := strconv.Atoi(plan.ScopeValue)
-		if err != nil || num <= 0 {
-			return errors.New("invalid approved ASN")
-		}
-
-		cfg.Scope.ASNs = []int{num}
-		asset = oamnet.AutonomousSystem{Number: num}
-	default:
-		return errors.New("unsupported collection scope type")
-	}
-
-	endpoint := "http://127.0.0.1:4000"
-	if cfg.EngineAPI != nil && cfg.EngineAPI.URL != "" {
-		endpoint = cfg.EngineAPI.URL
-	}
-
+	endpoint := collect.EngineURL(cfg)
 	c, err := client.NewClient(endpoint)
 	if err != nil {
 		return err
