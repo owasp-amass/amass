@@ -304,9 +304,17 @@ policy, its DMARC policy and the DKIM keys stored for it, and reports what
 lets it be spoofed: an SPF record that lets anyone send (`+all`, `?all`), no
 SPF, a softfail (`~all`), no DMARC record, a DMARC policy of `p=none` or one
 applied to part of the mail, and domains with no mail server that do not
-publish `v=spf1 -all` and a DMARC reject policy. A DMARC or DKIM record is
-only stored when the enumeration queried its name, so "no DMARC record
-stored" can mean it was never looked up (`internal/semantics/email.json`).
+publish `v=spf1 -all` and a DMARC reject policy
+(`internal/semantics/email.json`).
+
+A DMARC or DKIM record is only stored when the enumeration queried its name.
+At every zone apex it finds, the DNS plugin asks for `_dmarc`, `_mta-sts`,
+`_smtp._tls` and the DKIM selectors vendors document as fixed for every
+customer (Microsoft 365, Google Workspace, SendGrid, Mailchimp
+Transactional), listed with their sources in
+`engine/plugins/dns/policy.go`. A DKIM key under any other selector is
+stored only when something else finds its name, and a database from an
+enumeration before this change can lack DMARC records that exist.
 
 ## Exposure
 

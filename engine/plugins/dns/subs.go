@@ -212,6 +212,11 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 		return alias
 	}
 
+	// Names asked for below the apex are linked to it, as the apex handler
+	// links names that resolve, so that they are found from the domain.
+	apexEnt := d.plugin.getApex(subdomain)
+	d.queryPolicies(e, apexEnt, subdomain)
+
 	srvs := NamesByTier(Tier3)
 	rch := make(chan []*relSubs, len(srvs))
 	defer close(rch)
@@ -223,6 +228,7 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 			var results []*relSubs
 			if rr, err := support.PerformQuery(e.Session.Ctx(), n, dns.TypeSRV); err == nil && len(rr) > 0 {
 				if records := d.store(e, n, rr); len(records) > 0 {
+					d.linkBelow(e, apexEnt, records[0].alias)
 					results = append(results, records...)
 				}
 			} else if err == support.ErrFailedMaxDNSAttempts {
@@ -247,14 +253,31 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 	defer cancel()
 
-	fqdn, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name})
-	if err != nil || fqdn == nil {
-		return alias
-	}
-
+	// The name is stored only with a record that names another host, so an
+	// SRV name whose answer cannot be kept leaves no FQDN without edges.
+	var fqdn *dbt.Entity
+	var apex bool
 	for _, record := range rr {
 		var a *dbt.Entity
 		var edge *dbt.Edge
+		var err error
+
+		switch record.Header().Rrtype {
+		case dns.TypeNS, dns.TypeMX:
+			apex = true
+		case dns.TypeSRV:
+			// A target of "." says the service is not offered at this name (RFC 2782).
+			if utils.RemoveLastDot((record.(*dns.SRV)).Target) == "" {
+				continue
+			}
+		default:
+			continue
+		}
+		if fqdn == nil {
+			if fqdn, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err != nil || fqdn == nil {
+				return alias
+			}
+		}
 
 		if record.Header().Rrtype == dns.TypeNS {
 			data := utils.RemoveLastDot((record.(*dns.NS)).Ns)
@@ -293,8 +316,27 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 					ToEntity:   a,
 				})
 			}
-		} else {
-			continue
+		} else if srv, ok := record.(*dns.SRV); ok {
+			data := utils.RemoveLastDot(srv.Target)
+
+			a, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: data})
+			if err == nil && a != nil {
+				edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
+					Relation: &oamdns.SRVDNSRelation{
+						Name: "dns_record",
+						Header: oamdns.RRHeader{
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
+						},
+						Priority: int(srv.Priority),
+						Weight:   int(srv.Weight),
+						Port:     int(srv.Port),
+					},
+					FromEntity: fqdn,
+					ToEntity:   a,
+				})
+			}
 		}
 
 		if err == nil && edge != nil {
@@ -303,12 +345,14 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 				Source:     d.plugin.source.Name,
 				Confidence: d.plugin.source.Confidence,
 			})
-		} else {
+		} else if err != nil {
 			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
 	}
 
-	if len(alias) > 0 {
+	// Only a name with its own NS or MX records is a zone apex; an SRV
+	// name is not.
+	if apex && len(alias) > 0 {
 		d.plugin.addApex(name, fqdn)
 	}
 	return alias
