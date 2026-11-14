@@ -289,7 +289,8 @@ each with its registrar, creation and expiry dates, status, DNSSEC and DNS
 providers, with registrars and DNS providers counted. It reports domains
 whose registration expired or expires within 60 days, domains with no
 transfer lock among their EPP or RDAP statuses, domains with no stored
-registration and domains not signed with DNSSEC
+registration and domains whose record says they are not signed with
+DNSSEC; a record that does not say shows DNSSEC as not stated
 (`internal/semantics/domains.json`).
 
 ## Email security

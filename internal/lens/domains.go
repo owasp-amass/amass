@@ -47,14 +47,16 @@ var domainOrder = []string{DomainExpired, DomainExpiring, DomainUnlocked, Domain
 
 // DomainEntry is one registered domain of the subject.
 type DomainEntry struct {
-	Domain      string   `json:"domain"`
-	Names       int      `json:"names"`
-	Registered  bool     `json:"registered"`
-	Registrar   string   `json:"registrar,omitempty"`
-	Created     string   `json:"created,omitempty"`
-	Expires     string   `json:"expires,omitempty"`
-	Status      []string `json:"status,omitempty"`
-	DNSSEC      bool     `json:"dnssec"`
+	Domain     string   `json:"domain"`
+	Names      int      `json:"names"`
+	Registered bool     `json:"registered"`
+	Registrar  string   `json:"registrar,omitempty"`
+	Created    string   `json:"created,omitempty"`
+	Expires    string   `json:"expires,omitempty"`
+	Status     []string `json:"status,omitempty"`
+	// DNSSEC is nil when the record does not say: OAM omits a false value,
+	// and RDAP records are stored without it.
+	DNSSEC      *bool    `json:"dnssec,omitempty"`
 	NameServers []string `json:"name_servers,omitempty"`
 }
 
@@ -233,7 +235,10 @@ func (s *scope) readDomainRecord(e *DomainEntry, rec graph.Asset, rules domainRu
 	e.Registered = true
 	e.Created = graph.ContentString(rec, rules.Fields["created"])
 	e.Expires = graph.ContentString(rec, rules.Fields["expires"])
-	e.DNSSEC = contentBool(rec, rules.Fields["dnssec"])
+	var signed bool
+	if contentField(rec, rules.Fields["dnssec"], &signed) {
+		e.DNSSEC = &signed
+	}
 	e.Status = contentStrings(rec, rules.Fields["status"])
 
 	steps, err := s.w.steps(rec)
@@ -305,7 +310,7 @@ func domainFindings(e DomainEntry, rules domainRules) []DomainFinding {
 			Detail: fmt.Sprintf("no transfer lock among its statuses (%s; %s)", strings.Join(e.Status, ", "),
 				rules.StatusSource)})
 	}
-	if !e.DNSSEC {
+	if e.DNSSEC != nil && !*e.DNSSEC {
 		out = append(out, DomainFinding{Kind: DomainNoDNSSEC, Domain: e.Domain, Detail: "not signed with DNSSEC"})
 	}
 
@@ -352,6 +357,9 @@ func (r DomainsReport) Text() string {
 			if len(d.NameServers) > 0 {
 				fmt.Fprintf(&b, ", DNS by %s", strings.Join(d.NameServers, ", "))
 			}
+			if d.Registered {
+				fmt.Fprintf(&b, ", DNSSEC %s", dnssecLabel(d.DNSSEC))
+			}
 			b.WriteString("\n")
 		}
 	}
@@ -370,6 +378,17 @@ func (r DomainsReport) Text() string {
 
 	b.WriteString("\nThese are stored registration records, not a live lookup." + r.partialNote() + "\n")
 	return b.String()
+}
+
+// dnssecLabel says what a registration record states about DNSSEC.
+func dnssecLabel(signed *bool) string {
+	switch {
+	case signed == nil:
+		return "not stated"
+	case *signed:
+		return "signed"
+	}
+	return "unsigned"
 }
 
 // Facts implements Report.

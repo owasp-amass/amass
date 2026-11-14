@@ -156,6 +156,21 @@ func TestFindDomains(t *testing.T) {
 	if !unlocked {
 		t.Errorf("an unlocked domain was not reported: %+v", r.Findings)
 	}
+
+	// A record that does not say whether it is signed is not called unsigned.
+	delete(dr.Content.(map[string]any), "dnssec")
+	r, err = FindDomains(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.Findings {
+		if f.Kind == DomainNoDNSSEC {
+			t.Errorf("an unstated DNSSEC was reported unsigned: %+v", f)
+		}
+	}
+	if !strings.Contains(r.Text(), "DNSSEC not stated") {
+		t.Errorf("report:\n%s", r.Text())
+	}
 }
 
 func TestFindEmailSecurity(t *testing.T) {
