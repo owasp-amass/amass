@@ -17,6 +17,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens family -d <domain>` | The organizations behind an enumerated domain, the networks and other registered domains that serve it |
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
+| `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
 | `amass lens group-vendors -org <name>` or `-d <domain>` | The outside parties a whole corporate group depends on, and which of its organizations use each |
 | `amass lens duplicates` | Organizations stored more than once, recorded as merge proposals |
 | `amass lens identity` | Organizations whose legal identity contradicts their own evidence, recorded as correction proposals |
@@ -142,6 +143,23 @@ records for organizations with an LEI, and `org_unit`, which reviewed
 department proposals add. When sources name different parents, the report
 lists each one, and when the stored relationships form a cycle it names the
 relationship that closes it. Nothing is written.
+
+## Exposed services
+
+```bash
+amass lens services -d colgate.edu
+amass lens services -org "Colgate University"
+```
+
+Lists the services stored for the names, addresses and URLs the domain or
+organization controls (the same footprint the vendors lens walks): where each
+listens, its type, the software its response headers name (such as
+`server: nginx/1.18.0`), the certificates it presented and any products stored
+for it. It reports first what stands out: services on ports their type does not
+usually use, and certificates that have expired, expire within 30 days or were
+issued by their own subject. Services are what the HTTP and SSH probes stored
+during past active enumerations, not a live scan. The header names, expected
+ports and warning period are in `internal/ai/semantics/services.json`.
 
 ## Vendors across a corporate group
 
