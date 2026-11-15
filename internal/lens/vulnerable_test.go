@@ -39,6 +39,8 @@ func TestFindVulnerable(t *testing.T) {
 				Ranges: []vuln.Range{{StartIncl: "1.21.0"}}},
 			"CVE-2099-0002": {ID: "CVE-2099-0002", Score: 5.3, Severity: "MEDIUM",
 				Ranges: []vuln.Range{{Version: "1.18.0"}}},
+			// NVD names nginx for every version, with no version or range
+			"CVE-2007-0001": {ID: "CVE-2007-0001", Score: 7.8, Severity: "HIGH", Ranges: []vuln.Range{{}}},
 		}}},
 		KEV: map[string]vuln.KEVEntry{"CVE-2099-0002": {Name: "Example exploited flaw", DateAdded: "2026-01-02"}}}
 	if err := d.Save(path); err != nil {
@@ -68,6 +70,12 @@ func TestFindVulnerable(t *testing.T) {
 	}
 	if strings.Contains(text, "CVE-2099-0001") {
 		t.Errorf("a CVE outside the version's range was reported:\n%s", text)
+	}
+
+	// a CVE listed for every version is named but not counted
+	if len(r.AllVersions) != 1 || r.AllVersions[0].CVEs[0] != "CVE-2007-0001" ||
+		!strings.Contains(text, "Not counted") || !strings.Contains(text, "nginx 1.18.0: CVE-2007-0001") {
+		t.Errorf("the CVE listed for every version: %+v\n%s", r.AllVersions, text)
 	}
 
 	facts := strings.Join(r.Facts(), "\n")

@@ -5,6 +5,7 @@
 package vuln
 
 import (
+	"slices"
 	"sort"
 	"time"
 )
@@ -19,6 +20,9 @@ type Match struct {
 	KEVName   string `json:"kev_name,omitempty"`
 	KEVAdded  string `json:"kev_added,omitempty"`
 	Published string `json:"published,omitempty"`
+	// AllVersions is set when NVD names the product for every version,
+	// with no version or range, which says nothing about this version.
+	AllVersions bool `json:"all_versions,omitempty"`
 }
 
 // Status says whether a product version could be checked.
@@ -38,7 +42,9 @@ const (
 )
 
 // Check returns the CVEs affecting a product version, the strongest first:
-// those CISA lists as exploited, then by score. The reason explains a status
+// those CISA lists as exploited, then by score. CVEs NVD names for every
+// version of the product, with no version or range, come last and are
+// marked AllVersions: they are no evidence about a particular version. The reason explains a status
 // other than Checked.
 func (d *Data) Check(product, version string) ([]Match, Status, string) {
 	cat, err := LoadCatalog()
@@ -67,12 +73,18 @@ func (d *Data) Check(product, version string) ([]Match, Status, string) {
 
 		fetched = true
 		for id, c := range pd.CVEs {
-			if seen[id] || !covers(c.Ranges, version) {
+			if seen[id] {
+				continue
+			}
+
+			bounded := coversBounded(c.Ranges, version)
+			unbounded := slices.ContainsFunc(c.Ranges, Range.Unbounded)
+			if !bounded && !unbounded {
 				continue
 			}
 
 			seen[id] = true
-			m := Match{CVE: id, Score: c.Score, Severity: c.Severity}
+			m := Match{CVE: id, Score: c.Score, Severity: c.Severity, AllVersions: !bounded}
 			if !c.Published.IsZero() {
 				m.Published = c.Published.Format(time.DateOnly)
 			}
@@ -89,6 +101,9 @@ func (d *Data) Check(product, version string) ([]Match, Status, string) {
 
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
+		if a.AllVersions != b.AllVersions {
+			return b.AllVersions
+		}
 		if a.KEV != b.KEV {
 			return a.KEV
 		}
@@ -101,9 +116,11 @@ func (d *Data) Check(product, version string) ([]Match, Status, string) {
 	return out, Checked, ""
 }
 
-func covers(ranges []Range, version string) bool {
+// coversBounded reports whether a range that names a version or bounds
+// covers version.
+func coversBounded(ranges []Range, version string) bool {
 	for _, r := range ranges {
-		if r.Covers(version) {
+		if !r.Unbounded() && r.Covers(version) {
 			return true
 		}
 	}

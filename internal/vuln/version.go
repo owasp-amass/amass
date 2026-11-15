@@ -114,6 +114,10 @@ func compareInt(a, b int) int {
 	return 1
 }
 
+// Unbounded reports whether the range names no version and no bounds: NVD
+// lists the product for every version.
+func (r Range) Unbounded() bool { return r == Range{} }
+
 // Covers reports whether the range includes version.
 func (r Range) Covers(version string) bool {
 	if r.Version != "" {

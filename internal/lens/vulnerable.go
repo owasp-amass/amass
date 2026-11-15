@@ -51,6 +51,15 @@ type VulnerableSoftware struct {
 	KEV       int          `json:"kev"`
 }
 
+// AllVersionsSoftware is an identified product version for which NVD lists
+// CVEs only for every version, with no version or range: they are not
+// counted, since they say nothing about this version.
+type AllVersionsSoftware struct {
+	Product string   `json:"product"`
+	Version string   `json:"version"`
+	CVEs    []string `json:"cves"`
+}
+
 // UncheckedSoftware is an identified product version that could not be
 // checked, and why.
 type UncheckedSoftware struct {
@@ -75,6 +84,8 @@ type VulnerableReport struct {
 	Software  []VulnerableSoftware `json:"software"`
 	Clean     []string             `json:"clean,omitempty"`
 	Unchecked []UncheckedSoftware  `json:"unchecked,omitempty"`
+	// AllVersions are the versions with CVEs NVD lists for every version.
+	AllVersions []AllVersionsSoftware `json:"all_versions,omitempty"`
 }
 
 // FindVulnerable checks the software the services lens identifies on root's
@@ -136,15 +147,33 @@ func FindVulnerable(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 	for _, k := range order {
 		matches, status, reason := data.Check(k.product, k.version)
 		label := strings.TrimSpace(k.product + " " + k.version)
-		switch {
-		case status != vuln.Checked:
+		if status != vuln.Checked {
 			out.Unchecked = append(out.Unchecked, UncheckedSoftware{Product: k.product, Version: k.version,
 				Status: status, Reason: reason, Endpoints: len(endpoints[k])})
-		case len(matches) == 0:
+			continue
+		}
+
+		var ranged []vuln.Match
+		var unranged []string
+		for _, m := range matches {
+			if m.AllVersions {
+				unranged = append(unranged, m.CVE)
+			} else {
+				ranged = append(ranged, m)
+			}
+		}
+		if len(unranged) > 0 {
+			sort.Strings(unranged)
+			out.AllVersions = append(out.AllVersions, AllVersionsSoftware{Product: k.product, Version: k.version,
+				CVEs: unranged})
+		}
+
+		switch {
+		case len(ranged) == 0:
 			out.Clean = append(out.Clean, label)
 		default:
-			v := VulnerableSoftware{Product: k.product, Version: k.version, Endpoints: endpoints[k], CVEs: matches}
-			for _, m := range matches {
+			v := VulnerableSoftware{Product: k.product, Version: k.version, Endpoints: endpoints[k], CVEs: ranged}
+			for _, m := range ranged {
 				if m.KEV {
 					v.KEV++
 				}
@@ -256,6 +285,13 @@ func (r VulnerableReport) Text() string {
 
 	if len(r.Clean) > 0 {
 		fmt.Fprintf(&b, "\nNo CVEs for: %s\n", strings.Join(r.Clean, ", "))
+	}
+	if len(r.AllVersions) > 0 {
+		b.WriteString("\nNot counted: CVEs NVD lists for every version, with no version range, so they say nothing " +
+			"about these versions:\n")
+		for _, a := range r.AllVersions {
+			fmt.Fprintf(&b, "  %s %s: %s\n", a.Product, a.Version, strings.Join(a.CVEs, ", "))
+		}
 	}
 	if len(r.Unchecked) > 0 {
 		b.WriteString("\nNot checked:\n")
