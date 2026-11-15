@@ -19,6 +19,7 @@ func TestEmptyScopeSectionUsesDefaultPorts(t *testing.T) {
 	if err := os.WriteFile(p, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	c := NewConfig()
 	if err := c.LoadSettings(p); err != nil {
 		t.Fatal(err)
@@ -35,6 +36,7 @@ func TestListedPortsReplaceDefaults(t *testing.T) {
 	if err := os.WriteFile(p, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	c := NewConfig()
 	if err := c.LoadSettings(p); err != nil {
 		t.Fatal(err)
