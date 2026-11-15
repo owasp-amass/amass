@@ -316,6 +316,12 @@ func (s *Session) selectDBMS() error {
 	if err != nil {
 		return errors.New("failed to initialize database store: " + err.Error())
 	}
+	// The database records the first sighting of an asset, edge or tag in
+	// this enumeration, and may skip repeats with nothing new: last-seen
+	// times stay exact relative to the session's start.
+	if seen, ok := store.(repository.SeenSince); ok {
+		seen.SetSeenSince(s.start)
+	}
 	s.db, s.dbstats = withDBStats(store)
 	return nil
 }

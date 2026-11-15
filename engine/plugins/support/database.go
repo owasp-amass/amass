@@ -154,7 +154,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 				ends := amassdb.EdgeEnds(ctx, session.DB(), edges, false)
 				for _, edge := range edges {
 					if t, ok := ends[edge.ToEntity.ID]; ok {
-						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && c.SerialNumber == cert.SerialNumber {
+						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && SameCertificate(c, cert) {
 							found = true
 							break
 						}
@@ -234,4 +234,16 @@ func CreateCertificateChain(sess et.Session, certs []*x509.Certificate) (*dbt.En
 	}
 
 	return firstAsset, firstCert, findings
+}
+
+// SameCertificate reports whether two certificates are one: the same serial
+// number from the same issuer (RFC 5280 makes serial numbers unique per issuer
+// only), with the same key, as the Asset Database identifies a certificate.
+func SameCertificate(a, b *oamcert.TLSCertificate) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return a.SerialNumber == b.SerialNumber && strings.EqualFold(a.IssuerCommonName, b.IssuerCommonName) &&
+		strings.EqualFold(a.AuthorityKeyID, b.AuthorityKeyID) && strings.EqualFold(a.SubjectKeyID, b.SubjectKeyID)
 }

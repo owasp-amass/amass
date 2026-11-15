@@ -83,6 +83,31 @@ func TestCreateServiceAssetComparesCertificates(t *testing.T) {
 	if err != nil || diff.ID == first.ID {
 		t.Fatalf("another certificate matched: %v, %v", diff, err)
 	}
+
+	// the same serial number from another issuer is another certificate
+	issuer := *cert
+	issuer.IssuerCommonName = "Other CA"
+	diff, err = support.CreateServiceAsset(sess, addr, port(443), web("svc-4", "nginx"), &issuer)
+	if err != nil || diff.ID == first.ID {
+		t.Fatalf("another issuer's certificate with the same serial matched: %v, %v", diff, err)
+	}
+}
+
+func TestSameCertificate(t *testing.T) {
+	a := &oamcert.TLSCertificate{SerialNumber: "1", IssuerCommonName: "printer.example.edu", SubjectKeyID: "AB"}
+	b := *a
+	b.SubjectKeyID = "ab"
+	if !support.SameCertificate(a, &b) {
+		t.Error("key identifiers differing only in case are the same key")
+	}
+
+	b.IssuerCommonName = "router.other.net"
+	if support.SameCertificate(a, &b) {
+		t.Error("two issuers' certificates with the same serial number are two certificates")
+	}
+	if support.SameCertificate(a, nil) {
+		t.Error("a missing certificate matched")
+	}
 }
 
 // A header stored with no values must not crash the comparison.
