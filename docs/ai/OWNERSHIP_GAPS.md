@@ -18,7 +18,7 @@ probes today, a web scraper later) uses so the stored values are the same.
 SSH host key reuse is a strong signal compared only between addresses in
 the organization's footprint and others. The SSH-Probes engine plugin
 collects host keys in active enumeration, for in-scope public addresses
-on port 22: it completes the SSH key exchange once per host key type
+on port 22 when the configuration's `scope.ports` lists it: it completes the SSH key exchange once per host key type
 (Ed25519, ECDSA, RSA) and records each key's SHA-256 fingerprint and the
 server's banner, and it never authenticates (no user name or credential is
 sent).

@@ -98,8 +98,9 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 	var findings []*support.Finding
 
 	var count int
-	fch := make(chan []*support.Finding, len(e.Session.Config().Scope.Ports))
-	for _, port := range e.Session.Config().Scope.Ports {
+	ports := support.HTTPPorts(e.Session.Config())
+	fch := make(chan []*support.Finding, len(ports))
+	for _, port := range ports {
 		count++
 		go fe.probeOnePort(e, host, port, fch)
 	}

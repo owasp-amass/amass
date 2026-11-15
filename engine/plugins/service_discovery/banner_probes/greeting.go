@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"io"
 	"net"
 	"regexp"
@@ -90,6 +91,13 @@ var loadCatalog = sync.OnceValues(func() (catalog, error) {
 
 	return c, nil
 })
+
+// The catalog's ports are claimed from the HTTP probes.
+func init() {
+	if c, err := loadCatalog(); err == nil {
+		support.ClaimPorts("banner", c.probedPorts()...)
+	}
+}
 
 // probedPorts lists every port the catalog probes, in order.
 func (c catalog) probedPorts() []int {

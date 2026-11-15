@@ -97,7 +97,7 @@ func (bp *bannerProbing) check(e *et.Event) error {
 	}
 
 	var findings []*support.Finding
-	for _, port := range bp.cat.probedPorts() {
+	for _, port := range support.ScopePorts(e.Session.Config(), bp.cat.probedPorts()) {
 		findings = append(findings, bp.probe(e, e.Entity, ip, port)...)
 	}
 

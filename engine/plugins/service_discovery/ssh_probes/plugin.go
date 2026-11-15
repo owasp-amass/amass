@@ -25,8 +25,10 @@ import (
 	"github.com/owasp-amass/open-asset-model/network"
 )
 
-// sshPorts are the ports probed for SSH.
+// sshPorts are the ports probed for SSH when scope.ports lists them.
 var sshPorts = []int{22}
+
+func init() { support.ClaimPorts("ssh", sshPorts...) }
 
 type sshProbing struct {
 	name    string
@@ -100,7 +102,7 @@ func (sp *sshProbing) check(e *et.Event) error {
 	}
 
 	var findings []*support.Finding
-	for _, port := range sshPorts {
+	for _, port := range support.ScopePorts(e.Session.Config(), sshPorts) {
 		f, o := sp.probe(e, e.Entity, ip, port)
 		if f != nil {
 			findings = append(findings, f)

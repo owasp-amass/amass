@@ -100,8 +100,9 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 	var findings []*support.Finding
 
 	var count int
-	fch := make(chan []*support.Finding, len(e.Session.Config().Scope.Ports))
-	for _, port := range e.Session.Config().Scope.Ports {
+	ports := support.HTTPPorts(e.Session.Config())
+	fch := make(chan []*support.Finding, len(ports))
+	for _, port := range ports {
 		count++
 		go r.probeOnePort(e, ipaddr, port, fch)
 	}
