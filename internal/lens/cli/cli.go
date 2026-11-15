@@ -43,6 +43,7 @@ var lensOps = map[string]string{
 	"identity":      "identity-conflicts",
 	"person-named":  "person-named",
 	"vendors":       "vendors",
+	"vuln-update":   "vuln-update",
 }
 
 // The registered subject lenses are amass lens commands too.
@@ -166,6 +167,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	var withDomain, withOrg string
 	var lensAssets, lensReads int
 	var readStats bool
+	var vulnData string
 	var timeout time.Duration
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
@@ -186,6 +188,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", lens.LensMaxAssetsLimit))
 	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one lens run "+
 		"(default 20000, up to %d)", lens.LensMaxReadsLimit))
+	fs.StringVar(&vulnData, "vuln-data", "", "Vulnerability data file for vuln-update and the vulnerable lens "+
+		"(default from AMASS_VULN_DATA, or vulnerabilities.json in the output directory)")
 	fs.BoolVar(&readStats, "read-stats", false,
 		"Print the database reads the run made and their time to standard error")
 	fs.DurationVar(&timeout, "investigation-timeout", 8*time.Minute,
@@ -230,6 +234,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 
 	// These read and append to the journal only.
 	switch operation {
+	case "vuln-update":
+		return updateVulnerabilities(vulnData, timeout, out, errout)
 	case "signals":
 		return listSignals(format, true, out)
 	case "duplicate-signals":
@@ -300,6 +306,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	}
 
 	if l, ok := lens.SubjectLensNamed(operation); ok {
+		useVulnData(vulnData)
 		root, err := groupRoot(ctx, g, domainName, orgName)
 		if err != nil {
 			return err

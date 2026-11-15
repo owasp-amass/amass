@@ -1,0 +1,95 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Where the vulnerable software lens gets its data, and which identified products it can check. The updater (amass lens vuln-update) asks the NVD CVE API for every CVE whose configurations name each product's CPE names, with the version ranges they affect, and reads CISA's Known Exploited Vulnerabilities catalog to mark the CVEs known to be exploited; it then fetches only what changed. products gives, for a product the services lens identifies (product_fingerprints.json), its CPE names as NVD's CPE dictionary writes them (cpe:2.3:part:vendor:product), with a source showing NVD using them. unchecked lists identified products whose stored version cannot be compared with NVD's, and why. Every product in product_fingerprints.json is in one list or the other. Add products here, not in Go code.",
+  "nvd_api": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+  "nvd_source": "https://nvd.nist.gov/developers/vulnerabilities",
+  "kev_feed": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+  "kev_source": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+  "products": [
+    {
+      "product": "nginx",
+      "cpe": [
+        "cpe:2.3:a:f5:nginx"
+      ],
+      "source": "https://cvemon.intruder.io/cves/CVE-2021-23017"
+    },
+    {
+      "product": "Apache HTTP Server",
+      "cpe": [
+        "cpe:2.3:a:apache:http_server"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/143791"
+    },
+    {
+      "product": "Microsoft IIS",
+      "cpe": [
+        "cpe:2.3:a:microsoft:internet_information_server",
+        "cpe:2.3:a:microsoft:internet_information_services"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/619517"
+    },
+    {
+      "product": "PHP",
+      "cpe": [
+        "cpe:2.3:a:php:php"
+      ],
+      "source": "https://cve.akaoma.com/cve-2015-4642"
+    },
+    {
+      "product": "OpenSSL",
+      "cpe": [
+        "cpe:2.3:a:openssl:openssl"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/839095"
+    },
+    {
+      "product": "OpenSSH",
+      "cpe": [
+        "cpe:2.3:a:openbsd:openssh"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/1908"
+    },
+    {
+      "product": "Postfix",
+      "cpe": [
+        "cpe:2.3:a:postfix:postfix"
+      ],
+      "source": "https://cvemon.intruder.io/cves/CVE-2023-51764"
+    },
+    {
+      "product": "Exim",
+      "cpe": [
+        "cpe:2.3:a:exim:exim"
+      ],
+      "source": "https://cvepremium.circl.lu/vuln/cve-2023-42116"
+    },
+    {
+      "product": "Dovecot",
+      "cpe": [
+        "cpe:2.3:a:dovecot:dovecot"
+      ],
+      "source": "https://db.gcve.eu/vuln/CVE-2021-33515"
+    },
+    {
+      "product": "vsftpd",
+      "cpe": [
+        "cpe:2.3:a:vsftpd_project:vsftpd"
+      ],
+      "source": "https://cve.akaoma.com/cve-2011-2523"
+    }
+  ],
+  "unchecked": [
+    {
+      "product": "Microsoft Exchange Server",
+      "reason": "its headers give a build number, while NVD names releases and cumulative updates"
+    },
+    {
+      "product": "ASP.NET",
+      "reason": "its header gives the .NET runtime version, not a product release NVD names"
+    },
+    {
+      "product": "Express",
+      "reason": "its header carries no version"
+    }
+  ]
+}

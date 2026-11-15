@@ -297,6 +297,34 @@ registration and domains whose record says they are not signed with
 DNSSEC; a record that does not say shows DNSSEC as not stated
 (`internal/semantics/domains.json`).
 
+## Vulnerable software
+
+```bash
+amass lens vuln-update            # fetch or refresh the vulnerability data
+amass lens vulnerable -d example.com
+```
+
+Checks the software versions the services lens identifies against NVD's CVE
+data, and lists those with CVEs, known exploited ones first (CISA's Known
+Exploited Vulnerabilities catalog), with each CVE's score and NVD link. Which
+products can be checked, and their NVD CPE names, are in
+`internal/semantics/vulnerabilities.json`; every product the services lens
+identifies is there, as checked or with the reason it cannot be (a header
+that gives a build number or no version). A version the data does not cover
+yet, or a product without a version, is listed as not checked.
+
+`amass lens vuln-update` asks the NVD CVE API for every CVE naming each
+catalog product, with the versions it affects, and reads the KEV catalog; it
+writes `vulnerabilities.json` in the output directory (or `AMASS_VULN_DATA`,
+or `-vuln-data`). Later runs fetch only what changed, and a product added to
+the catalog is fetched in full. Without an NVD API key (`NVD_API_KEY`) the
+first run takes a few minutes, at NVD's published rate limit. The MCP server
+refreshes the data daily.
+
+Matching is by the version in stored headers and banners: distributions
+often backport fixes without changing the version, and software can hide or
+fake it, so confirm a CVE with the vendor's advisory.
+
 ## Email security
 
 ```bash
