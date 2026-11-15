@@ -117,7 +117,7 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 			return nil
 		}
 
-		_ = cs.plugin.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), cs.plugin.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

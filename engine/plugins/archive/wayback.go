@@ -100,7 +100,7 @@ func (w *wayback) check(e *et.Event) error {
 }
 
 func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
-	_ = w.rlimit.Wait(e.Session.Ctx())
+	_ = support.WaitLimit(e.Session.Ctx(), w.rlimit)
 	e.Session.NetSem().Acquire()
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 60*time.Second)

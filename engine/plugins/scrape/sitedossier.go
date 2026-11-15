@@ -104,7 +104,7 @@ func (sd *siteDossier) query(e *et.Event, name string) []*dbt.Entity {
 	defer subs.Close()
 
 	for i := 1; i < 20; i++ {
-		_ = sd.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), sd.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

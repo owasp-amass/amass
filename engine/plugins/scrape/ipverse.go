@@ -104,7 +104,7 @@ type record struct {
 }
 
 func (v *ipverse) query(sess et.Session, asset *dbt.Entity) *record {
-	_ = v.rlimit.Wait(sess.Ctx())
+	_ = support.WaitLimit(sess.Ctx(), v.rlimit)
 	sess.NetSem().Acquire()
 	as := asset.Asset.(*oamnet.AutonomousSystem)
 

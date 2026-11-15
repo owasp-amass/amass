@@ -54,6 +54,10 @@ type Session struct {
 	finished     bool
 	numOfSess    int
 	netSemaphore *sessSemaphore
+
+	// netUsage counts the session's share of the engine's DNS and data
+	// source capacity; the session's context carries it.
+	netUsage *et.NetUsage
 }
 
 // CreateSession initializes a new Session object based on the provided configuration.
@@ -71,9 +75,11 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 
 	startTime := time.Now()
 	numOfSessions := mgr.NumOfSessions() + 1
-	ctx, cancel := context.WithCancel(context.Background())
+	usage := &et.NetUsage{}
+	ctx, cancel := context.WithCancel(et.WithNetUsage(context.Background(), usage))
 	// Create a new session object
 	s := &Session{
+		netUsage:     usage,
 		id:           uuid.New(),
 		mgr:          mgr,
 		ctx:          ctx,
@@ -120,6 +126,7 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 	s.log.Info("Database connection established", slog.String("dsn", s.dsn))
 	go s.updateStats()
 	go s.updateSessionSemaphore()
+	go s.logNetUsage()
 	return s, nil
 }
 
@@ -203,9 +210,33 @@ func (s *Session) Kill() {
 	// gets the database calls too.
 	s.dbstats.log(s.log)
 	s.dbstats.log(slog.Default().With("session", s.id.String()))
+	s.netUsage.Log(s.log, netUsageMessage)
+	s.netUsage.Log(slog.Default().With("session", s.id.String()), netUsageMessage)
 	s.cancel()
 	s.finished = true
 	s.clients.CloseIdleConnections()
+}
+
+// netUsageMessage begins the log lines with a session's share of the
+// engine's DNS queries and data source rate limits.
+const netUsageMessage = "shared network use"
+
+// netUsageEvery is how often a running session logs its shared network use,
+// so sessions that run at the same time can be compared while they run.
+var netUsageEvery = 10 * time.Minute
+
+func (s *Session) logNetUsage() {
+	tick := time.NewTicker(netUsageEvery)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-tick.C:
+			s.netUsage.Log(slog.Default().With("session", s.id.String()), netUsageMessage+" so far")
+		}
+	}
 }
 
 func (s *Session) setupDB() error {

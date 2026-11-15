@@ -81,7 +81,7 @@ func (r *autsys) lookup(e *et.Event, num int, since time.Time) *dbt.Entity {
 }
 
 func (r *autsys) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.Autnum) {
-	_ = r.plugin.rlimit.Wait(e.Session.Ctx())
+	_ = support.WaitLimit(e.Session.Ctx(), r.plugin.rlimit)
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 3*time.Minute)
 	defer cancel()

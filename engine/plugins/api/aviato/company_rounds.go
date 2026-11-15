@@ -152,7 +152,7 @@ loop:
 			headers := amasshttp.Header{"Content-Type": []string{"application/json"}}
 			headers["Authorization"] = []string{"Bearer " + key}
 
-			_ = cr.plugin.rlimit.Wait(e.Session.Ctx())
+			_ = support.WaitLimit(e.Session.Ctx(), cr.plugin.rlimit)
 			e.Session.NetSem().Acquire()
 
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

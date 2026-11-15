@@ -118,7 +118,7 @@ loop:
 				url += "&lastId=" + lastid
 			}
 
-			_ = pt.rlimit.Wait(e.Session.Ctx())
+			_ = support.WaitLimit(e.Session.Ctx(), pt.rlimit)
 			e.Session.NetSem().Acquire()
 
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

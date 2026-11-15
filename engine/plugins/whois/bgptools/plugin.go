@@ -132,7 +132,7 @@ func (bt *bgpTools) whois(ctx context.Context, ipstr string) (*bgpToolsRecord, e
 	dial := amassnet.NewDialContext(3 * time.Second)
 	addr := net.JoinHostPort(bt.addr, strconv.Itoa(bt.port))
 
-	_ = bt.rlimit.Wait(ctx)
+	_ = support.WaitLimit(ctx, bt.rlimit)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 

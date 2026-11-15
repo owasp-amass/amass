@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/resolve/conn"
 	"github.com/owasp-amass/resolve/pool"
 	"github.com/owasp-amass/resolve/selectors"
@@ -93,14 +94,30 @@ var baselineResolvers = []baseline{
 var trusted *pool.Pool
 var detector *wildcards.Detector
 
+// PerformQuery asks the shared resolver pool for name's records of qtype,
+// retrying up to ten times. Each query is counted for the session whose
+// context ctx is (et.NetUsage), so the sessions' shares of the pool can be
+// compared.
 func PerformQuery(ctx context.Context, name string, qtype uint16) ([]dns.RR, error) {
+	usage := et.NetUsageFrom(ctx)
 	for i := 1; i <= 10; i++ {
 		msg := utils.QueryMsg(name, qtype)
 		if qtype == dns.TypePTR {
 			msg = utils.ReverseMsg(name)
 		}
 
-		if resp, err := dnsQuery(ctx, msg, trusted); err == nil && resp != nil {
+		start := time.Now()
+		resp, err := dnsQuery(ctx, msg, trusted)
+		switch {
+		case err == nil && resp != nil:
+			usage.DNSQuery(et.DNSAnswered, time.Since(start))
+		case err == ErrNameDoesNotExist || err == ErrNoRecordOfThisType:
+			usage.DNSQuery(et.DNSNoRecord, time.Since(start))
+		default:
+			usage.DNSQuery(et.DNSFailed, time.Since(start))
+		}
+
+		if err == nil && resp != nil {
 			if wildcardDetected(ctx, resp, detector) {
 				return nil, errors.New("wildcard detected")
 			}

@@ -119,7 +119,7 @@ func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 	}
 	limit := min(rcreds*50, count)
 
-	_ = p.rlimit.Wait(e.Session.Ctx())
+	_ = support.WaitLimit(e.Session.Ctx(), p.rlimit)
 	e.Session.NetSem().Acquire()
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
@@ -163,7 +163,7 @@ func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity) {
 }
 
 func (p *Prospeo) accountType(sess et.Session, key string) (int, error) {
-	_ = p.rlimit.Wait(sess.Ctx())
+	_ = support.WaitLimit(sess.Ctx(), p.rlimit)
 
 	sess.NetSem().Acquire()
 	rctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
@@ -191,7 +191,7 @@ func (p *Prospeo) accountType(sess et.Session, key string) (int, error) {
 }
 
 func (p *Prospeo) count(sess et.Session, domain string, key string) (int, error) {
-	_ = p.rlimit.Wait(sess.Ctx())
+	_ = support.WaitLimit(sess.Ctx(), p.rlimit)
 
 	sess.NetSem().Acquire()
 	rctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)

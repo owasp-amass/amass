@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"golang.org/x/time/rate"
 )
@@ -28,7 +29,7 @@ func init() {
 func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyCompletionsResponse, error) {
 	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
 
-	_ = gleifLimit.Wait(ctx)
+	_ = support.WaitLimit(ctx, gleifLimit)
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -53,7 +54,7 @@ func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyComple
 func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id
 
-	_ = gleifLimit.Wait(ctx)
+	_ = support.WaitLimit(ctx, gleifLimit)
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -76,7 +77,7 @@ func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 func GLEIFGetDirectParentRecord(ctx context.Context, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-parent"
 
-	_ = gleifLimit.Wait(ctx)
+	_ = support.WaitLimit(ctx, gleifLimit)
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -102,7 +103,7 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 	last := 1
 	link := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
-		_ = gleifLimit.Wait(ctx)
+		_ = support.WaitLimit(ctx, gleifLimit)
 		wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 
