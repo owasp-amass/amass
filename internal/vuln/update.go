@@ -27,6 +27,15 @@ const (
 	maxResponseBytes = 256 << 20
 )
 
+// MinRefresh is the shortest time between refreshes: NVD's best practices
+// ask clients not to request updates more often than once every two hours.
+const MinRefresh = 2 * time.Hour
+
+// retryWaits are the pauses before asking again after a transient failure:
+// a dropped connection, a rate limit or a server error. NVD asks clients
+// that are refused to wait before trying again.
+var retryWaits = []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute}
+
 // Updater refreshes a data file.
 type Updater struct {
 	Client *http.Client
@@ -68,7 +77,9 @@ func (u *Updater) logf(format string, args ...any) {
 // Update refreshes the data at path for every product in the catalog: a
 // product never fetched, or not fetched within NVD's change window, is
 // fetched in full; the others only for what changed since. The KEV catalog
-// is read in full. The file is written when everything succeeded.
+// is read in full. A product or the KEV catalog that cannot be fetched keeps
+// its previous data and is asked again at the next refresh; the rest is
+// saved, and the error names what was not fetched.
 func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error) {
 	var res UpdateResult
 	cat, err := LoadCatalog()
@@ -92,21 +103,38 @@ func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error)
 		u.pause = nvdKeylessPause
 	}
 
+	var failed []string
 	for _, cpe := range cat.cpes() {
+		if ctx.Err() != nil {
+			return res, ctx.Err()
+		}
+
 		started := u.now().UTC()
-		p := d.Products[cpe]
-		full := p == nil || started.Sub(p.FetchedAt) > nvdMaxChangeDays*24*time.Hour
+		prev := d.Products[cpe]
+		full := prev == nil || started.Sub(prev.FetchedAt) > nvdMaxChangeDays*24*time.Hour
+
+		// changes are read into a copy, so a failure keeps the previous data
 		var since time.Time
-		if full {
-			p = &ProductData{CVEs: map[string]*CVE{}}
-			res.Full++
-		} else {
-			since = p.FetchedAt.Add(-time.Hour)
+		p := &ProductData{CVEs: map[string]*CVE{}}
+		if !full {
+			since = prev.FetchedAt.Add(-time.Hour)
+			for id, c := range prev.CVEs {
+				p.CVEs[id] = c
+			}
 		}
 
 		n, err := u.fetchProduct(ctx, cat.NVDAPI, cpe, since, started, p)
 		if err != nil {
-			return res, fmt.Errorf("%s: %w", cpe, err)
+			if ctx.Err() != nil {
+				return res, ctx.Err()
+			}
+
+			u.logf("%s: not fetched: %v", cpe, err)
+			failed = append(failed, cpe)
+			continue
+		}
+		if full {
+			res.Full++
 		}
 
 		u.logf("%s: %d CVEs (%d changed)", cpe, len(p.CVEs), n)
@@ -118,24 +146,45 @@ func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error)
 		res.CVEs += len(p.CVEs)
 	}
 
-	kev, err := u.fetchKEV(ctx, cat.KEVFeed)
-	if err != nil {
-		return res, fmt.Errorf("KEV catalog: %w", err)
+	if kev, err := u.fetchKEV(ctx, cat.KEVFeed); err == nil {
+		d.KEV, d.KEVFetchedAt = kev, u.now().UTC()
+	} else {
+		if ctx.Err() != nil {
+			return res, ctx.Err()
+		}
+
+		u.logf("KEV catalog: not fetched: %v", err)
+		failed = append(failed, "the KEV catalog")
+	}
+	res.KEV = len(d.KEV)
+
+	// the catalog's hash is recorded only when all of it was fetched, so the
+	// next refresh asks again for what was not
+	d.About, d.UpdatedAt = dataAbout, u.now().UTC()
+	if len(failed) == 0 {
+		d.CatalogHash = cat.hash()
+	}
+	if err := d.Save(path); err != nil {
+		return res, err
+	}
+	if len(failed) > 0 {
+		return res, fmt.Errorf("%d of %d not fetched, kept from before and asked again at the next refresh: %s",
+			len(failed), len(cat.cpes())+1, strings.Join(failed, ", "))
 	}
 
-	d.KEV, d.KEVFetchedAt = kev, u.now().UTC()
-	res.KEV = len(kev)
-
-	d.About, d.CatalogHash, d.UpdatedAt = dataAbout, cat.hash(), u.now().UTC()
-	return res, d.Save(path)
+	return res, nil
 }
 
-// Stale reports whether the data at path needs a refresh: older than
-// maxAge, or fetched for a different set of catalog products.
+// Stale reports whether the data at path needs a refresh: never fetched,
+// or at least MinRefresh old and either older than maxAge or not fetched
+// for every catalog product.
 func Stale(path string, maxAge time.Duration, now time.Time) bool {
 	d, err := Load(path)
 	if err != nil || d.UpdatedAt.IsZero() {
 		return true
+	}
+	if now.Sub(d.UpdatedAt) < MinRefresh {
+		return false
 	}
 
 	cat, err := LoadCatalog()
@@ -318,14 +367,34 @@ func (u *Updater) fetchKEV(ctx context.Context, feed string) (map[string]KEVEntr
 	return out, nil
 }
 
-// getJSON fetches and decodes a URL; NVD requests are spaced to its rate
-// limit and send the API key.
+// getJSON fetches and decodes a URL, asking again after a transient
+// failure; NVD requests are spaced to its rate limit and send the API key.
 func (u *Updater) getJSON(ctx context.Context, rawURL string, nvd bool, v any) error {
+	for attempt := 0; ; attempt++ {
+		wait, err := u.getOnce(ctx, rawURL, nvd, v)
+		if err == nil || wait < 0 || attempt >= len(retryWaits) || ctx.Err() != nil {
+			return err
+		}
+
+		wait = max(wait, retryWaits[attempt])
+		u.logf("%v; asking again in %s", err, wait)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+}
+
+// getOnce makes one request. A transient failure returns how long the
+// server asked to wait (zero when it did not say); a failure that asking
+// again will not fix returns a negative wait.
+func (u *Updater) getOnce(ctx context.Context, rawURL string, nvd bool, v any) (time.Duration, error) {
 	if nvd {
 		if wait := u.pause - time.Since(u.last); !u.last.IsZero() && wait > 0 {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return -1, ctx.Err()
 			case <-time.After(wait):
 			}
 		}
@@ -335,7 +404,7 @@ func (u *Updater) getJSON(ctx context.Context, rawURL string, nvd bool, v any) e
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
 	req.Header.Set("User-Agent", "OWASP Amass vulnerability updater")
@@ -345,14 +414,38 @@ func (u *Updater) getJSON(ctx context.Context, rawURL string, nvd bool, v any) e
 
 	resp, err := u.Client.Do(req)
 	if err != nil {
-		return err
+		// a dropped or reset connection
+		return 0, err
 	}
 
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("%s: %s %s", req.URL.Host, resp.Status, strings.TrimSpace(string(msg)))
+		err := fmt.Errorf("%s: %s %s", req.URL.Host, resp.Status, strings.TrimSpace(string(msg)))
+
+		// NVD refuses with 403 when the rate limit is passed
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests, resp.StatusCode == http.StatusForbidden && nvd,
+			resp.StatusCode >= 500:
+			return retryAfter(resp.Header.Get("Retry-After")), err
+		default:
+			return -1, err
+		}
 	}
 
-	return json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(v)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(v); err != nil {
+		// a body cut off mid-stream
+		return 0, err
+	}
+
+	return 0, nil
+}
+
+// retryAfter reads a Retry-After header given in seconds, capped at an hour.
+func retryAfter(h string) time.Duration {
+	if s, err := strconv.Atoi(strings.TrimSpace(h)); err == nil && s > 0 {
+		return min(time.Duration(s)*time.Second, time.Hour)
+	}
+
+	return 0
 }

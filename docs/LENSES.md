@@ -330,7 +330,10 @@ catalog product, with the versions it affects, and reads the KEV catalog; it
 writes `vulnerabilities.json` in the output directory (or `AMASS_VULN_DATA`,
 or `-vuln-data`). Later runs fetch only what changed, and a product added to
 the catalog is fetched in full. Without an NVD API key (`NVD_API_KEY`) the
-first run takes a few minutes, at NVD's published rate limit.
+first run takes a few minutes, at NVD's published rate limit. A dropped
+connection, rate limit or server error is asked again after a pause; a
+product NVD still does not answer keeps its previous data, the rest is
+saved, and the next refresh asks for it again.
 `amass vuln-update -every 24h` keeps running and refreshes the data once a
 day (NVD asks for no more than once every two hours); so does the MCP server.
 

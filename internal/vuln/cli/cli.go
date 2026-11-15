@@ -28,7 +28,7 @@ const Description = "Fetch or refresh the vulnerability data (NVD CVEs and CISA 
 
 // minEvery is the shortest -every: NVD's best practices ask clients not to
 // request updates more often than once every two hours.
-const minEvery = 2 * time.Hour
+const minEvery = vuln.MinRefresh
 
 // NVDKeyEnv is an optional NVD API key, which allows faster updates.
 const NVDKeyEnv = "NVD_API_KEY"
@@ -103,11 +103,19 @@ func Run(cmdName string, args []string, out, errout io.Writer) error {
 	}}
 
 	res, err := u.Update(ctx, path)
+	if err != nil && res.Products == 0 && res.KEV == 0 {
+		return fmt.Errorf("update vulnerability data: %w", err)
+	}
+
+	// what was fetched is saved even when part of the update failed
+	if _, werr := fmt.Fprintf(out, "Updated %s: %d CPE names (%d fetched in full), %d CVEs, %d changed; %d known "+
+		"exploited vulnerabilities in CISA's catalog.\n", path, res.Products, res.Full, res.CVEs, res.Changed,
+		res.KEV); werr != nil {
+		return werr
+	}
 	if err != nil {
 		return fmt.Errorf("update vulnerability data: %w", err)
 	}
 
-	_, err = fmt.Fprintf(out, "Updated %s: %d CPE names (%d fetched in full), %d CVEs, %d changed; %d known exploited "+
-		"vulnerabilities in CISA's catalog.\n", path, res.Products, res.Full, res.CVEs, res.Changed, res.KEV)
-	return err
+	return nil
 }
