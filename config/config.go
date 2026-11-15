@@ -96,12 +96,12 @@ type Config struct {
 
 	// Will discovered subdomain name alterations be generated?
 	Alterations    bool     `yaml:"-" json:"alterations,omitempty"`
-	FlipWords      bool     `yaml:"-" json:"-"`
-	FlipNumbers    bool     `yaml:"-" json:"-"`
-	AddWords       bool     `yaml:"-" json:"-"`
-	AddNumbers     bool     `yaml:"-" json:"-"`
-	MinForWordFlip int      `yaml:"-" json:"-"`
-	EditDistance   int      `yaml:"-" json:"-"`
+	FlipWords      bool     `yaml:"-" json:"flip_words,omitempty"`
+	FlipNumbers    bool     `yaml:"-" json:"flip_numbers,omitempty"`
+	AddWords       bool     `yaml:"-" json:"add_words,omitempty"`
+	AddNumbers     bool     `yaml:"-" json:"add_numbers,omitempty"`
+	MinForWordFlip int      `yaml:"-" json:"min_for_word_flip,omitempty"`
+	EditDistance   int      `yaml:"-" json:"edit_distance,omitempty"`
 	AltWordlist    []string `yaml:"-" json:"alt_worldlist,omitempty"`
 
 	// Only access the data sources for names and return results?
