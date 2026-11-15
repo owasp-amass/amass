@@ -226,3 +226,30 @@ func TestLookupOnlyThisPluginsServices(t *testing.T) {
 		t.Errorf("the lookup gave %v, want only mine", got)
 	}
 }
+
+// A certificate that names its subject only in its alternative names, as
+// httptest's does, is stored too.
+func TestProbeStoresACertificateWithoutCommonNames(t *testing.T) {
+	hp, sess := newProbing(t)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, page)
+	}))
+	t.Cleanup(srv.Close)
+	sess.Clients().Probe = srv.Client()
+
+	cert := srv.Certificate()
+	if cert.Subject.CommonName != "" || cert.Issuer.CommonName != "" {
+		t.Skip("httptest's certificate now has common names")
+	}
+
+	host := sess.Asset(t, &oamdns.FQDN{Name: "www.example.com"})
+	var stored *oamcert.TLSCertificate
+	for _, f := range hp.query(&et.Event{Entity: host, Session: sess}, host, srv.URL, 443) {
+		if c, ok := f.To.Asset.(*oamcert.TLSCertificate); ok {
+			stored = c
+		}
+	}
+	if stored == nil || stored.SerialNumber != cert.SerialNumber.String() || stored.SubjectCommonName != "" {
+		t.Errorf("the certificate stored is %+v", stored)
+	}
+}

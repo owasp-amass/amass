@@ -225,6 +225,10 @@ func (s *scope) certificate(cert graph.Asset, rules certificateRules) ([]Certifi
 		}
 	}
 	sort.Strings(names)
+	// a certificate may name its subject only in its alternative names
+	if subject == "" && len(names) > 0 {
+		subject = names[0]
+	}
 	if issuerParty == "" {
 		issuerParty = issuer
 	}

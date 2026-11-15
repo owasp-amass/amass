@@ -57,6 +57,10 @@ func (h *horTlsCert) lookup(sess et.Session, tlsent *dbt.Entity) ([]*dbt.Entity,
 }
 
 func (h *horTlsCert) process(e *et.Event, c *oamcert.TLSCertificate, orgs []*dbt.Entity) {
+	// a certificate may name its subject only in its alternative names
+	if c.SubjectCommonName == "" {
+		return
+	}
 	// check if the TLS certificate subject common name is in scope
 	if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: c.SubjectCommonName}, 0); conf > 0 {
 		return

@@ -111,6 +111,41 @@ func TestFindCertificates(t *testing.T) {
 	}
 }
 
+// A certificate that names its subject only in its alternative names is
+// reported by the first name it covers.
+func TestFindCertificatesWithoutCommonName(t *testing.T) {
+	defer func(f func() time.Time) { certificateNow = f }(certificateNow)
+	certificateNow = func() time.Time { return time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC) }
+
+	g := postureFixture()
+	g.Assets["cert-san"] = graph.Asset{ID: "cert-san", Type: "TLSCertificate", Key: "cert-san",
+		Content: map[string]any{"serial_number": "cert-san", "subject_common_name": "",
+			"issuer_common_name": "R10", "not_before": "2026-01-01T00:00:00Z", "not_after": "2026-04-01T00:00:00Z",
+			"signature_algorithm": "SHA256-RSA"}}
+	g.Links = append(g.Links, graph.Relation{ID: "cert-san-san", FromID: "cert-san", ToID: "www.colgate.edu",
+		Label: "san_dns_name", Type: "SimpleRelation"})
+
+	r, err := FindCertificates(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Certificates != 4 {
+		t.Fatalf("certificates = %d: %+v", r.Certificates, r.Findings)
+	}
+	found := false
+	for _, f := range r.Findings {
+		if f.ID == "cert-san" {
+			found = true
+			if f.Kind != CertExpired || f.Subject != "www.colgate.edu" {
+				t.Errorf("the certificate without a common name was reported as %s %q", f.Kind, f.Subject)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("the certificate without a common name was not reported: %+v", r.Findings)
+	}
+}
+
 func TestFindDomains(t *testing.T) {
 	defer func(f func() time.Time) { domainsNow = f }(domainsNow)
 	domainsNow = func() time.Time { return time.Date(2027, 7, 1, 0, 0, 0, 0, time.UTC) }
