@@ -56,6 +56,9 @@ type plugin struct {
 	// mergeCheck is how often the merge watcher checks for drained work;
 	// zero turns duplicate merging off.
 	mergeCheck time.Duration
+	// othersWait bounds how long auto mode waits for other sessions before
+	// recording proposals without applying them.
+	othersWait time.Duration
 	// mergeMu lets one session's merge pass run at a time.
 	mergeMu  sync.Mutex
 	mu       sync.Mutex
@@ -66,7 +69,8 @@ type plugin struct {
 // NewAttribution returns the ownership attribution plugin.
 func NewAttribution() et.Plugin {
 	return &plugin{name: "AI-Attribution", lookup: os.LookupEnv, quiet: defaultQuiet, maxWait: defaultMaxWait,
-		mergeCheck: defaultMergeCheck, sessions: map[uuid.UUID]*tracker{}, journals: map[string]*review.Journal{}}
+		mergeCheck: defaultMergeCheck, othersWait: defaultOthersWait, sessions: map[uuid.UUID]*tracker{},
+		journals: map[string]*review.Journal{}}
 }
 
 func (p *plugin) Name() string {
@@ -242,6 +246,7 @@ func (t *tracker) run() {
 		for _, o := range t.orgs {
 			orgs = append(orgs, o)
 		}
+
 		t.mu.Unlock()
 
 		t.pass(orgs)
@@ -289,6 +294,7 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 		if t.model != nil {
 			policy.Model = ai.OwnershipModel{LinearModel: t.model}
 		}
+
 		res, err := review.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal, policy)
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", graph.AssetLabel(org), err))
@@ -331,7 +337,8 @@ func (t *tracker) widenScope(ctx context.Context, gains []graph.Asset) {
 		if conf <= 0 {
 			continue
 		}
-		if a, c := t.sess.Scope().IsAssetInScope(ent.Asset, conf); c >= conf && strings.EqualFold(a.Key(), ent.Asset.Key()) {
+		if a, c := t.sess.Scope().IsAssetInScope(ent.Asset, conf); c >= conf && strings.EqualFold(a.Key(),
+			ent.Asset.Key()) {
 			_ = t.sess.Backlog().Enqueue(ent)
 		}
 	}

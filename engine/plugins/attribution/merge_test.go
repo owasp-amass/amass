@@ -46,6 +46,7 @@ func seedDuplicates(t *testing.T, db repository.Repository) map[string]*dbt.Enti
 			Relation: &general.SimpleRelation{Name: "id"}}); err != nil {
 			t.Fatal(err)
 		}
+
 		ents[uid] = o
 	}
 	for _, uid := range []string{"ithaka:1", "ithaka:2"} {
@@ -53,6 +54,7 @@ func seedDuplicates(t *testing.T, db repository.Repository) map[string]*dbt.Enti
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		ents[uid] = o
 	}
 
@@ -66,6 +68,7 @@ func runMergeWatcher(t *testing.T, mode string) (repository.Repository, map[stri
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = db.Close() })
 
 	ents := seedDuplicates(t, db)
@@ -136,7 +139,8 @@ func TestDuplicatesAreMergedWhenTheEnumerationDrains(t *testing.T) {
 	for _, e := range entries {
 		switch e.Proposal.Decision {
 		case lens.GapPropose:
-			if e.Status != review.ProposalApplied || e.Outcome.Reviewer != review.AutomaticReviewer || e.Outcome.Merge == nil {
+			if e.Status != review.ProposalApplied || e.Outcome.Reviewer != review.AutomaticReviewer ||
+				e.Outcome.Merge == nil {
 				t.Errorf("proposed merge: %+v", e)
 			}
 		default:
@@ -231,6 +235,7 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = db.Close() }()
 
 	ents := seedDuplicates(t, db)
@@ -254,6 +259,7 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 	if p.tracker(busy) == nil {
 		t.Fatal("attribution is off")
 	}
+
 	done := session(1, 0)
 	if p.tracker(done) == nil {
 		t.Fatal("attribution is off")
@@ -286,5 +292,68 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 	_, err2 := db.FindEntityById(context.Background(), ents["globalsign:2"].ID)
 	if (err1 == nil) == (err2 == nil) {
 		t.Fatalf("want exactly one GlobalSign left after both drained: %v, %v", err1, err2)
+	}
+}
+
+// A long enumeration elsewhere must not hold a drained session open: in
+// journal mode nothing is written, so the proposals are recorded at once,
+// and in auto mode they are recorded without being applied once the wait
+// for the other sessions runs out.
+func TestBusyOtherSessionsDoNotHoldADrainedSession(t *testing.T) {
+	for _, mode := range []string{config.AttributionJournal, config.AttributionAuto} {
+		t.Run(mode, func(t *testing.T) {
+			db, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "busy.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			defer func() { _ = db.Close() }()
+
+			ents := seedDuplicates(t, db)
+			journal := filepath.Join(t.TempDir(), "review.jsonl")
+			env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": mode}
+			p := NewAttribution().(*plugin)
+			p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+			p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond
+			p.othersWait = 200 * time.Millisecond
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			session := func(total, completed int) *fakeSession {
+				s := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), db: db,
+					scope: &fakeScope{org: "none"}, backlog: &fakeBacklog{}, stats: &et.SessionStats{}}
+				s.stats.WorkItemsTotal, s.stats.WorkItemsCompleted = total, completed
+				return s
+			}
+
+			// The other enumeration stays busy throughout.
+			if p.tracker(session(50, 10)) == nil {
+				t.Fatal("attribution is off")
+			}
+
+			done := session(1, 0)
+			if p.tracker(done) == nil {
+				t.Fatal("attribution is off")
+			}
+
+			deadline := time.Now().Add(20 * time.Second)
+			for done.stats.Background() != 0 && time.Now().Before(deadline) {
+				time.Sleep(10 * time.Millisecond)
+			}
+			if n := done.stats.Background(); n != 0 {
+				t.Fatalf("a busy enumeration elsewhere held the drained session: background work = %d", n)
+			}
+
+			for uid, e := range ents {
+				if _, err := db.FindEntityById(context.Background(), e.ID); err != nil {
+					t.Errorf("merged while another enumeration was writing: %s is gone", uid)
+				}
+			}
+
+			entries, err := (&review.Journal{Path: journal}).DuplicateEntries()
+			if err != nil || len(entries) != 2 {
+				t.Fatalf("proposals were not recorded: %+v, %v", entries, err)
+			}
+		})
 	}
 }

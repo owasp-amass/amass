@@ -25,21 +25,33 @@ const (
 	mergeSettled = 2
 	// mergeTimeout bounds the duplicate search and its merges.
 	mergeTimeout = 5 * time.Minute
+	// defaultOthersWait is how long, once its own work has drained, a
+	// session in auto mode waits for the engine's other sessions before it
+	// records its proposals without applying them. It is well inside the
+	// enum client's default 30 minutes without progress.
+	defaultOthersWait = 10 * time.Minute
 )
 
-// watchMerges finds duplicate organizations once the session's other work
-// has drained, records the merge proposals in the journal and, in auto
-// mode, applies the proposed merges. It also records contradicted legal
-// identities and each enumerated domain's departments for review, and in
-// auto mode first retracts automatic ownership writes whose evidence is gone. Merges also wait for the engine's other sessions to
-// drain, and one merge pass runs at a time. Merging earlier could delete an
-// organization a plugin is still writing to. The watcher holds one unit of
-// background work, counted by its caller, so the session is not reported
-// finished before the merges run; it releases the unit when it returns.
+// watchMerges finds duplicate organizations once the session's own work
+// has drained and records the merge proposals in the journal. It also
+// records contradicted legal identities and each enumerated domain's
+// departments for review. In auto mode it then applies the proposed merges,
+// first retracting automatic ownership writes whose evidence is gone; those
+// writes also wait for the engine's other sessions to drain, since merging
+// earlier could delete an organization another session is still writing
+// to, and one pass runs at a time. When other sessions stay busy longer
+// than othersWait, the proposals are recorded without being applied, for
+// review or a later run: a long enumeration elsewhere must not hold this
+// session open (the enum client ends a session after its timeout without
+// progress) or keep its proposals from being recorded. The watcher holds
+// one unit of background work, counted by its caller, so the session is not
+// reported finished before the pass runs; it releases the unit when it
+// returns.
 func (t *tracker) watchMerges() {
 	defer t.sess.Stats().AddBackground(-1)
 
 	settled := 0
+	var drainedAt time.Time
 	tick := time.NewTicker(t.p.mergeCheck)
 	defer tick.Stop()
 	for {
@@ -51,17 +63,31 @@ func (t *tracker) watchMerges() {
 		if t.sess.Done() {
 			return
 		}
-		// Another enumeration on the same database may still be writing to
-		// an organization a merge would delete.
-		if !t.drained() || t.p.othersBusy(t) {
-			settled = 0
+		if !t.drained() {
+			settled, drainedAt = 0, time.Time{}
 			continue
+		}
+		if drainedAt.IsZero() {
+			drainedAt = time.Now()
+		}
+
+		// Only auto mode writes, so only it waits for other sessions.
+		write := t.mode == config.AttributionAuto
+		if write && t.p.othersBusy(t) {
+			if time.Since(drainedAt) < t.p.othersWait {
+				settled = 0
+				continue
+			}
+
+			write = false
+			t.sess.Log().Info("AI duplicate search records its merge proposals without applying them: other " +
+				"enumerations on this engine are still writing")
 		}
 
 		settled++
 		if settled >= mergeSettled {
 			t.p.mergeMu.Lock()
-			t.mergeDuplicates()
+			t.mergeDuplicates(write)
 			t.p.mergeMu.Unlock()
 			return
 		}
@@ -78,6 +104,7 @@ func (p *plugin) othersBusy(self *tracker) bool {
 			others = append(others, t)
 		}
 	}
+
 	p.mu.Unlock()
 
 	for _, t := range others {
@@ -105,13 +132,14 @@ func (t *tracker) drained() bool {
 }
 
 // mergeDuplicates records the duplicate organizations as merge proposals
-// and, in auto mode, merges the proposed pairs that are still pending.
-func (t *tracker) mergeDuplicates() {
+// and, when write is set, merges the proposed pairs that are still pending
+// after retracting automatic writes whose evidence is gone.
+func (t *tracker) mergeDuplicates(write bool) {
 	ctx, cancel := context.WithTimeout(t.sess.Ctx(), mergeTimeout)
 	defer cancel()
 
 	adapter := oamrepo.Adapter{Repo: t.sess.DB(), Neo4jDatabase: oamrepo.Neo4jDatabaseName(t.sess.Config())}
-	if t.mode == config.AttributionAuto {
+	if write {
 		t.recheck(ctx, adapter)
 	}
 
@@ -127,7 +155,7 @@ func (t *tracker) mergeDuplicates() {
 	}
 
 	merged := 0
-	if t.mode == config.AttributionAuto {
+	if write {
 		state, err := t.journal.DuplicateState()
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI duplicate search could not read the journal: %v", err))
