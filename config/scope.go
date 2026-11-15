@@ -23,32 +23,62 @@ func (c *Config) loadSeedandScopeSettings() error {
 	if c.Scope == nil {
 		c.Scope = &Scope{Ports: slices.Clone(DefaultPorts)}
 	}
+	if err := c.Scope.populate(); err != nil {
+		return err
+	}
 	if c.Seed == nil || c.Seed.isScopeEmpty(false) {
-		if c.Scope == nil {
-			return fmt.Errorf("config seed and scope are not initialized")
-		} else {
-			if err := c.Scope.populate(); err != nil {
-				return err
-			}
-			c.Seed = c.Scope
-			return nil
-		}
-	} else if err := c.Seed.populate(); err != nil {
-		return err
-	}
-
-	if c.Scope == nil || !c.Scope.isScopeEmpty(true) {
-		if err := c.Seed.populate(); err != nil {
-			return err
-		}
-		c.Scope = c.Seed
-		c.Scope.Ports = slices.Clone(DefaultPorts)
+		c.Seed = c.Scope
 		return nil
-	} else if err := c.Scope.populate(); err != nil {
+	}
+	if err := c.Seed.populate(); err != nil {
 		return err
 	}
 
+	// The seed is where the enumeration starts, so it is in scope as well:
+	// the scope is the scope section's entries and the seed's, with the
+	// scope section's ports (the default ports when it lists none).
+	c.Scope.merge(c.Seed)
 	return nil
+}
+
+// merge adds the names, addresses, networks, autonomous systems and
+// blacklisted names of o that s does not already have.
+func (s *Scope) merge(o *Scope) {
+	for _, d := range o.Domains {
+		if !slices.ContainsFunc(s.Domains, func(x string) bool { return strings.EqualFold(x, d) }) {
+			s.Domains = append(s.Domains, d)
+		}
+	}
+	for _, ip := range o.IP {
+		if !slices.Contains(s.IP, ip) {
+			s.IP = append(s.IP, ip)
+		}
+	}
+	for _, a := range o.Addresses {
+		if !slices.ContainsFunc(s.Addresses, a.Equal) {
+			s.Addresses = append(s.Addresses, a)
+		}
+	}
+	for _, cidr := range o.CIDRStrings {
+		if !slices.Contains(s.CIDRStrings, cidr) {
+			s.CIDRStrings = append(s.CIDRStrings, cidr)
+		}
+	}
+	for _, n := range o.CIDRs {
+		if !slices.ContainsFunc(s.CIDRs, func(x *net.IPNet) bool { return x.String() == n.String() }) {
+			s.CIDRs = append(s.CIDRs, n)
+		}
+	}
+	for _, asn := range o.ASNs {
+		if !slices.Contains(s.ASNs, asn) {
+			s.ASNs = append(s.ASNs, asn)
+		}
+	}
+	for _, b := range o.Blacklist {
+		if !slices.Contains(s.Blacklist, b) {
+			s.Blacklist = append(s.Blacklist, b)
+		}
+	}
 }
 
 func (s *Scope) isScopeEmpty(scopeSwitch bool) bool {
