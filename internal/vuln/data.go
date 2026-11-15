@@ -65,7 +65,7 @@ type KEVEntry struct {
 }
 
 const dataAbout = "Vulnerability data for the products in Amass's vulnerabilities.json, from the NVD CVE API and " +
-	"CISA's Known Exploited Vulnerabilities catalog, written by amass lens vuln-update."
+	"CISA's Known Exploited Vulnerabilities catalog, written by amass vuln-update."
 
 // Load reads a data file; a missing file is empty data.
 func Load(path string) (*Data, error) {

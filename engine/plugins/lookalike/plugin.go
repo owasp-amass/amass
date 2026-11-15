@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package lookalike finds, during active enumeration, the registered domains
+// Package lookalike finds, during enumeration, the registered domains
 // one typing mistake away from each in-scope registered domain that DNS
 // delegates, and stores them with their name servers and mail servers. Which
 // ones are the subject's own and which are not is left to the lookalike lens.
@@ -72,7 +72,7 @@ func (l *lookalikes) check(e *et.Event) error {
 	}
 
 	cfg := e.Session.Config()
-	if cfg == nil || !cfg.Active {
+	if cfg == nil {
 		return nil
 	}
 

@@ -209,7 +209,7 @@ func (r LookalikeReport) Text() string {
 	fmt.Fprintf(&b, "Lookalike domains of %s: %d stored of %d checked for %d domain(s); %d not tied to it.\n",
 		lookalikeSubject(r.Root, r.Owners), len(r.Lookalikes), r.Checked, len(r.Domains), others)
 	if len(r.Lookalikes) == 0 {
-		b.WriteString("\nNone stored. Lookalikes are collected during active enumeration of the domain.\n")
+		b.WriteString("\nNone stored. Lookalikes are collected during enumeration of the domain.\n")
 	}
 
 	titles := map[string]string{LookalikeOther: "Not tied to it", LookalikeOwnDNS: "On its own name servers or registrant",

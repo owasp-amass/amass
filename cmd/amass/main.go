@@ -42,10 +42,11 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/tools"
 	"github.com/owasp-amass/amass/v5/internal/track"
 	"github.com/owasp-amass/amass/v5/internal/viz"
+	vulncli "github.com/owasp-amass/amass/v5/internal/vuln/cli"
 )
 
 const (
-	usageMsg string = "[ai|assoc|engine|enum|lens|review|subs|track|viz] [options]"
+	usageMsg string = "[ai|assoc|engine|enum|lens|review|subs|track|viz|vuln-update] [options]"
 )
 
 type Args struct {
@@ -68,6 +69,7 @@ var subcommands = []subDesc{
 	{"subs", subs.Description},
 	{"track", track.Description},
 	{"viz", viz.Description},
+	{"vuln-update", vulncli.Description},
 }
 
 func main() {
@@ -90,7 +92,7 @@ func main() {
 			_, _ = afmt.G.Fprintln(color.Error, defaultBuf.String())
 			_, _ = afmt.G.Fprintf(color.Error, "Subcommands: \n\n")
 			for _, sub := range subcommands {
-				_, _ = afmt.G.Fprintf(color.Error, "\t%-6s\t%s\n", sub.Name, sub.Description)
+				_, _ = afmt.G.Fprintf(color.Error, "\t%-11s\t%s\n", sub.Name, sub.Description)
 			}
 			_, _ = afmt.G.Fprintln(color.Error)
 			return
@@ -174,6 +176,8 @@ func main() {
 		track.CLIWorkflow(cmdName, os.Args[2:])
 	case "viz":
 		viz.CLIWorkflow(cmdName, os.Args[2:])
+	case "vuln-update":
+		vulncli.CLIWorkflow(cmdName, os.Args[2:])
 	default:
 		usage()
 		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])

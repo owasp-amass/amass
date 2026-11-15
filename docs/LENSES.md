@@ -300,7 +300,7 @@ DNSSEC; a record that does not say shows DNSSEC as not stated
 ## Vulnerable software
 
 ```bash
-amass lens vuln-update            # fetch or refresh the vulnerability data
+amass vuln-update                 # fetch or refresh the vulnerability data
 amass lens vulnerable -d example.com
 ```
 
@@ -313,7 +313,7 @@ identifies is there, as checked or with the reason it cannot be (a header
 that gives a build number or no version). A version the data does not cover
 yet, or a product without a version, is listed as not checked.
 
-`amass lens vuln-update` asks the NVD CVE API for every CVE naming each
+`amass vuln-update` asks the NVD CVE API for every CVE naming each
 catalog product, with the versions it affects, and reads the KEV catalog; it
 writes `vulnerabilities.json` in the output directory (or `AMASS_VULN_DATA`,
 or `-vuln-data`). Later runs fetch only what changed, and a product added to
@@ -337,7 +337,7 @@ transposition, the typo models of Moore and Edelman), or with the same name
 under another common suffix, and says whom each seems to belong to: in the
 subject's footprint, on its own name servers or registrant (often a
 defensive registration), or not tied to it. Those not tied to it that
-receive mail come first. During active enumeration the Lookalike-Domains
+receive mail come first. During enumeration the Lookalike-Domains
 engine plugin checks the same candidates for each in-scope registered
 domain and stores those DNS delegates, with their name and mail servers, so
 the lens has them to report. The typo models, keyboard, suffixes and limits

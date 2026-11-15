@@ -27,7 +27,7 @@ func TestFindVulnerable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Software) != 0 || !strings.Contains(r.Text(), "amass lens vuln-update") {
+	if len(r.Software) != 0 || !strings.Contains(r.Text(), "amass vuln-update") {
 		t.Fatalf("without data:\n%s", r.Text())
 	}
 

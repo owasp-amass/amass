@@ -172,7 +172,7 @@ func (r VulnerableReport) Text() string {
 	fmt.Fprintf(&b, "Vulnerable software of %s: %d identified version(s) with CVEs, %d with known exploited ones, "+
 		"from %d service(s) (%d reads).\n", scope, len(r.Software), kev, r.Services, r.Reads)
 	if r.UpdatedAt.IsZero() {
-		fmt.Fprintf(&b, "\nNo vulnerability data at %s: run `amass lens vuln-update` to fetch it.\n", r.DataPath)
+		fmt.Fprintf(&b, "\nNo vulnerability data at %s: run `amass vuln-update` to fetch it.\n", r.DataPath)
 	} else {
 		fmt.Fprintf(&b, "Vulnerability data updated %s.\n", r.UpdatedAt.Format(time.DateOnly))
 	}

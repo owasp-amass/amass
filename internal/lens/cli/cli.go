@@ -43,7 +43,6 @@ var lensOps = map[string]string{
 	"identity":      "identity-conflicts",
 	"person-named":  "person-named",
 	"vendors":       "vendors",
-	"vuln-update":   "vuln-update",
 }
 
 // The registered subject lenses are amass lens commands too.
@@ -188,7 +187,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", lens.LensMaxAssetsLimit))
 	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one lens run "+
 		"(default 20000, up to %d)", lens.LensMaxReadsLimit))
-	fs.StringVar(&vulnData, "vuln-data", "", "Vulnerability data file for vuln-update and the vulnerable lens "+
+	fs.StringVar(&vulnData, "vuln-data", "", "Vulnerability data file the vulnerable lens reads "+
 		"(default from AMASS_VULN_DATA, or vulnerabilities.json in the output directory)")
 	fs.BoolVar(&readStats, "read-stats", false,
 		"Print the database reads the run made and their time to standard error")
@@ -234,8 +233,6 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 
 	// These read and append to the journal only.
 	switch operation {
-	case "vuln-update":
-		return updateVulnerabilities(vulnData, timeout, out, errout)
 	case "signals":
 		return listSignals(format, true, out)
 	case "duplicate-signals":
