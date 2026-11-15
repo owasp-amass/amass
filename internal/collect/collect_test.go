@@ -67,7 +67,7 @@ func TestConfigureNarrowsScope(t *testing.T) {
 	plan = NewPlan(graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.8.8.0/24"}, Passive)
 	asset, err := Configure(cfg, plan)
 	if err != nil || asset == nil || cfg.Active || !cfg.Passive || len(cfg.Scope.CIDRs) != 1 ||
-		len(cfg.Scope.Ports) != 2 {
+		len(cfg.Scope.Ports) != len(config.DefaultPorts) {
 		t.Errorf("passive config = %+v, %v", cfg.Scope, err)
 	}
 

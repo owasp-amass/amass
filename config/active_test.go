@@ -36,7 +36,7 @@ func TestActive(t *testing.T) {
 
 	// Test case 1: MarshalJSON returns the expected JSON bytes
 	t.Run("TestActive returns the expected JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"active":true,"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"active":true,"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		_ = c.loadActiveSettings(c)
 		got, err := c.JSON()
@@ -51,7 +51,7 @@ func TestActive(t *testing.T) {
 
 	t.Run("TestActive returns the expected JSON bytes when active isnt provided", func(t *testing.T) {
 		c := NewConfig()
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 
 		got, err := c.JSON()
@@ -69,7 +69,7 @@ func TestActive(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 
 		_ = c.loadActiveSettings(c)

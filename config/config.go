@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -194,6 +195,37 @@ type Scope struct {
 	Blacklist []string `yaml:"blacklist,omitempty" json:"blacklist,omitempty"`
 }
 
+// DefaultPorts are the ports active enumeration probes when the
+// configuration lists none: every port the SSH, mail and file greeting, and
+// HTTP probes know a protocol for. The web ports after the common ones are
+// administration consoles and management or data APIs that answer HTTP.
+var DefaultPorts = []int{
+	21,    // FTP
+	22,    // SSH
+	25,    // SMTP
+	80,    // HTTP
+	110,   // POP3
+	143,   // IMAP
+	443,   // HTTPS
+	465,   // SMTP over TLS
+	587,   // SMTP submission
+	993,   // IMAP over TLS
+	995,   // POP3 over TLS
+	2375,  // Docker Engine API (unencrypted)
+	2379,  // etcd client API
+	5984,  // CouchDB
+	6443,  // Kubernetes API server
+	8000,  // HTTP alternate
+	8080,  // HTTP alternate
+	8443,  // HTTPS alternate
+	8500,  // Consul HTTP API
+	8888,  // HTTP alternate
+	9200,  // Elasticsearch / OpenSearch REST API
+	9443,  // web administration consoles
+	10000, // Webmin
+	10250, // Kubernetes kubelet API
+}
+
 // NewConfig returns a default configuration object.
 func NewConfig() *Config {
 	return &Config{
@@ -202,7 +234,7 @@ func NewConfig() *Config {
 		Log:                 log.New(io.Discard, "", 0),
 		CollectionStartTime: time.Now(),
 		Seed:                &Scope{},
-		Scope:               &Scope{Ports: []int{80, 443}},
+		Scope:               &Scope{Ports: slices.Clone(DefaultPorts)},
 		Options:             make(map[string]interface{}),
 		MinForRecursive:     1,
 		FlipWords:           true,

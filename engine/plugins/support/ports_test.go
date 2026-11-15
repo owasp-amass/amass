@@ -30,3 +30,11 @@ func TestScopePortsAndClaims(t *testing.T) {
 		t.Fatal("a nil config has no ports")
 	}
 }
+
+// With no ports configured, every port a probe knows is probed.
+func TestDefaultConfigProbesKnownPorts(t *testing.T) {
+	cfg := config.NewConfig()
+	if got := ScopePorts(cfg, []int{22, 25, 993}); !slices.Equal(got, []int{22, 25, 993}) {
+		t.Fatalf("ScopePorts = %v with the default ports", got)
+	}
+}

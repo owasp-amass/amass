@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,11 @@ import (
 )
 
 func (c *Config) loadSeedandScopeSettings() error {
+	// A scope section with every entry commented out decodes as null: it
+	// restricts nothing, and the default ports apply.
+	if c.Scope == nil {
+		c.Scope = &Scope{Ports: slices.Clone(DefaultPorts)}
+	}
 	if c.Seed == nil || c.Seed.isScopeEmpty(false) {
 		if c.Scope == nil {
 			return fmt.Errorf("config seed and scope are not initialized")
@@ -36,7 +42,7 @@ func (c *Config) loadSeedandScopeSettings() error {
 			return err
 		}
 		c.Scope = c.Seed
-		c.Scope.Ports = []int{80, 443}
+		c.Scope.Ports = slices.Clone(DefaultPorts)
 		return nil
 	} else if err := c.Scope.populate(); err != nil {
 		return err
@@ -152,9 +158,9 @@ func convertPortRangeToSlice(portRange string) ([]int, error) {
 	return ports, nil
 }
 
-// returns true is ports match default ports (80,443), otherwise return false
+// portCheck reports whether ports are the default ports, DefaultPorts.
 func portCheck(ports []int) bool {
-	defaultPorts := []int{80, 443}
+	defaultPorts := DefaultPorts
 
 	portSet := make(map[int]struct{}, len(ports))
 	for _, v := range ports {

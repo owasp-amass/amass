@@ -30,7 +30,7 @@ func Configure(cfg *config.Config, plan Plan) (oam.Asset, error) {
 		return nil, errors.New("not an approvable collection plan: " + plan.Reason)
 	}
 
-	ports := []int{80, 443}
+	ports := slices.Clone(config.DefaultPorts)
 	if plan.Mode == Active && cfg.Scope != nil && len(cfg.Scope.Ports) > 0 {
 		ports = slices.Clone(cfg.Scope.Ports)
 	}

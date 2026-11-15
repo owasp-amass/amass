@@ -183,7 +183,8 @@ ports, including the implicit TLS ports 465, 993 and 995, and stores the
 greeting the server sends first, with the certificate a TLS port presented; it
 never sends a command or credential. `scope.ports` in the configuration lists every port active
 enumeration may probe: the SSH and banner probes try the ports they know that it
-lists, and the HTTP probes try the rest. Its ports and greeting patterns, each citing the
+lists, and the HTTP probes try the rest. Without `scope.ports`, every port the
+probes know is probed (`config.DefaultPorts`). Its ports and greeting patterns, each citing the
 protocol's RFC, are in
 `engine/plugins/service_discovery/banner_probes/protocols.json`. The header names, expected
 ports and warning period are in `internal/semantics/services.json`.

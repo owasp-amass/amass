@@ -106,7 +106,7 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 	fs.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	fs.IntVar(&args.MaxDepth, "max-depth", 0, "Maximum number of subdomain labels for brute forcing")
 	fs.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
-	fs.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
+	fs.Var(&args.Ports, "p", "Ports separated by commas (default: the FTP, SSH and mail ports and common web and management API ports)")
 	fs.Var(args.Resolvers, "r", "IP addresses of untrusted DNS resolvers (can be used multiple times)")
 	fs.Var(args.Resolvers, "tr", "IP addresses of trusted DNS resolvers (can be used multiple times)")
 	fs.IntVar(&args.Timeout, "timeout", 30, "Minutes to run without progress before terminating (Default: 30)")
