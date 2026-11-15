@@ -6,6 +6,9 @@ package lens
 
 import (
 	"context"
+	"net/netip"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -52,7 +55,9 @@ func networkFixture() graphtest.VendorGraph {
 	add("autnum-aws", "AutnumRecord", "AS16509", map[string]any{"handle": "AS16509", "name": "AMAZON-02"})
 	for _, ip := range []string{"ip-aws", "ip-aws2"} {
 		g.Links = append(g.Links, graph.Relation{ID: "cf-" + ip, FromID: "d1.cloudfront.net", ToID: ip,
-			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{
+				"header": map[string]any{"rr_type": 1},
+			}})
 		link("nb-aws", "contains", ip)
 	}
 	link("as-aws", "announces", "nb-aws")
@@ -78,7 +83,8 @@ func networkFixture() graphtest.VendorGraph {
 
 func TestFindNetworkInfrastructure(t *testing.T) {
 	g := networkFixture()
-	r, err := FindNetworkInfrastructure(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+	r, err := FindNetworkInfrastructure(context.Background(), g,
+		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
 		g.Assets["colgate.edu"], LensLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -155,5 +161,146 @@ func TestFindNetworkInfrastructureLimits(t *testing.T) {
 	}
 	if !r.Truncated || !strings.Contains(FormatNetworkReport(r), "Results are partial") {
 		t.Errorf("a five-read scan was not reported as partial: %+v", r)
+	}
+}
+
+// rangedGraph adds range searches to the fixture: the addresses and
+// netblocks it stores, by their ranges, as asset-db's IPRangeReader finds
+// them.
+type rangedGraph struct{ graphtest.VendorGraph }
+
+func (r rangedGraph) AddressesInRange(_ context.Context, prefix netip.Prefix, limit int) ([]graph.Asset, bool, error) {
+	var out []graph.Asset
+	for _, a := range r.Assets {
+		if addr, err := netip.ParseAddr(graph.ContentString(a, "address")); err == nil && a.Type == "IPAddress" &&
+			prefix.Contains(addr) {
+			out = append(out, a)
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	if len(out) > limit {
+		return out[:limit], true, nil
+	}
+
+	return out, false, nil
+}
+
+func (r rangedGraph) NetblocksContaining(_ context.Context, addr netip.Addr, limit int) ([]graph.Asset, error) {
+	var out []graph.Asset
+	for _, a := range r.Assets {
+		if p, err := netip.ParsePrefix(graph.ContentString(a, "cidr")); err == nil && a.Type == "Netblock" &&
+			p.Contains(addr) {
+			out = append(out, a)
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return netip.MustParsePrefix(out[i].Key).Bits() > netip.MustParsePrefix(out[j].Key).Bits()
+	})
+	return out[:min(limit, len(out))], nil
+}
+
+// With range searches, the lens counts addresses stored inside the
+// subject's netblocks that no edge links to the netblock, and names the
+// network of an address stored with no netblock.
+func TestNetworkLensReadsRanges(t *testing.T) {
+	g := networkFixture()
+	// an address inside the university's space with no contains edge, and
+	// a name of another domain on it
+	g.Assets["ip-unlinked"] = graph.Asset{ID: "ip-unlinked", Type: "IPAddress", Key: "149.43.7.7",
+		Content: map[string]any{"address": "149.43.7.7"}}
+	g.Assets["vpn.partner-co.com"] = graph.Asset{ID: "vpn.partner-co.com", Type: "FQDN", Key: "vpn.partner-co.com",
+		Content: map[string]any{"name": "vpn.partner-co.com"}}
+	g.Links = append(g.Links, graph.Relation{ID: "unlinked-a", FromID: "vpn.partner-co.com", ToID: "ip-unlinked",
+		Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+	// a provider address with no contains edge to its stored netblock
+	g.Assets["ip-aws3"] = graph.Asset{ID: "ip-aws3", Type: "IPAddress", Key: "13.32.9.9",
+		Content: map[string]any{"address": "13.32.9.9"}}
+	g.Assets["api.colgate.edu"] = graph.Asset{ID: "api.colgate.edu", Type: "FQDN", Key: "api.colgate.edu",
+		Content: map[string]any{"name": "api.colgate.edu"}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "colgate-node-api", FromID: "colgate.edu", ToID: "api.colgate.edu", Label: "node",
+			Type: "SimpleRelation"},
+		graph.Relation{ID: "api-a", FromID: "api.colgate.edu", ToID: "ip-aws3", Label: "dns_record",
+			Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+
+	catalog := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
+	without, err := FindNetworkInfrastructure(context.Background(), g, catalog, g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	with, err := FindNetworkInfrastructure(context.Background(), rangedGraph{g}, catalog, g.Assets["colgate.edu"],
+		LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// every address stored in the range is counted: 149.43.1.1, 5.5, 7.7
+	// and 9.9, two of them linked to nothing that leads the lens to them
+	if without.Networks[0].Addresses != 2 || with.Networks[0].Addresses != 4 {
+		t.Errorf("addresses in 149.43.0.0/16: %d without range reads, %d with; want 2 and 4",
+			without.Networks[0].Addresses, with.Networks[0].Addresses)
+	}
+	if len(with.Foreign) != 1 || with.Foreign[0].Names != 3 ||
+		strings.Join(with.Foreign[0].Addresses, ",") != "149.43.5.5,149.43.7.7" {
+		t.Errorf("foreign names with range reads = %+v", with.Foreign)
+	}
+
+	party := func(r NetworkReport) HostingShare {
+		for _, h := range r.Hosting {
+			if strings.Contains(strings.Join(h.Examples, ","), "api.colgate.edu") {
+				return h
+			}
+		}
+
+		return HostingShare{}
+	}
+	if p := party(without); p.Party != UnattributedAddresses {
+		t.Errorf("without range reads, api.colgate.edu is hosted by %q", p.Party)
+	}
+	if p := party(with); p.Party != "AMAZON-02" || strings.Join(p.Networks, ",") != "13.32.0.0/15" {
+		t.Errorf("with range reads, api.colgate.edu is hosted by %+v", p)
+	}
+}
+
+// The third-party lens names the network holding an address that is stored
+// with no netblock, when the graph can search by range.
+func TestThirdPartiesNameAddressNetworksByRange(t *testing.T) {
+	g := networkFixture()
+	g.Assets["ip-aws3"] = graph.Asset{ID: "ip-aws3", Type: "IPAddress", Key: "13.32.9.9",
+		Content: map[string]any{"address": "13.32.9.9"}}
+	g.Assets["api.colgate.edu"] = graph.Asset{ID: "api.colgate.edu", Type: "FQDN", Key: "api.colgate.edu",
+		Content: map[string]any{"name": "api.colgate.edu"}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "colgate-node-api", FromID: "colgate.edu", ToID: "api.colgate.edu", Label: "node",
+			Type: "SimpleRelation"},
+		graph.Relation{ID: "api-a", FromID: "api.colgate.edu", ToID: "ip-aws3", Label: "dns_record",
+			Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+
+	catalog := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
+	hostOf := func(gr graph.Graph) []string {
+		r, err := SearchThirdPartiesWithin(context.Background(), gr, catalog, g.Assets["colgate.edu"], LensLimits{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var out []string
+		for _, v := range r.Vendors {
+			if strings.Contains(strings.Join(v.Examples, ","), "api.colgate.edu") {
+				out = append(out, v.Vendor)
+			}
+		}
+
+		sort.Strings(out)
+		return out
+	}
+
+	if got := hostOf(g); slices.Contains(got, "AMAZON-02") {
+		t.Errorf("without range reads the address's network was named: %v", got)
+	}
+	if got := hostOf(rangedGraph{g}); !slices.Contains(got, "AMAZON-02") {
+		t.Errorf("with range reads, api.colgate.edu's vendors are %v, want AMAZON-02 among them", got)
 	}
 }

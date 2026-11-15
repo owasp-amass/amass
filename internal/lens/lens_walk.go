@@ -200,6 +200,8 @@ type lensWalker struct {
 	// prefetched holds bounded edge reads made for several assets at once,
 	// by asset ID and direction, until neighbors uses them.
 	prefetched map[string]prefetchedEdges
+	// rangeBlocks caches the netblock found by range for an address.
+	rangeBlocks map[string]graph.Asset
 }
 
 // prefetchedEdges is one asset's bounded edge read in one direction.

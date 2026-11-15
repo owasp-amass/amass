@@ -47,9 +47,13 @@ type ChangesReport struct {
 	// subject was: removed, moved, or no longer found.
 	QuietAssets    []ChangeGroup `json:"quiet_assets"`
 	QuietRelations []ChangeGroup `json:"quiet_relations"`
-	Reads          int           `json:"reads"`
-	Truncated      bool          `json:"truncated"`
-	Reason         string        `json:"reason,omitempty"`
+	// Run is the latest finished collection run since then that covered the
+	// subject, when one is recorded: quiet then means that run did not see
+	// it.
+	Run       *graph.CollectionRun `json:"run,omitempty"`
+	Reads     int                  `json:"reads"`
+	Truncated bool                 `json:"truncated"`
+	Reason    string               `json:"reason,omitempty"`
 }
 
 var changesJSON = semantics.File("changes.json")
@@ -129,9 +133,19 @@ func FindChanges(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 
 	// Something is quiet only if the subject was seen after since and the
 	// thing was not; a day's margin keeps one enumeration's own spread of
-	// times from counting.
+	// times from counting. A recorded run that covered the subject makes it
+	// exact: what it did not see is quiet.
 	quietBefore := since
 	seenSince := out.LastSeen.After(since.Add(24 * time.Hour))
+	run, err := coveringRun(ctx, g, roots, since)
+	if err != nil {
+		return out, err
+	}
+	if run != nil {
+		out.Run = run
+		quietBefore, seenSince = run.StartedAt, true
+	}
+
 	c := changeTally{examples: loadChangesRules().Examples, groups: map[string]map[string]*ChangeGroup{}}
 	for _, id := range order {
 		a := owned[id]
@@ -223,6 +237,58 @@ func (c *changeTally) list(kind string) []ChangeGroup {
 	return out
 }
 
+// coveringRun returns the latest finished collection run started after since
+// whose scope covers one of roots: names it, or names a domain one of them
+// is a name under. It returns nil when none is recorded or the graph does
+// not record runs.
+func coveringRun(ctx context.Context, g graph.Graph, roots []graph.Asset, since time.Time) (*graph.CollectionRun, error) {
+	rr, ok := g.(graph.RunReader)
+	if !ok {
+		return nil, nil
+	}
+
+	runs, err := rr.CollectionRuns(ctx, since, changesRunsRead)
+	if errors.Is(err, graph.ErrUnsupported) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, run := range runs {
+		if run.Status != graph.RunFinished || !run.StartedAt.After(since) {
+			continue
+		}
+		for _, t := range run.Scope {
+			for _, r := range roots {
+				if runCovers(t, r) {
+					found := run
+					return &found, nil
+				}
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+// changesRunsRead bounds the runs the changes lens reads.
+const changesRunsRead = 200
+
+func runCovers(t graph.RunTarget, a graph.Asset) bool {
+	if strings.EqualFold(t.Type, a.Type) && strings.EqualFold(strings.TrimSuffix(t.Key,
+		"."), strings.TrimSuffix(a.Key, ".")) {
+		return true
+	}
+	if t.Type != "FQDN" || a.Type != "FQDN" {
+		return false
+	}
+
+	name := strings.ToLower(strings.TrimSuffix(graph.FQDNName(a), "."))
+	domain := strings.ToLower(strings.TrimSuffix(t.Key, "."))
+	return domain != "" && strings.HasSuffix(name, "."+domain)
+}
+
 // FormatChangesReport renders the changes lens for a terminal.
 func FormatChangesReport(r ChangesReport) string {
 	var b strings.Builder
@@ -244,7 +310,17 @@ func FormatChangesReport(r ChangesReport) string {
 	}
 	write("First stored since then (assets, by type)", "new", r.NewAssets)
 	write("First stored since then (relationships, by purpose)", "new", r.NewRelations)
-	if r.LastSeen.After(r.Since.Add(24 * time.Hour)) {
+	if r.Run != nil {
+		fmt.Fprintf(&b, "\nCompared with the %s run that started %s and covered it", r.Run.Tool,
+			r.Run.StartedAt.Format("2006-01-02 15:04"))
+		if r.Run.ExternalID != "" {
+			fmt.Fprintf(&b, " (%s)", r.Run.ExternalID)
+		}
+
+		b.WriteString(".\n")
+		write("Not seen by that run (assets, by type)", "quiet", r.QuietAssets)
+		write("Not seen by that run (relationships, by purpose)", "quiet", r.QuietRelations)
+	} else if r.LastSeen.After(r.Since.Add(24 * time.Hour)) {
 		write("Not seen again since then (assets, by type)", "quiet", r.QuietAssets)
 		write("Not seen again since then (relationships, by purpose)", "quiet", r.QuietRelations)
 	} else {

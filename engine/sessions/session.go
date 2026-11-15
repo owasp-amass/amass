@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,12 +21,14 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/pubsub"
 	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	afmt "github.com/owasp-amass/amass/v5/internal/afmt"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/postgres"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/yl2chen/cidranger"
 )
@@ -58,6 +61,11 @@ type Session struct {
 	// netUsage counts the session's share of the engine's DNS and data
 	// source capacity; the session's context carries it.
 	netUsage *et.NetUsage
+
+	// runs records the session as a collection run in the database, when
+	// the repository can, and run is that run's ID.
+	runs repository.RunRecorder
+	run  string
 }
 
 // CreateSession initializes a new Session object based on the provided configuration.
@@ -127,6 +135,7 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 	s.log.Info("Session initialized")
 	s.log.Info("Temporary directory created", slog.String("dir", s.tmpdir))
 	s.log.Info("Database connection established", slog.String("dsn", s.dsn))
+	s.startRun()
 	go s.updateStats()
 	go s.updateSessionSemaphore()
 	go s.logNetUsage()
@@ -215,9 +224,95 @@ func (s *Session) Kill() {
 	s.dbstats.log(s.engineLog())
 	s.netUsage.Log(s.log, netUsageMessage)
 	s.netUsage.Log(s.engineLog(), netUsageMessage)
+	s.finishRun()
 	s.cancel()
 	s.finished = true
 	s.clients.CloseIdleConnections()
+}
+
+// startRun records the session as a collection run: what it was asked to
+// collect and how, so a later reader can tell what this enumeration did
+// not find. A failure is logged; the enumeration goes on without it.
+func (s *Session) startRun() {
+	if s.runs == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	run, err := s.runs.StartRun(ctx, &dbt.CollectionRun{Tool: "amass", ToolVersion: afmt.Version,
+		ExternalID: s.id.String(), StartedAt: s.start, Scope: runScope(s.cfg.Scope), Metadata: runMetadata(s.cfg)})
+	if err != nil {
+		s.engineLog().Error("failed to record the collection run", "err", err.Error())
+		return
+	}
+
+	s.run = run.ID
+}
+
+// finishRun ends the session's run: finished when all its work was done,
+// stopped when it ended with work left, so a run cut short is never read as
+// having looked everywhere.
+func (s *Session) finishRun() {
+	if s.runs == nil || s.run == "" {
+		return
+	}
+
+	status := dbt.RunStopped
+	s.stats.RLock()
+	if s.stats.WorkItemsTotal > 0 && s.stats.WorkItemsCompleted >= s.stats.WorkItemsTotal {
+		status = dbt.RunFinished
+	}
+
+	s.stats.RUnlock()
+	if s.stats.Background() > 0 {
+		status = dbt.RunStopped
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if _, err := s.runs.FinishRun(ctx, s.run, status, time.Time{}); err != nil {
+		s.engineLog().Error("failed to finish the collection run", "run", s.run, "err", err.Error())
+	}
+}
+
+// runScope names a configuration's scope as Open Asset Model targets.
+func runScope(sc *config.Scope) []dbt.RunTarget {
+	if sc == nil {
+		return nil
+	}
+
+	var out []dbt.RunTarget
+	for _, d := range sc.Domains {
+		out = append(out, dbt.RunTarget{Type: oam.FQDN, Key: strings.ToLower(d)})
+	}
+	for _, ip := range sc.Addresses {
+		out = append(out, dbt.RunTarget{Type: oam.IPAddress, Key: ip.String()})
+	}
+	for _, c := range sc.CIDRs {
+		out = append(out, dbt.RunTarget{Type: oam.Netblock, Key: c.String()})
+	}
+	for _, asn := range sc.ASNs {
+		out = append(out, dbt.RunTarget{Type: oam.AutonomousSystem, Key: strconv.Itoa(asn)})
+	}
+
+	return out
+}
+
+// runMetadata records how the enumeration collected.
+func runMetadata(cfg *config.Config) map[string]any {
+	mode := "default"
+	switch {
+	case cfg.Active:
+		mode = "active"
+	case cfg.Passive:
+		mode = "passive"
+	}
+
+	return map[string]any{"mode": mode, "rigid": cfg.Rigid, "brute_forcing": cfg.BruteForcing,
+		"alterations": cfg.Alterations}
 }
 
 // netUsageMessage begins the log lines with a session's share of the
@@ -322,6 +417,10 @@ func (s *Session) selectDBMS() error {
 	if seen, ok := store.(repository.SeenSince); ok {
 		seen.SetSeenSince(s.start)
 	}
+	if runs, ok := store.(repository.RunRecorder); ok {
+		s.runs = runs
+	}
+
 	s.db, s.dbstats = withDBStats(store)
 	return nil
 }

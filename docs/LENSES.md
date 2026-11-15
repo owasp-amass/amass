@@ -221,6 +221,14 @@ systems are read first; the contents of its netblocks, which can be large,
 take what the read limit leaves. These come from stored
 registrations (RDAP and WHOIS) and DNS resolutions, not a live scan.
 
+When the database can search address ranges (PostgreSQL, SQLite and Neo4j
+with asset-db's range indexes), an address with no stored netblock relation
+is placed in the most specific stored netblock that contains it, and a
+netblock's contents include every stored address inside its range, not only
+those linked to it; up to 1,000 addresses are read for each netblock, and the
+report says when there are more. The third-party lenses use the same
+containment to name the party hosting an address.
+
 ## Dangling DNS
 
 ```bash
@@ -268,6 +276,14 @@ proof that it was removed. When no enumeration has seen the subject since
 the time, nothing is reported as quiet. `-since` takes a date, an RFC 3339
 time or an age (`7d`, `72h`); without it, and for questions asked in plain
 language, the window is the last 30 days (`internal/semantics/changes.json`).
+
+When the database records collection runs, the comparison is with the most
+recent finished run whose scope covered the subject and that started after
+the time: what that run did not see is reported as not seen by it, which is
+firmer than comparing times alone because the run is known to have looked.
+Runs that stopped early are not used. Amass records each enumeration as a
+run (its scope, mode and session), and any other tool can record its own
+through asset-db's `RunRecorder`.
 
 ## Certificates
 

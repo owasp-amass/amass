@@ -381,8 +381,61 @@ func (d dependencyScan) party(a graph.Asset) (string, string, bool, []graph.Witn
 		}
 	}
 
+	// An address stored with no netblock is the network's whose stored
+	// range holds it, when the graph can search by range.
+	if a.Type == "IPAddress" {
+		block, err := d.w.netblockByRange(a)
+		if err != nil {
+			return "", "", false, nil, err
+		}
+		if block.ID != "" && block.ID != a.ID {
+			if _, mine := d.owned[block.ID]; mine {
+				return "", "", true, nil, nil
+			}
+
+			return d.party(block)
+		}
+	}
+
 	name, id, own, best, err := d.fallbackName(c.visited)
 	return name, id, own, c.witness(best, d.w.assets), err
+}
+
+// netblockByRange returns the most specific stored netblock whose range
+// holds an address, or an empty asset when none does or the graph cannot
+// search by range. Each address is looked up once per lens run.
+func (w *lensWalker) netblockByRange(ip graph.Asset) (graph.Asset, error) {
+	if b, ok := w.rangeBlocks[ip.ID]; ok {
+		return b, nil
+	}
+
+	rr, ok := w.graph.(graph.RangeReader)
+	addr, err := netip.ParseAddr(graph.ContentString(ip, "address"))
+	if !ok || err != nil {
+		return graph.Asset{}, nil
+	}
+	if w.report.Reads >= w.maxReads {
+		w.truncate("database read limit")
+		return graph.Asset{}, nil
+	}
+
+	w.report.Reads++
+	blocks, err := rr.NetblocksContaining(w.ctx, addr, 1)
+	if err != nil && !errors.Is(err, graph.ErrUnsupported) {
+		return graph.Asset{}, err
+	}
+
+	var block graph.Asset
+	if len(blocks) > 0 {
+		block = blocks[0]
+		w.assets[block.ID] = block
+	}
+	if w.rangeBlocks == nil {
+		w.rangeBlocks = map[string]graph.Asset{}
+	}
+
+	w.rangeBlocks[ip.ID] = block
+	return block, nil
 }
 
 // namedOrganization returns the closest organization whose name identifies
@@ -559,7 +612,8 @@ func dependencyKind(purpose, kind string) string {
 // typePlural renders an OAM type name as plural words, keeping acronyms
 // ("IPAddress" to "IP addresses", "FQDN" to "FQDNs").
 func typePlural(kind string) string {
-	words := strings.Fields(graph.CamelBoundary1.ReplaceAllString(graph.CamelBoundary2.ReplaceAllString(kind, "$1 $2"), "$1 $2"))
+	words := strings.Fields(graph.CamelBoundary1.ReplaceAllString(graph.CamelBoundary2.ReplaceAllString(kind,
+		"$1 $2"), "$1 $2"))
 	for i, w := range words {
 		if strings.ToUpper(w) != w {
 			words[i] = strings.ToLower(w)

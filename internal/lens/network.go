@@ -340,7 +340,9 @@ func (n *networkScan) resolve(name graph.Asset, out *NetworkReport) error {
 	return nil
 }
 
-// blockOf returns the netblock a stored address is in, or an empty asset.
+// blockOf returns the netblock a stored address is in, or an empty asset:
+// the netblock linked to it, or else the most specific stored netblock whose
+// range holds it, when the graph can search by range.
 func (n *networkScan) blockOf(ip graph.Asset) (graph.Asset, error) {
 	steps, err := n.w.steps(ip)
 	if err != nil {
@@ -352,7 +354,7 @@ func (n *networkScan) blockOf(ip graph.Asset) (graph.Asset, error) {
 		}
 	}
 
-	return graph.Asset{}, nil
+	return n.w.netblockByRange(ip)
 }
 
 // party names who holds a netblock outside the footprint, or the address
@@ -425,6 +427,45 @@ func (n *networkScan) contents(block graph.Asset) error {
 				return err
 			}
 		}
+	}
+
+	return n.addressesInRange(block, net)
+}
+
+// netRangeAddresses bounds the stored addresses one range read of a
+// netblock returns.
+const netRangeAddresses = 1000
+
+// addressesInRange counts the addresses stored inside one of the subject's
+// netblocks that the netblock is not linked to, when the graph can search
+// by range.
+func (n *networkScan) addressesInRange(block graph.Asset, net *OwnNetwork) error {
+	rr, ok := n.w.graph.(graph.RangeReader)
+	prefix, known := n.prefixes[block.ID]
+	if !ok || !known {
+		return nil
+	}
+	if n.w.report.Reads >= n.w.maxReads {
+		n.w.truncate("database read limit")
+		return nil
+	}
+
+	n.w.report.Reads++
+	addrs, more, err := rr.AddressesInRange(n.w.ctx, prefix, netRangeAddresses)
+	if errors.Is(err, graph.ErrUnsupported) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	for _, a := range addrs {
+		if err := n.address(a, net); err != nil {
+			return err
+		}
+	}
+	if more {
+		n.w.truncate(fmt.Sprintf("%s holds more than %d stored addresses", net.CIDR, netRangeAddresses))
 	}
 
 	return nil

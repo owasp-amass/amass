@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
@@ -104,5 +105,89 @@ func TestDefaultChangesWindow(t *testing.T) {
 	changesNow = func() time.Time { return day(time.November, 14) }
 	if got := DefaultChangesSince(); !got.Equal(day(time.October, 15)) {
 		t.Errorf("default window starts %s", got)
+	}
+}
+
+// runGraph records collection runs beside the fixture.
+type runGraph struct {
+	graphtest.VendorGraph
+	runs []graph.CollectionRun
+}
+
+func (r runGraph) CollectionRuns(_ context.Context, since time.Time, limit int) ([]graph.CollectionRun, error) {
+	var out []graph.CollectionRun
+	for _, run := range r.runs {
+		if since.IsZero() || !run.StartedAt.Before(since) {
+			out = append(out, run)
+		}
+	}
+
+	return out[:min(limit, len(out))], nil
+}
+
+// A finished run that covered the subject decides what is quiet: what it
+// did not see, with no margin.
+func TestFindChangesComparesWithTheLatestRun(t *testing.T) {
+	g := changesFixture()
+	// last seen on 10 November, before a run on the 12th that saw only the
+	// name and its owners
+	for id, a := range g.Assets {
+		if id == "colgate.edu" {
+			a.LastSeen = day(time.November, 12).Add(time.Hour)
+			g.Assets[id] = a
+		}
+	}
+
+	catalog := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
+	scope := []graph.RunTarget{{Type: "FQDN", Key: "colgate.edu"}}
+	rg := runGraph{VendorGraph: g, runs: []graph.CollectionRun{
+		{ID: "running", Tool: "amass", Status: "running", StartedAt: day(time.November, 14), Scope: scope},
+		{ID: "other", Tool: "amass", Status: graph.RunFinished, StartedAt: day(time.November, 13),
+			Scope: []graph.RunTarget{{Type: "FQDN", Key: "example.org"}}},
+		{ID: "latest", Tool: "amass", ExternalID: "session-9", Status: graph.RunFinished,
+			StartedAt: day(time.November, 12), Scope: scope},
+	}}
+
+	r, err := FindChanges(context.Background(), rg, catalog, g.Assets["colgate.edu"], day(time.November,
+		1), LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Run == nil || r.Run.ID != "latest" {
+		t.Fatalf("compared with run %+v, want the latest finished run that covered colgate.edu", r.Run)
+	}
+
+	quiet := 0
+	for _, c := range r.QuietAssets {
+		quiet += c.Count
+	}
+	if quiet < 2 {
+		t.Errorf("assets last seen before the run should be quiet: %+v", r.QuietAssets)
+	}
+
+	text := FormatChangesReport(r)
+	if !strings.Contains(text, "Compared with the amass run that started 2026-11-12") ||
+		!strings.Contains(text, "session-9") || !strings.Contains(text, "Not seen by that run") {
+		t.Errorf("report does not name the run:\n%s", text)
+	}
+
+	// without runs the same data falls back to the subject's last-seen time
+	plain, err := FindChanges(context.Background(), g, catalog, g.Assets["colgate.edu"], day(time.November, 1),
+		LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.Run != nil {
+		t.Errorf("a graph without runs named a run: %+v", plain.Run)
+	}
+
+	// a run of a name under the scope's domain covers it
+	if !runCovers(graph.RunTarget{Type: "FQDN", Key: "colgate.edu"}, graph.Asset{Type: "FQDN", Key: "www.colgate.edu",
+		Content: map[string]any{"name": "www.colgate.edu"}}) {
+		t.Error("a run of colgate.edu should cover www.colgate.edu")
+	}
+	if runCovers(graph.RunTarget{Type: "FQDN", Key: "colgate.edu"}, graph.Asset{Type: "FQDN", Key: "notcolgate.edu",
+		Content: map[string]any{"name": "notcolgate.edu"}}) {
+		t.Error("a run of colgate.edu should not cover notcolgate.edu")
 	}
 }
