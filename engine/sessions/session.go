@@ -36,6 +36,7 @@ type Session struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	log          *slog.Logger
+	dbstats      *dbStats
 	ps           *pubsub.Logger
 	cfg          *config.Config
 	scope        et.Scope
@@ -198,6 +199,10 @@ func (s *Session) Kill() {
 	}
 	close(s.done)
 
+	// The client may be gone when a session ends, so the engine's own log
+	// gets the database calls too.
+	s.dbstats.log(s.log)
+	s.dbstats.log(slog.Default().With("session", s.id.String()))
 	s.cancel()
 	s.finished = true
 	s.clients.CloseIdleConnections()
@@ -265,7 +270,7 @@ func (s *Session) selectDBMS() error {
 	if err != nil {
 		return errors.New("failed to initialize database store: " + err.Error())
 	}
-	s.db = store
+	s.db, s.dbstats = withDBStats(store)
 	return nil
 }
 
