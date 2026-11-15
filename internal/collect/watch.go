@@ -120,7 +120,7 @@ func (w *Watches) save() error {
 
 // Add creates a watch of an approved plan whose first run starts now.
 func (w *Watches) Add(plan Plan, interval time.Duration, approvedBy string) (Watch, error) {
-	if plan.Status != StatusApprovalRequired || plan.ID != PlanID(plan.ScopeType, plan.ScopeValue, plan.Mode) {
+	if !plan.Approvable() {
 		return Watch{}, errors.New("not an approvable collection plan: " + plan.Reason)
 	}
 	if interval < MinWatchInterval {

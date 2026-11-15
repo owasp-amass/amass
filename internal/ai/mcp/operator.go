@@ -68,7 +68,7 @@ const (
 const operatorInstructions = `
 
 Operator mode: this connection can also collect data and change the database, each time with the user's approval. When the user asks for an enumeration, or a question needs data the database lacks, use the tools below rather than declining: the server asks the user to approve every enumeration itself, so its approval step is the user's consent, and nothing runs without it. Only the user decides whether to approve; never approve on their behalf.
-- To collect data about a target that is missing or stale, call plan_enumeration (a domain, IP address, CIDR or AS number, and mode passive or active), show the user the plan's scope and effects, then call start_enumeration with the plan_id. The user is asked to approve it, in a dialog or at an approval_url you must give them. Prefer passive; active contacts the target's hosts and needs the user's authorization to test them.
+- To collect data about a target that is missing or stale, call plan_enumeration (a domain, IP address, CIDR or AS number, and mode passive or active; also lists more targets for the same run, such as the organization's netblocks and AS, and expand true allows scope expansion, only when the user asks for it), show the user the plan's scope and effects, then call start_enumeration with the same arguments and the plan_id. The user is asked to approve it, in a dialog or at an approval_url you must give them. Prefer passive; active contacts the target's hosts and needs the user's authorization to test them.
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run.
 - list_proposals shows the ownership, merge, identity and person-named proposals awaiting review; review_proposal approves, rejects or retracts one (approving and retracting write to the database and ask the user first).
 - watch_target re-runs a planned enumeration on a schedule (at most every 6 hours) after the user approves it once; list_watches shows each watch with what its last run found, and stop_watch removes one.
@@ -82,6 +82,13 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 		"description": "The exact target: a domain (example.com), an IP address, a CIDR range or an AS number (AS15169)"}
 	mode := map[string]any{"type": "string", "enum": []string{string(collect.Passive), string(collect.Active)},
 		"description": "passive (default) queries data sources only; active also probes the target's hosts"}
+	also := map[string]any{"type": "array", "maxItems": collect.MaxAlso,
+		"items": map[string]any{"type": "string"},
+		"description": "More targets in scope for the same run, each a domain, an IP address, a CIDR range or an " +
+			"AS number, such as the organization's own netblocks and AS"}
+	expand := map[string]any{"type": "boolean",
+		"description": "Allow scope expansion: domains, netblocks and ASes the engine attributes to the targets' " +
+			"organization while it runs are collected too (default false: only the listed targets)"}
 	obj := func(required []string, props map[string]any) map[string]any {
 		schema := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
 		if len(required) > 0 {
@@ -115,35 +122,46 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 	}
 
 	add(ToolPlanEnumeration, "Plan an Amass enumeration",
-		"Show what an enumeration of one exact target would do, without starting it: the scope, the methods, "+
-			"their effects, and the plan_id that start_enumeration needs.",
-		obj([]string{"target"}, map[string]any{"target": target, "mode": mode}), readOnly(),
+		"Show what an enumeration would do, without starting it: the scope (one target, any more targets in also, "+
+			"and whether it may expand), the methods, their effects, and the plan_id that start_enumeration needs.",
+		obj([]string{"target"}, map[string]any{"target": target, "mode": mode, "also": also, "expand": expand}),
+		readOnly(),
 		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
-			var a struct{ Target, Mode string }
+			var a struct {
+				Target string
+				Mode   string
+				Also   []string
+				Expand bool
+			}
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return nil, err
 			}
 
-			plan := planFor(a.Target, a.Mode)
+			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 
 			return jsonResult(map[string]any{"plan": plan,
-				"next": "Show the user the scope and effects, then call start_enumeration with this target, mode " +
-					"and plan_id. The user is asked to approve it."}), nil
+				"next": "Show the user the scope and effects, then call start_enumeration with the same target, " +
+					"mode, also and expand, and this plan_id. The user is asked to approve it."}), nil
 		})
 
 	add(ToolStartEnumeration, "Start an Amass enumeration",
 		"Start the enumeration a plan_enumeration call described. Collects data from the Internet about the "+
 			"target and stores it in the Asset Database; the user is asked to approve it first.",
-		obj([]string{"target", "plan_id"}, map[string]any{"target": target, "mode": mode,
-			"plan_id": map[string]any{"type": "string", "description": "The plan_id plan_enumeration returned"}}),
+		obj([]string{"target", "plan_id"}, map[string]any{"target": target, "mode": mode, "also": also,
+			"expand": expand, "plan_id": map[string]any{
+				"type":        "string",
+				"description": "The plan_id plan_enumeration returned",
+			}}),
 		&mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
 		func(ctx context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
 			var a struct {
 				Target string
 				Mode   string
+				Also   []string
+				Expand bool
 				PlanID string `json:"plan_id"`
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
@@ -153,13 +171,13 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				return nil, errors.New("this server cannot start enumerations: no engine is configured")
 			}
 
-			plan := planFor(a.Target, a.Mode)
+			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return nil, errors.New("plan_id does not match this target and mode; call plan_enumeration again " +
-					"and show the user the new plan")
+				return nil, errors.New("plan_id does not match this target, mode, also and expand; call plan_enumeration " +
+					"again and show the user the new plan")
 			}
 
 			msg := fmt.Sprintf("Start a %s?\n\n%s", plan.Summary(), plan.Effects)
@@ -235,7 +253,10 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 		"Re-run the enumeration a plan_enumeration call described on a schedule, so changes to the target are "+
 			"collected without asking each time. The user approves the watch once; it runs until stop_watch.",
 		obj([]string{"target", "plan_id", "every_hours"}, map[string]any{"target": target, "mode": mode,
-			"plan_id": map[string]any{"type": "string", "description": "The plan_id plan_enumeration returned"},
+			"also": also, "expand": expand, "plan_id": map[string]any{
+				"type":        "string",
+				"description": "The plan_id plan_enumeration returned",
+			},
 			"every_hours": map[string]any{"type": "integer", "minimum": int(collect.MinWatchInterval.Hours()),
 				"maximum": 24 * 90, "description": "Hours between runs, such as 24 for daily or 168 for weekly"}}),
 		&mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
@@ -243,6 +264,8 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			var a struct {
 				Target     string
 				Mode       string
+				Also       []string
+				Expand     bool
 				PlanID     string `json:"plan_id"`
 				EveryHours int    `json:"every_hours"`
 			}
@@ -253,12 +276,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				return nil, errors.New("this server cannot keep watches")
 			}
 
-			plan := planFor(a.Target, a.Mode)
+			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return nil, errors.New("plan_id does not match this target and mode; call plan_enumeration again")
+				return nil, errors.New("plan_id does not match this target, mode, also and expand; call plan_enumeration again")
 			}
 
 			every := time.Duration(a.EveryHours) * time.Hour
@@ -512,30 +535,36 @@ func approver(req *mcp.CallToolRequest, via string) string {
 var asNumber = regexp.MustCompile(`^(?i:as)?(\d{1,10})$`)
 
 // planFor reads a target as a user writes it.
-func planFor(target, mode string) collect.Plan {
-	target = strings.TrimSpace(target)
+func planFor(target, mode string, also []string, expand bool) collect.Plan {
 	m := collect.Mode(strings.ToLower(strings.TrimSpace(mode)))
 	if m == "" {
 		m = collect.Passive
 	}
 
-	sel := graph.AssetSelector{Type: "FQDN", Field: "name", Value: target}
-	switch {
-	case strings.Contains(target, "/"):
-		sel = graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: target}
-	case asNumber.MatchString(target):
-		sel = graph.AssetSelector{
-			Type:  "AutonomousSystem",
-			Field: "number",
-			Value: asNumber.FindStringSubmatch(target)[1],
-		}
-	default:
-		if _, err := netip.ParseAddr(target); err == nil {
-			sel = graph.AssetSelector{Type: "IPAddress", Field: "address", Value: target}
-		}
+	opts := collect.Options{Expand: expand}
+	for _, a := range also {
+		opts.Also = append(opts.Also, selectorFor(a))
 	}
 
-	return collect.NewPlan(sel, m)
+	return collect.NewPlanWith(selectorFor(target), m, opts)
+}
+
+// selectorFor reads a target as a domain, an IP address, a CIDR range or an
+// AS number (AS15169 or 15169).
+func selectorFor(target string) graph.AssetSelector {
+	target = strings.TrimSpace(target)
+	switch {
+	case strings.Contains(target, "/"):
+		return graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: target}
+	case asNumber.MatchString(target):
+		return graph.AssetSelector{Type: "AutonomousSystem", Field: "number",
+			Value: asNumber.FindStringSubmatch(target)[1]}
+	}
+	if _, err := netip.ParseAddr(target); err == nil {
+		return graph.AssetSelector{Type: "IPAddress", Field: "address", Value: target}
+	}
+
+	return graph.AssetSelector{Type: "FQDN", Field: "name", Value: target}
 }
 
 // foundSince reports what was first stored under a finished run's target

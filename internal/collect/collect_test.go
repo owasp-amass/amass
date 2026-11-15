@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 func TestPlansBindScopeAndMode(t *testing.T) {
@@ -255,5 +258,83 @@ func TestManagerLimitsTimeoutsAndResume(t *testing.T) {
 	if _, err := m4.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "e.example"},
 		Passive), ""); err == nil || len(f2.sessions) != 0 {
 		t.Errorf("a failed seed left a session: %v %v", err, f2.sessions)
+	}
+}
+
+func TestPlanWithMoreTargets(t *testing.T) {
+	sel := graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}
+	asn := graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: "64500"}
+	cidr := graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "198.51.100.7/24"}
+
+	// one exact target keeps the ID earlier releases gave it
+	if p := NewPlanWith(sel, Passive, Options{}); p.ID != PlanID("domain", "example.org", Passive) {
+		t.Errorf("a one-target plan's ID changed: %s", p.ID)
+	}
+
+	p := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{cidr, asn, asn, sel}})
+	if p.Status != StatusApprovalRequired || len(p.Also) != 2 || p.Also[0] != (ScopeEntry{"asn", "64500"}) ||
+		p.Also[1] != (ScopeEntry{"cidr", "198.51.100.0/24"}) || p.Expand {
+		t.Fatalf("plan = %+v", p)
+	}
+
+	// the order of the added targets does not matter; their set and
+	// expansion do
+	if q := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{asn, cidr}}); q.ID != p.ID {
+		t.Error("the same targets in another order gave another ID")
+	}
+
+	e := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{asn, cidr}, Expand: true})
+	if e.ID == p.ID || p.ID == NewPlan(sel, Active).ID || !e.Expand || !strings.Contains(e.Effects, "probed too") {
+		t.Errorf("expansion or added targets did not change the ID, or the effects: %+v", e)
+	}
+
+	// an added target meets the target's rules
+	wide := graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.0.0.0/8"}
+	if bad := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{wide}}); bad.Status != StatusUnsupported ||
+		!strings.Contains(bad.Reason, "8.0.0.0/8") {
+		t.Errorf("a /8 was added to an active plan: %+v", bad)
+	}
+
+	private := graph.AssetSelector{Type: "IPAddress", Field: "address", Value: "10.0.0.1"}
+	if NewPlanWith(sel, Passive, Options{Also: []graph.AssetSelector{private}}).Status != StatusUnsupported {
+		t.Error("a private address was added")
+	}
+
+	many := make([]graph.AssetSelector, MaxAlso+1)
+	for i := range many {
+		many[i] = graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: strconv.Itoa(64500 + i)}
+	}
+	if NewPlanWith(sel, Passive, Options{Also: many}).Status != StatusUnsupported {
+		t.Error("more than MaxAlso targets were added")
+	}
+
+	// configuring sets every target in scope, expansion as planned, and
+	// refuses a plan whose added targets were changed after it was shown
+	cfg := config.NewConfig()
+	assets, err := configure(cfg, e)
+	if err != nil || len(assets) != 3 || cfg.Rigid || len(cfg.Scope.Domains) != 1 || len(cfg.Scope.ASNs) != 1 ||
+		len(cfg.Scope.CIDRs) != 1 {
+		t.Fatalf("configure: %v, %d assets, scope %+v, rigid %v", err, len(assets), cfg.Scope, cfg.Rigid)
+	}
+	if _, ok := assets[0].(oamdns.FQDN); !ok {
+		t.Errorf("the first seed is %T, not the plan's target", assets[0])
+	}
+
+	cfg = config.NewConfig()
+	if _, err := configure(cfg, p); err != nil || !cfg.Rigid {
+		t.Errorf("a plan without expansion configured a non-rigid scope: %v", err)
+	}
+
+	tampered := e
+	tampered.Also = append([]ScopeEntry{}, e.Also...)
+	tampered.Also[1].Value = "203.0.113.0/24"
+	if _, err := configure(config.NewConfig(), tampered); err == nil {
+		t.Error("a plan whose added targets were changed was configured")
+	}
+
+	tampered = e
+	tampered.Expand = false
+	if _, err := configure(config.NewConfig(), tampered); err == nil {
+		t.Error("a plan whose expansion was changed was configured")
 	}
 }

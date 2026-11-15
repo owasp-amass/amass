@@ -200,7 +200,7 @@ func (m *Manager) Resume(ctx context.Context) error {
 }
 
 // Start opens an engine session for an approved plan, seeds it with the
-// plan's target and supervises it. approvedBy names who approved it.
+// plan's targets and supervises it. approvedBy names who approved it.
 func (m *Manager) Start(ctx context.Context, plan Plan, approvedBy string) (Run, error) {
 	if m.Engine == nil || m.Config == nil {
 		return Run{}, errors.New("the enumeration engine is not configured")
@@ -229,7 +229,7 @@ func (m *Manager) Start(ctx context.Context, plan Plan, approvedBy string) (Run,
 		return Run{}, fmt.Errorf("load configuration: %w", err)
 	}
 
-	asset, err := Configure(cfg, plan)
+	assets, err := configure(cfg, plan)
 	if err != nil {
 		return Run{}, err
 	}
@@ -239,9 +239,11 @@ func (m *Manager) Start(ctx context.Context, plan Plan, approvedBy string) (Run,
 		return Run{}, fmt.Errorf("create the enumeration session: %w", err)
 	}
 	// A seed failure must not leave an idle, unsupervised session behind.
-	if _, err := m.Engine.CreateAsset(ctx, token, asset); err != nil {
-		_ = m.Engine.TerminateSession(context.Background(), token)
-		return Run{}, fmt.Errorf("seed the enumeration session: %w", err)
+	for _, asset := range assets {
+		if _, err := m.Engine.CreateAsset(ctx, token, asset); err != nil {
+			_ = m.Engine.TerminateSession(context.Background(), token)
+			return Run{}, fmt.Errorf("seed the enumeration session: %w", err)
+		}
 	}
 
 	now := m.now()

@@ -18,15 +18,26 @@ import (
 )
 
 // Configure narrows cfg, a freshly loaded configuration, to exactly the
-// plan's scope and mode, and returns the asset that seeds the session. No
+// plan's scope and mode, and returns the asset of the plan's target. No
 // inherited scope, seed names or expansion survive; data source settings,
 // resolvers and word lists do. Active mode keeps the configured ports.
 func Configure(cfg *config.Config, plan Plan) (oam.Asset, error) {
+	assets, err := configure(cfg, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	return assets[0], nil
+}
+
+// configure is Configure, returning the assets that seed the session: the
+// plan's target first, then the targets the plan adds. The scope expands
+// only when the plan allows it.
+func configure(cfg *config.Config, plan Plan) ([]oam.Asset, error) {
 	if cfg == nil {
 		return nil, errors.New("collection configuration is required")
 	}
-	if plan.Status != StatusApprovalRequired || plan.ID == "" ||
-		plan.ID != PlanID(plan.ScopeType, plan.ScopeValue, plan.Mode) {
+	if !plan.Approvable() {
 		return nil, errors.New("not an approvable collection plan: " + plan.Reason)
 	}
 
@@ -38,46 +49,63 @@ func Configure(cfg *config.Config, plan Plan) (oam.Asset, error) {
 	cfg.Scope = &config.Scope{Ports: ports}
 	cfg.Seed = cfg.Scope
 	cfg.ProvidedNames = nil
-	cfg.Rigid = true
+	cfg.Rigid = !plan.Expand
 	cfg.Recursive = false
 	cfg.Passive = plan.Mode == Passive
 	cfg.Active = plan.Mode == Active
 	cfg.BruteForcing = plan.Mode == Active
 	cfg.Alterations = plan.Mode == Active
 
-	switch plan.ScopeType {
+	entries := append([]ScopeEntry{{Type: plan.ScopeType, Value: plan.ScopeValue}}, plan.Also...)
+	assets := make([]oam.Asset, 0, len(entries))
+	for _, e := range entries {
+		a, err := addScope(cfg, e)
+		if err != nil {
+			return nil, err
+		}
+
+		assets = append(assets, a)
+	}
+
+	return assets, nil
+}
+
+// addScope puts one approved target in cfg's scope and returns its asset.
+func addScope(cfg *config.Config, e ScopeEntry) (oam.Asset, error) {
+	switch e.Type {
 	case "domain":
-		cfg.AddDomain(plan.ScopeValue)
-		if len(cfg.Scope.Domains) != 1 || cfg.Scope.Domains[0] != plan.ScopeValue {
+		n := len(cfg.Scope.Domains)
+		cfg.AddDomain(e.Value)
+		if len(cfg.Scope.Domains) != n+1 || cfg.Scope.Domains[n] != e.Value {
 			return nil, errors.New("failed to set exact FQDN scope")
 		}
 
-		return oamdns.FQDN{Name: plan.ScopeValue}, nil
+		return oamdns.FQDN{Name: e.Value}, nil
 	case "ip":
-		addr, err := netip.ParseAddr(plan.ScopeValue)
-		ip := net.ParseIP(plan.ScopeValue)
+		addr, err := netip.ParseAddr(e.Value)
+		ip := net.ParseIP(e.Value)
 		if err != nil || ip == nil {
 			return nil, errors.New("invalid approved IP")
 		}
 
-		cfg.Scope.Addresses = []net.IP{ip}
+		cfg.Scope.Addresses = append(cfg.Scope.Addresses, ip)
 		return oamnet.IPAddress{Address: addr, Type: ipKind(addr)}, nil
 	case "cidr":
-		prefix, err := netip.ParsePrefix(plan.ScopeValue)
-		_, cidr, cerr := net.ParseCIDR(plan.ScopeValue)
+		prefix, err := netip.ParsePrefix(e.Value)
+		_, cidr, cerr := net.ParseCIDR(e.Value)
 		if err != nil || cerr != nil {
 			return nil, errors.New("invalid approved CIDR")
 		}
 
-		cfg.Scope.CIDRs = []*net.IPNet{cidr}
+		cfg.Scope.CIDRs = append(cfg.Scope.CIDRs, cidr)
 		return oamnet.Netblock{CIDR: prefix, Type: ipKind(prefix.Addr())}, nil
 	case "asn":
-		num, err := strconv.Atoi(plan.ScopeValue)
+		num, err := strconv.Atoi(e.Value)
 		if err != nil || num <= 0 {
 			return nil, errors.New("invalid approved ASN")
 		}
 
-		cfg.Scope.ASNs = []int{num}
+		cfg.Scope.ASNs = append(cfg.Scope.ASNs, num)
 		return oamnet.AutonomousSystem{Number: num}, nil
 	}
 

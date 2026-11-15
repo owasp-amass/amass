@@ -78,8 +78,8 @@ A server started with an operator configuration also offers tools that act:
 
 | Tool | What it does |
 | --- | --- |
-| `plan_enumeration` | Shows what enumerating one exact target (domain, IP, CIDR or AS number) would do, passive or active: scope, methods, effects and the `plan_id`. Starts nothing. |
-| `start_enumeration` | Starts the planned enumeration after the user approves it. |
+| `plan_enumeration` | Shows what enumerating a target (domain, IP, CIDR or AS number) would do, passive or active: scope, methods, effects and the `plan_id`. `also` adds up to 25 more targets to the same run (such as the organization's netblocks and AS, each held to the same rules), and `expand` allows scope expansion, as `amass enum` does without `-rigid`; the `plan_id` covers both. Starts nothing. |
+| `start_enumeration` | Starts the planned enumeration, with the same `target`, `mode`, `also` and `expand`, after the user approves it. |
 | `enumeration_status` | Lists runs, or shows one with its progress and, once finished, what the changes lens finds since it started. |
 | `stop_enumeration` | Ends a run and its engine session. |
 | `watch_target` | Re-runs a planned enumeration every N hours (at least 6) after one approval, until stopped. |

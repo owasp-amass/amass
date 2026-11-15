@@ -33,13 +33,15 @@ type fakeEngine struct {
 	mu       sync.Mutex
 	sessions map[uuid.UUID]bool
 	seeded   []oam.Asset
+	configs  []*config.Config
 }
 
-func (f *fakeEngine) CreateSession(context.Context, *config.Config) (uuid.UUID, error) {
+func (f *fakeEngine) CreateSession(_ context.Context, cfg *config.Config) (uuid.UUID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	id := uuid.New()
 	f.sessions[id] = true
+	f.configs = append(f.configs, cfg)
 	return id, nil
 }
 
@@ -490,11 +492,11 @@ func TestPlanForReadsTargets(t *testing.T) {
 	cases := map[string]string{"example.com": "domain", "8.8.8.8": "ip", "8.8.8.0/24": "cidr", "AS15169": "asn",
 		"15169": "asn"}
 	for target, want := range cases {
-		if p := planFor(target, ""); p.ScopeType != want || p.Mode != collect.Passive {
+		if p := planFor(target, "", nil, false); p.ScopeType != want || p.Mode != collect.Passive {
 			t.Errorf("%s = %+v", target, p)
 		}
 	}
-	if p := planFor("example.com", "loud"); p.Status != collect.StatusUnsupported {
+	if p := planFor("example.com", "loud", nil, false); p.Status != collect.StatusUnsupported {
 		t.Errorf("unknown mode planned: %+v", p)
 	}
 }
@@ -613,5 +615,60 @@ func TestInstructionsMatchTheConnection(t *testing.T) {
 	if strings.Contains(operator, "never starts an enumeration") || strings.Contains(operator, "read-only access") ||
 		!strings.Contains(operator, "Operator mode") || !strings.Contains(operator, "rather than declining") {
 		t.Errorf("the operator's instructions contradict its tools:\n%s", operator)
+	}
+}
+
+// An enumeration of a domain with the organization's AS and netblock in
+// scope, allowing expansion: the plan, the approval prompt, the session's
+// scope and its seeds all carry every target.
+func TestStartEnumerationWithMoreTargetsAndExpansion(t *testing.T) {
+	fx := newOperatorFixture(t)
+	var asked []string
+	cs := connect(t, fx.url, operatorToken, func(r *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		asked = append(asked, r.Params.Message)
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, nil
+	})
+
+	args := map[string]any{"target": "utica.edu", "mode": "active", "also": []string{"AS26808", "72.237.4.0/24"},
+		"expand": true}
+	text, isErr := call(t, cs, ToolPlanEnumeration, args)
+	if isErr {
+		t.Fatalf("plan: %s", text)
+	}
+
+	var out struct{ Plan collect.Plan }
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Plan.Also) != 2 || !out.Plan.Expand || !strings.Contains(out.Plan.Effects, "Scope expansion") {
+		t.Fatalf("plan = %+v", out.Plan)
+	}
+
+	// the ID covers the added targets and expansion
+	narrow := map[string]any{"target": "utica.edu", "mode": "active", "also": []string{"AS26808"}, "expand": true,
+		"plan_id": out.Plan.ID}
+	if text, isErr := call(t, cs, ToolStartEnumeration, narrow); !isErr || !strings.Contains(text, "does not match") {
+		t.Errorf("a plan_id started a different scope: %s", text)
+	}
+
+	args["plan_id"] = out.Plan.ID
+	if text, isErr = call(t, cs, ToolStartEnumeration, args); isErr {
+		t.Fatalf("start: %s", text)
+	}
+	if len(asked) != 1 || !strings.Contains(asked[0], "ACTIVE enumeration of domain utica.edu with asn 26808, "+
+		"cidr 72.237.4.0/24, allowing scope expansion") {
+		t.Errorf("approval prompt = %q", asked)
+	}
+
+	fx.engine.mu.Lock()
+	defer fx.engine.mu.Unlock()
+	if len(fx.engine.configs) != 1 || len(fx.engine.seeded) != 3 {
+		t.Fatalf("%d sessions, %d seeds", len(fx.engine.configs), len(fx.engine.seeded))
+	}
+
+	cfg := fx.engine.configs[0]
+	if cfg.Rigid || !cfg.Active || len(cfg.Scope.Domains) != 1 || len(cfg.Scope.ASNs) != 1 ||
+		cfg.Scope.ASNs[0] != 26808 || len(cfg.Scope.CIDRs) != 1 || cfg.Scope.CIDRs[0].String() != "72.237.4.0/24" {
+		t.Errorf("session scope = %+v, rigid %v", cfg.Scope, cfg.Rigid)
 	}
 }
