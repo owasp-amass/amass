@@ -158,25 +158,27 @@ loop:
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 			defer cancel()
 
-			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/funding-rounds?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)
+			u := fmt.Sprintf("%s/company/%s/funding-rounds?perPage=%d&page=%d", cr.plugin.api,
+				url.QueryEscape(oamid.ID), perPage, page)
 			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
 			e.Session.NetSem().Release()
 			if err != nil {
 				msg := fmt.Sprintf("failed to obtain the funding rounds for %s: %s", oamid.ID, err)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
-				continue
+				// try the next key for the same page
+				continue loop
 			} else if resp.StatusCode != 200 {
 				msg := fmt.Sprintf("failed to obtain the funding rounds for %s: %s", oamid.ID, resp.Status)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
-				continue
+				continue loop
 			} else if resp.Body == "" {
 				msg := fmt.Sprintf("failed to obtain the funding rounds for %s: empty body", oamid.ID)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
-				continue
-			} else if strings.Contains(resp.Body, "error") {
+				continue loop
+			} else if strings.Contains(resp.Body, `"error"`) {
 				msg := fmt.Sprintf("failed to obtain the funding rounds for %s: %s", oamid.ID, resp.Body)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
-				continue
+				continue loop
 			}
 
 			var result companyRoundsResult

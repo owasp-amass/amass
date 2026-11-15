@@ -124,7 +124,7 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 		defer cancel()
 
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
-			URL:    "https://data.api.aviato.co/company/search",
+			URL:    cs.plugin.api + "/company/search",
 			Method: "POST",
 			Header: headers,
 			Body:   `{"dsl": ` + string(dslJSON) + `}`,

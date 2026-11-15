@@ -74,7 +74,9 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) [
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, host, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, fe.plugin.source.Name); err != nil {
+			// only the services this plugin found count
+			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, fe.plugin.source.Name); err != nil ||
+				len(tags) == 0 {
 				continue
 			}
 			if _, ok := edge.Relation.(*oamgen.PortRelation); ok {

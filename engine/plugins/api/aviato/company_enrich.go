@@ -111,7 +111,7 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 		defer cancel()
 
-		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", url.QueryEscape(oamid.ID))
+		u := fmt.Sprintf("%s/company/enrich?id=%s", ce.plugin.api, url.QueryEscape(oamid.ID))
 		resp, err := amasshttp.RequestWebPage(ctx,
 			e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
 		e.Session.NetSem().Release()
@@ -127,7 +127,7 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: empty body", oamid.ID)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
-		} else if strings.Contains(resp.Body, "error") {
+		} else if strings.Contains(resp.Body, `"error"`) {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, resp.Body)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue

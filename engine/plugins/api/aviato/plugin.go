@@ -22,6 +22,7 @@ func NewAviato() et.Plugin {
 
 	return &aviato{
 		name:   "Aviato",
+		api:    "https://data.api.aviato.co",
 		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Aviato",
