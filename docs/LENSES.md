@@ -507,7 +507,12 @@ addresses, URLs, services, certificates and networks alike rather than the
 first subdomains found, and is marked partial. URLs take their turn, but
 their own relations are followed last: they are numerous and mostly lead
 back to names already in the footprint (`follow_last` in
-`internal/semantics/lens.json`). Raise the limits for one run with
+`internal/semantics/lens.json`). A lens that reads only some kinds of asset
+focuses its walk on them (`focus` in the same file): the email lens admits
+only names and the kinds of asset that can lead to names, not addresses,
+netblocks or autonomous systems, so its limit covers more domains; the
+domains and certificates lenses are focused the same way. Without a limit,
+focusing does not change what a lens reports. Raise the limits for one run with
 `-max-assets` (up to 100,000) and `-max-reads` (up to 1,000,000); MCP
 callers pass `max_assets` to `investigate`. A larger run takes longer and may need a longer
 `-investigation-timeout` (8 minutes by default, up to 30):

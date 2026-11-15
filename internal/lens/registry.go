@@ -115,6 +115,11 @@ func newScope(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, ro
 		ownDomains: map[string]bool{}}
 	s.w = newLensWalker(ctx, g, bounded, meaning, schema.Relations(), root, s.report)
 	s.w.maxAssets, s.w.maxReads = limits.assets(), limits.reads()
+	if targets := lensFocus(name); len(targets) > 0 {
+		s.w.admitOnly = footprintFocusTypes(s.w.relations, meaning, targets)
+		s.w.expand = s.w.admitOnly
+	}
+
 	roots := []graph.Asset{root}
 	owners, err := s.w.owningOrganizations(root)
 	if err != nil {

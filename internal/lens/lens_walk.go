@@ -175,6 +175,9 @@ type lensWalker struct {
 	// expand, when set, limits which controlled asset types are expanded
 	// further; other controlled assets are recorded but not read.
 	expand map[string]bool
+	// admitOnly, when set, are the only types the footprint walk admits;
+	// assets of other types are not counted against its asset limit.
+	admitOnly map[string]bool
 	// parent and via record how each controlled asset was reached, so a
 	// witnessed path can be rebuilt from the root.
 	parent map[string]string
@@ -766,6 +769,10 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 			if _, seen := owned[s.other.ID]; seen || queued[s.other.ID] || s.other.Type == "Person" ||
 				!footprintPass(s) ||
 				(s.other.Type == "Organization" && (s.attr != graph.AttrControls || w.stopAt[s.other.ID])) {
+				continue
+			}
+
+			if w.admitOnly != nil && !w.admitOnly[s.other.Type] {
 				continue
 			}
 
