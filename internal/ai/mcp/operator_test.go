@@ -597,3 +597,21 @@ func TestWatchTools(t *testing.T) {
 		t.Error("the watch was not removed")
 	}
 }
+
+// The instructions a client gets must agree with the tools it has: a
+// reader is told it cannot start enumerations, and an operator is not, so
+// an assistant does not decline an enumeration the user asked for.
+func TestInstructionsMatchTheConnection(t *testing.T) {
+	fx := newOperatorFixture(t)
+
+	reader := connect(t, fx.url, readerToken, nil).InitializeResult().Instructions
+	if !strings.Contains(reader, "never starts an enumeration") || strings.Contains(reader, "Operator mode") {
+		t.Errorf("the reader's instructions do not say it is read-only:\n%s", reader)
+	}
+
+	operator := connect(t, fx.url, operatorToken, nil).InitializeResult().Instructions
+	if strings.Contains(operator, "never starts an enumeration") || strings.Contains(operator, "read-only access") ||
+		!strings.Contains(operator, "Operator mode") || !strings.Contains(operator, "rather than declining") {
+		t.Errorf("the operator's instructions contradict its tools:\n%s", operator)
+	}
+}

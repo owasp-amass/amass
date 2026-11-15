@@ -89,9 +89,9 @@ func (nopWriteCloser) Close() error { return nil }
 // tools and the investigation tools.
 func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, op *Operator,
 	links *VizLinks) *mcp.Server {
-	instructions := serverInstructions
+	instructions := serverInstructions + readOnlyInstructions
 	if op != nil {
-		instructions += operatorInstructions
+		instructions = serverInstructions + operatorInstructions
 	}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},

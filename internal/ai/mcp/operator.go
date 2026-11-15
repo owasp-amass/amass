@@ -67,7 +67,7 @@ const (
 
 const operatorInstructions = `
 
-Operator mode: this connection may also act.
+Operator mode: this connection can also collect data and change the database, each time with the user's approval. When the user asks for an enumeration, or a question needs data the database lacks, use the tools below rather than declining: the server asks the user to approve every enumeration itself, so its approval step is the user's consent, and nothing runs without it. Only the user decides whether to approve; never approve on their behalf.
 - To collect data about a target that is missing or stale, call plan_enumeration (a domain, IP address, CIDR or AS number, and mode passive or active), show the user the plan's scope and effects, then call start_enumeration with the plan_id. The user is asked to approve it, in a dialog or at an approval_url you must give them. Prefer passive; active contacts the target's hosts and needs the user's authorization to test them.
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run.
 - list_proposals shows the ownership, merge, identity and person-named proposals awaiting review; review_proposal approves, rejects or retracts one (approving and retracting write to the database and ask the user first).

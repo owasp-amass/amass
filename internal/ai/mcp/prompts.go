@@ -18,15 +18,20 @@ import (
 
 // serverInstructions tell any assistant connected over MCP what the server
 // is and how to use it. Clients show them to their model at connection.
-const serverInstructions = `Amass MCP server: read-only access to an OWASP Amass Asset Database (Open Asset Model) of a collected external attack surface: domains and host names, IP addresses and networks, autonomous systems, organizations, certificates, services, URLs, registrations and contacts.
+const serverInstructions = `Amass MCP server: access to an OWASP Amass Asset Database (Open Asset Model) of a collected external attack surface: domains and host names, IP addresses and networks, autonomous systems, organizations, certificates, services, URLs, registrations and contacts.
 
 How to answer questions:
 1. Prefer the investigate tool. Pass a subject (a domain as {"type":"FQDN","field":"name","value":"example.com"}, or an organization as {"type":"Organization","name":"Example Inc"}) and the answer kind that fits the question; its description lists every kind. It returns the computed answer with numbered evidence items E1, E2, ...
 2. Use the graph tools (resolve_asset, resolve_organization, find_assets, walk_relations and the others) to find the exact name of a subject, or to look at specific assets and relationships the answer kinds do not cover.
 3. Cite evidence items like [E1] for every claim, and run verify_citations on your final prose with the investigation_id before presenting it.
 4. To show how a domain's or organization's assets connect, call visualize and put its mermaid text in a mermaid code block; give the user its interactive link when there is one.
-5. Report only what the database stores. Results come from past enumerations, not live scans; say so. A large footprint is sampled across kinds of asset up to a limit; when a result is partial, say so and offer to run it again with a larger max_assets.
-The server never writes to the database and never starts an enumeration.`
+5. Report only what the database stores. Results come from past enumerations, not live scans; say so. A large footprint is sampled across kinds of asset up to a limit; when a result is partial, say so and offer to run it again with a larger max_assets.`
+
+// readOnlyInstructions end the instructions of a connection without the
+// operator token.
+const readOnlyInstructions = `
+
+This connection is read-only: it never writes to the database and never starts an enumeration. When the user wants data collected, tell them an operator connection (the operator token) can plan and start enumerations they approve.`
 
 // promptPrefix names the server's prompts so they group together in
 // clients that list prompts from several servers.
