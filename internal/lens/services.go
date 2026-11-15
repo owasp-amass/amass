@@ -74,6 +74,9 @@ type ExposedService struct {
 	Certificates []ServiceCertificate `json:"certificates,omitempty"`
 	// UnusualPorts are ports outside expected_ports for the service type.
 	UnusualPorts []string `json:"unusual_ports,omitempty"`
+	// Unsupported are identified products in release lines their makers
+	// no longer support (software_lifecycle.json).
+	Unsupported []UnsupportedRelease `json:"unsupported,omitempty"`
 }
 
 // ServicesReport is the result of the services lens.
@@ -226,6 +229,11 @@ func describeService(w *lensWalker, svc graph.Asset, rules serviceRules) (*Expos
 	out := &ExposedService{Service: svc, ServiceType: graph.ContentString(svc, "service_type")}
 	out.Software = softwareHeaders(svc, rules.SoftwareHeaders)
 	out.Identified = identifyProducts(svc)
+	for _, p := range out.Identified {
+		if u, ok := unsupportedRelease(p); ok {
+			out.Unsupported = append(out.Unsupported, u)
+		}
+	}
 
 	steps, err := w.steps(svc)
 	if err != nil {
@@ -310,7 +318,7 @@ func portExpected(rules serviceRules, kind, port string) bool {
 }
 
 func serviceNotable(s ExposedService) bool {
-	if len(s.UnusualPorts) > 0 {
+	if len(s.UnusualPorts) > 0 || len(s.Unsupported) > 0 {
 		return true
 	}
 	for _, c := range s.Certificates {
@@ -368,6 +376,9 @@ func FormatServicesReport(r ServicesReport) string {
 		}
 		for _, p := range s.UnusualPorts {
 			notes = append(notes, fmt.Sprintf("%s service on unusual port %s (%s)", s.ServiceType, p, where))
+		}
+		for _, u := range s.Unsupported {
+			notes = append(notes, fmt.Sprintf("runs %s (%s)", u, where))
 		}
 		for _, c := range s.Certificates {
 			switch {

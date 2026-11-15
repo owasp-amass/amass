@@ -38,6 +38,7 @@ var exposureLens = SubjectLens{
 const (
 	ExposureUnusualPort = "unusual_ports"
 	ExposureBadCert     = "certificate_problems"
+	ExposureUnsupported = "unsupported_software"
 )
 
 // ExposureClass is one kind of exposure and what falls in it.
@@ -136,6 +137,9 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		Rationale: "services moved to unusual ports are often forgotten and unmonitored"}
 	certs := ExposureClass{Name: ExposureBadCert, Title: "Services with certificate problems",
 		Rationale: "expired and self-issued certificates train users to click through warnings"}
+	unsupported := ExposureClass{Name: ExposureUnsupported, Title: "Software its maker no longer supports",
+		Rationale: "release lines past their end of support get no security fixes; check whether the distribution " +
+			"backports them before treating the version as vulnerable"}
 	note := func(c *ExposureClass, example string) {
 		c.Count++
 		if len(c.Examples) < exposureExamples {
@@ -166,6 +170,9 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		}
 		if len(svc.UnusualPorts) > 0 {
 			note(&unusual, label)
+		}
+		for _, u := range svc.Unsupported {
+			note(&unsupported, fmt.Sprintf("%s: %s", strings.Join(svc.Endpoints[:min(2, len(svc.Endpoints))], ", "), u))
 		}
 		for _, c := range svc.Certificates {
 			switch {
@@ -207,7 +214,7 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		out.Truncated, out.Reason = true, services.Reason
 	}
 	out.Services = len(services.Services)
-	for _, c := range append(classes, unusual, certs) {
+	for _, c := range append(classes, unsupported, unusual, certs) {
 		if c.Count > 0 {
 			out.Classes = append(out.Classes, c)
 		}

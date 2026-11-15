@@ -328,8 +328,10 @@ file sharing, infrastructure management interfaces, URLs with a password
 written into them (shown masked), login and administration pages (found by
 URL path or by the page title a probe stored for a web service), TXT
 records that disclose internal details (Kubernetes ExternalDNS ownership
-records), services on unusual ports and services with expired or
-self-issued certificates.
+records), services on unusual ports, services with expired or self-issued
+certificates, and software in a release line its maker no longer supports
+(`internal/semantics/software_lifecycle.json`, each line citing the maker's
+lifecycle page).
 Each class says why it matters and lists examples. The classes, ports, URL,
 title and TXT patterns are in `internal/semantics/exposure.json`.
 

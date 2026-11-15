@@ -79,7 +79,7 @@ func TestIdentifyProducts(t *testing.T) {
 		{svc("web-service", "", map[string]any{"Server": []any{"nginx/1.24.0 (Ubuntu)"}}), "nginx 1.24.0"},
 		{svc("web-service", "", map[string]any{"Server": []any{"nginx"}}), "nginx"},
 		{svc("web-service", "", map[string]any{"Server": []any{"Apache/2.4.58 (Unix) OpenSSL/3.0.13"}}),
-			"Apache HTTP Server 2.4.58"},
+			"Apache HTTP Server 2.4.58,OpenSSL 3.0.13"},
 		{svc("web-service", "", map[string]any{"Server": []any{"Microsoft-IIS/10.0"},
 			"X-Powered-By": []any{"ASP.NET"}, "X-AspNet-Version": []any{"4.0.30319"}}),
 			"Microsoft IIS 10.0,ASP.NET 4.0.30319"},
