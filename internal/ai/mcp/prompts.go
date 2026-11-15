@@ -66,10 +66,15 @@ func addPrompts(server *mcp.Server) {
 		})
 	}
 
-	var overview []string
-	for _, k := range overviewKinds {
-		if slices.Contains(offered, k) {
-			overview = append(overview, k)
+	// The report lens assembles the others into one answer; without it the
+	// overview asks for several kinds.
+	overview := []string{lens.LensReport}
+	if !slices.Contains(offered, lens.LensReport) {
+		overview = nil
+		for _, k := range overviewKinds {
+			if slices.Contains(offered, k) {
+				overview = append(overview, k)
+			}
 		}
 	}
 	if len(overview) == 0 {

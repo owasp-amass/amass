@@ -120,7 +120,7 @@ func TestMCPPrompts(t *testing.T) {
 		`{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"example.com\"}`,
 		`answer: \"exposure\"`,
 		`{\"type\":\"Organization\",\"name\":\"Example University\"}`,
-		`answer: \"third_party\"`, `answer: \"dangling_dns\"`,
+		`answer: \"report\"`, `"name":"amass_report"`,
 		"subject argument",
 	} {
 		if !strings.Contains(out, want) {

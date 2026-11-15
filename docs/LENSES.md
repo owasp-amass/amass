@@ -14,6 +14,7 @@ evidence does and nothing is left behind to clean up.
 
 | Command | What it does |
 | --- | --- |
+| `amass lens report -d <domain>` or `-org <name>` | An attack surface report: key findings first, then each posture lens |
 | `amass lens family -d <domain>` | The organizations behind an enumerated domain, the networks and other registered domains that serve it |
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
@@ -334,6 +335,23 @@ certificates, and software in a release line its maker no longer supports
 lifecycle page).
 Each class says why it matters and lists examples. The classes, ports, URL,
 title and TXT patterns are in `internal/semantics/exposure.json`.
+
+## Attack surface report
+
+```bash
+amass lens report -d colgate.edu > colgate-report.md
+```
+
+Writes one Markdown report for a domain or organization: key findings first
+(possible subdomain takeovers, records pointing into expired domains,
+passwords in URLs, exposed databases and remote access, expired domains and
+certificates, unsupported software, email spoofing and more, by priority,
+each with a count and examples), then the results of the exposure, dangling
+DNS, certificates, domains, email, services, network, concentration,
+changes and coverage lenses. Every lens reads the footprint once. The
+sections and which findings count, with their priorities, are in
+`internal/semantics/report.json`. Assistants get it as the `report` answer
+kind and the `amass_report` and `amass_attack_surface_overview` prompts.
 
 ## Provider concentration
 

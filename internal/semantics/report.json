@@ -1,0 +1,43 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the report lens assembles an attack surface report for a domain or organization. sections are the lenses it runs, in order, each under its title; every lens reads the same footprint, once. findings pick the facts a lens reports that belong in the report's key findings: a fact matches when its first word is kind (or, with any_word, any of its words is), in the named lens. Key findings are listed by priority (1 first), each with how many there are and examples. The report is computed from the stored data when asked, not a live scan, and is never written to the Asset Database. Add sections and findings here, not in Go code.",
+  "examples_per_finding": 3,
+  "sections": [
+    {"lens": "exposure", "title": "What it exposes"},
+    {"lens": "dangling", "title": "Dangling DNS"},
+    {"lens": "certificates", "title": "Certificates"},
+    {"lens": "domains", "title": "Registered domains"},
+    {"lens": "email", "title": "Email security"},
+    {"lens": "services", "title": "Services"},
+    {"lens": "network", "title": "Network infrastructure"},
+    {"lens": "concentration", "title": "Provider concentration"},
+    {"lens": "changes", "title": "Recent changes"},
+    {"lens": "coverage", "title": "Data coverage"}
+  ],
+  "findings": [
+    {"lens": "dangling", "kind": "claimable_alias", "title": "Possible subdomain takeover", "priority": 1},
+    {"lens": "dangling", "kind": "expired_domain", "title": "Records pointing into expired domains", "priority": 1},
+    {"lens": "exposure", "kind": "url_credentials", "title": "Passwords written into URLs", "priority": 1},
+    {"lens": "exposure", "kind": "databases", "title": "Databases reachable from the internet", "priority": 1},
+    {"lens": "exposure", "kind": "remote_access", "title": "Remote access and shells", "priority": 1},
+    {"lens": "domains", "kind": "expired", "title": "Expired domain registrations", "priority": 1},
+    {"lens": "exposure", "kind": "management", "title": "Infrastructure management interfaces", "priority": 2},
+    {"lens": "exposure", "kind": "file_sharing", "title": "File sharing and transfer", "priority": 2},
+    {"lens": "exposure", "kind": "unsupported_software", "title": "Software its maker no longer supports", "priority": 2},
+    {"lens": "email", "kind": "spf_allows_anyone", "title": "SPF lets anyone send as the domain", "priority": 2},
+    {"lens": "certificates", "kind": "expired", "title": "Expired certificates", "priority": 2},
+    {"lens": "exposure", "kind": "internal_details_in_dns", "title": "TXT records that disclose internal details", "priority": 2},
+    {"lens": "dangling", "kind": "expiring_domain", "title": "Records pointing into domains about to expire", "priority": 2},
+    {"lens": "domains", "kind": "expiring", "title": "Domain registrations expiring soon", "priority": 2},
+    {"lens": "exposure", "kind": "login_pages", "title": "Login and administration pages", "priority": 3},
+    {"lens": "email", "kind": "no_dmarc", "title": "Domains without a DMARC policy", "priority": 3},
+    {"lens": "email", "kind": "dmarc_monitor_only", "title": "DMARC policies that only monitor", "priority": 3},
+    {"lens": "email", "kind": "no_spf", "title": "Domains without an SPF policy", "priority": 3},
+    {"lens": "email", "kind": "unprotected_non_mail_domain", "title": "Domains without mail that can be spoofed", "priority": 3},
+    {"lens": "domains", "kind": "no_transfer_lock", "title": "Domains without a transfer lock", "priority": 3},
+    {"lens": "certificates", "kind": "expiring", "title": "Certificates expiring soon", "priority": 3},
+    {"lens": "certificates", "kind": "weak_signature", "title": "Certificates with weak signatures", "priority": 3},
+    {"lens": "concentration", "kind": "single_point_of_failure", "any_word": true, "title": "Single points of failure among providers", "priority": 3},
+    {"lens": "exposure", "kind": "unusual_ports", "title": "Services on unusual ports", "priority": 3}
+  ]
+}

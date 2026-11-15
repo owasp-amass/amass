@@ -63,6 +63,7 @@ func SubjectLenses() []SubjectLens {
 		coverageLens,
 		geographyLens,
 		compareLens,
+		reportLens,
 	}
 }
 
