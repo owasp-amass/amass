@@ -13,6 +13,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -92,8 +93,9 @@ func (j *jarmPlugin) hasCertificate(e *et.Event, since time.Time) bool {
 	defer cancel()
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, e.Entity, since, "certificate"); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, e.Session.DB(), edges, false)
 		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
+			if a, ok := ends[edge.ToEntity.ID]; ok {
 				if a.Asset.AssetType() == oam.TLSCertificate {
 					return true
 				}
@@ -120,8 +122,9 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	defer cancel()
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, e.Entity, since); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, e.Session.DB(), edges, true)
 		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
+			if a, ok := ends[edge.FromEntity.ID]; ok {
 				if t := jarmTarget(a, edge); t != nil {
 					if _, isName := a.Asset.(*oamdns.FQDN); isName {
 						// Names first: the probes then carry the server name.

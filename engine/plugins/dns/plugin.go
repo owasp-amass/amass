@@ -13,6 +13,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -188,6 +189,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, fent *dbt.Entity, atype 
 	defer cancel()
 
 	if edges, err := session.DB().OutgoingEdges(ctx, fent, since, "dns_record"); err == nil && len(edges) > 0 {
+		var keep []*dbt.Edge
 		for _, edge := range edges {
 			var rrtype int
 
@@ -231,7 +233,13 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, fent *dbt.Entity, atype 
 				}
 			}
 
-			if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil && to.Asset.AssetType() == atype {
+			keep = append(keep, edge)
+		}
+
+		// The records' targets are read together.
+		ends := amassdb.EdgeEnds(ctx, session.DB(), keep, false)
+		for _, edge := range keep {
+			if to, ok := ends[edge.ToEntity.ID]; ok && to.Asset.AssetType() == atype {
 				results = append(results, to)
 			}
 		}

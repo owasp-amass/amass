@@ -19,6 +19,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -145,9 +146,10 @@ func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) [
 	defer cancel()
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, e.Session.DB(), edges, false)
 		for _, edge := range edges {
-			a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
-			if err != nil {
+			a, ok := ends[edge.ToEntity.ID]
+			if !ok {
 				continue
 			}
 			totype := string(a.Asset.AssetType())

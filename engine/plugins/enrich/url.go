@@ -14,6 +14,7 @@ import (
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -146,9 +147,10 @@ func (u *urlexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []
 		}
 
 		if edges, err := e.Session.DB().OutgoingEdges(ctx, asset, since, label); err == nil && len(edges) > 0 {
+			ends := amassdb.EdgeEnds(ctx, e.Session.DB(), edges, false)
 			for _, edge := range edges {
-				to, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
-				if err != nil {
+				to, ok := ends[edge.ToEntity.ID]
+				if !ok {
 					continue
 				}
 

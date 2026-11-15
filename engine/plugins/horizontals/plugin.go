@@ -15,6 +15,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
@@ -419,8 +420,9 @@ func (h *horizPlugin) addASNetblocksToScope(sess et.Session, asn int) *dbt.Entit
 		ctx, cancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
 		defer cancel()
 
+		ends := amassdb.EdgeEnds(ctx, sess.DB(), edges, false)
 		for _, edge := range edges {
-			if to, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
+			if to, ok := ends[edge.ToEntity.ID]; ok {
 				// add the announced netblock to the scope
 				h.enqueueIfOutOfScope(sess, to)
 			}

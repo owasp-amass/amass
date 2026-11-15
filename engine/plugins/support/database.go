@@ -80,39 +80,6 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 	return results
 }
 
-func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
-	if asset == nil || src == nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(session.Ctx(), 3*time.Second)
-	defer cancel()
-
-	_, _ = session.DB().CreateEntityProperty(ctx, asset, oamgen.SimpleProperty{
-		PropertyName:  "last_monitored",
-		PropertyValue: src.Name,
-	})
-}
-
-func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Source, since time.Time) bool {
-	if asset == nil || src == nil || since.IsZero() {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(session.Ctx(), 3*time.Second)
-	defer cancel()
-
-	if tags, err := session.DB().FindEntityTags(ctx, asset, since, "last_monitored"); err == nil && len(tags) > 0 {
-		for _, tag := range tags {
-			if tag.Property.Value() == src.Name {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *oamplat.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
 	var srvs []*dbt.Entity
 
@@ -139,13 +106,19 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		// go though the hosts that could have previously associated with the service
 		for _, s := range srcs {
 			if edges, err := session.DB().OutgoingEdges(ctx, s, time.Time{}); err == nil && len(edges) > 0 {
+				var ports []*dbt.Edge
 				for _, edge := range edges {
 					if eport, ok := edge.Relation.(*oamgen.PortRelation); ok &&
 						eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
-						if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
-							if srv, ok := to.Asset.(*oamplat.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
-								srvs = append(srvs, to)
-							}
+						ports = append(ports, edge)
+					}
+				}
+
+				ends := amassdb.EdgeEnds(ctx, session.DB(), ports, false)
+				for _, edge := range ports {
+					if to, ok := ends[edge.ToEntity.ID]; ok {
+						if srv, ok := to.Asset.(*oamplat.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
+							srvs = append(srvs, to)
 						}
 					}
 				}
@@ -177,8 +150,9 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 			if edges, err := session.DB().OutgoingEdges(ctx, srv, time.Time{}, "certificate"); err == nil && len(edges) > 0 {
 				var found bool
 
+				ends := amassdb.EdgeEnds(ctx, session.DB(), edges, false)
 				for _, edge := range edges {
-					if t, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && t != nil {
+					if t, ok := ends[edge.ToEntity.ID]; ok {
 						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && c.SerialNumber == cert.SerialNumber {
 							found = true
 							break
