@@ -16,7 +16,7 @@ import (
 // networkLens answers a network lens query.
 func (a Agent) networkLens(ctx context.Context, root graph.Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	report, err := lens.FindNetworkInfrastructure(ctx, a.Runner.Graph, a.Runner.Catalog, root, lens.LensLimits{})
+	report, err := lens.FindNetworkInfrastructure(ctx, a.Runner.Graph, a.Runner.Catalog, root, a.Runner.LensLimits)
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "network_lens", OutputPaths: len(report.Networks),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 // groupVendorsLens answers a group_vendors lens query.
 func (a Agent) groupVendorsLens(ctx context.Context, root graph.Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	report, err := lens.FindGroupVendors(ctx, a.Runner.Graph, a.Runner.Catalog, root, lens.LensLimits{})
+	report, err := lens.FindGroupVendors(ctx, a.Runner.Graph, a.Runner.Catalog, root, a.Runner.LensLimits)
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "group_vendors_lens", OutputPaths: len(report.Vendors),
 		Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {

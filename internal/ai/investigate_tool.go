@@ -130,6 +130,9 @@ func InvestigationSpecs(schema graph.SchemaCatalog) []llm.ToolSpec {
 				"columns":      goal["columns"],
 				"purpose":      goal["purpose"],
 				"hops":         map[string]any{"type": "array", "items": hop, "maxItems": 3},
+				"max_assets": map[string]any{"type": "integer", "minimum": 1, "maximum": investigateMaxAssets,
+					"description": "Assets a lens may read from a large footprint (default 2000, sampled across " +
+						"kinds of asset); raise it when a result says it is partial, at the cost of time"},
 			}),
 		},
 		{
@@ -152,6 +155,7 @@ type investigateArgs struct {
 	Columns     []lens.TableColumn `json:"columns"`
 	Purpose     string             `json:"purpose"`
 	Hops        []PlanHop          `json:"hops"`
+	MaxAssets   int                `json:"max_assets"`
 }
 
 // queryFromArgs builds and validates the Query an investigate call asks
@@ -202,6 +206,10 @@ func queryFromArgs(a investigateArgs, schema graph.SchemaCatalog) (Query, error)
 
 // RunInvestigationTool serves investigate and verify_citations. model may
 // be nil; the paths answer then fails with advice to choose another kind.
+// investigateMaxAssets is the largest footprint an investigate call may ask
+// a lens to read.
+const investigateMaxAssets = 50000
+
 func RunInvestigationTool(ctx context.Context, runner ToolRunner, model llm.Model, store *EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
 	if store == nil {
 		return nil, errors.New("evidence store not configured")
@@ -223,6 +231,13 @@ func RunInvestigationTool(ctx context.Context, runner ToolRunner, model llm.Mode
 		if model == nil && !q.Deterministic() {
 			return nil, errors.New("the paths answer needs a model on the Amass side; choose hierarchy, " +
 				"controlled, third_party, table or route")
+		}
+
+		if a.MaxAssets > 0 {
+			runner.LensLimits.MaxAssets = min(a.MaxAssets, investigateMaxAssets)
+			// Ten reads an asset, as the defaults allow.
+			runner.LensLimits.MaxReads = min(max(runner.LensLimits.MaxReads, 10*runner.LensLimits.MaxAssets),
+				lens.LensMaxReadsLimit)
 		}
 
 		inv, err := (Agent{Model: model, Runner: runner}).AskQuery(ctx, q, AdaptiveOptions{})

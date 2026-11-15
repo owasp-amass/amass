@@ -17,6 +17,7 @@ evidence. Arguments:
 | `columns` | Table columns: `{"type":"IPAddress","role":""}`, `{"type":"Organization","role":"controller"}` |
 | `hops` | Route hops: `{"direction","label","relation_type","destination_type"}`, up to 3 |
 | `purpose` | `connected` (default) or `ultimate_parent` for paths |
+| `max_assets` | Assets a lens may read (default 2,000, up to 50,000); a larger footprint is sampled across kinds of asset and the answer is marked incomplete |
 
 The tool description, the answer enum and the controllable row types are
 generated from the OAM catalog, the answer-kind registry and the semantics

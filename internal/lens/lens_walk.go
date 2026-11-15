@@ -450,7 +450,8 @@ func (w *lensWalker) steps(cur graph.Asset) ([]step, error) {
 func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.Asset, []string, error) {
 	owned := map[string]graph.Asset{}
 	w.footprint = owned
-	var order, queue []string
+	var order, queue, deferred []string
+	last := followLast()
 	admit := func(a graph.Asset, parent string, via graph.Relation) {
 		owned[a.ID] = a
 		order = append(order, a.ID)
@@ -458,7 +459,13 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 			w.parent[a.ID] = parent
 			w.via[a.ID] = via
 		}
-		if parent == "" || w.expand == nil || w.expand[a.Type] {
+		switch {
+		case parent != "" && w.expand != nil && !w.expand[a.Type]:
+		case parent != "" && last[a.Type]:
+			// follow_last assets count in their turn but are followed only
+			// once nothing else is left to follow.
+			deferred = append(deferred, a.ID)
+		default:
 			queue = append(queue, a.ID)
 		}
 	}
@@ -468,33 +475,54 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 		}
 	}
 
-	// Assets of the follow_last types wait here until nothing else is left
-	// to follow, so they spend only what remains of the asset limit.
+	// Assets found but not yet admitted wait by type, and the asset limit is
+	// shared out a type at a time in turn, so a footprint larger than the
+	// limit is a sample of every kind of asset (names, addresses, URLs,
+	// services, certificates) rather than the first thousands of subdomains
+	// found. Assets of the follow_last types take their turn too, but are
+	// followed only when nothing else is left, so they spend few reads.
 	type waiting struct {
 		asset  graph.Asset
 		parent string
 		via    graph.Relation
 	}
-	var later []waiting
+	pending := map[string][]waiting{}
+	var kinds []string // types in the order first found, for a stable turn order
 	queued := map[string]bool{}
-	last := followLast()
+	turn := 0
+	next := func() (waiting, bool) {
+		for range kinds {
+			t := kinds[turn%len(kinds)]
+			turn++
+			for len(pending[t]) > 0 {
+				c := pending[t][0]
+				pending[t] = pending[t][1:]
+				if _, seen := owned[c.asset.ID]; !seen {
+					return c, true
+				}
+			}
+		}
+		return waiting{}, false
+	}
 
-	for len(queue) > 0 || len(later) > 0 {
+	for {
 		if err := w.ctx.Err(); err != nil {
 			return nil, nil, err
 		}
 		if len(queue) == 0 {
-			next := later[0]
-			later = later[1:]
-			if _, seen := owned[next.asset.ID]; seen {
+			c, ok := next()
+			if !ok {
+				if len(deferred) == 0 {
+					break
+				}
+				queue, deferred = deferred, nil
 				continue
 			}
 			if len(owned) >= w.maxAssets {
 				w.truncate("controlled asset limit")
 				break
 			}
-
-			admit(next.asset, next.parent, next.via)
+			admit(c.asset, c.parent, c.via)
 			continue
 		}
 		if w.report.Reads >= w.maxReads {
@@ -513,23 +541,16 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 			return nil, nil, err
 		}
 		for _, s := range steps {
-			if _, seen := owned[s.other.ID]; seen || s.other.Type == "Person" || !footprintPass(s) ||
+			if _, seen := owned[s.other.ID]; seen || queued[s.other.ID] || s.other.Type == "Person" ||
+				!footprintPass(s) ||
 				(s.other.Type == "Organization" && (s.attr != graph.AttrControls || w.stopAt[s.other.ID])) {
 				continue
 			}
-			if last[s.other.Type] {
-				if !queued[s.other.ID] {
-					queued[s.other.ID] = true
-					later = append(later, waiting{asset: s.other, parent: cur.ID, via: s.edge})
-				}
-				continue
+			queued[s.other.ID] = true
+			if _, known := pending[s.other.Type]; !known {
+				kinds = append(kinds, s.other.Type)
 			}
-			if len(owned) >= w.maxAssets {
-				w.truncate("controlled asset limit")
-				break
-			}
-
-			admit(s.other, cur.ID, s.edge)
+			pending[s.other.Type] = append(pending[s.other.Type], waiting{asset: s.other, parent: cur.ID, via: s.edge})
 		}
 	}
 

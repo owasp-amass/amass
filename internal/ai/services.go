@@ -16,7 +16,7 @@ import (
 // servicesLens answers a services lens query.
 func (a Agent) servicesLens(ctx context.Context, root graph.Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	report, err := lens.FindServices(ctx, a.Runner.Graph, a.Runner.Catalog, root, lens.LensLimits{})
+	report, err := lens.FindServices(ctx, a.Runner.Graph, a.Runner.Catalog, root, a.Runner.LensLimits)
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "services_lens", OutputPaths: len(report.Services),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {

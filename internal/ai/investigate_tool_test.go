@@ -127,3 +127,16 @@ func TestEvidenceStoreIsBounded(t *testing.T) {
 		t.Error("oldest investigation was not evicted")
 	}
 }
+
+// A caller may ask a lens to read fewer or more assets; the answer says when
+// it is partial.
+func TestInvestigateMaxAssets(t *testing.T) {
+	store := NewEvidenceStore()
+	small := investigate(t, store,
+		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"answer":"third_party","max_assets":2}`)
+	full := investigate(t, store,
+		`{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"answer":"third_party","max_assets":50000}`)
+	if small["incomplete"] != true || full["incomplete"] == true {
+		t.Errorf("incomplete: small %v, full %v", small["incomplete"], full["incomplete"])
+	}
+}

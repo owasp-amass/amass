@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 type ToolRunner struct {
@@ -21,6 +22,9 @@ type ToolRunner struct {
 	// KnownVerification reports whether a TXT record is a verification token
 	// the DNS-SD plugin recognizes, for the vendors lens (see VendorOptions).
 	KnownVerification func(record string) bool
+	// LensLimits bounds the lenses investigations run; zero keeps the
+	// lenses' defaults.
+	LensLimits lens.LensLimits
 }
 
 func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) (json.RawMessage, error) {

@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -214,5 +215,38 @@ func TestFindShared(t *testing.T) {
 	if _, err := FindShared(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"],
 		g.Assets["colgate.edu"], LensLimits{}); err == nil {
 		t.Error("a subject was compared with itself")
+	}
+}
+
+// When the footprint is larger than the asset limit, the limit is shared
+// out across kinds of asset: many subdomains do not crowd out the URLs and
+// services.
+func TestFootprintLimitSamplesEveryKind(t *testing.T) {
+	g := graphtest.ServicesFixture()
+	for i := 0; i < 300; i++ {
+		name := fmt.Sprintf("host%d.colgate.edu", i)
+		g.Assets[name] = graph.Asset{ID: name, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+		g.Links = append(g.Links, graph.Relation{ID: "n" + name, FromID: "colgate.edu", ToID: name, Label: "node",
+			Type: "SimpleRelation"})
+	}
+	url := "https://portal.colgate.edu/login"
+	g.Assets[url] = graph.Asset{ID: url, Type: "URL", Key: url, Content: map[string]any{"url": url}}
+	g.Links = append(g.Links, graph.Relation{ID: "u", FromID: url, ToID: "portal.colgate.edu", Label: "domain",
+		Type: "SimpleRelation"})
+
+	r, err := SearchControlled(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], nil, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := r.FootprintTypes
+
+	limited, err := FindExposure(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"],
+		LensLimits{MaxAssets: 60})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !limited.Truncated || limited.URLs != 1 || limited.Services == 0 {
+		t.Errorf("limited footprint (full %v): %d URLs, %d services, truncated %v", full, limited.URLs,
+			limited.Services, limited.Truncated)
 	}
 }

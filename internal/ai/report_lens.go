@@ -16,7 +16,7 @@ import (
 // reportLens answers a query with a registered subject lens.
 func (a Agent) reportLens(ctx context.Context, l lens.SubjectLens, root graph.Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
-	r, err := l.Find(ctx, a.Runner.Graph, a.Runner.Catalog, root, lens.Options{})
+	r, err := l.Find(ctx, a.Runner.Graph, a.Runner.Catalog, root, lens.Options{Limits: a.Runner.LensLimits})
 	partial, reason := false, ""
 	if r != nil {
 		partial, reason = r.Partial()

@@ -558,7 +558,7 @@ func (a Agent) thirdPartyLens(ctx context.Context, root graph.Asset, out Investi
 		// A domain gets the full vendors lens: the services its TXT records
 		// name, and its institution and affiliates set apart.
 		report, err = lens.FindVendors(ctx, a.Runner.Graph, a.Runner.Catalog, root,
-			lens.VendorOptions{KnownVerification: a.Runner.KnownVerification})
+			lens.VendorOptions{KnownVerification: a.Runner.KnownVerification, Limits: a.Runner.LensLimits})
 	} else {
 		report, err = lens.SearchThirdParties(ctx, a.Runner.Graph, a.Runner.Catalog, root)
 	}

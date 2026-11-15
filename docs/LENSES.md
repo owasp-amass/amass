@@ -471,13 +471,16 @@ names the relationship that stayed partial. Outside the controlled footprint
 the lens only looks for who controls an asset, so it never pages down a
 provider's hierarchy, such as the names under amazonaws.com.
 
-The vendors lens follows at most 2,000 controlled assets and makes at most
-20,000 database reads per run. URLs are followed last, after every name,
-certificate and network the lens can reach: they are numerous and mostly lead
-back to names it already follows (`follow_last` in
-`internal/semantics/lens.json`). A large institution can reach either; raise
-them for one run with `-max-assets` (up to 100,000) and `-max-reads` (up to
-1,000,000). A larger run takes longer and may need a longer
+Every lens follows at most 2,000 controlled assets and makes at most 20,000
+database reads per run. When the footprint is larger, the asset limit is
+shared out a kind of asset at a time in turn, so the result samples names,
+addresses, URLs, services, certificates and networks alike rather than the
+first subdomains found, and is marked partial. URLs take their turn, but
+their own relations are followed last: they are numerous and mostly lead
+back to names already in the footprint (`follow_last` in
+`internal/semantics/lens.json`). Raise the limits for one run with
+`-max-assets` (up to 100,000) and `-max-reads` (up to 1,000,000); MCP
+callers pass `max_assets` to `investigate`. A larger run takes longer and may need a longer
 `-investigation-timeout` (8 minutes by default, up to 30):
 
 ```bash
