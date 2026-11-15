@@ -12,7 +12,9 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
+	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/collect"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
 )
 
@@ -23,6 +25,8 @@ type OperatorOptions struct {
 	// RunJournal records enumeration runs (JSON lines); empty keeps them in
 	// memory only.
 	RunJournal string
+	// WatchFile keeps scheduled enumerations; empty disables watches.
+	WatchFile string
 	// PublicURL is how a user's browser reaches the HTTP server, for
 	// data source key links; empty disables them.
 	PublicURL           string
@@ -71,6 +75,20 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 	}()
 
 	op := &Operator{Collect: m, Graph: g, Journal: journal, RequireConfirmation: opts.RequireConfirmation}
+	stopWatches := func() {}
+	if opts.WatchFile != "" {
+		runner := ai.ToolRunner{Graph: g, Catalog: oamrepo.Catalog{}, Limits: graph.DefaultLimits()}
+		op.Watches = &collect.Watches{Manager: m, Path: opts.WatchFile,
+			Summarize: func(ctx context.Context, run collect.Run) string {
+				if s, ok := foundSince(ctx, runner, run).(string); ok {
+					return s
+				}
+				return ""
+			}}
+		ctx, cancel := context.WithCancel(context.Background())
+		go op.Watches.Run(ctx)
+		stopWatches = cancel
+	}
 	if opts.PublicURL != "" {
 		op.Approvals = &ApprovalLinks{BaseURL: opts.PublicURL}
 	}
@@ -80,5 +98,5 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 			op.KeyLinks = &KeyLinks{BaseURL: opts.PublicURL, Path: path}
 		}
 	}
-	return op, func() { m.Close(); c.Close() }, nil
+	return op, func() { stopWatches(); m.Close(); c.Close() }, nil
 }

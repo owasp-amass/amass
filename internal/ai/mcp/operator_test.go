@@ -528,3 +528,41 @@ func TestApprovalLinks(t *testing.T) {
 		t.Error("an approval link worked twice")
 	}
 }
+
+// A watch is approved once and then runs its plan on a schedule.
+func TestWatchTools(t *testing.T) {
+	fx := newOperatorFixture(t)
+	fx.op.Watches = &collect.Watches{Manager: fx.op.Collect}
+	approve := func(*mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, nil
+	}
+	cs := connect(t, fx.url, operatorToken, approve)
+	id := planID(t, cs, "watch.example", "passive")
+	if text, isErr := call(t, cs, ToolWatchTarget, map[string]any{"target": "watch.example", "plan_id": id,
+		"every_hours": 1}); !isErr {
+		t.Errorf("an hourly watch was accepted: %s", text)
+	}
+	text, isErr := call(t, cs, ToolWatchTarget, map[string]any{"target": "watch.example", "plan_id": id,
+		"every_hours": 24})
+	if isErr {
+		t.Fatal(text)
+	}
+	var out struct{ Watch collect.Watch }
+	if err := json.Unmarshal([]byte(text), &out); err != nil || out.Watch.ID == "" {
+		t.Fatalf("watch = %s", text)
+	}
+
+	fx.op.Watches.Tick(context.Background())
+	if fx.engine.count() != 1 {
+		t.Error("the watch did not start its first run")
+	}
+	if text, _ := call(t, cs, ToolListWatches, map[string]any{}); !strings.Contains(text, out.Watch.ID) {
+		t.Errorf("list: %s", text)
+	}
+	if text, isErr := call(t, cs, ToolStopWatch, map[string]any{"watch_id": out.Watch.ID}); isErr {
+		t.Errorf("stop: %s", text)
+	}
+	if len(fx.op.Watches.List()) != 0 {
+		t.Error("the watch was not removed")
+	}
+}

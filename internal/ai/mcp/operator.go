@@ -32,6 +32,8 @@ import (
 // (stdio), unless RequireConfirmation is set.
 type Operator struct {
 	Collect *collect.Manager
+	// Watches re-run approved plans on a schedule; nil disables watching.
+	Watches *collect.Watches
 	// Graph writes approved proposals; reads go through the runner.
 	Graph oamrepo.Adapter
 	// Journal is the review journal automatic attribution writes.
@@ -58,6 +60,9 @@ const (
 	ToolReviewProposal    = "review_proposal"
 	ToolDataSources       = "data_sources"
 	ToolDataSourceKey     = "data_source_key_link"
+	ToolWatchTarget       = "watch_target"
+	ToolListWatches       = "list_watches"
+	ToolStopWatch         = "stop_watch"
 )
 
 const operatorInstructions = `
@@ -66,6 +71,7 @@ Operator mode: this connection may also act.
 - To collect data about a target that is missing or stale, call plan_enumeration (a domain, IP address, CIDR or AS number, and mode passive or active), show the user the plan's scope and effects, then call start_enumeration with the plan_id. The user is asked to approve it, in a dialog or at an approval_url you must give them. Prefer passive; active contacts the target's hosts and needs the user's authorization to test them.
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run.
 - list_proposals shows the ownership, merge, identity and person-named proposals awaiting review; review_proposal approves, rejects or retracts one (approving and retracting write to the database and ask the user first).
+- watch_target re-runs a planned enumeration on a schedule (at most every 6 hours) after the user approves it once; list_watches shows each watch with what its last run found, and stop_watch removes one.
 - data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.`
 
 func boolPtr(b bool) *bool { return &b }
@@ -210,6 +216,77 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				return nil, err
 			}
 			return jsonResult(map[string]any{"run": run}), nil
+		})
+
+	add(ToolWatchTarget, "Watch a target with Amass",
+		"Re-run the enumeration a plan_enumeration call described on a schedule, so changes to the target are "+
+			"collected without asking each time. The user approves the watch once; it runs until stop_watch.",
+		obj([]string{"target", "plan_id", "every_hours"}, map[string]any{"target": target, "mode": mode,
+			"plan_id": map[string]any{"type": "string", "description": "The plan_id plan_enumeration returned"},
+			"every_hours": map[string]any{"type": "integer", "minimum": int(collect.MinWatchInterval.Hours()),
+				"maximum": 24 * 90, "description": "Hours between runs, such as 24 for daily or 168 for weekly"}}),
+		&mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
+		func(ctx context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+			var a struct {
+				Target     string
+				Mode       string
+				PlanID     string `json:"plan_id"`
+				EveryHours int    `json:"every_hours"`
+			}
+			if err := json.Unmarshal(raw, &a); err != nil {
+				return nil, err
+			}
+			if op.Watches == nil {
+				return nil, errors.New("this server cannot keep watches")
+			}
+			plan := planFor(a.Target, a.Mode)
+			if plan.Status != collect.StatusApprovalRequired {
+				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
+			}
+			if a.PlanID != plan.ID {
+				return nil, errors.New("plan_id does not match this target and mode; call plan_enumeration again")
+			}
+			every := time.Duration(a.EveryHours) * time.Hour
+			msg := fmt.Sprintf("Run a %s every %d hours, starting now, until the watch is stopped?\n\n%s",
+				plan.Summary(), a.EveryHours, plan.Effects)
+			return op.gate(req, msg, func(via string) (*mcp.CallToolResult, error) {
+				w, err := op.Watches.Add(plan, every, approver(req, via))
+				if err != nil {
+					return nil, err
+				}
+				return jsonResult(map[string]any{"watch": w,
+					"next": "The first run starts within a minute. list_watches shows what each run found."}), nil
+			})
+		})
+
+	add(ToolListWatches, "Amass watches",
+		"List the scheduled enumerations: their scope, schedule, next run, and what the last finished run found.",
+		obj(nil, map[string]any{}), readOnly(),
+		func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error) {
+			if op.Watches == nil {
+				return nil, errors.New("this server cannot keep watches")
+			}
+			return jsonResult(map[string]any{"watches": op.Watches.List()}), nil
+		})
+
+	add(ToolStopWatch, "Stop an Amass watch", "Remove a scheduled enumeration; a run it started finishes on its own.",
+		obj([]string{"watch_id"}, map[string]any{"watch_id": map[string]any{"type": "string"}}),
+		&mcp.ToolAnnotations{DestructiveHint: boolPtr(false), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+			var a struct {
+				WatchID string `json:"watch_id"`
+			}
+			if err := json.Unmarshal(raw, &a); err != nil {
+				return nil, err
+			}
+			if op.Watches == nil {
+				return nil, errors.New("this server cannot keep watches")
+			}
+			w, err := op.Watches.Remove(a.WatchID)
+			if err != nil {
+				return nil, err
+			}
+			return jsonResult(map[string]any{"removed": w}), nil
 		})
 
 	add(ToolListProposals, "Amass review proposals",

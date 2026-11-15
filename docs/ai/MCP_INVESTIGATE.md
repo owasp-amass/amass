@@ -82,6 +82,9 @@ A server started with an operator configuration also offers tools that act:
 | `start_enumeration` | Starts the planned enumeration after the user approves it. |
 | `enumeration_status` | Lists runs, or shows one with its progress and, once finished, what the changes lens finds since it started. |
 | `stop_enumeration` | Ends a run and its engine session. |
+| `watch_target` | Re-runs a planned enumeration every N hours (at least 6) after one approval, until stopped. |
+| `list_watches` | Lists watches with their schedule, next run and what the last finished run found (the changes lens since it started). |
+| `stop_watch` | Removes a watch. |
 | `list_proposals` | Lists ownership, merge, identity and person-named proposals. |
 | `review_proposal` | Approves, rejects or retracts a proposal; approving and retracting write to the Asset Database after the user approves. |
 | `data_sources` | Lists which data sources have credentials, never the credentials. |
@@ -119,7 +122,9 @@ ports, and covers at most a /16 IPv4 or /48 IPv6 range. Two runs may run
 at once; a run ends when its work settles, after 30 minutes without
 progress, or after 24 hours. Runs are recorded in
 `AMASS_AI_MCP_RUN_JOURNAL` and resumed after a restart while the engine
-still has them.
+still has them. Watches are kept in `AMASS_AI_MCP_WATCHES` (at most 32); a
+due run that cannot start because of the running limit is retried an hour
+later.
 
 Connecting an assistant to the Compose environment is covered by
 `scripts/ai-connect.sh` in amass-docker-compose (see its `AI.md`).

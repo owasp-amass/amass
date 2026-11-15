@@ -75,6 +75,7 @@ func run() error {
 		op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{
 			ConfigFile:          *cfgFile,
 			RunJournal:          os.Getenv("AMASS_AI_MCP_RUN_JOURNAL"),
+			WatchFile:           os.Getenv("AMASS_AI_MCP_WATCHES"),
 			PublicURL:           os.Getenv("AMASS_AI_MCP_PUBLIC_URL"),
 			RequireConfirmation: os.Getenv("AMASS_AI_MCP_REQUIRE_CONFIRMATION") == "true",
 		})
