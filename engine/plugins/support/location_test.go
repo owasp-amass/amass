@@ -7,6 +7,8 @@ package support
 import (
 	"strings"
 	"testing"
+
+	pioz "github.com/pioz/countries"
 )
 
 // parts turns "label=value|label=value" into the parts libpostal returns.
@@ -131,5 +133,124 @@ func TestStandardPOBoxAndPostcode(t *testing.T) {
 func TestLocationFromPartsKeepsUnparsedAddress(t *testing.T) {
 	if loc := locationFromParts("Somewhere", parts("country=usa")); loc.Address != "Somewhere" {
 		t.Errorf("an address with only a country gave %q", loc.Address)
+	}
+}
+
+// Streets written different ways in other countries have one standard form.
+func TestStandardStreetOtherCountries(t *testing.T) {
+	for _, tc := range []struct {
+		country string
+		streets []string
+		want    string
+	}{
+		{"CA", []string{"Boulevard René-Lévesque Ouest", "boul. Rene Levesque O."}, "boul rene levesque o"},
+		{"CA", []string{"Sainte-Catherine Street West", "Sainte Catherine St W"}, "sainte catherine st w"},
+		{"DE", []string{"Hauptstraße", "Hauptstr.", "Hauptstrasse"}, "hauptstr"},
+		{"DE", []string{"Berliner Straße", "Berliner Str."}, "berliner str"},
+		{"CH", []string{"Bahnhofstrasse", "Bahnhofstr."}, "bahnhofstr"},
+		{"FR", []string{"Avenue des Champs-Élysées", "av. des Champs Elysees"}, "av des champs elysees"},
+		{"FR", []string{"Rue du Faubourg Saint-Honoré", "rue du faubourg st honore"}, "rue du faubourg st honore"},
+		{"ES", []string{"Calle Mayor", "C/ Mayor"}, "c mayor"},
+		{"ES", []string{"Avenida de América", "Avda. de America", "Av. de América"}, "avda de america"},
+		{"BR", []string{"Avenida Paulista", "Av. Paulista"}, "av paulista"},
+		{"AU", []string{"George Street", "George St"}, "george st"},
+		{"RU", []string{"улица Тверская", "ул. Тверская"}, "ул тверская"},
+		{"PL", []string{"ulica Marszałkowska", "ul. Marszalkowska"}, "ul marszalkowska"},
+		{"FI", []string{"Aleksanterinkatu", "Aleksanterink."}, "aleksanterink"},
+		{"TR", []string{"Atatürk Caddesi", "Ataturk Cad."}, "ataturk cad"},
+	} {
+		for _, s := range tc.streets {
+			if got := standardStreet(s, tc.country); got != tc.want {
+				t.Errorf("%q in %s gave %q, want %q", s, tc.country, got, tc.want)
+			}
+		}
+	}
+}
+
+// Accents on Latin letters are dropped, while marks on letters of other
+// scripts are kept, since they change the letter.
+func TestCleanAddressPartScripts(t *testing.T) {
+	for in, want := range map[string]string{
+		"Straße":          "strasse",
+		"Ærøskøbing":      "aeroeskoebing",
+		"Łódź":            "lodz",
+		"Чайковского":     "чайковского",
+		"がっこう":            "がっこう",
+		"Rue de l'Église": "rue de l eglise",
+	} {
+		if got := cleanAddressPart(in); got != want {
+			t.Errorf("%q gave %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Postal codes are written in their country's standard form.
+func TestStandardPostcodeOtherCountries(t *testing.T) {
+	for code, want := range map[[2]string]string{
+		{"h3b4w8", "CA"}:   "H3B 4W8",
+		{"H3B-4W8", "CA"}:  "H3B 4W8",
+		{"sw1a1aa", "GB"}:  "SW1A 1AA",
+		{"1000001", "JP"}:  "100-0001",
+		{"100-0001", "JP"}: "100-0001",
+		{"01310100", "BR"}: "01310-100",
+		{"1012ab", "NL"}:   "1012 AB",
+		{"1010", "LV"}:     "LV-1010",
+		{"D-80331", "DE"}:  "80331",
+		{"11455", "SE"}:    "114 55",
+		{"A65F4E2", "IE"}:  "A65 F4E2",
+	} {
+		if got := standardPostcode(code[0], code[1]); got != want {
+			t.Errorf("%q in %s gave %q, want %q", code[0], code[1], got, want)
+		}
+	}
+}
+
+// Provinces are found by their names in the country data's languages.
+func TestProvinceCode(t *testing.T) {
+	for _, tc := range [][3]string{
+		{"Bayern", "DE", "BY"},
+		{"Québec", "CA", "QC"},
+		{"quebec", "CA", "QC"},
+		{"new york", "US", "NY"},
+		{"Nowhere", "US", "Nowhere"},
+	} {
+		if got := provinceCode(tc[0], tc[1]); got != tc[2] {
+			t.Errorf("%q in %s gave %q, want %q", tc[0], tc[1], got, tc[2])
+		}
+	}
+}
+
+// The same place in another country, written different ways, is one
+// Location.
+func TestLocationFromPartsOtherCountries(t *testing.T) {
+	a := locationFromParts("", parts("road=Hauptstraße|house_number=5|postcode=80331|city=München|state=Bayern|"+
+		"country=Germany"))
+	b := locationFromParts("", parts("road=hauptstr.|house_number=5|postcode=D-80331|city=munchen|state=by|"+
+		"country=deutschland"))
+	if a.Address != b.Address || a.Address != "5 HAUPTSTR, MUNCHEN, BY 80331, DE" {
+		t.Errorf("the two German addresses gave %q and %q", a.Address, b.Address)
+	}
+}
+
+// Every set of address forms names real countries, and no word has two
+// standard forms for a country in the same part and position.
+func TestAddressFormsData(t *testing.T) {
+	f := loadAddressForms()
+
+	seen := map[string]string{}
+	for _, form := range f.Forms {
+		for _, c := range form.Countries {
+			if pioz.Get(c) == nil {
+				t.Errorf("%s names an unknown country %q", form.Name, c)
+			}
+			for k, v := range form.Words {
+				key := strings.Join([]string{c, form.Part, form.Position, k}, "|")
+				if prev, ok := seen[key]; ok && prev != v {
+					t.Errorf("%s: %q in %s is both %q and %q", form.Name, k, c, prev, v)
+				}
+
+				seen[key] = v
+			}
+		}
 	}
 }

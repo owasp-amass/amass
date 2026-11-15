@@ -16,7 +16,6 @@ import (
 	biter "github.com/biter777/countries"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/open-asset-model/contact"
-	pioz "github.com/pioz/countries"
 )
 
 type parsedComponent struct {
@@ -115,16 +114,9 @@ func locationFromParts(address string, parts []parsedComponent) *contact.Locatio
 		}
 	}
 
-	// convert the province to its code; libpostal lowercases names
+	// the province's code, from its name in any language the country data has
 	if loc.Country != "" && len(loc.Province) > 2 {
-		if c := pioz.Get(loc.Country); c != nil {
-			for _, sub := range c.Subdivisions {
-				if strings.EqualFold(sub.Name, loc.Province) {
-					loc.Province = sub.Code
-					break
-				}
-			}
-		}
+		loc.Province = provinceCode(loc.Province, loc.Country)
 	}
 
 	country := strings.ToUpper(loc.Country)
