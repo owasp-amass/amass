@@ -1,0 +1,71 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How a parsed street address is put in one standard form, so the same place written different ways is one Location. libpostal splits the address into parts; each part is then lowercased, its punctuation removed and its spacing collapsed, and the words below are replaced by their standard forms for the countries listed: street suffixes on the last word of the street (or the word before a trailing directional), directionals at the start or end of the street when other words remain, unit designators in the unit, number words anywhere in the street, and the ways of writing a post office box at the start of the box. postcodes keep the first digits of a country's postal code (a US ZIP+4 is the 5-digit ZIP Code with a 4-digit add-on, written after a hyphen). The identity of a Location is its number, street, unit, PO box, city, province, postal code and country in this form; a building or recipient name counts only when there is no street. Each set cites the standard it follows. Add countries and words here, not in Go code.",
+  "forms": [
+    {"name": "street suffixes", "part": "suffix", "countries": ["US"],
+      "source": "https://pe.usps.com/text/pub28/28apc_002.htm",
+      "words": {
+        "alley": "aly", "allee": "aly", "ally": "aly",
+        "avenue": "ave", "av": "ave", "aven": "ave", "avenu": "ave", "avn": "ave", "avnue": "ave",
+        "boulevard": "blvd", "boul": "blvd", "boulv": "blvd",
+        "bypass": "byp",
+        "center": "ctr", "centre": "ctr", "cent": "ctr", "centr": "ctr", "cntr": "ctr", "cnter": "ctr",
+        "circle": "cir", "circ": "cir", "circl": "cir", "crcl": "cir", "crcle": "cir",
+        "court": "ct",
+        "cove": "cv",
+        "crescent": "cres",
+        "crossing": "xing",
+        "drive": "dr", "driv": "dr", "drv": "dr",
+        "expressway": "expy", "expr": "expy", "express": "expy", "expw": "expy",
+        "extension": "ext", "extn": "ext",
+        "freeway": "fwy", "frwy": "fwy",
+        "highway": "hwy", "highwy": "hwy", "hiway": "hwy", "hiwy": "hwy", "hway": "hwy",
+        "hill": "hl",
+        "lane": "ln",
+        "loop": "loop",
+        "parkway": "pkwy", "parkwy": "pkwy", "pkway": "pkwy", "pky": "pkwy",
+        "pike": "pike",
+        "place": "pl",
+        "plaza": "plz", "plza": "plz",
+        "point": "pt",
+        "road": "rd",
+        "route": "rte",
+        "square": "sq", "sqr": "sq", "sqre": "sq", "squ": "sq",
+        "street": "st", "str": "st", "strt": "st",
+        "terrace": "ter", "terr": "ter",
+        "trail": "trl", "trails": "trl",
+        "turnpike": "tpke", "trnpk": "tpke", "turnpk": "tpke",
+        "way": "way", "wy": "way"
+      }},
+    {"name": "directionals", "part": "directional", "countries": ["US"],
+      "source": "https://pe.usps.com/text/pub28/28c2_014.htm",
+      "words": {
+        "north": "n", "south": "s", "east": "e", "west": "w",
+        "northeast": "ne", "northwest": "nw", "southeast": "se", "southwest": "sw"
+      }},
+    {"name": "secondary unit designators", "part": "unit", "countries": ["US"],
+      "source": "https://pe.usps.com/text/pub28/28c2_003.htm",
+      "words": {
+        "apartment": "apt", "building": "bldg", "floor": "fl", "suite": "ste", "unit": "unit",
+        "room": "rm", "department": "dept"
+      }},
+    {"name": "number words", "part": "number", "countries": ["US"],
+      "source": "https://pe.usps.com/text/pub28/pub28c3_021.htm",
+      "words": {
+        "first": "1st", "second": "2nd", "third": "3rd", "fourth": "4th", "fifth": "5th",
+        "sixth": "6th", "seventh": "7th", "eighth": "8th", "ninth": "9th", "tenth": "10th",
+        "eleventh": "11th", "twelfth": "12th", "thirteenth": "13th", "fourteenth": "14th",
+        "fifteenth": "15th", "sixteenth": "16th", "seventeenth": "17th", "eighteenth": "18th",
+        "nineteenth": "19th", "twentieth": "20th"
+      }},
+    {"name": "post office boxes", "part": "po_box", "countries": ["US"],
+      "source": "https://pe.usps.com/text/pub28/28c2_036.htm",
+      "words": {
+        "p o box": "po box", "post office box": "po box", "pob": "po box", "p o b": "po box",
+        "postal box": "po box", "box": "po box"
+      }}
+  ],
+  "postcodes": [
+    {"country": "US", "digits": 5, "source": "https://pe.usps.com/text/pub28/pub28c2_034.htm"}
+  ]
+}

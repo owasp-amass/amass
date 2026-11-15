@@ -61,57 +61,115 @@ func CountryToAlpha2Code(country string) string {
 	return country
 }
 
+// StreetAddressToLocation parses an address with libpostal and returns the
+// Location it names, or nil when the address cannot be parsed. The same
+// place written different ways becomes the same Location: its Address is
+// built from the parsed parts in standard form (see address_forms.json).
 func StreetAddressToLocation(address string) *contact.Location {
+	address = strings.TrimSpace(address)
 	if address == "" {
 		return nil
 	}
-	address = strings.TrimSpace(address)
 
 	parts, err := postalServerParseAddress(address)
 	if err != nil {
 		return nil
 	}
 
-	loc := &contact.Location{Address: address}
+	return locationFromParts(address, parts)
+}
+
+// locationFromParts builds a Location from the parts libpostal found in an
+// address. The parts are put in standard form, and the Address is the
+// standard one-line form of the number, street, unit, PO box, city,
+// province, postal code and country; a building name is part of it only
+// when there is no street. Without any of those parts, the Address is the
+// one given.
+func locationFromParts(address string, parts []parsedComponent) *contact.Location {
+	loc := &contact.Location{}
 	for _, part := range parts {
+		v := strings.TrimSpace(part.Value)
 		switch part.Label {
 		case "house":
-			loc.Building = part.Value
+			loc.Building = v
 		case "house_number":
-			loc.BuildingNumber = part.Value
+			loc.BuildingNumber = v
 		case "road":
-			loc.StreetName = part.Value
+			loc.StreetName = v
 		case "unit":
-			loc.Unit = part.Value
+			loc.Unit = v
 		case "po_box":
-			loc.POBox = part.Value
+			loc.POBox = v
 		case "city":
-			loc.City = part.Value
+			loc.City = v
 		case "state":
-			loc.Province = part.Value
+			loc.Province = v
 		case "postcode":
-			loc.PostalCode = part.Value
+			loc.PostalCode = v
 		case "country":
-			loc.Country = CountryToAlpha2Code(part.Value)
-		case "suburb":
-			fallthrough
-		case "city_district":
-			if s := part.Value; s != "" {
-				loc.Locality = s
+			loc.Country = CountryToAlpha2Code(v)
+		case "suburb", "city_district":
+			if v != "" {
+				loc.Locality = v
 			}
 		}
 	}
 
-	// attempt to convert the province to its two-letter abbreviation
+	// convert the province to its code; libpostal lowercases names
 	if loc.Country != "" && len(loc.Province) > 2 {
 		if c := pioz.Get(loc.Country); c != nil {
-			if sub := c.SubdivisionByName(loc.Province); sub.Type != "" {
-				loc.Province = sub.Code
+			for _, sub := range c.Subdivisions {
+				if strings.EqualFold(sub.Name, loc.Province) {
+					loc.Province = sub.Code
+					break
+				}
 			}
 		}
+	}
+
+	country := strings.ToUpper(loc.Country)
+	loc.Country = country
+	loc.BuildingNumber = cleanAddressPart(loc.BuildingNumber)
+	loc.StreetName = standardStreet(loc.StreetName, country)
+	loc.Unit = standardUnit(loc.Unit, country)
+	loc.POBox = standardPOBox(loc.POBox, country)
+	loc.City = cleanAddressPart(loc.City)
+	loc.Locality = cleanAddressPart(loc.Locality)
+	loc.Province = strings.ToUpper(cleanAddressPart(loc.Province))
+	loc.PostalCode = standardPostcode(loc.PostalCode, country)
+
+	loc.Address = standardAddress(loc)
+	if loc.Address == "" {
+		loc.Address = address
 	}
 
 	return loc
+}
+
+// standardAddress writes a Location's standard parts as one uppercase line,
+// as USPS Publication 28 writes addresses.
+func standardAddress(loc *contact.Location) string {
+	join := func(sep string, s ...string) string {
+		var out []string
+		for _, v := range s {
+			if v != "" {
+				out = append(out, v)
+			}
+		}
+
+		return strings.Join(out, sep)
+	}
+
+	place := join(" ", loc.BuildingNumber, loc.StreetName, loc.Unit)
+	if loc.StreetName == "" {
+		place = join(" ", cleanAddressPart(loc.Building), loc.BuildingNumber, loc.Unit)
+	}
+	if place == "" && loc.POBox == "" && loc.City == "" && loc.PostalCode == "" {
+		return ""
+	}
+
+	return strings.ToUpper(join(", ", place, loc.POBox, loc.City,
+		join(" ", loc.Province, loc.PostalCode), loc.Country))
 }
 
 func postalServerParseAddress(address string) ([]parsedComponent, error) {
