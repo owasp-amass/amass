@@ -74,8 +74,8 @@ var changesLens = SubjectLens{
 // Text implements Report.
 func (r ServicesReport) Text() string { return FormatServicesReport(r) }
 
-// Facts implements Report: the software each service runs, and its type and
-// endpoints.
+// Facts implements Report: the software each service runs, its type and
+// endpoints, and the web applications recognized from stored URLs.
 func (r ServicesReport) Facts() []string {
 	var out []string
 	for _, s := range r.Services {
@@ -84,6 +84,9 @@ func (r ServicesReport) Facts() []string {
 		}
 
 		out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
+	}
+	for _, a := range r.Applications {
+		out = append(out, "web application "+a.String()+" on "+a.Site)
 	}
 
 	return out

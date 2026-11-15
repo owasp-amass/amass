@@ -187,7 +187,10 @@ lists, and the HTTP probes try the rest. Without `scope.ports`, every port the
 probes know is probed (`config.DefaultPorts`). Its ports and greeting patterns, each citing the
 protocol's RFC, are in
 `engine/plugins/service_discovery/banner_probes/protocols.json`. The header names, expected
-ports and warning period are in `internal/semantics/services.json`.
+ports and warning period are in `internal/semantics/services.json`. It also
+lists the web applications recognized from the stored URLs, such as WordPress
+sites with their release, bundled jQuery, plugins and themes
+(`internal/semantics/web_applications.json`).
 
 ## Network infrastructure
 
@@ -312,6 +315,15 @@ products can be checked, and their NVD CPE names, are in
 identifies is there, as checked or with the reason it cannot be (a header
 that gives a build number or no version). A version the data does not cover
 yet, or a product without a version, is listed as not checked.
+
+Web applications are recognized from the URLs stored for the subject
+(`internal/semantics/web_applications.json`). For WordPress, the release
+comes from the scripts WordPress versions with its own release
+(`comment-reply.js`, `wp-embed.js`) and the bundled jQuery from its own file,
+both as WordPress's script loader writes them; plugins and themes are listed
+by name, with the version written in their asset URLs, but not checked,
+because each add-on chooses that value. The services lens lists these sites
+too.
 
 `amass vuln-update` asks the NVD CVE API for every CVE naming each
 catalog product, with the versions it affects, and reads the KEV catalog; it

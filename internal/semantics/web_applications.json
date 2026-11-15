@@ -1,0 +1,23 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the services lens recognizes web applications from the URLs stored for what a subject controls. An application is recognized on a site (scheme, host and port) when a stored URL's path matches path. versions read a release from the query parameter query of the files matching their path; each names the product it is the release of and cites the application's own source showing that this file carries that product's version. components name the add-ons (plugins, themes) a path shows; their query value is set by each add-on, so it is reported as the version written in the asset URL and not used to check vulnerabilities. url_types are the asset types holding URLs and url_field the content field with the URL. Patterns are regular expressions matched without case. Nothing is written to the Asset Database. Add values here, not in Go code.",
+  "url_types": ["URL"],
+  "url_field": "url",
+  "applications": [
+    {"product": "WordPress", "vendor": "WordPress Foundation",
+      "path": "(?:^|/)wp-(?:content|includes|admin|json)/",
+      "source": "https://developer.wordpress.org/reference/functions/wp_default_scripts/",
+      "versions": [
+        {"product": "WordPress", "vendor": "WordPress Foundation",
+          "path": "/wp-includes/js/(?:comment-reply|wp-embed)(?:\\.min)?\\.js$", "query": "ver",
+          "source": "https://developer.wordpress.org/reference/classes/wp_scripts/"},
+        {"product": "jQuery", "vendor": "OpenJS Foundation",
+          "path": "/wp-includes/js/jquery/jquery(?:\\.min)?\\.js$", "query": "ver",
+          "source": "https://developer.wordpress.org/reference/functions/wp_default_scripts/"}
+      ],
+      "components": [
+        {"kind": "plugin", "path": "/wp-content/plugins/([^/]+)/", "query": "ver"},
+        {"kind": "theme", "path": "/wp-content/themes/([^/]+)/", "query": "ver"}
+      ]}
+  ]
+}

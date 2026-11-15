@@ -91,9 +91,12 @@ type ServicesReport struct {
 	// runs on ("nginx 1.18.0").
 	ByProduct map[string]int `json:"by_product"`
 	ByPort    map[string]int `json:"by_port"`
-	Reads     int            `json:"reads"`
-	Truncated bool           `json:"truncated"`
-	Reason    string         `json:"reason,omitempty"`
+	// Applications are the web applications recognized from the stored
+	// URLs (web_applications.json).
+	Applications []WebApplication `json:"applications,omitempty"`
+	Reads        int              `json:"reads"`
+	Truncated    bool             `json:"truncated"`
+	Reason       string           `json:"reason,omitempty"`
 }
 
 // LensServices asks for the services stored for what a domain or
@@ -224,6 +227,12 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		return a.Service.ID < b.Service.ID
 	})
 
+	assets := make([]graph.Asset, 0, len(order))
+	for _, id := range order {
+		assets = append(assets, owned[id])
+	}
+
+	out.Applications = identifyWebApplications(assets)
 	out.Hosts = len(hosts)
 	out.Reads = report.Reads
 	out.Truncated, out.Reason = report.Truncated, report.Reason
@@ -355,6 +364,7 @@ func FormatServicesReport(r ServicesReport) string {
 	if len(r.Services) == 0 {
 		b.WriteString("No service is stored for its names, addresses or URLs. Services are stored by the HTTP and " +
 			"SSH probes during an active enumeration.\n")
+		writeWebApplications(&b, r.Applications)
 		return b.String()
 	}
 
@@ -451,6 +461,7 @@ func FormatServicesReport(r ServicesReport) string {
 		b.WriteString("\n")
 	}
 
+	writeWebApplications(&b, r.Applications)
 	b.WriteString("These are services stored by past probes, not a live scan. Identified software is read from " +
 		"stored headers and banners, which software can hide or fake.")
 	if r.Truncated {

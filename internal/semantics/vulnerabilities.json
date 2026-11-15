@@ -76,6 +76,48 @@
         "cpe:2.3:a:vsftpd_project:vsftpd"
       ],
       "source": "https://cve.akaoma.com/cve-2011-2523"
+    },
+    {
+      "product": "Apache Traffic Server",
+      "cpe": [
+        "cpe:2.3:a:apache:traffic_server"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/1762807"
+    },
+    {
+      "product": "Phusion Passenger",
+      "cpe": [
+        "cpe:2.3:a:phusion:passenger"
+      ],
+      "source": "https://db.gcve.eu/vuln/CVE-2013-2119"
+    },
+    {
+      "product": "mod_perl",
+      "cpe": [
+        "cpe:2.3:a:apache:mod_perl"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/160"
+    },
+    {
+      "product": "Perl",
+      "cpe": [
+        "cpe:2.3:a:perl:perl"
+      ],
+      "source": "https://db.gcve.eu/vuln/fkie_cve-2023-47038"
+    },
+    {
+      "product": "WordPress",
+      "cpe": [
+        "cpe:2.3:a:wordpress:wordpress"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/41607"
+    },
+    {
+      "product": "jQuery",
+      "cpe": [
+        "cpe:2.3:a:jquery:jquery"
+      ],
+      "source": "https://www.incibe.es/en/incibe-cert/early-warning/vulnerabilities/cve-2020-11022"
     }
   ],
   "unchecked": [
@@ -89,6 +131,14 @@
     },
     {
       "product": "Express",
+      "reason": "its header carries no version"
+    },
+    {
+      "product": "Drupal",
+      "reason": "its header gives only the major version, while NVD's ranges name full releases"
+    },
+    {
+      "product": "Next.js",
       "reason": "its header carries no version"
     }
   ]

@@ -7,6 +7,8 @@ package lens
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -114,6 +116,23 @@ func FindVulnerable(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 		}
 	}
 
+	for _, a := range services.Applications {
+		ids := a.Identified
+		if !slices.ContainsFunc(ids, func(p IdentifiedProduct) bool { return p.Product == a.Product }) {
+			ids = append(ids, IdentifiedProduct{Product: a.Product})
+		}
+		for _, p := range ids {
+			k := key{p.Product, p.Version}
+			if _, ok := endpoints[k]; !ok {
+				order = append(order, k)
+			}
+
+			list := endpoints[k]
+			graph.AddUnique(&list, a.Site)
+			endpoints[k] = list
+		}
+	}
+
 	for _, k := range order {
 		matches, status, reason := data.Check(k.product, k.version)
 		label := strings.TrimSpace(k.product + " " + k.version)
@@ -133,6 +152,34 @@ func FindVulnerable(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 
 			out.Software = append(out.Software, v)
 		}
+	}
+
+	// Add-ons are listed, not checked: their asset versions are not
+	// confirmed releases, and they have no catalog entries.
+	addons := map[string][]string{}
+	sites := map[string]int{}
+	for _, a := range services.Applications {
+		sites[a.Product]++
+		list := addons[a.Product]
+		for _, c := range a.Components {
+			graph.AddUnique(&list, c.Kind+" "+c.Name)
+		}
+		if len(list) > 0 {
+			addons[a.Product] = list
+		}
+	}
+	for _, product := range slices.Sorted(maps.Keys(addons)) {
+		names := addons[product]
+		sort.Strings(names)
+		shown := names[:min(len(names), vulnerableExamples*2)]
+		reason := fmt.Sprintf("%d found (%s", len(names), strings.Join(shown, ", "))
+		if len(names) > len(shown) {
+			reason += fmt.Sprintf(", and %d more", len(names)-len(shown))
+		}
+
+		reason += "); their versions in asset URLs are chosen by each add-on, so they are not confirmed"
+		out.Unchecked = append(out.Unchecked, UncheckedSoftware{Product: product + " add-ons", Status: vuln.Unchecked,
+			Reason: reason, Endpoints: sites[product]})
 	}
 
 	sort.SliceStable(out.Software, func(i, j int) bool {
@@ -218,9 +265,9 @@ func (r VulnerableReport) Text() string {
 		}
 	}
 
-	b.WriteString("\nMatched by the version in stored headers and banners: distributions often backport fixes " +
-		"without changing the version, and software can hide or fake it, so confirm with the vendor's advisory. " +
-		"CVE data from the NVD; known exploited vulnerabilities from CISA's KEV catalog.")
+	b.WriteString("\nMatched by the version in stored headers, banners and asset URLs: distributions often " +
+		"backport fixes without changing the version, and software can hide or fake it, so confirm with the " +
+		"vendor's advisory. CVE data from the NVD; known exploited vulnerabilities from CISA's KEV catalog.")
 	if r.Truncated {
 		fmt.Fprintf(&b, " Results are partial (%s); raise -max-assets or -max-reads to cover more.", r.Reason)
 	}

@@ -30,6 +30,13 @@
         {"series": "7.5", "end_of_support": "2020-01-15"},
         {"series": "7.0", "end_of_support": "2020-01-15"},
         {"series": "6.0", "end_of_support": "2015-07-15"}
+      ]},
+    {"product": "Drupal", "source": "https://drupal.org/about/core/policies/core-release-cycles/schedule",
+      "unsupported": [
+        {"series": "10", "end_of_support": "2026-12-09"},
+        {"series": "9", "end_of_support": "2023-11-01"},
+        {"series": "8", "end_of_support": "2021-11-17"},
+        {"series": "7", "end_of_support": "2025-01-05"}
       ]}
   ]
 }

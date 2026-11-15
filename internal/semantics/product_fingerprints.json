@@ -46,6 +46,27 @@
       "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/vsftpd/"},
     {"product": "Dovecot", "vendor": "Open-Xchange", "banner": true, "service_types": ["pop3", "imap"],
       "pattern": "Dovecot( \\([^)]*\\))? ready", "version": 0,
-      "source": "https://dovecot.org/doc/dovecot-example.conf"}
+      "source": "https://dovecot.org/doc/dovecot-example.conf"},
+    {"product": "Drupal", "vendor": "Drupal Association", "header": "x-generator",
+      "pattern": "^Drupal ([0-9]+) \\(https://www\\.drupal\\.org\\)", "version": 1,
+      "source": "https://api.drupal.org/api/drupal/core!lib!Drupal!Core!EventSubscriber!ResponseGeneratorSubscriber.php/11.3.x"},
+    {"product": "Apache Traffic Server", "vendor": "Apache Software Foundation", "header": "server",
+      "pattern": "^ATS(?:/([0-9][0-9A-Za-z.]*))?$", "version": 1,
+      "source": "https://docs.trafficserver.apache.org/admin-guide/files/records.yaml.en.html"},
+    {"product": "Phusion Passenger", "vendor": "Phusion", "header": "x-powered-by",
+      "pattern": "^Phusion Passenger(?:\\(R\\))?(?: ([0-9][0-9.]*))?", "version": 1,
+      "source": "https://www.phusionpassenger.com/library/config/nginx/reference"},
+    {"product": "Phusion Passenger", "vendor": "Phusion", "header": "server",
+      "pattern": "\\bPhusion[ _]Passenger(?:\\(R\\))?(?:[ /]([0-9][0-9.]*))?", "version": 1,
+      "source": "https://www.phusionpassenger.com/library/config/nginx/reference"},
+    {"product": "Next.js", "vendor": "Vercel", "header": "x-powered-by",
+      "pattern": "^Next\\.js$", "version": 0,
+      "source": "https://nextjs.org/docs/app/api-reference/config/next-config-js/poweredByHeader"},
+    {"product": "mod_perl", "vendor": "Apache Software Foundation", "header": "server",
+      "pattern": "\\bmod_perl/([0-9][0-9A-Za-z._-]*)", "version": 1,
+      "source": "https://perl.apache.org/docs/2.0/api/Apache2/ServerUtil.html"},
+    {"product": "Perl", "vendor": "Perl Foundation", "header": "server",
+      "pattern": "\\bPerl/v?([0-9][0-9.]*)", "version": 1,
+      "source": "https://perl.apache.org/docs/2.0/api/Apache2/ServerUtil.html"}
   ]
 }
