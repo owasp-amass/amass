@@ -60,6 +60,7 @@ func SubjectLenses() []SubjectLens {
 		danglingLens,
 		changesLens,
 		vulnerableLens,
+		lookalikesLens,
 		certificatesLens,
 		domainsLens,
 		emailLens,

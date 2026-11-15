@@ -24,6 +24,10 @@
       "title": "Email security"
     },
     {
+      "lens": "lookalikes",
+      "title": "Lookalike domains"
+    },
+    {
       "lens": "services",
       "title": "Services"
     },
@@ -143,6 +147,18 @@
       "lens": "vulnerable",
       "kind": "cve",
       "title": "Identified software versions with CVEs",
+      "priority": 3
+    },
+    {
+      "lens": "lookalikes",
+      "kind": "lookalike_mail",
+      "title": "Lookalike domains not tied to it that receive mail",
+      "priority": 2
+    },
+    {
+      "lens": "lookalikes",
+      "kind": "lookalike_other",
+      "title": "Lookalike domains not tied to it",
       "priority": 3
     },
     {

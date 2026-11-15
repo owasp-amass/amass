@@ -1,0 +1,24 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass finds registered domains that look like a subject's. For each registered domain the collection checks, during active enumeration, the names one typing mistake away from its first label under the same suffix, and the same label under the suffixes in tlds; a candidate is stored only when DNS delegates it (it has NS records). The typo models are those of Moore and Edelman (typo_source): one insertion, deletion, substitution or transposition, where an inserted or substituted character is next to its neighbor on a QWERTY keyboard (keyboard_rows) or repeats it. Labels shorter than min_label_length are not checked: one mistake away from a short name is mostly other organizations' ordinary names. The lookalike lens computes the same candidates and reports those stored. Add values here, not in Go code.",
+  "typo_source": "https://community.icann.org/download/attachments/58727388/Measuring%20the%20Perpetrators%20and%20Funders%20of%20Typosquatting.pdf?api=v2",
+  "keyboard_rows": [
+    "1234567890",
+    "qwertyuiop",
+    "asdfghjkl",
+    "zxcvbnm"
+  ],
+  "tlds": [
+    "com",
+    "net",
+    "org",
+    "co",
+    "info",
+    "biz",
+    "us",
+    "io"
+  ],
+  "tld_source": "https://www.iana.org/domains/root/db",
+  "min_label_length": 4,
+  "max_candidates": 400
+}

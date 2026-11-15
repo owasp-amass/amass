@@ -325,6 +325,25 @@ Matching is by the version in stored headers and banners: distributions
 often backport fixes without changing the version, and software can hide or
 fake it, so confirm a CVE with the vendor's advisory.
 
+## Lookalike domains
+
+```bash
+amass lens lookalikes -d example.com
+```
+
+Lists the stored registered domains one typing mistake away from the
+subject's (one insertion, deletion, adjacent-key substitution or
+transposition, the typo models of Moore and Edelman), or with the same name
+under another common suffix, and says whom each seems to belong to: in the
+subject's footprint, on its own name servers or registrant (often a
+defensive registration), or not tied to it. Those not tied to it that
+receive mail come first. During active enumeration the Lookalike-Domains
+engine plugin checks the same candidates for each in-scope registered
+domain and stores those DNS delegates, with their name and mail servers, so
+the lens has them to report. The typo models, keyboard, suffixes and limits
+are in `internal/semantics/lookalikes.json`. A lookalike is not necessarily
+hostile.
+
 ## Email security
 
 ```bash
