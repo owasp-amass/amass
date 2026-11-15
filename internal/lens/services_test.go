@@ -122,3 +122,28 @@ func TestProductFingerprintCatalog(t *testing.T) {
 		t.Error("the catalog is empty")
 	}
 }
+
+// Certificate dates are stored without a time zone by the collectors, so
+// expiry is judged on those too.
+func TestCertificateOfDatesWithoutZone(t *testing.T) {
+	defer func(f func() time.Time) { serviceNow = f }(serviceNow)
+	serviceNow = func() time.Time { return time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC) }
+
+	for _, tc := range []struct {
+		notAfter        string
+		expired, expiry bool
+	}{
+		{"2026-11-13T04:12:07", true, false},
+		{"2026-12-07T20:19:48", false, true},
+		{"2027-03-03T00:17:03", false, false},
+		{"2026-11-13T04:12:07Z", true, false},
+	} {
+		cert := graph.Asset{ID: "c", Type: "TLSCertificate", Content: map[string]any{
+			"subject_common_name": "example.com", "issuer_common_name": "CA", "not_after": tc.notAfter}}
+		c := certificateOf(cert, 30)
+		if c.Expired != tc.expired || c.ExpiresSoon != tc.expiry {
+			t.Errorf("%s: expired %v expires soon %v, want %v %v", tc.notAfter, c.Expired, c.ExpiresSoon,
+				tc.expired, tc.expiry)
+		}
+	}
+}

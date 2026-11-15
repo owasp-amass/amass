@@ -303,7 +303,8 @@ func certificateOf(cert graph.Asset, warningDays int) ServiceCertificate {
 
 	c.SelfIssued = c.Issuer != "" && strings.EqualFold(c.Issuer, c.Subject)
 
-	if t, err := time.Parse(time.RFC3339, c.NotAfter); err == nil {
+	// Certificates are stored with or without a time zone; one without is UTC.
+	if t, ok := parseRecordDate(c.NotAfter); ok {
 		now := serviceNow()
 		c.Expired = t.Before(now)
 		c.ExpiresSoon = !c.Expired && t.Before(now.AddDate(0, 0, warningDays))
