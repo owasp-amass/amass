@@ -35,3 +35,13 @@ func TestRunHelp(t *testing.T) {
 		t.Errorf("the usage lacks the flags or description:\n%s", errout.String())
 	}
 }
+
+// Refreshing more often than NVD's best practices allow is refused.
+func TestRunEveryHasAMinimum(t *testing.T) {
+	var out, errout bytes.Buffer
+
+	err := Run("amass vuln-update", []string{"-every", "30m"}, &out, &errout)
+	if err == nil || !strings.Contains(err.Error(), "at least 2h") {
+		t.Errorf("-every 30m gave %v, want the 2h minimum", err)
+	}
+}

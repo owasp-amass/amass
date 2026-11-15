@@ -120,27 +120,10 @@ func run() error {
 // vulnRefreshEnv set to "off" stops the daily vulnerability data refresh.
 const vulnRefreshEnv = "AMASS_AI_MCP_VULN_REFRESH"
 
-// refreshVulnerabilities keeps the vulnerable lens's data current: it
-// checks every hour and refreshes the data when it is a day old or the
-// catalog gained products. A failed refresh is retried at the next check.
+// refreshVulnerabilities keeps the vulnerable lens's data current: it is
+// refreshed once a day, and when the catalog gains products.
 func refreshVulnerabilities(ctx context.Context, path string) {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for {
-		if vuln.Stale(path, 24*time.Hour, time.Now()) {
-			u := &vuln.Updater{APIKey: os.Getenv("NVD_API_KEY")}
-			if res, err := u.Update(ctx, path); err != nil {
-				fmt.Fprintf(os.Stderr, "mcp: vulnerability data refresh: %v\n", err)
-			} else {
-				fmt.Fprintf(os.Stderr, "mcp: vulnerability data refreshed: %d CVEs, %d known exploited\n", res.CVEs,
-					res.KEV)
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
+	vuln.KeepFresh(ctx, path, os.Getenv("NVD_API_KEY"), 24*time.Hour, func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "mcp: "+format+"\n", args...)
+	})
 }
