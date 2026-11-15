@@ -84,6 +84,16 @@ type identitySearch struct {
 	ctx    context.Context
 	graph  graph.Graph
 	report IdentityReport
+	batch  batchAssets
+}
+
+// spend counts one database read, or reports that the budget is spent.
+func (s *identitySearch) spend() bool {
+	if s.report.Reads >= dupMaxReads {
+		return false
+	}
+	s.report.Reads++
+	return true
 }
 
 // edges reads an asset's edges completely within the check's read budget;
@@ -109,6 +119,9 @@ func (s *identitySearch) edges(id, dir, label string) ([]graph.Relation, error) 
 }
 
 func (s *identitySearch) asset(id string) (graph.Asset, error) {
+	if a, ok := s.batch.get(id); ok {
+		return a, nil
+	}
 	if s.report.Reads >= dupMaxReads {
 		return graph.Asset{}, errDupReadLimit
 	}
@@ -221,6 +234,9 @@ func (s *identitySearch) check(o graph.Asset, legal, juris string) (*IdentityCon
 	if err != nil {
 		return nil, err
 	}
+	if err := s.batch.load(s.ctx, s.graph, ids, "out", s.spend); err != nil {
+		return nil, err
+	}
 	for _, e := range ids {
 		a, err := s.asset(e.ToID)
 		if err != nil {
@@ -312,6 +328,9 @@ func (s *identitySearch) contactCountries(o graph.Asset) (map[string]bool, error
 
 		locs, err := s.edges(e.FromID, "out", "location")
 		if err != nil {
+			return nil, err
+		}
+		if err := s.batch.load(s.ctx, s.graph, locs, "out", s.spend); err != nil {
 			return nil, err
 		}
 		for _, l := range locs {

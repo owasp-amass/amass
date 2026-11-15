@@ -143,8 +143,9 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 
 				if edges, err := db.OutgoingEdges(ctx, a, since, outRels...); err == nil && len(edges) > 0 {
 					fromID := id
+					ends := amassdb.EdgeEnds(ctx, db, edges, false)
 					for _, edge := range edges {
-						if to, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil {
+						if to, ok := ends[edge.ToEntity.ID]; ok {
 							toID := idx
 							n2 := newNode(toID, to)
 							if n2 == nil {
@@ -176,8 +177,9 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 
 				if edges, err := db.IncomingEdges(ctx, a, since, inRels...); err == nil && len(edges) > 0 {
 					toID := id
+					ends := amassdb.EdgeEnds(ctx, db, edges, true)
 					for _, edge := range edges {
-						if from, err := db.FindEntityById(ctx, edge.FromEntity.ID); err == nil {
+						if from, ok := ends[edge.FromEntity.ID]; ok {
 							fromID := idx
 							n2 := newNode(fromID, from)
 							if n2 == nil {
@@ -266,8 +268,9 @@ func associatedWithScope(db repository.Repository, asset *types.Entity, scope []
 	defer cancel()
 
 	if edges, err := db.OutgoingEdges(ctx, asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, db, edges, false)
 		for _, edge := range edges {
-			if to, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil {
+			if to, ok := ends[edge.ToEntity.ID]; ok {
 				if n, ok := to.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
 					return true
 				}
@@ -284,6 +287,7 @@ func followBackForScope(db repository.Repository, asset *types.Entity, scope []s
 	defer cancel()
 
 	if edges, err := db.IncomingEdges(ctx, asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
+		var follow []*types.Edge
 		for _, edge := range edges {
 			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType != 5 {
 				continue
@@ -292,7 +296,11 @@ func followBackForScope(db repository.Repository, asset *types.Entity, scope []s
 			} else if rel, ok := edge.Relation.(*oamdns.SRVDNSRelation); ok && rel.Header.RRType != 33 {
 				continue
 			}
-			if from, err := db.FindEntityById(ctx, edge.FromEntity.ID); err == nil {
+			follow = append(follow, edge)
+		}
+		ends := amassdb.EdgeEnds(ctx, db, follow, true)
+		for _, edge := range follow {
+			if from, ok := ends[edge.FromEntity.ID]; ok {
 				if n, ok := from.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
 					return true
 				} else if followBackForScope(db, from, scope, since) {

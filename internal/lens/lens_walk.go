@@ -361,33 +361,11 @@ func (w *lensWalker) neighborsPerLabel(lr graph.LabeledEdgeReader, a graph.Asset
 // prefetch reads the assets at the far end of edges that are not yet known
 // in one batch, when the graph can.
 func (w *lensWalker) prefetch(cur graph.Asset, edges []graph.Relation) error {
-	batch, ok := w.graph.(graph.AssetBatchReader)
-	if !ok {
-		return nil
-	}
-	var ids []string
-	want := map[string]bool{}
-	for _, e := range edges {
-		other := e.ToID
-		if e.FromID != cur.ID {
-			other = e.FromID
-		}
-		if _, known := w.assets[other]; !known && other != "" && other != cur.ID && !want[other] {
-			want[other] = true
-			ids = append(ids, other)
-		}
-	}
-	if len(ids) < 2 {
-		return nil
-	}
-	found, err := batch.GetAssets(w.ctx, ids)
-	if err != nil {
-		return err
-	}
-	for id, a := range found {
+	read, err := graph.FarAssets(w.ctx, w.graph, cur.ID, edges, func(id string) bool { _, ok := w.assets[id]; return ok })
+	for id, a := range read {
 		w.assets[id] = a
 	}
-	return nil
+	return err
 }
 
 // readLabel reads the edges of id with one label in one direction. When the

@@ -412,6 +412,10 @@ func searchTypedRelationIntent(ctx context.Context, g graph.Graph, limits graph.
 			}
 
 			sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
+			read, err := graph.FarAssets(ctx, g, last.ID, edges, nil)
+			if err != nil {
+				return out, err
+			}
 			for _, edge := range edges {
 				if err := ctx.Err(); err != nil {
 					return out, err
@@ -458,7 +462,7 @@ func searchTypedRelationIntent(ctx context.Context, g graph.Graph, limits graph.
 					break
 				}
 
-				asset, err := g.GetAsset(ctx, dest)
+				asset, err := graph.AssetFrom(ctx, g, read, dest)
 				if err != nil {
 					return out, err
 				}

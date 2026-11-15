@@ -517,6 +517,10 @@ an asset with more edges than one read returns has each relationship's first
 edges read in one query; only a relationship with more is then paged on its
 own. Both use asset-db's `FindEntitiesByIds` and `ReadEdgesPerLabel`, and fall
 back to one read at a time on a repository without them.
+The same batch reads serve the graph search and guided investigation tools,
+the duplicate, identity, corporate group and person-named checks, `amass viz`
+and the enumeration engine's name-to-address lookups, and each MCP tool call
+reads an asset or edge list once however many of its lenses ask.
 
 These are stored records, not verified contracts: a token or SPF include can
 outlive the service.

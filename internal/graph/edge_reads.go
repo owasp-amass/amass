@@ -53,3 +53,51 @@ func ReadEdges(ctx context.Context, graph Graph, id, dir, label string, maxEdges
 	edges, err := graph.Edges(ctx, id, dir, label, time.Time{})
 	return edges, false, err
 }
+
+// ReadLabels reads the edges of one asset in one direction for each of
+// labels, as ReadEdges does for each label on its own. When the graph is a
+// LabeledEdgeReader, every label's first edges come in one read and only a
+// label with more is then read alone. more names the labels left partial.
+func ReadLabels(ctx context.Context, graph Graph, id, dir string, labels []string, maxEdges int,
+	spend func() bool) (map[string][]Relation, map[string]bool, error) {
+	out := make(map[string][]Relation, len(labels))
+	more := map[string]bool{}
+	lr, ok := graph.(LabeledEdgeReader)
+	if !ok || len(labels) < 2 {
+		for _, l := range labels {
+			edges, m, err := ReadEdges(ctx, graph, id, dir, l, maxEdges, spend)
+			if err != nil {
+				return nil, nil, err
+			}
+			out[l], more[l] = edges, m
+		}
+		return out, more, nil
+	}
+
+	if !spend() {
+		for _, l := range labels {
+			more[l] = true
+		}
+		return out, more, nil
+	}
+	edges, partial, err := lr.EdgesPerLabel(ctx, id, dir, labels, time.Time{}, min(MaxEdgeRead, maxEdges))
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, e := range edges {
+		out[e.Label] = append(out[e.Label], e)
+	}
+	for _, l := range partial {
+		if maxEdges <= MaxEdgeRead {
+			more[l] = true
+			continue
+		}
+		// Read the label alone, past the first edges, up to maxEdges.
+		all, m, err := ReadEdges(ctx, graph, id, dir, l, maxEdges, spend)
+		if err != nil {
+			return nil, nil, err
+		}
+		out[l], more[l] = all, m
+	}
+	return out, more, nil
+}

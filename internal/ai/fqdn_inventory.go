@@ -167,6 +167,10 @@ func searchFQDNInventory(ctx context.Context, g graph.Graph, limits graph.Limits
 		}
 
 		sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
+		read, err := graph.FarAssets(ctx, g, current.asset.ID, edges, func(id string) bool { return seen[id] })
+		if err != nil {
+			return out, err
+		}
 		for _, edge := range edges {
 			if err := ctx.Err(); err != nil {
 				return out, err
@@ -194,7 +198,7 @@ func searchFQDNInventory(ctx context.Context, g graph.Graph, limits graph.Limits
 				break
 			}
 
-			next, err := g.GetAsset(ctx, edge.ToID)
+			next, err := graph.AssetFrom(ctx, g, read, edge.ToID)
 			if err != nil {
 				return out, err
 			}

@@ -180,6 +180,10 @@ func SearchGraph(ctx context.Context, g graph.Graph, catalog graph.SchemaCatalog
 		}
 
 		sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
+		read, err := graph.FarAssets(ctx, g, current.asset.ID, edges, func(id string) bool { _, ok := assets[id]; return ok })
+		if err != nil {
+			return out, err
+		}
 		for _, edge := range edges {
 			if err := ctx.Err(); err != nil {
 				return out, err
@@ -214,7 +218,7 @@ func SearchGraph(ctx context.Context, g graph.Graph, catalog graph.SchemaCatalog
 					return out, nil
 				}
 
-				next, err = g.GetAsset(ctx, nextID)
+				next, err = graph.AssetFrom(ctx, g, read, nextID)
 				if err != nil {
 					return out, err
 				}

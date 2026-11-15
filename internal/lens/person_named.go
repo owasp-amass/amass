@@ -63,6 +63,7 @@ type personNamedSearch struct {
 	ctx    context.Context
 	graph  graph.Graph
 	report PersonNamedReport
+	batch  batchAssets
 }
 
 func (s *personNamedSearch) spend() bool {
@@ -75,6 +76,9 @@ func (s *personNamedSearch) spend() bool {
 }
 
 func (s *personNamedSearch) asset(id string) (graph.Asset, error) {
+	if a, ok := s.batch.get(id); ok {
+		return a, nil
+	}
 	if !s.spend() {
 		return graph.Asset{}, errDupReadLimit
 	}
@@ -159,6 +163,9 @@ func (s *personNamedSearch) check(o graph.Asset) (*PersonNamedOrg, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := s.batch.load(s.ctx, s.graph, people, "out", s.spend); err != nil {
+			return nil, err
+		}
 		for _, p := range people {
 			person, err := s.asset(p.ToID)
 			if err != nil {
@@ -204,6 +211,9 @@ func (s *personNamedSearch) registrationDomains(contactID string) ([]string, err
 		return nil, err
 	}
 
+	if err := s.batch.load(s.ctx, s.graph, in, "in", s.spend); err != nil {
+		return nil, err
+	}
 	var domains []string
 	for _, e := range in {
 		src, err := s.asset(e.FromID)

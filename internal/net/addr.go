@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -29,8 +30,9 @@ func ReadASPrefixes(ctx context.Context, db repository.Repository, asn int, sinc
 
 	fqdn := ents[0]
 	if edges, err := db.OutgoingEdges(ctx, fqdn, since, "announces"); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, db, edges, false)
 		for _, edge := range edges {
-			if a, err := db.FindEntityById(ctx, edge.ToEntity.ID); err != nil {
+			if a, ok := ends[edge.ToEntity.ID]; !ok {
 				continue
 			} else if netblock, ok := a.Asset.(*network.Netblock); ok {
 				prefixes = append(prefixes, netblock.CIDR.String())

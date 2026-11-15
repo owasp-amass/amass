@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"log/slog"
 	"strings"
 	"time"
@@ -124,8 +125,9 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		if _, ok := src.Asset.(*oamdns.FQDN); ok {
 			// check for IP assresses associated with the FQDN
 			if edges, err := session.DB().OutgoingEdges(ctx, src, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+				ends := amassdb.EdgeEnds(ctx, session.DB(), edges, false)
 				for _, edge := range edges {
-					if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
+					if to, ok := ends[edge.ToEntity.ID]; ok {
 						if _, ok := to.Asset.(*oamnet.IPAddress); ok {
 							srcs = append(srcs, to)
 						}

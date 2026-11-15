@@ -295,10 +295,14 @@ func verifiedFor(ctx context.Context, g graph.Graph, root graph.Asset) ([]Vendor
 		return nil, err
 	}
 
+	read, err := graph.FarAssets(ctx, g, root.ID, edges, nil)
+	if err != nil {
+		return nil, err
+	}
 	byName := map[string]*VendorUse{}
 	var order []string
 	for _, e := range edges {
-		org, err := g.GetAsset(ctx, e.ToID)
+		org, err := graph.AssetFrom(ctx, g, read, e.ToID)
 		if err != nil {
 			return nil, err
 		}

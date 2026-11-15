@@ -77,6 +77,7 @@ type dupSearch struct {
 	graph    graph.Graph
 	report   DuplicateReport
 	profiles map[string]*orgProfile
+	batch    batchAssets
 }
 
 var errDupReadLimit = errors.New("database read limit")
@@ -310,6 +311,26 @@ func (s *dupSearch) edges(id, dir, label string) ([]graph.Relation, error) {
 	return edges, err
 }
 
+// labelEdges reads an asset's edges for several labels in one direction
+// as edges does for each, with every label's first edges in one read when
+// the graph can.
+func (s *dupSearch) labelEdges(id, dir string, labels []string) (map[string][]graph.Relation, error) {
+	if s.report.Reads >= dupMaxReads {
+		return nil, errDupReadLimit
+	}
+
+	byLabel, more, err := graph.ReadLabels(s.ctx, s.graph, id, dir, labels, LensMaxPerLabel, s.spend)
+	if err != nil {
+		return nil, err
+	}
+	for _, label := range labels {
+		if more[label] {
+			s.truncate(partialRead(s.report.Reads >= dupMaxReads, id, dir, label))
+		}
+	}
+	return byLabel, nil
+}
+
 // firstEdges reads at most limit edges in one bounded read, for samples
 // that are meant to be partial (a domain's names, a network's addresses).
 func (s *dupSearch) firstEdges(id, dir, label string, limit int) ([]graph.Relation, error) {
@@ -339,6 +360,9 @@ func (s *dupSearch) spend() bool {
 }
 
 func (s *dupSearch) asset(id string) (graph.Asset, error) {
+	if a, ok := s.batch.get(id); ok {
+		return a, nil
+	}
 	if s.report.Reads >= dupMaxReads {
 		return graph.Asset{}, errDupReadLimit
 	}
@@ -362,6 +386,9 @@ func (s *dupSearch) profile(o graph.Asset) (*orgProfile, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.batch.load(s.ctx, s.graph, ids, "out", s.spend); err != nil {
+		return nil, err
+	}
 	for _, e := range ids {
 		a, err := s.asset(e.ToID)
 		if err != nil {
@@ -371,11 +398,13 @@ func (s *dupSearch) profile(o graph.Asset) (*orgProfile, error) {
 		p.addIdentifier(graph.ContentString(a, "id_type"), graph.ContentString(a, "id"))
 	}
 
-	for _, label := range []string{"legal_address", "hq_address", "location"} {
-		locs, err := s.edges(o.ID, "out", label)
-		if err != nil {
-			return nil, err
-		}
+	addressLabels := []string{"legal_address", "hq_address", "location"}
+	byLabel, err := s.labelEdges(o.ID, "out", addressLabels)
+	if err != nil {
+		return nil, err
+	}
+	for _, label := range addressLabels {
+		locs := byLabel[label]
 		for _, e := range locs {
 			p.locations[e.ToID] = true
 		}
@@ -400,6 +429,13 @@ func (s *dupSearch) profile(o graph.Asset) (*orgProfile, error) {
 		}
 	}
 
+	locIDs := make([]string, 0, len(p.locations))
+	for id := range p.locations {
+		locIDs = append(locIDs, id)
+	}
+	if err := s.batch.loadIDs(s.ctx, s.graph, locIDs, s.spend); err != nil {
+		return nil, err
+	}
 	for id := range p.locations {
 		loc, err := s.asset(id)
 		if err != nil {
@@ -410,13 +446,13 @@ func (s *dupSearch) profile(o graph.Asset) (*orgProfile, error) {
 		}
 	}
 
-	for _, label := range parentChildLabels() {
-		for _, dir := range []string{"out", "in"} {
-			links, err := s.edges(o.ID, dir, label)
-			if err != nil {
-				return nil, err
-			}
-			for _, e := range links {
+	for _, dir := range []string{"out", "in"} {
+		byLabel, err := s.labelEdges(o.ID, dir, parentChildLabels())
+		if err != nil {
+			return nil, err
+		}
+		for _, label := range parentChildLabels() {
+			for _, e := range byLabel[label] {
 				other := e.ToID
 				if dir == "in" {
 					other = e.FromID

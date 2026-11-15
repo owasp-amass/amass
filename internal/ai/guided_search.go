@@ -400,6 +400,11 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 				}
 			}
 		}
+		read, err := graph.FarAssets(ctx, s.graph, node.ID, batchEdges.edges,
+			func(id string) bool { _, ok := s.assets[id]; return ok })
+		if err != nil {
+			return false, err
+		}
 		for _, e := range batchEdges.edges {
 			if err := ctx.Err(); err != nil {
 				return false, err
@@ -434,7 +439,7 @@ func (s *GuidedExplorer) Advance(ctx context.Context, batch int) (bool, error) {
 				}
 
 				var err error
-				next, err = s.graph.GetAsset(ctx, nextID)
+				next, err = graph.AssetFrom(ctx, s.graph, read, nextID)
 				if err != nil {
 					return false, err
 				}

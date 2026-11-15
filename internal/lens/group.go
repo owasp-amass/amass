@@ -84,6 +84,7 @@ type groupSearch struct {
 	labels []string
 	report GroupReport
 	assets map[string]graph.Asset
+	batch  batchAssets
 	// cycle names the first stored parent found to be below its child.
 	cycle string
 }
@@ -107,6 +108,9 @@ func (s *groupSearch) asset(id string) (graph.Asset, error) {
 	if a, ok := s.assets[id]; ok {
 		return a, nil
 	}
+	if a, ok := s.batch.get(id); ok {
+		return a, nil
+	}
 	if !s.spend() {
 		return graph.Asset{}, errDupReadLimit
 	}
@@ -122,14 +126,18 @@ func (s *groupSearch) asset(id string) (graph.Asset, error) {
 // direction, with the organization at the other end.
 func (s *groupSearch) links(id, dir string) ([]graph.Relation, error) {
 	var out []graph.Relation
+	byLabel, partial, err := graph.ReadLabels(s.ctx, s.graph, id, dir, s.labels, groupMaxMembers, s.spend)
+	if err != nil {
+		return nil, err
+	}
 	for _, label := range s.labels {
-		edges, more, err := graph.ReadEdges(s.ctx, s.graph, id, dir, label, groupMaxMembers, s.spend)
-		if err != nil {
-			return nil, err
-		}
+		edges, more := byLabel[label], partial[label]
 		if more {
 			s.truncate(fmt.Sprintf("more than %d %s %s relationships on organization %s", groupMaxMembers, dir,
 				label, id))
+		}
+		if err := s.batch.load(s.ctx, s.graph, edges, dir, s.spend); err != nil {
+			return nil, err
 		}
 		for _, e := range edges {
 			other := e.ToID

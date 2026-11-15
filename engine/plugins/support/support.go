@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"net"
 	"net/netip"
 	"regexp"
@@ -268,12 +269,17 @@ func NameIPAddresses(session et.Session, name *oamdns.FQDN) []*oamnet.IPAddress 
 
 	var results []*oamnet.IPAddress
 	if edges, err := session.DB().OutgoingEdges(ctx, fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
+		var addrs []*dbt.Edge
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
-				if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil {
-					if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
-						results = append(results, ip)
-					}
+				addrs = append(addrs, edge)
+			}
+		}
+		ends := amassdb.EdgeEnds(ctx, session.DB(), addrs, false)
+		for _, edge := range addrs {
+			if to, ok := ends[edge.ToEntity.ID]; ok {
+				if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
+					results = append(results, ip)
 				}
 			}
 		}

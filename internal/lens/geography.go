@@ -109,6 +109,13 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 	if err != nil {
 		return out, err
 	}
+	var parties []string
+	for _, h := range network.Hosting {
+		if !h.Own && h.PartyID != "" {
+			parties = append(parties, h.PartyID)
+		}
+	}
+	read, _ := graph.AssetsByID(ctx, g, parties) // a party not read is read alone below
 	hosting := map[string]*ChangeGroup{}
 	var order []string
 	for _, h := range network.Hosting {
@@ -116,7 +123,7 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 		if h.Own {
 			c = "its own networks"
 		} else if h.PartyID != "" {
-			party, err := g.GetAsset(ctx, h.PartyID)
+			party, err := graph.AssetFrom(ctx, g, read, h.PartyID)
 			if err == nil {
 				if locs, err := s.locations(party, rules); err == nil && len(locs) > 0 {
 					c = country(locs[0], rules)
@@ -201,9 +208,10 @@ func (s *scope) partyCountry(party graph.Asset, rules geographyRules) string {
 			}
 			frontier = next
 		}
+		read, _ := graph.AssetsByID(s.w.ctx, s.w.graph, frontier)
 		for _, id := range frontier {
 			s.report.Reads++
-			l, err := s.w.graph.GetAsset(s.w.ctx, id)
+			l, err := graph.AssetFrom(s.w.ctx, s.w.graph, read, id)
 			if err == nil && slices.Contains(rules.LocationTypes, l.Type) {
 				if c := country(l, rules); c != rules.Unknown {
 					return c
