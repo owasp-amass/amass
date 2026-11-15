@@ -311,6 +311,12 @@ applied to part of the mail, and domains with no mail server that do not
 publish `v=spf1 -all` and a DMARC reject policy
 (`internal/semantics/email.json`).
 
+Mail handlers are named by provider when their MX host matches one the
+provider documents for its customers (Google Workspace, Microsoft 365,
+Mimecast, Barracuda, Cisco Secure Email, Proofpoint Essentials; each entry in
+`mail_providers` cites that documentation). Other MX hosts are named by their
+registrable domain.
+
 A DMARC or DKIM record is only stored when the enumeration queried its name.
 At every zone apex it finds, the DNS plugin asks for `_dmarc`, `_mta-sts`,
 `_smtp._tls` and the DKIM selectors vendors document as fixed for every

@@ -7,6 +7,7 @@ package lens
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -88,6 +89,15 @@ type emailRules struct {
 	MonitorPolicies []string          `json:"monitor_policies"`
 	NoneSPF         string            `json:"none_spf"`
 	Sources         map[string]string `json:"sources"`
+	MailProviders   []mailProvider    `json:"mail_providers"`
+}
+
+// mailProvider names who receives mail sent to MX hosts its pattern matches.
+type mailProvider struct {
+	Provider string `json:"provider"`
+	Pattern  string `json:"pattern"`
+	Source   string `json:"source"`
+	re       *regexp.Regexp
 }
 
 var loadEmailRules = sync.OnceValue(func() emailRules {
@@ -97,6 +107,19 @@ var loadEmailRules = sync.OnceValue(func() emailRules {
 	}
 	if r.SPFPrefix == "" || r.DMARCPrefix == "" || r.DMARCLabel == "" || r.DKIMLabel == "" {
 		panic("email.json: spf_prefix, dmarc_prefix, dmarc_label and dkim_label are required")
+	}
+	for i, p := range r.MailProviders {
+		if p.Provider == "" || p.Pattern == "" || !strings.HasPrefix(p.Source, "https://") {
+			panic("email.json: mail provider " + p.Provider + ": provider, pattern and a documentation source are " +
+				"required")
+		}
+
+		re, err := regexp.Compile("(?i)" + p.Pattern)
+		if err != nil {
+			panic("email.json: mail provider " + p.Provider + ": " + err.Error())
+		}
+
+		r.MailProviders[i].re = re
 	}
 
 	return r
@@ -122,6 +145,7 @@ func FindEmailSecurity(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 		if a.Type != "FQDN" {
 			continue
 		}
+
 		name := graph.FQDNName(a)
 		d := graph.RegisteredDomain(name)
 		if d == "" || reservedName(d) {
@@ -152,19 +176,23 @@ func FindEmailSecurity(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 	for d := range apexes {
 		keys = append(keys, d)
 	}
+
 	sort.Strings(keys)
 	for _, d := range keys {
 		if s.spent() {
 			break
 		}
+
 		m, err := s.mailDomain(d, apexes[d], rules)
 		if err != nil {
 			return out, err
 		}
+
 		m.DKIMSelector = dkim[d]
 		for _, p := range m.MailServers {
 			providers.add("providers", p, d)
 		}
+
 		out.Findings = append(out.Findings, emailFindings(m, rules)...)
 		out.Domains = append(out.Domains, m)
 	}
@@ -173,7 +201,9 @@ func FindEmailSecurity(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 	for i, k := range emailOrder {
 		rank[k] = i
 	}
-	sort.SliceStable(out.Findings, func(i, j int) bool { return rank[out.Findings[i].Kind] < rank[out.Findings[j].Kind] })
+
+	sort.SliceStable(out.Findings,
+		func(i, j int) bool { return rank[out.Findings[i].Kind] < rank[out.Findings[j].Kind] })
 	out.lensBase = s.base()
 	out.Providers = providers.list("providers")
 	return out, nil
@@ -190,14 +220,17 @@ func (s *scope) lookupName(name string) (graph.Asset, bool) {
 			return a, true
 		}
 	}
+
 	resolver, ok := s.w.graph.(graph.AssetResolver)
 	if !ok {
 		return graph.Asset{}, false
 	}
+
 	res, err := resolver.ResolveAsset(s.w.ctx, graph.AssetSelector{Type: "FQDN", Field: "name", Value: name}, 2)
 	if err != nil || len(res.Candidates) == 0 {
 		return graph.Asset{}, false
 	}
+
 	return res.Candidates[0].Asset, true
 }
 
@@ -219,13 +252,20 @@ func (s *scope) mailDomain(domain string, apex graph.Asset, rules emailRules) (M
 		if !st.forward || !mailRR(st.edge) {
 			continue
 		}
-		host := graph.RegisteredDomain(graph.FQDNName(st.other))
-		provider := vendorNameOf(host)
+
+		name := graph.FQDNName(st.other)
+		host := graph.RegisteredDomain(name)
+		provider := mailProviderOf(rules, name)
+		if provider == "" {
+			provider = vendorNameOf(host)
+		}
 		if s.ownDomains[host] {
 			provider = "own mail servers"
 		}
+
 		graph.AddUnique(&m.MailServers, provider)
 	}
+
 	sort.Strings(m.MailServers)
 
 	txt, err := graph.TXTValues(s.w.ctx, s.w.graph, apex.ID)
@@ -254,6 +294,19 @@ func (s *scope) mailDomain(domain string, apex graph.Asset, rules emailRules) (M
 	return m, nil
 }
 
+// mailProviderOf names the provider whose documented MX hosts include host,
+// or "" when none does.
+func mailProviderOf(rules emailRules, host string) string {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	for _, p := range rules.MailProviders {
+		if p.re.MatchString(host) {
+			return p.Provider
+		}
+	}
+
+	return ""
+}
+
 // dmarcTag returns one tag's value of a DMARC record (RFC 7489 section 6.4).
 func dmarcTag(record, tag string) string {
 	for _, part := range strings.Split(record, ";") {
@@ -262,6 +315,7 @@ func dmarcTag(record, tag string) string {
 			return strings.ToLower(strings.TrimSpace(v))
 		}
 	}
+
 	return ""
 }
 
@@ -273,6 +327,7 @@ func spfAll(record string) string {
 			return term
 		}
 	}
+
 	return ""
 }
 
@@ -294,7 +349,8 @@ func emailFindings(m MailDomain, rules emailRules) []EmailFinding {
 
 	switch {
 	case m.DMARC == "":
-		add(EmailNoDMARC, "no DMARC record is stored (check that its "+rules.DMARCLabel+" name was enumerated)", "dmarc")
+		add(EmailNoDMARC,
+			"no DMARC record is stored (check that its "+rules.DMARCLabel+" name was enumerated)", "dmarc")
 	case slices.Contains(rules.MonitorPolicies, m.DMARCPolicy):
 		add(EmailDMARCMonitor, "its DMARC policy is p="+m.DMARCPolicy+", so spoofed mail is still delivered", "dmarc")
 	default:
@@ -319,6 +375,7 @@ func (r EmailReport) Text() string {
 	if len(r.Owners) > 0 {
 		subject += " and " + strings.Join(r.Owners, ", ")
 	}
+
 	fmt.Fprintf(&b, "Mail security of %s: %d domain(s) from %d controlled asset(s) (%d reads).\n", subject,
 		len(r.Domains), r.Footprint, r.Reads)
 
@@ -358,5 +415,6 @@ func (r EmailReport) Facts() []string {
 	for _, f := range r.Findings {
 		out = append(out, f.Kind+" "+f.Domain)
 	}
+
 	return out
 }
