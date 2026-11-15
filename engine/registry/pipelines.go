@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/InfluxCommunity/influxdb3-go/v2/influxdb3"
@@ -48,27 +50,15 @@ func (r *registry) BuildAssetPipeline(ctx context.Context, atype oam.AssetType) 
 		}
 
 		id := fmt.Sprintf("%s - Priority: %d", atype, priority)
-		if len(handlers) == 1 {
-			h := handlers[0]
-
-			if max := h.MaxInstances; max > 1 {
-				stages = append(stages, pipeline.DynamicPool(id, handlerTask(h), max))
-				if max > bufsize {
-					bufsize = max
-				}
-			} else {
-				stages = append(stages, pipeline.FIFO(id, handlerTask(h)))
-			}
+		task, instances := stageTask(handlers)
+		if task == nil {
+			continue
+		}
+		if instances > 1 {
+			stages = append(stages, pipeline.DynamicPool(id, task, instances))
+			bufsize = max(bufsize, instances)
 		} else {
-			var tasks []pipeline.Task
-
-			for _, handler := range handlers {
-				if h := handlerTask(handler); h != nil {
-					tasks = append(tasks, h)
-				}
-			}
-
-			stages = append(stages, pipeline.Parallel(id, tasks...))
+			stages = append(stages, pipeline.FIFO(id, task))
 		}
 	}
 
@@ -104,60 +94,149 @@ func sendElementOnExit(ede *et.EventDataElement) {
 	}
 }
 
+// stageTask returns the task for the handlers at one position of an asset
+// type's pipeline, and how many events it may handle at once: the fewest
+// instances any of the handlers allows. Handlers sharing a position each
+// see every event, together, and the event moves on when all have
+// finished. A stage that took one event at a time whenever handlers shared
+// a position held every event behind the slowest handler's slowest event.
+func stageTask(handlers []*et.Handler) (pipeline.TaskFunc, int) {
+	var hs []*et.Handler
+	instances := 0
+	for _, h := range handlers {
+		if h == nil || h.Callback == nil {
+			continue
+		}
+
+		hs = append(hs, h)
+		n := max(h.MaxInstances, 1)
+		if instances == 0 || n < instances {
+			instances = n
+		}
+	}
+
+	switch len(hs) {
+	case 0:
+		return nil, 0
+	case 1:
+		return handlerTask(hs[0]), instances
+	}
+
+	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+		ede, err := eventElement(hs[0], data)
+		if err != nil {
+			return nil, err
+		}
+
+		oks := make([]bool, len(hs))
+		errs := make([]error, len(hs))
+		var wg sync.WaitGroup
+		for i, h := range hs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				oks[i], errs[i] = handleElement(ctx, h, ede)
+			}()
+		}
+
+		wg.Wait()
+
+		// the handlers have finished, so the event's errors are
+		// written here alone
+		for _, err := range errs {
+			if err != nil {
+				ede.Error = multierror.Append(ede.Error, err)
+			}
+		}
+		if slices.Contains(oks, false) {
+			sendElementOnExit(ede)
+			return nil, nil
+		}
+
+		return data, nil
+	}), instances
+}
+
 func handlerTask(h *et.Handler) pipeline.TaskFunc {
 	if h == nil || h.Callback == nil {
 		return nil
 	}
 
-	r := h
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
-		if data == nil {
-			return nil, fmt.Errorf("%s pipeline task received a nil data element", h.Name)
+		ede, err := eventElement(h, data)
+		if err != nil {
+			return nil, err
 		}
 
-		ede, ok := data.(*et.EventDataElement)
-		if !ok || ede == nil {
-			return nil, fmt.Errorf("%s pipeline task failed to extract the EventDataElement", h.Name)
+		ok, herr := handleElement(ctx, h, ede)
+		if herr != nil {
+			ede.Error = multierror.Append(ede.Error, herr)
 		}
-
-		select {
-		case <-ctx.Done():
+		if !ok {
 			sendElementOnExit(ede)
 			return nil, nil
-		default:
-			if ede.Event.Session.Done() {
-				sendElementOnExit(ede)
-				return nil, nil
-			}
 		}
 
-		pname := h.Plugin.Name()
-		from := string(ede.Event.Entity.Asset.AssetType())
-		transformations := transformationsByType(ede.Event.Session.Config(), from)
-		if len(transformations) > 0 && !allExcludesPlugin(transformations, pname) {
-			pmatch := tosContainPlugin(transformations, pname)
-
-			if !pmatch {
-				if _, err := ede.Event.Session.Config().CheckTransformations(from, h.Transforms...); err == nil {
-					pmatch = true
-				}
-			}
-			if pmatch {
-				start := time.Now()
-				if err := runHandler(r, ede.Event); err != nil {
-					ede.Error = multierror.Append(ede.Error, err)
-				}
-				if influxClient != nil {
-					end := time.Now()
-					duration := end.Sub(start).Nanoseconds()
-					handlerID := fmt.Sprintf("%s-%d", from, h.Position)
-					dataPointQueue.Append(influxdb3.NewPointWithMeasurement("handler_duration").
-						SetTag("handler", handlerID).SetField("duration", duration).SetTimestamp(end))
-				}
-			}
-		}
 		return data, nil
 	})
+}
+
+// eventElement returns the event a pipeline task received.
+func eventElement(h *et.Handler, data pipeline.Data) (*et.EventDataElement, error) {
+	if data == nil {
+		return nil, fmt.Errorf("%s pipeline task received a nil data element", h.Name)
+	}
+
+	ede, ok := data.(*et.EventDataElement)
+	if !ok || ede == nil {
+		return nil, fmt.Errorf("%s pipeline task failed to extract the EventDataElement", h.Name)
+	}
+
+	return ede, nil
+}
+
+// handleElement runs the handler for the event when the configuration's
+// transformations call for it. It reports false when the event must leave
+// the pipeline (the engine or the session is done), and the handler's
+// error.
+func handleElement(ctx context.Context, h *et.Handler, ede *et.EventDataElement) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, nil
+	default:
+		if ede.Event.Session.Done() {
+			return false, nil
+		}
+	}
+
+	pname := h.Plugin.Name()
+	from := string(ede.Event.Entity.Asset.AssetType())
+	transformations := transformationsByType(ede.Event.Session.Config(), from)
+	if len(transformations) == 0 || allExcludesPlugin(transformations, pname) {
+		return true, nil
+	}
+
+	pmatch := tosContainPlugin(transformations, pname)
+	if !pmatch {
+		if _, err := ede.Event.Session.Config().CheckTransformations(from, h.Transforms...); err == nil {
+			pmatch = true
+		}
+	}
+	if !pmatch {
+		return true, nil
+	}
+
+	start := time.Now()
+	err := runHandler(h, ede.Event)
+	if influxClient != nil {
+		end := time.Now()
+		duration := end.Sub(start).Nanoseconds()
+		handlerID := fmt.Sprintf("%s-%d", from, h.Position)
+		dataPointQueue.Append(influxdb3.NewPointWithMeasurement("handler_duration").
+			SetTag("handler", handlerID).SetField("duration", duration).SetTimestamp(end))
+	}
+
+	return true, err
 }
 
 // runHandler calls a handler, turning a panic into the event's error and
