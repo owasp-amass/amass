@@ -179,6 +179,11 @@ type Scope struct {
 	// ASNs specified as in scope
 	ASNs []int `yaml:"asns,omitempty" json:"asns,omitempty"`
 
+	// Organizations (corporations) in scope: the companies discovered
+	// assets must be attributable to. In the seed, a starting point the
+	// engine resolves to the company's domains, networks and systems.
+	Organizations []string `yaml:"organizations,omitempty" json:"organizations,omitempty"`
+
 	// CIDR IPNET
 	CIDRs []*net.IPNet `yaml:"-" json:"cidrs,omitempty"`
 
@@ -193,6 +198,17 @@ type Scope struct {
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string `yaml:"blacklist,omitempty" json:"blacklist,omitempty"`
+
+	// Names are known DNS names (leads) that seed the enumeration: usually
+	// subdomains of an in-scope root, supplied from other tooling or past
+	// knowledge so the enumeration does not overlook them. Only meaningful
+	// in the seed section; they are folded into the provided names the run
+	// starts from, so they do not transfer as part of the scope.
+	Names []string `yaml:"names,omitempty" json:"-"`
+
+	// NamesFile is a file of seed DNS names, one per line. Only meaningful
+	// in the seed section; its names are loaded into Names.
+	NamesFile string `yaml:"names_file,omitempty" json:"-"`
 }
 
 // DefaultPorts are the ports active enumeration probes when the

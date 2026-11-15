@@ -12,6 +12,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 // ipnet2Prefix converts a net.IPNet to a netip.Prefix.
@@ -77,5 +78,11 @@ func convertScopeToAssets(scope *config.Scope) []oam.Asset {
 		asset := oamnet.AutonomousSystem{Number: asn}
 		assets = append(assets, asset)
 	}
+
+	// Convert Organizations (corporations) to assets.
+	for _, org := range scope.Organizations {
+		assets = append(assets, oamorg.Organization{ID: org, Name: org})
+	}
+
 	return assets
 }

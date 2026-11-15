@@ -15,6 +15,7 @@ import (
 	"github.com/caffix/stringset"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	"golang.org/x/net/publicsuffix"
 )
 
 func (c *Config) loadSeedandScopeSettings() error {
@@ -26,19 +27,76 @@ func (c *Config) loadSeedandScopeSettings() error {
 	if err := c.Scope.populate(); err != nil {
 		return err
 	}
-	if c.Seed == nil || c.Seed.isScopeEmpty(false) {
-		c.Seed = c.Scope
-		return nil
-	}
-	if err := c.Seed.populate(); err != nil {
-		return err
+	// Seed DNS names (leads) may be listed inline and in a file; load the
+	// file into the inline list before deciding whether the seed is empty.
+	if c.Seed != nil && c.Seed.NamesFile != "" {
+		list, err := GetListFromFile(c.Seed.NamesFile)
+		if err != nil {
+			return fmt.Errorf("failed to read the seed names file %q: %v", c.Seed.NamesFile, err)
+		}
+
+		c.Seed.Names = append(c.Seed.Names, list...)
 	}
 
-	// The seed is where the enumeration starts, so it is in scope as well:
-	// the scope is the scope section's entries and the seed's, with the
-	// scope section's ports (the default ports when it lists none).
-	c.Scope.merge(c.Seed)
+	if c.Seed == nil || c.Seed.isScopeEmpty(false) {
+		// Without a seed, the whole scope is where the enumeration starts.
+		c.Seed = c.Scope
+	} else {
+		if err := c.Seed.populate(); err != nil {
+			return err
+		}
+
+		// The seed is where the enumeration starts, and it is in scope as
+		// well: the scope boundary is the scope section's entries and the
+		// seed's, with the scope section's ports (the default ports when it
+		// lists none).
+		c.Scope.merge(c.Seed)
+	}
+
+	// Seed names are leads the enumeration starts from, so they join the
+	// provided names and their registered domains join the scope boundary.
+	c.AddSeedNames(c.Seed.Names...)
 	return nil
+}
+
+// HasSeed reports whether the enumeration has at least one starting point:
+// a seed (or scope, when no seed was given) entry of any kind, or a
+// provided name. A run with none has nothing to begin from.
+func (c *Config) HasSeed() bool {
+	return len(c.ProvidedNames) > 0 || !c.SeedScope().isScopeEmpty(false)
+}
+
+// SeedScope returns where the enumeration starts: the seed when one was
+// given, otherwise the whole scope. It is resolved at seed time so that
+// command-line targets, which populate the scope, are the start when no
+// explicit seed was configured.
+func (c *Config) SeedScope() *Scope {
+	if c.Seed != nil && !c.Seed.isScopeEmpty(false) {
+		return c.Seed
+	}
+
+	return c.Scope
+}
+
+// AddSeedNames records known DNS names as leads the enumeration starts from:
+// each is added to the provided names submitted to the engine, and its
+// registered domain is added to the scope boundary so the lead is never
+// dropped as out of scope. It does not make the registered domain a seed on
+// its own. A name whose registered domain cannot be determined is still
+// submitted as a provided name.
+func (c *Config) AddSeedNames(names ...string) {
+	for _, n := range names {
+		name := strings.ToLower(strings.TrimSpace(n))
+		if name == "" {
+			continue
+		}
+		if !slices.Contains(c.ProvidedNames, name) {
+			c.ProvidedNames = append(c.ProvidedNames, name)
+		}
+		if dom, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && dom != "" {
+			c.AddDomain(dom)
+		}
+	}
 }
 
 // merge adds the names, addresses, networks, autonomous systems and
@@ -74,6 +132,11 @@ func (s *Scope) merge(o *Scope) {
 			s.ASNs = append(s.ASNs, asn)
 		}
 	}
+	for _, org := range o.Organizations {
+		if !slices.ContainsFunc(s.Organizations, func(x string) bool { return strings.EqualFold(x, org) }) {
+			s.Organizations = append(s.Organizations, org)
+		}
+	}
 	for _, b := range o.Blacklist {
 		if !slices.Contains(s.Blacklist, b) {
 			s.Blacklist = append(s.Blacklist, b)
@@ -95,6 +158,12 @@ func (s *Scope) isScopeEmpty(scopeSwitch bool) bool {
 		return false
 	}
 	if len(s.IP) > 0 {
+		return false
+	}
+	if len(s.Organizations) > 0 {
+		return false
+	}
+	if len(s.Names) > 0 || s.NamesFile != "" {
 		return false
 	}
 	if scopeSwitch && portCheck(s.Ports) {

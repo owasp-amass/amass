@@ -214,7 +214,9 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 
 	var count int
 	// create all assets defined in the scope on the server
-	for _, a := range convertScopeToAssets(cfg.Scope) {
+	// The enumeration starts from the seed; the scope only bounds it. With
+	// no explicit seed, SeedScope falls back to the whole scope.
+	for _, a := range convertScopeToAssets(cfg.SeedScope()) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
@@ -429,8 +431,9 @@ func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 		_, _ = afmt.R.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
 	}
-	if len(cfg.Domains()) == 0 {
-		_, _ = afmt.R.Fprintln(color.Error, "Configuration error: No root domain names were provided")
+	if !cfg.HasSeed() {
+		_, _ = afmt.R.Fprintln(color.Error,
+			"Configuration error: no seed was provided (a domain, name, address, CIDR, ASN or organization)")
 		os.Exit(1)
 	}
 	return cfg, &args
@@ -457,7 +460,7 @@ func (e Args) OverrideConfig(conf *config.Config) error {
 		conf.EngineAPI = &config.EngAPI{URL: e.Engine}
 	}
 	if e.Names.Len() > 0 {
-		conf.ProvidedNames = e.Names.Slice()
+		conf.AddSeedNames(e.Names.Slice()...)
 	}
 	if e.BruteWordList.Len() > 0 {
 		conf.Wordlist = e.BruteWordList.Slice()

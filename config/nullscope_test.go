@@ -45,3 +45,20 @@ func TestListedPortsReplaceDefaults(t *testing.T) {
 		t.Fatalf("ports = %v", c.Scope.Ports)
 	}
 }
+
+// The embedded default configuration must load and parse: it ships with
+// Amass and is the template users copy.
+func TestDefaultConfigLoads(t *testing.T) {
+	c := NewConfig()
+	if err := c.LoadSettings("../resources/config.yaml"); err != nil {
+		t.Fatalf("the default config did not load: %v", err)
+	}
+	if !slices.Equal(c.Scope.Ports, []int{80, 443, 8000, 8080, 8443, 8888}) {
+		t.Errorf("default ports = %v", c.Scope.Ports)
+	}
+	// Every seed/scope entry is commented out, so the scope restricts nothing
+	// and the seed falls back to it.
+	if c.Seed != c.Scope {
+		t.Error("with no seed section, the seed should be the scope")
+	}
+}

@@ -1,23 +1,68 @@
-scope:
-#  domains: # registered domain names in scope
+# ─────────────────────────────────────────────────────────────────────────
+# seed: where the enumeration STARTS — the existing knowledge about the
+# target (its domains, known names, address space, or company). The seed is
+# the one section you really need: everything listed here is collected from,
+# and is automatically in scope.
+#
+# Any seed entry is also a scope entry, so a simple run needs only a seed.
+# Use a separate scope section (below) only when the boundary should be
+# wider than the starting points.
+# ─────────────────────────────────────────────────────────────────────────
+#seed:
+#  domains: # registered domains to begin from (the usual starting point)
 #    - owasp.org
-#  ips: # IP addresses in scope, multiple methods of inserting IP addresses can be used
+#  names: # known DNS names (leads) so the run does not overlook them;
+#    - vpn.owasp.org   # normally subdomains of a domain already in scope.
+#    - api.owasp.org   # Each lead's registered domain is added to the scope.
+#  names_file: ./known-names.txt # a file of leads, one name per line
+#                                # (e.g. output from other tooling)
+#  ips: # IP addresses to begin from (several formats are accepted)
 #    - 192.0.2.1
 #    - 192.0.2.2
 #    - 192.168.0.3-8
 #    - 192.168.0.10-192.168.0.20
-#  cidrs: # CIDR ranges that are in scope
+#  cidrs: # CIDR ranges to begin from
 #    - 192.0.2.0/24
 #    - 192.0.2.128/25
-  ports: # ports to be used when actively scanning services
+#  asns: # autonomous system numbers to begin from
+#    - 64496
+#  organizations: # company names to begin from; the engine resolves each to
+#    - Example Corporation   # its registered domains, networks and systems.
+
+# ─────────────────────────────────────────────────────────────────────────
+# scope: the BOUNDARY a discovered asset must fall within to be kept. Unless
+# the run is started with -rigid, the engine may widen the scope as it finds
+# evidence (for example, a netblock or domain registered to an in-scope
+# organization) — so the scope is a starting boundary, not a hard cap.
+#
+# Leave scope out to bound the run by the seed alone. List entries here only
+# to allow assets beyond the seed. The same entry types as the seed are
+# accepted (names and names_file are seed-only), plus ports and blacklist.
+# ─────────────────────────────────────────────────────────────────────────
+scope:
+#  domains: # additional registered domains allowed in scope
+#    - owasp.org
+#  ips: # IP addresses allowed in scope
+#    - 192.0.2.1
+#  cidrs: # CIDR ranges allowed in scope
+#    - 192.0.2.0/24
+#  asns: # autonomous systems allowed in scope (their announced networks)
+#    - 64496
+#  organizations: # companies discovered assets must be attributable to
+#    - Example Corporation
+  # Ports active enumeration may probe on in-scope addresses, for every
+  # service. Leave ports out to probe every port the probes know (the SSH,
+  # mail and file greetings, and the common web and management-API ports).
+  # List ports only to narrow that; ranges such as "8000-8010" also work.
+  ports:
     - 80
     - 443
     - 8000
     - 8080
     - 8443
     - 8888
-#  blacklist: # subdomains to be blacklisted
-#    - example.owasp.org
+#  blacklist: # subdomains that will never be investigated
+#    - internal.owasp.org
 options:
   datasources: "./datasources.yaml"
   # engine: "http://127.0.0.1:4000"
