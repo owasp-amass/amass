@@ -46,7 +46,7 @@ func (l *lookalikes) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       l,
 		Name:         l.name + "-Handler",
-		Position:     14,
+		Position:     15,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
