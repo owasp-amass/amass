@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/sessions"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -26,6 +28,54 @@ type ipNetblock struct {
 	name   string
 	log    *slog.Logger
 	source *et.Source
+	stored *storedNetblocks
+}
+
+// storedNetblocks remembers, per session, the netblocks and autonomous
+// systems this plugin has stored with their announces relation. Every
+// address of a netblock shares them, so only an address's own contains
+// relation is stored for it: the netblock, the AS, the announces relation
+// and their sources are stored once per session, not once per address.
+type storedNetblocks struct {
+	sync.Mutex
+	m map[storedNetblockKey]storedNetblock
+}
+
+type storedNetblockKey struct {
+	session uuid.UUID
+	cidr    string
+	asn     int
+	source  string
+}
+
+type storedNetblock struct{ nb, as *dbt.Entity }
+
+// maxStoredNetblocks bounds the cache; it is emptied when full.
+const maxStoredNetblocks = 1 << 14
+
+func (s *storedNetblocks) get(k storedNetblockKey) (storedNetblock, bool) {
+	s.Lock()
+	defer s.Unlock()
+
+	v, ok := s.m[k]
+	return v, ok
+}
+
+func (s *storedNetblocks) put(k storedNetblockKey, v storedNetblock) {
+	s.Lock()
+	defer s.Unlock()
+
+	if s.m == nil || len(s.m) >= maxStoredNetblocks {
+		s.m = map[storedNetblockKey]storedNetblock{}
+	}
+	s.m[k] = v
+}
+
+func (s *storedNetblocks) forget(k storedNetblockKey) {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.m, k)
 }
 
 func NewIPNetblock() et.Plugin {
@@ -35,6 +85,7 @@ func NewIPNetblock() et.Plugin {
 			Name:       "IP-Netblock",
 			Confidence: 100,
 		},
+		stored: &storedNetblocks{},
 	}
 }
 
@@ -103,62 +154,72 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 		return nil
 	}
 
-	nb, as := d.store(e, entry)
+	nb, as, first := d.store(e, entry)
 	if nb == nil || as == nil {
 		return nil
 	}
 
-	d.process(e, e.Entity, nb, as)
+	d.process(e, e.Entity, nb, as, first)
 	return nil
 }
 
-func (d *ipNetblock) store(e *et.Event, entry *sessions.CIDRangerEntry) (*dbt.Entity, *dbt.Entity) {
-	netblock := &oamnet.Netblock{
-		Type: "IPv4",
-		CIDR: netip.MustParsePrefix(entry.Net.String()),
+// store records that the netblock contains the event's address, storing
+// the netblock, its AS and the announces relation the first time the
+// session sees them. It reports whether they were new to the session.
+func (d *ipNetblock) store(e *et.Event, entry *sessions.CIDRangerEntry) (*dbt.Entity, *dbt.Entity, bool) {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
+	k := storedNetblockKey{session: e.Session.ID(), cidr: entry.Net.String(), asn: entry.ASN, source: entry.Src.Name}
+	shared, known := d.stored.get(k)
+	if known {
+		// The cached netblock may have been removed (merged) since.
+		if !d.storeContains(ctx, e, entry, shared.nb) {
+			d.stored.forget(k)
+			known = false
+		}
 	}
+	if !known {
+		nb, as := d.storeNetblock(ctx, e, entry)
+		if nb == nil || as == nil || !d.storeContains(ctx, e, entry, nb) {
+			return nil, nil, false
+		}
+
+		shared = storedNetblock{nb: nb, as: as}
+		d.stored.put(k, shared)
+	}
+
+	return shared.nb, shared.as, !known
+}
+
+// storeNetblock stores the netblock and its AS, the announces relation and
+// their sources.
+func (d *ipNetblock) storeNetblock(ctx context.Context, e *et.Event,
+	entry *sessions.CIDRangerEntry) (*dbt.Entity, *dbt.Entity) {
+	prefix, err := netip.ParsePrefix(entry.Net.String())
+	if err != nil {
+		return nil, nil
+	}
+
+	netblock := &oamnet.Netblock{Type: "IPv4", CIDR: prefix}
 	if netblock.CIDR.Addr().Is6() {
 		netblock.Type = "IPv6"
 	}
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
-	defer cancel()
-
+	src := &general.SourceProperty{Source: entry.Src.Name, Confidence: entry.Src.Confidence}
 	nb, err := e.Session.DB().CreateAsset(ctx, netblock)
 	if err != nil || nb == nil {
 		return nil, nil
 	}
 
-	_, _ = e.Session.DB().CreateEntityProperty(ctx, nb, &general.SourceProperty{
-		Source:     entry.Src.Name,
-		Confidence: entry.Src.Confidence,
-	})
-
-	edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "contains"},
-		FromEntity: nb,
-		ToEntity:   e.Entity,
-	})
-	if err != nil || edge == nil {
-		return nil, nil
-	}
-
-	_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-		Source:     entry.Src.Name,
-		Confidence: entry.Src.Confidence,
-	})
-
+	_, _ = e.Session.DB().CreateEntityProperty(ctx, nb, src)
 	as, err := e.Session.DB().CreateAsset(ctx, &oamnet.AutonomousSystem{Number: entry.ASN})
 	if err != nil || as == nil {
 		return nil, nil
 	}
 
-	_, _ = e.Session.DB().CreateEntityProperty(ctx, as, &general.SourceProperty{
-		Source:     entry.Src.Name,
-		Confidence: entry.Src.Confidence,
-	})
-
-	edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
+	_, _ = e.Session.DB().CreateEntityProperty(ctx, as, src)
+	edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 		Relation:   &general.SimpleRelation{Name: "announces"},
 		FromEntity: as,
 		ToEntity:   nb,
@@ -167,26 +228,47 @@ func (d *ipNetblock) store(e *et.Event, entry *sessions.CIDRangerEntry) (*dbt.En
 		return nil, nil
 	}
 
+	_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, src)
+	return nb, as
+}
+
+// storeContains stores that the netblock contains the event's address.
+func (d *ipNetblock) storeContains(ctx context.Context, e *et.Event, entry *sessions.CIDRangerEntry,
+	nb *dbt.Entity) bool {
+	edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "contains"},
+		FromEntity: nb,
+		ToEntity:   e.Entity,
+	})
+	if err != nil || edge == nil {
+		return false
+	}
+
 	_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
 		Source:     entry.Src.Name,
 		Confidence: entry.Src.Confidence,
 	})
-
-	return nb, as
+	return true
 }
 
-func (d *ipNetblock) process(e *et.Event, ip, nb, as *dbt.Entity) {
+// process logs the address's netblock and, the first time the session sees
+// them, sends the netblock and its AS on as events and logs the announces
+// relation.
+func (d *ipNetblock) process(e *et.Event, ip, nb, as *dbt.Entity, first bool) {
 	ipstr := ip.Asset.Key()
 	nbname := nb.Asset.Key()
+
+	e.Session.Log().Info("relationship discovered", "from", nbname, "relation", "contains",
+		"to", ipstr, slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
+	if !first {
+		return
+	}
 
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    nb.Asset.Key(),
 		Entity:  nb,
 		Session: e.Session,
 	})
-
-	e.Session.Log().Info("relationship discovered", "from", nbname, "relation", "contains",
-		"to", ipstr, slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
 
 	asname := "AS" + as.Asset.Key()
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
@@ -218,7 +300,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 		return
 	}
 
-	_, _ = e.Session.DB().CreateEntityProperty(ctx, nb, &general.SourceProperty{
+	_, _ = e.Session.DB().CreateEntityProperty(ctx, asn, &general.SourceProperty{
 		Source:     d.source.Name,
 		Confidence: d.source.Confidence,
 	})

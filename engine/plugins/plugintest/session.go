@@ -109,3 +109,7 @@ func (s *Session) TTL(minutes int) {
 			Confidence: 100}
 	}
 }
+
+// WrapDB replaces the session's repository with wrap(repository), such as a
+// wrapper that counts calls.
+func (s *Session) WrapDB(wrap func(repository.Repository) repository.Repository) { s.db = wrap(s.db) }
