@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -56,13 +57,19 @@ func NewSession(t testing.TB) *Session {
 		log: slog.New(slog.NewTextHandler(io.Discard, nil)), stats: &et.SessionStats{}}
 }
 
-func (s *Session) ID() uuid.UUID             { return s.id }
-func (s *Session) Ctx() context.Context      { return s.ctx }
-func (s *Session) Log() *slog.Logger         { return s.log }
-func (s *Session) Config() *config.Config    { return s.cfg }
+func (s *Session) ID() uuid.UUID { return s.id }
+
+func (s *Session) Ctx() context.Context { return s.ctx }
+
+func (s *Session) Log() *slog.Logger { return s.log }
+
+func (s *Session) Config() *config.Config { return s.cfg }
+
 func (s *Session) DB() repository.Repository { return s.db }
-func (s *Session) Stats() *et.SessionStats   { return s.stats }
-func (s *Session) Done() bool                { return s.ctx.Err() != nil }
+
+func (s *Session) Stats() *et.SessionStats { return s.stats }
+
+func (s *Session) Done() bool { return s.ctx.Err() != nil }
 
 // Asset stores a in the session's database and returns its entity.
 func (s *Session) Asset(t testing.TB, a oam.Asset) *dbt.Entity { return Asset(t, s.db, a) }
@@ -89,4 +96,16 @@ func (s *Session) Edge(t testing.TB, from *dbt.Entity, rel oam.Relation, to *dbt
 	}
 
 	return e
+}
+
+// TTL lets every asset type transform to every other with the given time
+// to live in minutes, as an enumeration's configuration would, so the
+// plugin code under test finds its TTLs.
+func (s *Session) TTL(minutes int) {
+	s.cfg.Transformations = map[string]*config.Transformation{}
+	for _, t := range oam.AssetList {
+		from := strings.ToLower(string(t))
+		s.cfg.Transformations[from+"->all"] = &config.Transformation{From: from, To: "all", TTL: minutes,
+			Confidence: 100}
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -143,7 +144,7 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 			}
 			if pmatch {
 				start := time.Now()
-				if err := r.Callback(ede.Event); err != nil {
+				if err := runHandler(r, ede.Event); err != nil {
 					ede.Error = multierror.Append(ede.Error, err)
 				}
 				if influxClient != nil {
@@ -157,6 +158,22 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 		}
 		return data, nil
 	})
+}
+
+// runHandler calls a handler, turning a panic into the event's error and
+// logging it with its stack: a bug in one plugin must fail that event, not
+// stop the engine and every session it runs.
+func runHandler(h *et.Handler, e *et.Event) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("%s handler panicked: %v", h.Name, p)
+			if e != nil && e.Session != nil {
+				e.Session.Log().Error(err.Error(), "stack", string(debug.Stack()))
+			}
+		}
+	}()
+
+	return h.Callback(e)
 }
 
 func transformationsByType(cfg *config.Config, from string) []*config.Transformation {

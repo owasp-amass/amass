@@ -109,11 +109,22 @@ func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IP
 
 func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) *dbt.Entity {
 	n := asset.Asset.(*network.Netblock)
+	// The addresses come from the RDAP server: a missing or malformed one
+	// leaves the record unstored rather than panicking the handler.
+	start, err := netip.ParseAddr(resp.StartAddress)
+	if err != nil {
+		return nil
+	}
+	end, err := netip.ParseAddr(resp.EndAddress)
+	if err != nil {
+		return nil
+	}
+
 	ipnetrec := &oamreg.IPNetRecord{
 		CIDR:         n.CIDR,
 		Handle:       resp.Handle,
-		StartAddress: netip.MustParseAddr(resp.StartAddress),
-		EndAddress:   netip.MustParseAddr(resp.EndAddress),
+		StartAddress: start,
+		EndAddress:   end,
 		Type:         n.Type,
 		Name:         resp.Name,
 		Method:       resp.Type,

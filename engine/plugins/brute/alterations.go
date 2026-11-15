@@ -7,6 +7,7 @@ package brute
 import (
 	"errors"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -295,61 +296,66 @@ func fuzzyLabelSearches(name string, distance int, chars string) []string {
 	return guesses
 }
 
+// additions inserts each of chars at every position of each label. Every
+// guess is built in a new slice: building it in the label's own runes
+// would change the label for the guesses that follow.
 func additions(set []string, chars string) []string {
 	ldh := []rune(chars)
-	ldhLen := len(ldh)
 
 	var guesses []string
 	for _, str := range set {
 		rstr := []rune(str)
-		rlen := len(rstr)
 
-		for i := 0; i <= rlen; i++ {
-			for j := range ldhLen {
-				temp := append(rstr, ldh[0])
-
-				copy(temp[i+1:], temp[i:])
-				temp[i] = ldh[j]
+		for i := 0; i <= len(rstr); i++ {
+			for _, c := range ldh {
+				temp := make([]rune, 0, len(rstr)+1)
+				temp = append(temp, rstr[:i]...)
+				temp = append(temp, c)
+				temp = append(temp, rstr[i:]...)
 				guesses = append(guesses, string(temp))
 			}
 		}
 	}
+
 	return guesses
 }
 
+// deletions removes each character of each label in turn.
 func deletions(set []string) []string {
 	var guesses []string
 
 	for _, str := range set {
 		rstr := []rune(str)
-		rlen := len(rstr)
 
-		for i := range rlen {
-			if del := string(append(rstr[:i], rstr[i+1:]...)); del != "" {
+		for i := range rstr {
+			temp := make([]rune, 0, len(rstr)-1)
+			temp = append(temp, rstr[:i]...)
+			temp = append(temp, rstr[i+1:]...)
+			if del := string(temp); del != "" {
 				guesses = append(guesses, del)
 			}
 		}
 	}
+
 	return guesses
 }
 
+// substitutions replaces each character of each label with each of chars.
 func substitutions(set []string, chars string) []string {
 	ldh := []rune(chars)
-	ldhLen := len(ldh)
 
 	var guesses []string
 	for _, str := range set {
 		rstr := []rune(str)
-		rlen := len(rstr)
 
-		for i := range rlen {
-			temp := rstr
-
-			for j := range ldhLen {
-				temp[i] = ldh[j]
+		for i := range rstr {
+			for _, c := range ldh {
+				temp := slices.Clone(rstr)
+				temp[i] = c
 				guesses = append(guesses, string(temp))
 			}
 		}
 	}
+
 	return guesses
 }
