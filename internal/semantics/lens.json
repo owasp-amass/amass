@@ -17,6 +17,9 @@
     ],
     "lookalikes": [
       "FQDN"
+    ],
+    "subdomains": [
+      "FQDN"
     ]
   }
 }

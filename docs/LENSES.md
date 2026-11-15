@@ -15,6 +15,7 @@ evidence does and nothing is left behind to clean up.
 | Command | What it does |
 | --- | --- |
 | `amass lens report -d <domain>` or `-org <name>` | An attack surface report: key findings first, then each posture lens |
+| `amass lens subdomains -d <domain>` or `-org <name>` | The names it controls, each with its stored IP addresses, and how many names fall into each autonomous system and netblock |
 | `amass lens family -d <domain>` | The organizations behind an enumerated domain, the networks and other registered domains that serve it |
 | `amass lens vendors -d <domain>` | The outside parties the domain and its organization's assets depend on |
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
@@ -45,6 +46,29 @@ Every command takes `-format text` (the default) or `-format json`, `-dir`
 and `-config` like the other subcommands, and `-journal` for the review
 journal (by default the one automatic attribution uses, set by
 `AMASS_AI_JOURNAL`).
+
+## Subdomains
+
+```bash
+amass lens subdomains -d colgate.edu
+amass lens subdomains -org "Colgate University"
+```
+
+Lists the names (FQDNs) the domain or organization controls, in order, each
+with the IP addresses stored for it. A name whose addresses are reached
+through an alias (CNAME) is followed to the end of its chain, as a resolver
+would, and marked as resolved through an alias. It then summarizes how many
+of the names fall into each autonomous system and netblock: each resolved
+address is placed in the netblock stored as containing it or, when the
+database can search address ranges, the most specific stored netblock whose
+range holds it, and that netblock's autonomous system. Names with an address
+that no stored netblock holds are counted under "(no stored netblock)".
+
+This replaces the former `subs` subcommand: the plain list of names, the
+names with their addresses, and the names-per-autonomous-system-and-netblock
+summary are all here. These are stored names and resolutions, not a live
+scan; reads are bounded (`-max-assets`, `-max-reads`) and the report says
+when a limit cut it short.
 
 ## Organization family
 
