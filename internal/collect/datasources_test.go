@@ -42,10 +42,12 @@ func TestDataSourceKeys(t *testing.T) {
 		t.Fatalf("status = %+v, %v", st, err)
 	}
 
-	if err := SetDataSourceCredentials(path, "Shodan", "", config.Credentials{Apikey: "k: with # odd chars"}); err != nil {
+	if err := SetDataSourceCredentials(path, "Shodan", "",
+		config.Credentials{Apikey: "k: with # odd chars"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetDataSourceCredentials(path, "Censys", "work", config.Credentials{Apikey: "id", Secret: "s"}); err != nil {
+	if err := SetDataSourceCredentials(path, "Censys", "work",
+		config.Credentials{Apikey: "id", Secret: "s"}); err != nil {
 		t.Fatal(err)
 	}
 	// Replacing an account keeps one set of credentials.
@@ -58,10 +60,12 @@ func TestDataSourceKeys(t *testing.T) {
 	if !strings.Contains(text, "minimum_ttl: 1440") || !strings.Contains(text, "uncomment and add credentials") {
 		t.Errorf("settings or comments lost:\n%s", text)
 	}
+
 	var dsc config.DataSourceConfig
 	if err := yaml.Unmarshal(data, &dsc); err != nil {
 		t.Fatal(err)
 	}
+
 	dsc.MapNames()
 	if c := dsc.GetCredentials("Shodan"); c == nil || c.Apikey != "new" {
 		t.Errorf("Shodan = %+v\n%s", c, text)

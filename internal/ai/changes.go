@@ -17,8 +17,9 @@ import (
 func (a Agent) changesLens(ctx context.Context, root graph.Asset, out Investigation) (Investigation, error) {
 	started := time.Now()
 	report, err := lens.FindChanges(ctx, a.Runner.Graph, a.Runner.Catalog, root, time.Time{}, a.Runner.LensLimits)
-	out.recordTrace(started, InvestigationTraceEvent{Stage: "changes_lens", OutputPaths: len(report.NewAssets) + len(report.QuietAssets),
-		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
+	out.recordTrace(started,
+		InvestigationTraceEvent{Stage: "changes_lens", OutputPaths: len(report.NewAssets) + len(report.QuietAssets),
+			GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {
 		out.Incomplete = true
 		return out, err

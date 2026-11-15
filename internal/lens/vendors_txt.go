@@ -122,10 +122,12 @@ func scanTXT(records []string, domain string) txtScan {
 	for _, v := range found {
 		scan.senders = append(scan.senders, *v)
 	}
+
 	sort.Slice(scan.senders, func(i, j int) bool { return scan.senders[i].Vendor < scan.senders[j].Vendor })
 	for t := range unknown {
 		scan.unknownSPF = append(scan.unknownSPF, t)
 	}
+
 	sort.Strings(scan.unknownSPF)
 
 	return scan
@@ -254,6 +256,7 @@ func FindVendors(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 	if err != nil {
 		return r, fmt.Errorf("verification relationships of %s: %w", graph.AssetLabel(root), err)
 	}
+
 	r.Vendors = mergeVerified(r.Vendors, verified)
 
 	records, err := graph.TXTValues(ctx, g, root.ID)
@@ -271,6 +274,7 @@ func FindVendors(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 			r.UnrecognizedSPF = append(r.UnrecognizedSPF, inc)
 		}
 	}
+
 	keys := map[string]bool{}
 	for _, rec := range scan.tokens {
 		if opts.KnownVerification != nil && opts.KnownVerification(rec) {
@@ -281,6 +285,7 @@ func FindVendors(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 			r.UnrecognizedTokens = append(r.UnrecognizedTokens, key)
 		}
 	}
+
 	sort.Strings(r.UnrecognizedTokens)
 
 	return r, nil
@@ -299,6 +304,7 @@ func verifiedFor(ctx context.Context, g graph.Graph, root graph.Asset) ([]Vendor
 	if err != nil {
 		return nil, err
 	}
+
 	byName := map[string]*VendorUse{}
 	var order []string
 	for _, e := range edges {
@@ -323,6 +329,7 @@ func verifiedFor(ctx context.Context, g graph.Graph, root graph.Asset) ([]Vendor
 	for _, k := range order {
 		out = append(out, *byName[k])
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].Vendor < out[j].Vendor })
 
 	return out, nil
@@ -359,6 +366,7 @@ func FormatVendorReport(r ThirdPartyReport) string {
 	case "database read limit":
 		b.WriteString("Raise -max-reads to read more of the database.\n")
 	}
+
 	b.WriteString(familyLines(r))
 	if len(r.UnrecognizedSPF) > 0 {
 		fmt.Fprintf(&b, "\nSPF includes no vendor entry recognizes (%d): %s\n", len(r.UnrecognizedSPF),

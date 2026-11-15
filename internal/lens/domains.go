@@ -142,6 +142,7 @@ func FindDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 			if entries[d] == nil {
 				entries[d] = &DomainEntry{Domain: d}
 			}
+
 			entries[d].Names++
 			if graph.FQDNName(a) == d {
 				names[d] = a
@@ -162,11 +163,13 @@ func FindDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 	for d := range entries {
 		keys = append(keys, d)
 	}
+
 	sort.Strings(keys)
 	for _, d := range keys {
 		if s.spent() {
 			break
 		}
+
 		e := entries[d]
 		rec, ok := records[d]
 		if !ok {
@@ -185,6 +188,7 @@ func FindDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 		for _, ns := range e.NameServers {
 			registrars.add("dns", ns, d)
 		}
+
 		findings = append(findings, domainFindings(*e, rules)...)
 		out.Domains = append(out.Domains, *e)
 	}
@@ -193,6 +197,7 @@ func FindDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 	for i, k := range domainOrder {
 		rank[k] = i
 	}
+
 	sort.SliceStable(findings, func(i, j int) bool { return rank[findings[i].Kind] < rank[findings[j].Kind] })
 	out.lensBase = s.base()
 	out.Registrars, out.DNS = registrars.list("registrars"), registrars.list("dns")
@@ -209,10 +214,12 @@ func (s *scope) registrationOf(name graph.Asset, domain string, rules domainRule
 		if !ok {
 			return graph.Asset{}, false, nil
 		}
+
 		res, err := resolver.ResolveAsset(s.w.ctx, graph.AssetSelector{Type: "FQDN", Field: "name", Value: domain}, 2)
 		if err != nil || len(res.Candidates) == 0 {
 			return graph.Asset{}, false, nil
 		}
+
 		name = res.Candidates[0].Asset
 	}
 
@@ -239,6 +246,7 @@ func (s *scope) readDomainRecord(e *DomainEntry, rec graph.Asset, rules domainRu
 	if contentField(rec, rules.Fields["dnssec"], &signed) {
 		e.DNSSEC = &signed
 	}
+
 	e.Status = contentStrings(rec, rules.Fields["status"])
 
 	steps, err := s.w.steps(rec)
@@ -261,13 +269,16 @@ func (s *scope) readDomainRecord(e *DomainEntry, rec graph.Asset, rules domainRu
 			if ns == "" {
 				continue
 			}
+
 			provider := vendorNameOf(ns)
 			if s.ownDomains[ns] {
 				provider = "own name servers"
 			}
+
 			graph.AddUnique(&e.NameServers, provider)
 		}
 	}
+
 	sort.Strings(e.NameServers)
 	return nil
 }
@@ -282,6 +293,7 @@ func contentStrings(a graph.Asset, field string) []string {
 	if v := graph.ContentString(a, field); v != "" {
 		return []string{v}
 	}
+
 	return nil
 }
 
@@ -324,6 +336,7 @@ func (r DomainsReport) Text() string {
 	if len(r.Owners) > 0 {
 		subject += " and " + strings.Join(r.Owners, ", ")
 	}
+
 	fmt.Fprintf(&b, "Registered domains of %s: %d from %d controlled asset(s) (%d reads).\n", subject, len(r.Domains),
 		r.Footprint, r.Reads)
 
@@ -353,6 +366,7 @@ func (r DomainsReport) Text() string {
 			} else if expires == "" {
 				expires = domainUnknownTag
 			}
+
 			fmt.Fprintf(&b, "  %s: %d name(s), registrar %s, expires %s", d.Domain, d.Names, registrar, expires)
 			if len(d.NameServers) > 0 {
 				fmt.Fprintf(&b, ", DNS by %s", strings.Join(d.NameServers, ", "))
@@ -360,6 +374,7 @@ func (r DomainsReport) Text() string {
 			if d.Registered {
 				fmt.Fprintf(&b, ", DNSSEC %s", dnssecLabel(d.DNSSEC))
 			}
+
 			b.WriteString("\n")
 		}
 	}
@@ -370,6 +385,7 @@ func (r DomainsReport) Text() string {
 		if len(g.groups) == 0 {
 			continue
 		}
+
 		fmt.Fprintf(&b, "\n%s:\n", g.title)
 		for _, x := range g.groups {
 			fmt.Fprintf(&b, "  %s: %d domain(s)\n", x.Key, x.Count)
@@ -388,6 +404,7 @@ func dnssecLabel(signed *bool) string {
 	case *signed:
 		return "signed"
 	}
+
 	return "unsigned"
 }
 
@@ -400,5 +417,6 @@ func (r DomainsReport) Facts() []string {
 	for _, f := range r.Findings {
 		out = append(out, f.Kind+" "+f.Domain)
 	}
+
 	return out
 }

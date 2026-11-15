@@ -39,6 +39,7 @@ func ReadEdges(ctx context.Context, graph Graph, id, dir, label string, maxEdges
 			if len(out) >= maxEdges {
 				return out, true, nil
 			}
+
 			cursor = next
 		}
 	}
@@ -69,8 +70,10 @@ func ReadLabels(ctx context.Context, graph Graph, id, dir string, labels []strin
 			if err != nil {
 				return nil, nil, err
 			}
+
 			out[l], more[l] = edges, m
 		}
+
 		return out, more, nil
 	}
 
@@ -78,8 +81,10 @@ func ReadLabels(ctx context.Context, graph Graph, id, dir string, labels []strin
 		for _, l := range labels {
 			more[l] = true
 		}
+
 		return out, more, nil
 	}
+
 	edges, partial, err := lr.EdgesPerLabel(ctx, id, dir, labels, time.Time{}, min(MaxEdgeRead, maxEdges))
 	if err != nil {
 		return nil, nil, err
@@ -92,12 +97,15 @@ func ReadLabels(ctx context.Context, graph Graph, id, dir string, labels []strin
 			more[l] = true
 			continue
 		}
+
 		// Read the label alone, past the first edges, up to maxEdges.
 		all, m, err := ReadEdges(ctx, graph, id, dir, l, maxEdges, spend)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		out[l], more[l] = all, m
 	}
+
 	return out, more, nil
 }

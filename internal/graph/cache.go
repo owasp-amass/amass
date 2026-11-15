@@ -39,10 +39,12 @@ func Cached(g Graph) Graph {
 	if _, done := g.(*cachedGraph); done {
 		return g
 	}
+
 	full, ok := g.(fullGraph)
 	if !ok {
 		return g
 	}
+
 	return &cachedGraph{inner: full, entries: map[string]any{}}
 }
 
@@ -78,10 +80,12 @@ func (c *cachedGraph) GetAsset(ctx context.Context, id string) (Asset, error) {
 	if v, ok := c.get(key); ok {
 		return v.(Asset), nil
 	}
+
 	a, err := c.inner.GetAsset(ctx, id)
 	if err == nil {
 		c.put(key, a)
 	}
+
 	return a, err
 }
 
@@ -94,10 +98,12 @@ func (c *cachedGraph) Edges(ctx context.Context, id, dir, label string, since ti
 	if v, ok := c.get(key); ok {
 		return slices.Clone(v.(edgesResult).edges), nil
 	}
+
 	edges, err := c.inner.Edges(ctx, id, dir, label, since)
 	if err == nil {
 		c.put(key, edgesResult{edges: edges})
 	}
+
 	return edges, err
 }
 
@@ -108,10 +114,12 @@ func (c *cachedGraph) EdgesLimited(ctx context.Context, id, dir, label string, s
 		r := v.(edgesResult)
 		return slices.Clone(r.edges), r.more, nil
 	}
+
 	edges, more, err := c.inner.EdgesLimited(ctx, id, dir, label, since, limit)
 	if err == nil {
 		c.put(key, edgesResult{edges: edges, more: more})
 	}
+
 	return edges, more, err
 }
 
@@ -122,10 +130,12 @@ func (c *cachedGraph) EdgesPage(ctx context.Context, id, dir, label string, sinc
 		r := v.(edgesResult)
 		return slices.Clone(r.edges), r.next, nil
 	}
+
 	edges, next, err := c.inner.EdgesPage(ctx, id, dir, label, since, cursor, limit)
 	if err == nil {
 		c.put(key, edgesResult{edges: edges, next: next})
 	}
+
 	return edges, next, err
 }
 
@@ -134,10 +144,12 @@ func (c *cachedGraph) Evidence(ctx context.Context, id string, limit int) ([]Evi
 	if v, ok := c.get(key); ok {
 		return slices.Clone(v.([]Evidence)), nil
 	}
+
 	ev, err := c.inner.Evidence(ctx, id, limit)
 	if err == nil {
 		c.put(key, ev)
 	}
+
 	return ev, err
 }
 
@@ -146,10 +158,12 @@ func (c *cachedGraph) EdgeEvidence(ctx context.Context, id string, limit int) ([
 	if v, ok := c.get(key); ok {
 		return slices.Clone(v.([]Evidence)), nil
 	}
+
 	ev, err := c.inner.EdgeEvidence(ctx, id, limit)
 	if err == nil {
 		c.put(key, ev)
 	}
+
 	return ev, err
 }
 
@@ -180,6 +194,7 @@ func (c *cachedGraph) GetAssets(ctx context.Context, ids []string) (map[string]A
 	if len(missing) == 0 {
 		return out, nil
 	}
+
 	found, err := c.inner.GetAssets(ctx, missing)
 	if err != nil {
 		return nil, err
@@ -188,20 +203,24 @@ func (c *cachedGraph) GetAssets(ctx context.Context, ids []string) (map[string]A
 		c.put("a\x00"+id, a)
 		out[id] = a
 	}
+
 	return out, nil
 }
 
 func (c *cachedGraph) EdgesPerLabel(ctx context.Context, id, dir string, labels []string, since time.Time,
 	perLabel int) ([]Relation, []string, error) {
-	key := fmt.Sprintf("b\x00%s\x00%s\x00%s\x00%d\x00%d", id, dir, strings.Join(labels, ","), since.UnixNano(), perLabel)
+	key := fmt.Sprintf("b\x00%s\x00%s\x00%s\x00%d\x00%d", id, dir, strings.Join(labels,
+		","), since.UnixNano(), perLabel)
 	if v, ok := c.get(key); ok {
 		r := v.(labeledResult)
 		return slices.Clone(r.edges), slices.Clone(r.more), nil
 	}
+
 	edges, more, err := c.inner.EdgesPerLabel(ctx, id, dir, labels, since, perLabel)
 	if err == nil {
 		c.put(key, labeledResult{edges: edges, more: more})
 	}
+
 	return slices.Clone(edges), slices.Clone(more), err
 }
 

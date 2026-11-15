@@ -93,14 +93,17 @@ func FindConcentration(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 	if err != nil {
 		return out, err
 	}
+
 	certs, err := FindCertificates(ctx, g, schema, root, limits)
 	if err != nil {
 		return out, err
 	}
+
 	network, err := FindNetworkInfrastructure(ctx, g, schema, root, limits)
 	if err != nil {
 		return out, err
 	}
+
 	mail, err := FindEmailSecurity(ctx, g, schema, root, limits)
 	if err != nil {
 		return out, err
@@ -112,6 +115,7 @@ func FindConcentration(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 		if h.Own {
 			key = ConcentrationOwn
 		}
+
 		hosting = append(hosting, ChangeGroup{Key: key, Count: h.Names, Examples: h.Examples})
 	}
 
@@ -122,6 +126,7 @@ func FindConcentration(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 			out.Truncated, out.Reason = true, p.Reason
 		}
 	}
+
 	out.Reads += network.Reads
 	if network.Truncated && !out.Truncated {
 		out.Truncated, out.Reason = true, network.Reason
@@ -141,6 +146,7 @@ func FindConcentration(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 			out.Categories = append(out.Categories, conc)
 		}
 	}
+
 	return out, nil
 }
 
@@ -174,6 +180,7 @@ func concentrationOf(category, unit string, groups []ChangeGroup) (Concentration
 	for _, g := range outside {
 		served += g.Count
 	}
+
 	c.TopShare = float64(outside[0].Count) / float64(served)
 	switch {
 	case served < rules.MinItems:
@@ -185,6 +192,7 @@ func concentrationOf(category, unit string, groups []ChangeGroup) (Concentration
 	default:
 		c.Level = ConcentrationDiverse
 	}
+
 	return c, true
 }
 
@@ -195,6 +203,7 @@ func (r ConcentrationReport) Text() string {
 	if len(r.Owners) > 0 {
 		subject += " and " + strings.Join(r.Owners, ", ")
 	}
+
 	fmt.Fprintf(&b, "Provider concentration of %s (%d reads).\n", subject, r.Reads)
 	if len(r.Categories) == 0 {
 		b.WriteString("No provider of DNS, registration, certificates, hosting or mail is stored.\n")
@@ -228,5 +237,6 @@ func (r ConcentrationReport) Facts() []string {
 			out = append(out, fmt.Sprintf("%s %s %s", c.Category, c.Level, c.Providers[0].Key))
 		}
 	}
+
 	return out
 }

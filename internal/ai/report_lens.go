@@ -21,6 +21,7 @@ func (a Agent) reportLens(ctx context.Context, l lens.SubjectLens, root graph.As
 	if r != nil {
 		partial, reason = r.Partial()
 	}
+
 	out.recordTrace(started, InvestigationTraceEvent{Stage: l.Name + "_lens", Incomplete: err != nil || partial,
 		Detail: reason})
 	if err != nil {

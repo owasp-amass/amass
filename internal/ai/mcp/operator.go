@@ -88,6 +88,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			// Clients reject a null required list.
 			schema["required"] = required
 		}
+
 		return schema
 	}
 
@@ -100,10 +101,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				if req.Params != nil {
 					args = req.Params.Arguments
 				}
+
 				res, err := h(ctx, req, args)
 				if err != nil {
 					return errorResult(err), nil
 				}
+
 				return res, nil
 			})
 	}
@@ -120,10 +123,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return nil, err
 			}
+
 			plan := planFor(a.Target, a.Mode)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
+
 			return jsonResult(map[string]any{"plan": plan,
 				"next": "Show the user the scope and effects, then call start_enumeration with this target, mode " +
 					"and plan_id. The user is asked to approve it."}), nil
@@ -147,6 +152,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Collect == nil {
 				return nil, errors.New("this server cannot start enumerations: no engine is configured")
 			}
+
 			plan := planFor(a.Target, a.Mode)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
@@ -155,6 +161,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				return nil, errors.New("plan_id does not match this target and mode; call plan_enumeration again " +
 					"and show the user the new plan")
 			}
+
 			msg := fmt.Sprintf("Start a %s?\n\n%s", plan.Summary(), plan.Effects)
 			return op.gate(req, msg, func(via string) (*mcp.CallToolResult, error) {
 				sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
@@ -163,6 +170,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				if err != nil {
 					return nil, err
 				}
+
 				return jsonResult(map[string]any{"run": run,
 					"next": "Check progress with enumeration_status; runs end on their own when the work is done."}), nil
 			})
@@ -187,14 +195,17 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if a.RunID == "" {
 				return jsonResult(map[string]any{"runs": op.Collect.Runs()}), nil
 			}
+
 			run, ok := op.Collect.Get(a.RunID)
 			if !ok {
 				return nil, fmt.Errorf("no enumeration run %s", a.RunID)
 			}
+
 			out := map[string]any{"run": run}
 			if run.Finished() && runner.Graph != nil {
 				out["found"] = foundSince(ctx, runner, run)
 			}
+
 			return jsonResult(out), nil
 		})
 
@@ -211,10 +222,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Collect == nil {
 				return nil, errors.New("no engine is configured")
 			}
+
 			run, err := op.Collect.Stop(ctx, a.RunID)
 			if err != nil {
 				return nil, err
 			}
+
 			return jsonResult(map[string]any{"run": run}), nil
 		})
 
@@ -239,6 +252,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Watches == nil {
 				return nil, errors.New("this server cannot keep watches")
 			}
+
 			plan := planFor(a.Target, a.Mode)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
@@ -246,6 +260,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if a.PlanID != plan.ID {
 				return nil, errors.New("plan_id does not match this target and mode; call plan_enumeration again")
 			}
+
 			every := time.Duration(a.EveryHours) * time.Hour
 			msg := fmt.Sprintf("Run a %s every %d hours, starting now, until the watch is stopped?\n\n%s",
 				plan.Summary(), a.EveryHours, plan.Effects)
@@ -254,6 +269,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				if err != nil {
 					return nil, err
 				}
+
 				return jsonResult(map[string]any{"watch": w,
 					"next": "The first run starts within a minute. list_watches shows what each run found."}), nil
 			})
@@ -266,6 +282,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Watches == nil {
 				return nil, errors.New("this server cannot keep watches")
 			}
+
 			return jsonResult(map[string]any{"watches": op.Watches.List()}), nil
 		})
 
@@ -282,10 +299,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Watches == nil {
 				return nil, errors.New("this server cannot keep watches")
 			}
+
 			w, err := op.Watches.Remove(a.WatchID)
 			if err != nil {
 				return nil, err
 			}
+
 			return jsonResult(map[string]any{"removed": w}), nil
 		})
 
@@ -297,10 +316,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Journal == "" {
 				return nil, errors.New("no review journal is configured")
 			}
+
 			text, err := lenscli.ProposalsText(op.Journal)
 			if err != nil {
 				return nil, err
 			}
+
 			return textResult(text), nil
 		})
 
@@ -324,6 +345,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.Journal == "" {
 				return nil, errors.New("no review journal is configured")
 			}
+
 			decide := func(via string) (*mcp.CallToolResult, error) {
 				dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
 				defer cancel()
@@ -331,11 +353,13 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				if err != nil {
 					return nil, err
 				}
+
 				return textResult(text), nil
 			}
 			if a.Decision == lenscli.DecisionReject || a.Decision == "" {
 				return decide("no write")
 			}
+
 			msg := fmt.Sprintf("%s proposal %s? This changes the Asset Database.",
 				strings.ToUpper(a.Decision[:1])+a.Decision[1:], a.ProposalID)
 			return op.gate(req, msg, decide)
@@ -349,10 +373,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			if op.DataSources == "" {
 				return nil, errors.New("no datasources file is configured")
 			}
+
 			st, err := collect.DataSourceStatus(op.DataSources)
 			if err != nil {
 				return nil, err
 			}
+
 			var with, without []string
 			for _, s := range st {
 				if s.Configured {
@@ -361,6 +387,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 					without = append(without, s.Name)
 				}
 			}
+
 			return jsonResult(map[string]any{"configured": with, "without_credentials": without,
 				"note": "Sources without credentials are skipped. Use data_source_key_link to let the user add a key."}), nil
 		})
@@ -380,10 +407,12 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				return nil, errors.New("this connection cannot serve key links; add the key to the datasources " +
 					"file (config/datasources.yaml in the Compose stack)")
 			}
+
 			link, expires, err := op.KeyLinks.New(a.Source)
 			if err != nil {
 				return nil, err
 			}
+
 			return jsonResult(map[string]any{"url": link, "expires": expires.Format(time.RFC3339),
 				"next": "Give the user this link to open in a browser on the computer running Amass. It works once."}), nil
 		})
@@ -405,6 +434,7 @@ func (op *Operator) gate(req *mcp.CallToolRequest, message string,
 			if r != nil && r.Action == "accept" && r.Content["approve"] == true {
 				return act("approval dialog")
 			}
+
 			return nil, errors.New("the user did not approve this action; nothing was done")
 		}
 	}
@@ -424,11 +454,13 @@ func (op *Operator) gate(req *mcp.CallToolRequest, message string,
 			if err != nil {
 				return "", err
 			}
+
 			return resultText(res), nil
 		})
 		if err != nil {
 			return nil, err
 		}
+
 		return jsonResult(map[string]any{"status": "awaiting_approval", "approval_url": link,
 			"expires": expires.Format(time.RFC3339),
 			"next": "Nothing has happened yet. Ask the user to open approval_url in a browser on the computer " +
@@ -438,6 +470,7 @@ func (op *Operator) gate(req *mcp.CallToolRequest, message string,
 		return nil, errors.New("this client cannot show an approval dialog (MCP elicitation), and the " +
 			"server requires one for this action; use a client that supports it")
 	}
+
 	return act("client tool approval")
 }
 
@@ -450,6 +483,7 @@ func resultText(res *mcp.CallToolResult) string {
 			}
 		}
 	}
+
 	return b.String()
 }
 
@@ -457,6 +491,7 @@ func elicitable(req *mcp.CallToolRequest) bool {
 	if req == nil || req.Session == nil {
 		return false
 	}
+
 	p := req.Session.InitializeParams()
 	return p != nil && p.Capabilities != nil && p.Capabilities.Elicitation != nil
 }
@@ -470,6 +505,7 @@ func approver(req *mcp.CallToolRequest, via string) string {
 			client = p.ClientInfo.Name
 		}
 	}
+
 	return fmt.Sprintf("mcp:%s (%s)", client, via)
 }
 
@@ -488,12 +524,17 @@ func planFor(target, mode string) collect.Plan {
 	case strings.Contains(target, "/"):
 		sel = graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: target}
 	case asNumber.MatchString(target):
-		sel = graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: asNumber.FindStringSubmatch(target)[1]}
+		sel = graph.AssetSelector{
+			Type:  "AutonomousSystem",
+			Field: "number",
+			Value: asNumber.FindStringSubmatch(target)[1],
+		}
 	default:
 		if _, err := netip.ParseAddr(target); err == nil {
 			sel = graph.AssetSelector{Type: "IPAddress", Field: "address", Value: target}
 		}
 	}
+
 	return collect.NewPlan(sel, m)
 }
 
@@ -504,6 +545,7 @@ func foundSince(ctx context.Context, runner ai.ToolRunner, run collect.Run) any 
 	if !ok || run.Plan.Target.Type == "" {
 		return "the database cannot look up the target"
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
@@ -512,11 +554,13 @@ func foundSince(ctx context.Context, runner ai.ToolRunner, run collect.Run) any 
 	if err != nil || len(res.Candidates) == 0 {
 		return "the target is not in the database yet"
 	}
+
 	report, err := lens.FindChanges(ctx, runner.Graph, runner.Catalog, res.Candidates[0].Asset, run.StartedAt,
 		lens.LensLimits{})
 	if err != nil {
 		return "the changes lens could not run: " + err.Error()
 	}
+
 	return lens.FormatChangesReport(report)
 }
 
@@ -525,6 +569,7 @@ func jsonResult(v any) *mcp.CallToolResult {
 	if err != nil {
 		return errorResult(err)
 	}
+
 	return textResult(string(data))
 }
 

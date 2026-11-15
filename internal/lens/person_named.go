@@ -197,6 +197,7 @@ func (s *personNamedSearch) check(o graph.Asset) (*PersonNamedOrg, error) {
 	for _, c := range contacts {
 		graph.AddUnique(&found.ContactIDs, c.FromID)
 	}
+
 	sort.Strings(found.ContactIDs)
 	sort.Strings(found.Domains)
 	return found, nil
@@ -214,6 +215,7 @@ func (s *personNamedSearch) registrationDomains(contactID string) ([]string, err
 	if err := s.batch.load(s.ctx, s.graph, in, "in", s.spend); err != nil {
 		return nil, err
 	}
+
 	var domains []string
 	for _, e := range in {
 		src, err := s.asset(e.FromID)
@@ -263,6 +265,7 @@ func FormatPersonNamedReport(r PersonNamedReport) string {
 	if r.Truncated {
 		fmt.Fprintf(&b, " Incomplete: %s.", r.Reason)
 	}
+
 	b.WriteString("\n")
 	if len(r.Candidates) == 0 {
 		b.WriteString("No organization is recorded under a person's name.\n")
@@ -276,6 +279,7 @@ func FormatPersonNamedReport(r PersonNamedReport) string {
 		if len(c.Domains) > 0 {
 			fmt.Fprintf(&b, ", registration contact for %s", strings.Join(c.Domains, ", "))
 		}
+
 		b.WriteString("\n")
 	}
 

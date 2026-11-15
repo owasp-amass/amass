@@ -42,7 +42,8 @@ var loadFamilyRules = sync.OnceValue(func() familyRules {
 	if err := graph.DecodeStrict(familyJSON, &r); err != nil {
 		panic("family.json: " + err.Error())
 	}
-	if r.SampleNames < 1 || r.SampleNetwork < 1 || r.SampleNames > graph.MaxEdgeRead || r.SampleNetwork > graph.MaxEdgeRead ||
+	if r.SampleNames < 1 || r.SampleNetwork < 1 || r.SampleNames > graph.MaxEdgeRead ||
+		r.SampleNetwork > graph.MaxEdgeRead ||
 		r.DedicatedShare <= 0 || r.DedicatedShare > 1 {
 		panic("family.json: sample sizes must be in 1..500 and dedicated_share in (0, 1]")
 	}
@@ -268,6 +269,7 @@ func (s *familySearch) recordOrganizations(recID string, controllers bool) ([]st
 	if err != nil {
 		return nil, err
 	}
+
 	out, err := s.dup.edges(recID, "out", "")
 	if err != nil {
 		return nil, err
@@ -319,7 +321,8 @@ func (s *familySearch) profileOrganization(id string) error {
 	if err != nil {
 		return err
 	}
-	if o.Type != "Organization" || graph.IsPlaceholder(o) || semantics.IsPlaceholderOrganization(graph.ContentString(o, "name")) {
+	if o.Type != "Organization" || graph.IsPlaceholder(o) ||
+		semantics.IsPlaceholderOrganization(graph.ContentString(o, "name")) {
 		s.skipped[id] = true
 		return nil
 	}
@@ -328,6 +331,7 @@ func (s *familySearch) profileOrganization(id string) error {
 	if err != nil {
 		return err
 	}
+
 	fp := &familyProfile{orgProfile: p, registers: map[string]bool{}, contactFor: map[string]bool{},
 		certified: map[string]int{}, emails: map[string]bool{}, netRecs: map[string]bool{}, autnums: map[string]bool{}}
 	if err := s.controls(fp); err != nil {
@@ -346,6 +350,7 @@ func (s *familySearch) controls(p *familyProfile) error {
 		if i >= dupMaxContacts {
 			break
 		}
+
 		i++
 
 		in, err := s.dup.edges(cr, "in", "")
@@ -436,6 +441,7 @@ func (s *familySearch) sampleDomain(root graph.Asset) error {
 			}
 		}
 	}
+
 	s.report.MoreNames = len(queue) > 0
 
 	return nil
@@ -467,11 +473,13 @@ func (s *familySearch) resolveName(id string, counts map[string]int) error {
 		if err := s.holdersOf(b); err != nil {
 			return err
 		}
+
 		counts[b]++
 		for _, h := range s.holders[b] {
 			if s.heldNames[h] == nil {
 				s.heldNames[h] = map[string]bool{}
 			}
+
 			s.heldNames[h][id] = true
 		}
 	}
@@ -509,6 +517,7 @@ func (s *familySearch) holdersOf(block string) error {
 	if err != nil {
 		return err
 	}
+
 	s.cidrs[block] = graph.ContentString(a, "cidr")
 
 	regs, err := s.dup.edges(block, "out", "registration")
@@ -594,10 +603,12 @@ func (s *familySearch) servingBlocks() []string {
 			blocks = append(blocks, b)
 		}
 	}
+
 	sort.Slice(blocks, func(i, j int) bool {
 		if s.netNames[blocks[i]] != s.netNames[blocks[j]] {
 			return s.netNames[blocks[i]] > s.netNames[blocks[j]]
 		}
+
 		return blocks[i] < blocks[j]
 	})
 
@@ -626,10 +637,12 @@ func (s *familySearch) blocksToClassify(direct map[string][]string) []string {
 	for b := range s.netNames {
 		byNames = append(byNames, b)
 	}
+
 	sort.Slice(byNames, func(i, j int) bool {
 		if s.netNames[byNames[i]] != s.netNames[byNames[j]] {
 			return s.netNames[byNames[i]] > s.netNames[byNames[j]]
 		}
+
 		return byNames[i] < byNames[j]
 	})
 
@@ -696,6 +709,7 @@ func nameMatchesLabel(words []string, label string, generic, stop []string) bool
 			if unicode.IsLetter(r) || unicode.IsDigit(r) {
 				return r
 			}
+
 			return -1
 		}, w)
 		if w == "" {
@@ -709,6 +723,7 @@ func nameMatchesLabel(words []string, label string, generic, stop []string) bool
 				return true
 			}
 		}
+
 		compact.WriteString(w)
 		all.WriteByte(w[0])
 		if !slices.Contains(stop, w) {
@@ -745,6 +760,7 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 		if err != nil {
 			return dedicated, sampled, err
 		}
+
 		sampled[b] = d
 
 		share, familyShare := 0.0, 0.0
@@ -754,8 +770,10 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 			for dom := range domains {
 				n += d[dom]
 			}
+
 			familyShare = float64(n) / float64(total)
 		}
+
 		held := false
 		holderDomains := map[string]bool{}
 		for _, h := range s.holders[b] {
@@ -768,6 +786,7 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 				}
 			}
 		}
+
 		// A network whose holder has no tie of its own to the domain is not
 		// the domain's when an unrelated registered domain has at least as
 		// many of its stored names: a hosting provider's network serving
@@ -779,6 +798,7 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 				rival = true
 			}
 		}
+
 		byShare := (share >= s.rules.DedicatedShare || familyShare >= s.rules.DedicatedShare) && !rival
 
 		net := FamilyNetwork{CIDR: s.cidrs[b], Names: s.netNames[b], Share: share, Dedicated: held || byShare}
@@ -787,6 +807,7 @@ func (s *familySearch) classifyNetworks(domain string, direct map[string][]strin
 				net.Holder, net.HolderID = graph.AssetLabel(p.asset), p.asset.ID
 			}
 		}
+
 		s.report.Networks = append(s.report.Networks, net)
 		if net.Dedicated {
 			dedicated[b] = true
@@ -877,6 +898,7 @@ func (s *familySearch) memberNetworks(domain string, dedicated map[string]bool) 
 				if !ok {
 					continue
 				}
+
 				s.report.Networks[i].Dedicated = true
 				dedicated[b] = true
 				s.report.Members[m].Evidence = append(s.report.Members[m].Evidence, fmt.Sprintf(
@@ -932,6 +954,7 @@ func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, 
 			if d == domain {
 				continue
 			}
+
 			r, ok := related[d]
 			if !ok || n > r.Names {
 				related[d] = &RelatedDomain{Domain: d, Names: n, CIDR: s.cidrs[b],
@@ -946,6 +969,7 @@ func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, 
 		if !r.OwnNetwork {
 			continue
 		}
+
 		label := domainLabel(d)
 		for id := range own {
 			p := s.profiles[id]
@@ -958,11 +982,13 @@ func (s *familySearch) relatedDomains(domain string, dedicated map[string]bool, 
 	for _, r := range related {
 		s.report.RelatedDomains = append(s.report.RelatedDomains, *r)
 	}
+
 	sort.Slice(s.report.RelatedDomains, func(i, j int) bool {
 		a, b := s.report.RelatedDomains[i], s.report.RelatedDomains[j]
 		if a.Names != b.Names {
 			return a.Names > b.Names
 		}
+
 		return a.Domain < b.Domain
 	})
 }
@@ -1032,6 +1058,7 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 	if len(ties) == 0 {
 		return
 	}
+
 	s.tied = map[string]bool{}
 	for id := range ties {
 		s.tied[id] = true
@@ -1043,6 +1070,7 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 			main = id
 		}
 	}
+
 	m := s.profiles[main].asset
 	s.report.Main = &m
 
@@ -1067,6 +1095,7 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 			// certificate, without the institution's name or registration.
 			member.Relation = FamilyOther
 		}
+
 		s.report.Members = append(s.report.Members, member)
 	}
 
@@ -1095,6 +1124,7 @@ func (s *familySearch) members(domain string, direct map[string][]string, dedica
 		if weight[a.Organization.ID] != weight[b.Organization.ID] {
 			return weight[a.Organization.ID] > weight[b.Organization.ID]
 		}
+
 		return a.Organization.ID < b.Organization.ID
 	})
 }
@@ -1127,6 +1157,7 @@ func (s *familySearch) sameInstitution(main string, ties map[string][]string) ma
 			ids = append(ids, id)
 		}
 	}
+
 	sort.Strings(ids)
 
 	same := map[string]sameReason{main: {why: "main", byName: true}}
@@ -1198,6 +1229,7 @@ func (s *familySearch) renamed(a, b string) bool {
 				out[w] = true
 			}
 		}
+
 		return out
 	}
 
@@ -1292,6 +1324,7 @@ func nameVariant(a, b string, generic []string) bool {
 	for _, w := range wb {
 		have[w] = true
 	}
+
 	// Initials skip short joining words: SUNY is State University of New
 	// York.
 	stop := abbreviationStopWords()
@@ -1304,6 +1337,7 @@ func nameVariant(a, b string, generic []string) bool {
 					skipped.WriteByte(w[0])
 				}
 			}
+
 			have[all.String()] = true
 			have[skipped.String()] = true
 		}
@@ -1427,11 +1461,13 @@ func FormatFamilyReport(r FamilyReport) string {
 	if r.MoreNames {
 		more = "; it has more"
 	}
+
 	fmt.Fprintf(&b, "Organization family of %s (%d of its names sampled%s, %d reads).", r.Domain, r.SampledNames,
 		more, r.Reads)
 	if r.Truncated {
 		fmt.Fprintf(&b, " Incomplete: %s.", r.Reason)
 	}
+
 	b.WriteString("\n")
 	if r.Main == nil {
 		b.WriteString("No stored organization is tied to the domain.\n")
@@ -1447,6 +1483,7 @@ func FormatFamilyReport(r FamilyReport) string {
 			fmt.Fprintf(&b, "\n%s:\n", titles[m.Relation])
 			last = m.Relation
 		}
+
 		fmt.Fprintf(&b, "  %s [%s]\n", graph.AssetLabel(m.Organization), m.Organization.ID)
 		for _, e := range m.Evidence {
 			fmt.Fprintf(&b, "    - %s\n", e)
@@ -1460,10 +1497,12 @@ func FormatFamilyReport(r FamilyReport) string {
 			if n.Dedicated {
 				kind = "the family's"
 			}
+
 			holder := n.Holder
 			if holder == "" {
 				holder = "holder unknown"
 			}
+
 			fmt.Fprintf(&b, "  %s (%s): %d of the sampled names, %s, %.0f%% of the names stored for it are the "+
 				"domain's\n", n.CIDR, holder, n.Names, kind, n.Share*100)
 		}
@@ -1478,6 +1517,7 @@ func FormatFamilyReport(r FamilyReport) string {
 			case d.OwnNetwork:
 				whose = ", hosted on the institution's network"
 			}
+
 			fmt.Fprintf(&b, "  %s (%d names, %s%s)\n", d.Domain, d.Names, d.CIDR, whose)
 		}
 	}

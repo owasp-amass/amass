@@ -45,6 +45,7 @@ func assertBatchReads(t *testing.T, repo repository.Repository, fallback bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var ids []string
 	for i := 0; i < 4; i++ {
 		child, err := repo.CreateAsset(ctx, &oamdns.FQDN{Name: fmt.Sprintf("h%d.batch.example", i)})
@@ -55,8 +56,10 @@ func assertBatchReads(t *testing.T, repo repository.Repository, fallback bool) {
 			Relation: &oamgen.SimpleRelation{Name: "node"}}); err != nil {
 			t.Fatal(err)
 		}
+
 		ids = append(ids, child.ID)
 	}
+
 	svc, err := repo.CreateAsset(ctx, &oamplat.Service{ID: "batch-svc", Type: "HTTP", Output: "ok"})
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +89,7 @@ func assertBatchReads(t *testing.T, repo repository.Repository, fallback bool) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+
 		labels := map[string]int{}
 		for _, e := range edges {
 			labels[e.Label]++
@@ -115,6 +119,7 @@ func TestAdapterBatchReadsOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	assertBatchReads(t, repo, true)
 }
@@ -126,10 +131,12 @@ func TestAdapterBatchReadsOnPostgres(t *testing.T) {
 	if dsn == "" {
 		t.Skip("AMASS_AI_POSTGRES_BATCH_DSN is not set")
 	}
+
 	repo, err := assetdb.New(postgres.Postgres, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	assertBatchReads(t, repo, true)
 }
@@ -141,10 +148,12 @@ func TestAdapterBatchReadsOnNeo4j(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set AMASS_AI_TEST_NEO4J_DSN to a disposable Neo4j database")
 	}
+
 	repo, err := assetdb.New(neo4jrepo.Neo4j, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	assertBatchReads(t, repo, false)
 }

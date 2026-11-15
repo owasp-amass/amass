@@ -29,21 +29,27 @@ type unbatched struct{ a Adapter }
 func (u unbatched) GetAsset(ctx context.Context, id string) (graph.Asset, error) {
 	return u.a.GetAsset(ctx, id)
 }
+
 func (u unbatched) FindAssets(ctx context.Context, t string, since time.Time, limit int) ([]graph.Asset, error) {
 	return u.a.FindAssets(ctx, t, since, limit)
 }
+
 func (u unbatched) Edges(ctx context.Context, id, dir, label string, since time.Time) ([]graph.Relation, error) {
 	return u.a.Edges(ctx, id, dir, label, since)
 }
+
 func (u unbatched) Evidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
 	return u.a.Evidence(ctx, id, limit)
 }
+
 func (u unbatched) EdgesLimited(ctx context.Context, id, dir, label string, since time.Time, limit int) ([]graph.Relation, bool, error) {
 	return u.a.EdgesLimited(ctx, id, dir, label, since, limit)
 }
+
 func (u unbatched) EdgesPage(ctx context.Context, id, dir, label string, since time.Time, cursor string, limit int) ([]graph.Relation, string, error) {
 	return u.a.EdgesPage(ctx, id, dir, label, since, cursor, limit)
 }
+
 func (u unbatched) EdgeEvidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
 	return u.a.EdgeEvidence(ctx, id, limit)
 }
@@ -56,6 +62,7 @@ func TestLensSameWithBatchReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -76,6 +83,7 @@ func TestLensSameWithBatchReads(t *testing.T) {
 		if i%100 != 0 {
 			continue
 		}
+
 		ip, err := repo.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.AddrFrom4([4]byte{192, 0, 2, byte(i / 100)}),
 			Type: "IPv4"})
 		if err != nil {
@@ -85,6 +93,7 @@ func TestLensSameWithBatchReads(t *testing.T) {
 			Name: "dns_record", Header: oamdns.RRHeader{RRType: 1, Class: 1}}}); err != nil {
 			t.Fatal(err)
 		}
+
 		svc, err := repo.CreateAsset(ctx, &oamplat.Service{ID: fmt.Sprintf("svc-%d", i), Type: "HTTP",
 			Output: "ok", Attributes: map[string][]string{"Server": {"nginx/1.25.3"}}})
 		if err != nil {
@@ -101,11 +110,13 @@ func TestLensSameWithBatchReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	limits := lens.LensLimits{MaxAssets: 5000}
 	with, err := lens.FindServices(ctx, batched, Catalog{}, root, limits)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	without, err := lens.FindServices(ctx, unbatched{a: Adapter{Repo: repo}}, Catalog{}, root, limits)
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +126,7 @@ func TestLensSameWithBatchReads(t *testing.T) {
 		t.Fatalf("the lens differs with batch reads:\n%s\n---\n%s", lens.FormatServicesReport(with),
 			lens.FormatServicesReport(without))
 	}
+
 	t.Logf("lens reads: %d with batch reads, %d without; adapter calls %v", with.Reads, without.Reads,
 		batched.Stats.calls)
 	if len(with.Services) != 6 {

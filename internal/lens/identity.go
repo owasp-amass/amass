@@ -92,6 +92,7 @@ func (s *identitySearch) spend() bool {
 	if s.report.Reads >= dupMaxReads {
 		return false
 	}
+
 	s.report.Reads++
 	return true
 }
@@ -107,6 +108,7 @@ func (s *identitySearch) edges(id, dir, label string) ([]graph.Relation, error) 
 		if s.report.Reads >= dupMaxReads {
 			return false
 		}
+
 		s.report.Reads++
 		return true
 	}
@@ -371,6 +373,7 @@ func sortedKeys(m map[string]bool) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -382,6 +385,7 @@ func FormatIdentityReport(r IdentityReport) string {
 	if r.Truncated {
 		fmt.Fprintf(&b, " Incomplete: %s.", r.Reason)
 	}
+
 	b.WriteString("\n")
 	if len(r.Conflicts) == 0 {
 		b.WriteString("No legal identity contradicts its organization's evidence.\n")

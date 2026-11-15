@@ -157,6 +157,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		if group != "ai" {
 			return fmt.Errorf("usage: amass %s <name> [flags]; unexpected arguments %v", group, fs.Args())
 		}
+
 		return errors.New("usage: amass ai [flags] " + strings.Join(operations, "|"))
 	}
 
@@ -374,9 +375,11 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 			if err != nil {
 				return fmt.Errorf("operator mode: %w", err)
 			}
+
 			defer release()
 			server.Operator = op
 		}
+
 		return server.Serve(context.Background(), in, out)
 	}
 	if operation == "eval" {

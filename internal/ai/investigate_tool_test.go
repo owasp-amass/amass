@@ -20,7 +20,8 @@ func investigate(t *testing.T, store *EvidenceStore, args string) map[string]any
 	t.Helper()
 
 	g, cat := graphtest.CampusWeb()
-	raw, err := RunInvestigationTool(context.Background(), ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()},
+	raw, err := RunInvestigationTool(context.Background(),
+		ToolRunner{Graph: g, Catalog: cat, Limits: graph.DefaultLimits()},
 		nil, store, ToolInvestigate, json.RawMessage(args))
 	if err != nil {
 		t.Fatal(err)

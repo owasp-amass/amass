@@ -328,11 +328,13 @@ func (w *lensWalker) neighborsPerLabel(lr graph.LabeledEdgeReader, a graph.Asset
 		w.truncate("database read limit")
 		return out, nil
 	}
+
 	w.report.Reads++
 	edges, more, err := lr.EdgesPerLabel(w.ctx, a.ID, dir, labels, time.Time{}, lensMaxPerAsset)
 	if err != nil {
 		return nil, err
 	}
+
 	add(edges)
 
 	_, pages := w.graph.(graph.PagedGraph)
@@ -346,6 +348,7 @@ func (w *lensWalker) neighborsPerLabel(lr graph.LabeledEdgeReader, a graph.Asset
 			w.truncate("database read limit")
 			break
 		}
+
 		edges, m, limit, err := w.readLabel(a.ID, dir, label)
 		if err != nil {
 			return nil, err
@@ -353,18 +356,22 @@ func (w *lensWalker) neighborsPerLabel(lr graph.LabeledEdgeReader, a graph.Asset
 		if m {
 			w.truncate(fmt.Sprintf("more than %d %s %s edges on %s %s", limit, dir, label, a.Type, graph.AssetLabel(a)))
 		}
+
 		add(edges)
 	}
+
 	return out, nil
 }
 
 // prefetch reads the assets at the far end of edges that are not yet known
 // in one batch, when the graph can.
 func (w *lensWalker) prefetch(cur graph.Asset, edges []graph.Relation) error {
-	read, err := graph.FarAssets(w.ctx, w.graph, cur.ID, edges, func(id string) bool { _, ok := w.assets[id]; return ok })
+	read, err := graph.FarAssets(w.ctx, w.graph, cur.ID, edges,
+		func(id string) bool { _, ok := w.assets[id]; return ok })
 	for id, a := range read {
 		w.assets[id] = a
 	}
+
 	return err
 }
 
@@ -401,6 +408,7 @@ func (w *lensWalker) readLabel(id, dir, label string) ([]graph.Relation, bool, i
 		if len(out) >= LensMaxPerLabel {
 			return out, true, LensMaxPerLabel, nil
 		}
+
 		cursor = next
 	}
 }
@@ -422,6 +430,7 @@ func (w *lensWalker) labelsFor(kind, dir string) []string {
 	for l := range set {
 		out = append(out, l)
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -436,6 +445,7 @@ func (w *lensWalker) withoutDescent(kind string, labels []string) []string {
 		if r.SourceType != kind {
 			continue
 		}
+
 		m, ok := w.meaning(r.SourceType, r.Label, r.RelationType, r.DestinationType)
 		if !ok {
 			continue
@@ -453,6 +463,7 @@ func (w *lensWalker) withoutDescent(kind string, labels []string) []string {
 			out = append(out, l)
 		}
 	}
+
 	return out
 }
 
@@ -569,6 +580,7 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 				}
 			}
 		}
+
 		return waiting{}, false
 	}
 
@@ -582,6 +594,7 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 				if len(deferred) == 0 {
 					break
 				}
+
 				queue, deferred = deferred, nil
 				continue
 			}
@@ -589,6 +602,7 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 				w.truncate("controlled asset limit")
 				break
 			}
+
 			admit(c.asset, c.parent, c.via)
 			continue
 		}
@@ -613,10 +627,12 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 				(s.other.Type == "Organization" && (s.attr != graph.AttrControls || w.stopAt[s.other.ID])) {
 				continue
 			}
+
 			queued[s.other.ID] = true
 			if _, known := pending[s.other.Type]; !known {
 				kinds = append(kinds, s.other.Type)
 			}
+
 			pending[s.other.Type] = append(pending[s.other.Type], waiting{asset: s.other, parent: cur.ID, via: s.edge})
 		}
 	}

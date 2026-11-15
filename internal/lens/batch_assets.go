@@ -23,6 +23,7 @@ func (b *batchAssets) load(ctx context.Context, g graph.Graph, edges []graph.Rel
 	if _, ok := g.(graph.AssetBatchReader); !ok {
 		return nil
 	}
+
 	var ids []string
 	want := map[string]bool{}
 	for _, e := range edges {
@@ -35,6 +36,7 @@ func (b *batchAssets) load(ctx context.Context, g graph.Graph, edges []graph.Rel
 			ids = append(ids, id)
 		}
 	}
+
 	return b.loadIDs(ctx, g, ids, spend)
 }
 
@@ -50,6 +52,7 @@ func (b *batchAssets) loadIDs(ctx context.Context, g graph.Graph, ids []string, 
 	if len(need) < 2 || !spend() {
 		return nil
 	}
+
 	read, err := graph.AssetsByID(ctx, g, need)
 	if err != nil {
 		return err
@@ -60,6 +63,7 @@ func (b *batchAssets) loadIDs(ctx context.Context, g graph.Graph, ids []string, 
 	for id, a := range read {
 		b.read[id] = a
 	}
+
 	return nil
 }
 

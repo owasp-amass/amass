@@ -21,6 +21,7 @@ func TestFootprintDrawings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	nodes, edges := FootprintGraph(report)
 	if len(nodes) < 3 || len(edges) < 2 || nodes[0].Label != "colgate.edu" {
 		t.Fatalf("nodes %+v edges %+v", nodes, edges)
@@ -54,7 +55,10 @@ func TestFootprintDrawings(t *testing.T) {
 
 // Labels cannot break out of a Mermaid diagram.
 func TestMermaidLabelsAreSafe(t *testing.T) {
-	nodes := []Node{{ID: 0, Type: "FQDN", Label: `x"] --> evil["<script>`}, {ID: 1, Type: "IPAddress", Label: "1.2.3.4"}}
+	nodes := []Node{
+		{ID: 0, Type: "FQDN", Label: `x"] --> evil["<script>`},
+		{ID: 1, Type: "IPAddress", Label: "1.2.3.4"},
+	}
 	edges := []Edge{{From: 0, To: 1, Label: `a"|b`}}
 	for _, out := range []string{MermaidSummary(nodes, edges), MermaidDetail(nodes, edges, 10)} {
 		if strings.Contains(out, "<script>") || strings.Contains(out, `a"|b`) || strings.Count(out, "-->") != 1 {

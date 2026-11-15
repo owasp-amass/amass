@@ -157,6 +157,7 @@ func (s *HTTPServer) Handler() http.Handler {
 	if s.Viz != nil {
 		mux.Handle(vizLinkPrefix, s.Viz)
 	}
+
 	return mux
 }
 
@@ -228,6 +229,7 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 			if sess == nil {
 				s.closeSDKSession(session)
 			}
+
 			http.Error(w, "MCP session missing or expired", http.StatusNotFound)
 			return
 		}
@@ -285,6 +287,7 @@ func (s *HTTPServer) sdkHandler(operator bool) http.Handler {
 	if operator && s.sdkOperator != nil {
 		return s.sdkOperator
 	}
+
 	return s.sdk
 }
 
@@ -324,6 +327,7 @@ func (r *sessionRecorder) WriteHeader(code int) {
 			r.admit(id)
 		}
 	}
+
 	r.ResponseWriter.WriteHeader(code)
 }
 

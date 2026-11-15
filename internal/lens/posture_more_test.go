@@ -35,6 +35,7 @@ func TestFindExposure(t *testing.T) {
 	if g.EvidenceByID == nil {
 		g.EvidenceByID = map[string][]graph.Evidence{}
 	}
+
 	g.EvidenceByID["svc-web"] = append(g.EvidenceByID["svc-web"], graph.Evidence{ID: "t1", SubjectID: "svc-web",
 		Kind: "SimpleProperty", Property: map[string]any{"property_name": "http_title",
 			"property_value": "Sign in to your account"}})
@@ -50,6 +51,7 @@ func TestFindExposure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	classes := map[string]ExposureClass{}
 	for _, c := range r.Classes {
 		classes[c.Name] = c
@@ -58,7 +60,10 @@ func TestFindExposure(t *testing.T) {
 		t.Errorf("remote access = %+v (want the SSH and RDP services)", c)
 	}
 	if c := classes["login_pages"]; c.Count != 2 || !slices.Contains(c.Examples, url) ||
-		!slices.ContainsFunc(c.Examples, func(e string) bool { return strings.Contains(e, `"Sign in to your account"`) }) {
+		!slices.ContainsFunc(c.Examples, func(e string) bool {
+			return strings.Contains(e,
+				`"Sign in to your account"`)
+		}) {
 		t.Errorf("login pages = %+v (want the URL and the titled service)", c)
 	}
 	if c := classes["url_credentials"]; c.Count != 1 || strings.Contains(r.Text(), "hunter2") ||
@@ -105,11 +110,18 @@ func TestFindConcentration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cats := map[string]Concentration{}
 	for _, c := range r.Categories {
 		cats[c.Category] = c
 	}
-	for _, name := range []string{"DNS providers", "registrars", "certificate authorities", "hosting", "mail providers"} {
+	for _, name := range []string{
+		"DNS providers",
+		"registrars",
+		"certificate authorities",
+		"hosting",
+		"mail providers",
+	} {
 		if _, ok := cats[name]; !ok {
 			t.Errorf("missing %s in %+v", name, r.Categories)
 		}
@@ -132,6 +144,7 @@ func TestFindCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	gaps := map[string]CoverageGap{}
 	for _, gp := range r.Gaps {
 		gaps[gp.Name] = gp
@@ -161,6 +174,7 @@ func TestFindGeography(t *testing.T) {
 	if len(r.Own) != 1 || r.Own[0].Key != "US" || !strings.Contains(r.Own[0].Examples[0], "Hamilton") {
 		t.Errorf("own = %+v", r.Own)
 	}
+
 	hosted := map[string]int{}
 	for _, h := range r.Hosting {
 		hosted[h.Key] = h.Count
@@ -175,12 +189,19 @@ func TestFindGeography(t *testing.T) {
 	g.Assets["loc-cdn"] = graph.Asset{ID: "loc-cdn", Type: "Location", Key: "1 Market St",
 		Content: map[string]any{"address": "1 Market St", "city": "San Francisco", "country": "us"}}
 	g.Links = append(g.Links,
-		graph.Relation{ID: "cdn-reg", FromID: "autnum-cdn", ToID: "cr-cdn", Label: "registrant", Type: "SimpleRelation"},
+		graph.Relation{
+			ID:     "cdn-reg",
+			FromID: "autnum-cdn",
+			ToID:   "cr-cdn",
+			Label:  "registrant",
+			Type:   "SimpleRelation",
+		},
 		graph.Relation{ID: "cdn-loc", FromID: "cr-cdn", ToID: "loc-cdn", Label: "location", Type: "SimpleRelation"})
 	r, err = FindGeography(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	hosted = map[string]int{}
 	for _, h := range r.Hosting {
 		hosted[h.Key] = h.Count
@@ -201,6 +222,7 @@ func TestFindShared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	shared := false
 	for _, v := range r.SharedVendors {
 		shared = shared || strings.Contains(strings.ToLower(v.Key), "ultradns")
@@ -229,6 +251,7 @@ func TestFootprintLimitSamplesEveryKind(t *testing.T) {
 		g.Links = append(g.Links, graph.Relation{ID: "n" + name, FromID: "colgate.edu", ToID: name, Label: "node",
 			Type: "SimpleRelation"})
 	}
+
 	url := "https://portal.colgate.edu/login"
 	g.Assets[url] = graph.Asset{ID: url, Type: "URL", Key: url, Content: map[string]any{"url": url}}
 	g.Links = append(g.Links, graph.Relation{ID: "u", FromID: url, ToID: "portal.colgate.edu", Label: "domain",
@@ -238,6 +261,7 @@ func TestFootprintLimitSamplesEveryKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	full := r.FootprintTypes
 
 	limited, err := FindExposure(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"],

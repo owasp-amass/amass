@@ -127,12 +127,14 @@ func connect(t *testing.T, url, token string, elicit func(*mcp.ElicitRequest) (*
 			return elicit(r)
 		}}
 	}
+
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1"}, opts)
 	cs, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: url + "/mcp",
 		HTTPClient: &http.Client{Transport: bearer{token, http.DefaultTransport}}, DisableStandaloneSSE: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = cs.Close() })
 	return cs
 }
@@ -143,10 +145,12 @@ func toolNames(t *testing.T, cs *mcp.ClientSession) map[string]bool {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	out := map[string]bool{}
 	for _, tool := range res.Tools {
 		out[tool.Name] = true
 	}
+
 	return out
 }
 
@@ -156,12 +160,14 @@ func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
+
 	var text strings.Builder
 	for _, c := range res.Content {
 		if tc, ok := c.(*mcp.TextContent); ok {
 			text.WriteString(tc.Text)
 		}
 	}
+
 	return text.String(), res.IsError
 }
 
@@ -171,10 +177,12 @@ func planID(t *testing.T, cs *mcp.ClientSession, target, mode string) string {
 	if isErr {
 		t.Fatalf("plan: %s", text)
 	}
+
 	var out struct{ Plan collect.Plan }
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
 		t.Fatal(err)
 	}
+
 	return out.Plan.ID
 }
 
@@ -184,6 +192,7 @@ func TestOperatorToolsNeedTheOperatorToken(t *testing.T) {
 	if reader[ToolStartEnumeration] || reader[ToolReviewProposal] || !reader["walk_relations"] {
 		t.Errorf("reader tools = %v", reader)
 	}
+
 	operator := toolNames(t, connect(t, fx.url, operatorToken, nil))
 	for _, name := range []string{ToolPlanEnumeration, ToolStartEnumeration, ToolEnumerationStatus,
 		ToolStopEnumeration, ToolListProposals, ToolReviewProposal, ToolDataSources, ToolDataSourceKey,
@@ -225,6 +234,7 @@ func TestStartEnumerationAsksTheUser(t *testing.T) {
 		if answer == "accept" {
 			return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, nil
 		}
+
 		return &mcp.ElicitResult{Action: answer}, nil
 	})
 
@@ -249,6 +259,7 @@ func TestStartEnumerationAsksTheUser(t *testing.T) {
 	if isErr || fx.engine.count() != 1 {
 		t.Fatalf("an approved enumeration did not start: %s", text)
 	}
+
 	var started struct{ Run collect.Run }
 	if err := json.Unmarshal([]byte(text), &started); err != nil || started.Run.State != collect.StateRunning ||
 		!strings.Contains(started.Run.ApprovedBy, "test-client (approval dialog)") {
@@ -278,7 +289,8 @@ func TestClientsWithoutApprovalDialogs(t *testing.T) {
 
 	fx.op.RequireConfirmation = true
 	id = planID(t, cs, "8.8.8.0/24", "passive")
-	if text, isErr := call(t, cs, ToolStartEnumeration, map[string]any{"target": "8.8.8.0/24", "plan_id": id}); !isErr ||
+	if text, isErr := call(t, cs, ToolStartEnumeration,
+		map[string]any{"target": "8.8.8.0/24", "plan_id": id}); !isErr ||
 		!strings.Contains(text, "cannot show an approval dialog") {
 		t.Errorf("a required dialog was skipped: %s", text)
 	}
@@ -295,6 +307,7 @@ func TestApprovalOnOlderProtocol(t *testing.T) {
 	if code != 200 || session == "" {
 		t.Fatalf("initialize: %d", code)
 	}
+
 	postSSE(t, fx.url, operatorToken, session, `{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 
 	id := collect.PlanID("domain", "example.org", collect.Passive)
@@ -310,6 +323,7 @@ func TestApprovalOnOlderProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	lines := bufio.NewScanner(resp.Body)
@@ -326,6 +340,7 @@ func TestApprovalOnOlderProtocol(t *testing.T) {
 		if !ok {
 			continue
 		}
+
 		var msg struct {
 			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
@@ -341,6 +356,7 @@ func TestApprovalOnOlderProtocol(t *testing.T) {
 			if code, _, _ := postSSE(t, fx.url, operatorToken, session, reply); code != 202 {
 				t.Fatalf("approval reply: %d", code)
 			}
+
 			continue
 		}
 		if string(msg.ID) == "7" {
@@ -363,10 +379,12 @@ func postSSE(t *testing.T, base, token, session, body string) (int, http.Header,
 		req.Header.Set("Mcp-Session-Id", session)
 		req.Header.Set("Mcp-Protocol-Version", "2025-11-25")
 	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	// Read the whole response, as a client does: the server finishes
 	// registering a session only once its initialize stream ends.
@@ -402,6 +420,7 @@ func TestDataSourceKeyLink(t *testing.T) {
 	if isErr {
 		t.Fatal(text)
 	}
+
 	var link struct{ URL string }
 	if err := json.Unmarshal([]byte(text), &link); err != nil || !strings.HasPrefix(link.URL, fx.url+keyLinkPrefix) {
 		t.Fatalf("link = %s", text)
@@ -411,6 +430,7 @@ func TestDataSourceKeyLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ := io.ReadAll(page.Body)
 	_ = page.Body.Close()
 	if page.StatusCode != 200 || !strings.Contains(string(body), "Shodan credentials") {
@@ -421,11 +441,13 @@ func TestDataSourceKeyLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(body), "Saved") || strings.Contains(string(body), "sk-test") {
 		t.Fatalf("post = %d %s", resp.StatusCode, body)
 	}
+
 	data, _ := os.ReadFile(fx.sources)
 	if !strings.Contains(string(data), "sk-test-123") {
 		t.Errorf("key not stored:\n%s", data)
@@ -436,6 +458,7 @@ func TestDataSourceKeyLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_ = resp.Body.Close()
 	if resp.StatusCode != 404 {
 		t.Errorf("a used link worked again: %d", resp.StatusCode)
@@ -456,6 +479,7 @@ func TestReviewToolsReadTheJournal(t *testing.T) {
 	if text, isErr := call(t, cs, ToolListProposals, map[string]any{}); isErr {
 		t.Errorf("list proposals: %s", text)
 	}
+
 	text, isErr := call(t, cs, ToolReviewProposal, map[string]any{"proposal_id": "own-missing", "decision": "reject"})
 	if !isErr || !strings.Contains(text, "own-missing") {
 		t.Errorf("reject of a missing proposal: %s", text)
@@ -492,6 +516,7 @@ func TestApprovalLinks(t *testing.T) {
 			!strings.HasPrefix(out.URL, fx.url+approvalPrefix) {
 			t.Fatalf("start = %s", text)
 		}
+
 		return out.URL
 	}
 
@@ -499,10 +524,12 @@ func TestApprovalLinks(t *testing.T) {
 	if fx.engine.count() != 0 {
 		t.Fatal("an enumeration started before approval")
 	}
+
 	page, err := http.Get(link)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ := io.ReadAll(page.Body)
 	_ = page.Body.Close()
 	if !strings.Contains(string(body), "PASSIVE enumeration of domain example.net") || fx.engine.count() != 0 {
@@ -519,12 +546,14 @@ func TestApprovalLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if fx.engine.count() != 1 || !strings.Contains(string(body), "approval link") {
 		t.Fatalf("approve: %s", body)
 	}
-	if resp, _ := http.PostForm(link, url.Values{"decision": {"approve"}}); resp.StatusCode != 404 || fx.engine.count() != 1 {
+	if resp, _ := http.PostForm(link,
+		url.Values{"decision": {"approve"}}); resp.StatusCode != 404 || fx.engine.count() != 1 {
 		t.Error("an approval link worked twice")
 	}
 }
@@ -542,11 +571,13 @@ func TestWatchTools(t *testing.T) {
 		"every_hours": 1}); !isErr {
 		t.Errorf("an hourly watch was accepted: %s", text)
 	}
+
 	text, isErr := call(t, cs, ToolWatchTarget, map[string]any{"target": "watch.example", "plan_id": id,
 		"every_hours": 24})
 	if isErr {
 		t.Fatal(text)
 	}
+
 	var out struct{ Watch collect.Watch }
 	if err := json.Unmarshal([]byte(text), &out); err != nil || out.Watch.ID == "" {
 		t.Fatalf("watch = %s", text)

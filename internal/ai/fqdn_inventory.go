@@ -115,6 +115,7 @@ func searchFQDNInventory(ctx context.Context, g graph.Graph, limits graph.Limits
 	if paged {
 		perNode = maxMatches + 1
 	}
+
 	maxEdges := 4 * (maxMatches + 1)
 
 	type queued struct {

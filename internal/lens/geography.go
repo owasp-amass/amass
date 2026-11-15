@@ -92,6 +92,7 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 		if s.spent() {
 			break
 		}
+
 		a := s.owned[id]
 		locs, err := s.locations(a, rules)
 		if err != nil {
@@ -109,12 +110,14 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 	if err != nil {
 		return out, err
 	}
+
 	var parties []string
 	for _, h := range network.Hosting {
 		if !h.Own && h.PartyID != "" {
 			parties = append(parties, h.PartyID)
 		}
 	}
+
 	read, _ := graph.AssetsByID(ctx, g, parties) // a party not read is read alone below
 	hosting := map[string]*ChangeGroup{}
 	var order []string
@@ -133,12 +136,14 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 				}
 			}
 		}
+
 		grp, ok := hosting[c]
 		if !ok {
 			grp = &ChangeGroup{Key: c}
 			hosting[c] = grp
 			order = append(order, c)
 		}
+
 		grp.Count += h.Names
 		if len(grp.Examples) < 3 && !h.Own {
 			graph.AddUnique(&grp.Examples, h.Party)
@@ -147,6 +152,7 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 	for _, c := range order {
 		out.Hosting = append(out.Hosting, *hosting[c])
 	}
+
 	slices.SortStableFunc(out.Hosting, func(a, b ChangeGroup) int { return b.Count - a.Count })
 
 	out.lensBase = s.base()
@@ -154,6 +160,7 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 	if network.Truncated && !out.Truncated {
 		out.Truncated, out.Reason = true, network.Reason
 	}
+
 	out.Own = tally.list("own")
 	return out, nil
 }
@@ -164,12 +171,14 @@ func (s *scope) locations(a graph.Asset, rules geographyRules) ([]graph.Asset, e
 	if err != nil {
 		return nil, err
 	}
+
 	var out []graph.Asset
 	for _, st := range steps {
 		if st.forward && slices.Contains(rules.LocationTypes, st.other.Type) {
 			out = append(out, st.other)
 		}
 	}
+
 	return out, nil
 }
 
@@ -193,6 +202,7 @@ func (s *scope) partyCountry(party graph.Asset, rules geographyRules) string {
 				if s.spent() {
 					return rules.Unknown
 				}
+
 				s.report.Reads++
 				edges, _, err := bounded.EdgesLimited(s.w.ctx, id, dir, label, time.Time{}, partyLocationEdges)
 				if err != nil {
@@ -206,8 +216,10 @@ func (s *scope) partyCountry(party graph.Asset, rules geographyRules) string {
 					}
 				}
 			}
+
 			frontier = next
 		}
+
 		read, _ := graph.AssetsByID(s.w.ctx, s.w.graph, frontier)
 		for _, id := range frontier {
 			s.report.Reads++
@@ -219,6 +231,7 @@ func (s *scope) partyCountry(party graph.Asset, rules geographyRules) string {
 			}
 		}
 	}
+
 	return rules.Unknown
 }
 
@@ -226,6 +239,7 @@ func country(l graph.Asset, rules geographyRules) string {
 	if c := strings.ToUpper(strings.TrimSpace(graph.ContentString(l, rules.CountryField))); c != "" {
 		return c
 	}
+
 	return rules.Unknown
 }
 
@@ -234,6 +248,7 @@ func placeLabel(a, l graph.Asset, rules geographyRules) string {
 	if city := graph.ContentString(l, rules.CityField); city != "" {
 		label += " (" + city + ")"
 	}
+
 	return label
 }
 
@@ -244,6 +259,7 @@ func (r GeographyReport) Text() string {
 	if len(r.Owners) > 0 {
 		subject += " and " + strings.Join(r.Owners, ", ")
 	}
+
 	fmt.Fprintf(&b, "Geography of %s, from %d controlled asset(s) (%d reads).\n", subject, r.Footprint, r.Reads)
 	if len(r.Own) > 0 {
 		b.WriteString("\nIts stored addresses, by country:\n")
@@ -274,5 +290,6 @@ func (r GeographyReport) Facts() []string {
 	for _, c := range r.Hosting {
 		out = append(out, "hosted in "+c.Key)
 	}
+
 	return out
 }

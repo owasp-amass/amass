@@ -63,6 +63,7 @@ func (w *Watches) now() time.Time {
 	if w.Now != nil {
 		return w.Now()
 	}
+
 	return time.Now()
 }
 
@@ -70,15 +71,18 @@ func (w *Watches) load() {
 	if w.loaded {
 		return
 	}
+
 	w.loaded = true
 	w.watches = map[string]*Watch{}
 	if w.Path == "" {
 		return
 	}
+
 	data, err := os.ReadFile(w.Path)
 	if err != nil {
 		return
 	}
+
 	var list []*Watch
 	if json.Unmarshal(data, &list) == nil {
 		for _, x := range list {
@@ -94,19 +98,23 @@ func (w *Watches) save() error {
 	if w.Path == "" {
 		return nil
 	}
+
 	list := make([]*Watch, 0, len(w.watches))
 	for _, x := range w.watches {
 		list = append(list, x)
 	}
+
 	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.Before(list[j].CreatedAt) })
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	tmp := w.Path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
+
 	return os.Rename(tmp, w.Path)
 }
 
@@ -135,6 +143,7 @@ func (w *Watches) Add(plan Plan, interval time.Duration, approvedBy string) (Wat
 	if _, err := rand.Read(b); err != nil {
 		return Watch{}, err
 	}
+
 	now := w.now()
 	x := &Watch{ID: "watch-" + hex.EncodeToString(b), Plan: plan, Interval: interval, ApprovedBy: approvedBy,
 		CreatedAt: now, NextRunAt: now}
@@ -151,6 +160,7 @@ func (w *Watches) Remove(id string) (Watch, error) {
 	if !ok {
 		return Watch{}, fmt.Errorf("no watch %s", id)
 	}
+
 	delete(w.watches, id)
 	x.Removed = true
 	return *x, w.save()
@@ -165,6 +175,7 @@ func (w *Watches) List() []Watch {
 	for _, x := range w.watches {
 		out = append(out, *x)
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	return out
 }
@@ -186,6 +197,7 @@ func (w *Watches) Tick(ctx context.Context) {
 			due = append(due, x)
 		}
 	}
+
 	w.mu.Unlock()
 
 	for _, x := range finished {
@@ -194,11 +206,13 @@ func (w *Watches) Tick(ctx context.Context) {
 		if w.Summarize != nil && (run.State == StateFinished || run.State == StateTimedOut) {
 			summary = w.Summarize(ctx, run)
 		}
+
 		w.mu.Lock()
 		if cur, ok := w.watches[x.ID]; ok {
 			cur.Changes, cur.ChangesAt = summary, w.now()
 			_ = w.save()
 		}
+
 		w.mu.Unlock()
 	}
 
@@ -219,6 +233,7 @@ func (w *Watches) Tick(ctx context.Context) {
 			cur.LastRunID, cur.LastRunAt = run.ID, run.StartedAt
 			cur.NextRunAt = run.StartedAt.Add(cur.Interval)
 		}
+
 		_ = w.save()
 		w.mu.Unlock()
 	}

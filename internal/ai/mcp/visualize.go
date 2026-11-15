@@ -55,6 +55,7 @@ func (v *VizLinks) now() time.Time {
 	if v.Now != nil {
 		return v.Now()
 	}
+
 	return time.Now()
 }
 
@@ -64,6 +65,7 @@ func (v *VizLinks) New(subject string) (string, error) {
 	if id == "" || v.BaseURL == "" {
 		return "", errors.New("links are not available")
 	}
+
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.links == nil {
@@ -77,6 +79,7 @@ func (v *VizLinks) New(subject string) (string, error) {
 	if len(v.links) >= maxVizLinks {
 		return "", errors.New("too many open drawing links; wait for them to expire")
 	}
+
 	v.links[id] = vizLink{subject: subject, expires: v.now().Add(vizLinkTTL)}
 	return strings.TrimSuffix(v.BaseURL, "/") + vizLinkPrefix + id, nil
 }
@@ -115,6 +118,7 @@ func (v *VizLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = viz.WriteGEXFData(w, nodes, edges)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = viz.WriteD3Data(w, nodes, edges)
 }
@@ -130,6 +134,7 @@ func resolveSubject(ctx context.Context, g graph.Graph, subject string) (graph.A
 		if !ok {
 			return graph.Asset{}, errors.New("the database cannot look up names")
 		}
+
 		name := strings.ToLower(strings.Trim(subject, "."))
 		res, err := resolver.ResolveAsset(ctx, graph.AssetSelector{Type: "FQDN", Field: "name", Value: name}, 1)
 		if err != nil {
@@ -138,6 +143,7 @@ func resolveSubject(ctx context.Context, g graph.Graph, subject string) (graph.A
 		if len(res.Candidates) == 0 {
 			return graph.Asset{}, fmt.Errorf("%s is not in the database; enumerate it first", name)
 		}
+
 		return res.Candidates[0].Asset, nil
 	}
 
@@ -145,6 +151,7 @@ func resolveSubject(ctx context.Context, g graph.Graph, subject string) (graph.A
 	if !ok {
 		return graph.Asset{}, errors.New("the database cannot look up organizations")
 	}
+
 	orgs, err := lookup.LookupOrganizations(ctx, subject, 5)
 	if err != nil {
 		return graph.Asset{}, err
@@ -155,6 +162,7 @@ func resolveSubject(ctx context.Context, g graph.Graph, subject string) (graph.A
 	case 1:
 		return orgs[0], nil
 	}
+
 	return graph.Asset{}, fmt.Errorf("%d organizations are named %q; use resolve_organization to pick one",
 		len(orgs), subject)
 }
@@ -165,14 +173,17 @@ func footprint(ctx context.Context, runner ai.ToolRunner, subject string) ([]viz
 	if runner.Graph == nil || runner.Catalog == nil {
 		return nil, nil, lens.ControlledReport{}, errors.New("no database is configured")
 	}
+
 	root, err := resolveSubject(ctx, runner.Graph, subject)
 	if err != nil {
 		return nil, nil, lens.ControlledReport{}, err
 	}
+
 	report, err := lens.SearchControlled(ctx, runner.Graph, runner.Catalog, root, nil, vizMaxAssets)
 	if err != nil {
 		return nil, nil, report, err
 	}
+
 	nodes, edges := viz.FootprintGraph(report)
 	return nodes, edges, report, nil
 }
@@ -186,6 +197,7 @@ func addVisualizeTool(server *mcp.Server, runner ai.ToolRunner, links *VizLinks)
 	if links != nil {
 		desc += " Also returns a link to an interactive graph and a GEXF file for Gephi, valid for an hour."
 	}
+
 	server.AddTool(&mcp.Tool{Name: ToolVisualize, Title: "Draw an Amass footprint", Description: desc,
 		InputSchema: map[string]any{"type": "object", "required": []string{"subject"}, "additionalProperties": false,
 			"properties": map[string]any{"subject": map[string]any{"type": "string",
@@ -198,6 +210,7 @@ func addVisualizeTool(server *mcp.Server, runner ai.ToolRunner, links *VizLinks)
 					return errorResult(err), nil
 				}
 			}
+
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 			nodes, edges, report, err := footprint(ctx, runner, a.Subject)
@@ -219,6 +232,7 @@ func addVisualizeTool(server *mcp.Server, runner ai.ToolRunner, links *VizLinks)
 					out["gexf_url"] = link + ".gexf"
 				}
 			}
+
 			return jsonResult(out), nil
 		})
 }

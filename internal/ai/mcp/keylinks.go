@@ -49,6 +49,7 @@ func (k *KeyLinks) now() time.Time {
 	if k.Now != nil {
 		return k.Now()
 	}
+
 	return time.Now()
 }
 
@@ -61,6 +62,7 @@ func (k *KeyLinks) New(source string) (string, time.Time, error) {
 	if k.BaseURL == "" {
 		return "", time.Time{}, errors.New("the server does not know its public URL (AMASS_AI_MCP_PUBLIC_URL)")
 	}
+
 	id := newSessionID()
 	if id == "" {
 		return "", time.Time{}, errors.New("could not create a link")
@@ -70,6 +72,7 @@ func (k *KeyLinks) New(source string) (string, time.Time, error) {
 	if ttl <= 0 {
 		ttl = defaultKeyLinkTTL
 	}
+
 	expires := k.now().Add(ttl)
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -84,6 +87,7 @@ func (k *KeyLinks) New(source string) (string, time.Time, error) {
 	if len(k.links) >= maxKeyLinks {
 		return "", time.Time{}, errors.New("too many open key links; wait for them to expire")
 	}
+
 	k.links[id] = keyLink{source: source, expires: expires}
 	return strings.TrimSuffix(k.BaseURL, "/") + keyLinkPrefix + id, expires, nil
 }
@@ -97,6 +101,7 @@ func (k *KeyLinks) peek(id string) (keyLink, bool) {
 		delete(k.links, id)
 		return keyLink{}, false
 	}
+
 	return l, true
 }
 
@@ -109,6 +114,7 @@ func (k *KeyLinks) take(id string) (keyLink, bool) {
 	if !ok || k.now().After(l.expires) {
 		return keyLink{}, false
 	}
+
 	return l, true
 }
 
@@ -154,6 +160,7 @@ func (k *KeyLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			page.Error = "This link has expired or was already used. Ask your assistant for a new one."
 		}
+
 		page.Source = l.source
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
@@ -161,12 +168,14 @@ func (k *KeyLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
 		}
+
 		l, ok := k.take(id)
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			page.Error = "This link has expired or was already used. Ask your assistant for a new one."
 			break
 		}
+
 		page.Source = l.source
 		cred := config.Credentials{Apikey: strings.TrimSpace(r.PostForm.Get("apikey")),
 			Secret: strings.TrimSpace(r.PostForm.Get("secret")), Username: strings.TrimSpace(r.PostForm.Get("username")),
@@ -176,12 +185,14 @@ func (k *KeyLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			page.Error = fmt.Sprintf("The credentials were not stored: %v. Ask your assistant for a new link.", err)
 			break
 		}
+
 		page.Done = true
 	default:
 		w.Header().Set("Allow", "GET, POST")
 		http.Error(w, "use GET or POST", http.StatusMethodNotAllowed)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = keyPage.Execute(w, page)
 }

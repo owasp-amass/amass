@@ -332,7 +332,8 @@ func queryFromPlannedGoal(goal InvestigationGoal, question string, schema graph.
 	case lens.LensTable:
 		q = Query{Version: QueryVersion, Question: question, Subject: goal.Subject, Traversal: TraversalExplore,
 			TargetTypes: append([]string(nil), goal.TargetTypes...), Direction: "both", Purpose: "connected",
-			Lens: lens.LensTable, Columns: tableColumns(goal, mentionedTypes(question, schema)), Source: SourceModelGoal}
+			Lens: lens.LensTable, Columns: tableColumns(goal, mentionedTypes(question,
+				schema)), Source: SourceModelGoal}
 	default:
 		if goal.Subject.Type == "Organization" && goal.Purpose == "connected" && len(goal.Relationships) == 0 &&
 			lens.ControlledReachable(schema, goal.TargetTypes) {
@@ -473,6 +474,7 @@ func mentionedTypePositions(question string, schema graph.SchemaCatalog) map[str
 			if prev, ok := found[a.kind]; !ok || i < prev {
 				found[a.kind] = i
 			}
+
 			// Blank the phrase so shorter aliases inside it cannot match.
 			text = text[:i+1] + strings.Repeat("#", len(a.words)) + text[i+1+len(a.words):]
 		}
@@ -599,6 +601,7 @@ func isSubjectLens(name string) bool {
 	if subjectLens[name] {
 		return true
 	}
+
 	l, ok := lens.SubjectLensNamed(name)
 	return ok && l.Name == name && !l.NeedsOther
 }
@@ -608,6 +611,7 @@ func lensKind(name string) string {
 	if isSubjectLens(name) {
 		return subjectLensKind
 	}
+
 	return name
 }
 
@@ -631,6 +635,7 @@ func init() {
 		if l.NeedsOther {
 			continue
 		}
+
 		answerKinds = append(answerKinds, AnswerKind{Name: l.Name, Description: l.Description,
 			Subjects: []string{"Organization", "FQDN"}, Targets: "[]", Examples: l.Examples})
 	}

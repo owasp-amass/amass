@@ -32,7 +32,11 @@ type PolicyName struct {
 var PolicyNames = []PolicyName{
 	{Label: "_dmarc", Purpose: "DMARC policy", Source: "https://www.rfc-editor.org/rfc/rfc7489#section-6.1"},
 	{Label: "_mta-sts", Purpose: "MTA-STS policy", Source: "https://www.rfc-editor.org/rfc/rfc8461#section-3.1"},
-	{Label: "_smtp._tls", Purpose: "SMTP TLS reporting policy", Source: "https://www.rfc-editor.org/rfc/rfc8460#section-3"},
+	{
+		Label:   "_smtp._tls",
+		Purpose: "SMTP TLS reporting policy",
+		Source:  "https://www.rfc-editor.org/rfc/rfc8460#section-3",
+	},
 	{Label: "selector1._domainkey", Purpose: "DKIM key (Microsoft 365)",
 		Source: "https://learn.microsoft.com/en-us/defender-office-365/email-authentication-dkim-configure"},
 	{Label: "selector2._domainkey", Purpose: "DKIM key (Microsoft 365)",
@@ -71,6 +75,7 @@ func (d *dnsSubs) queryPolicies(e *et.Event, apex *dbt.Entity, subdomain string)
 				e.Session.Log().Warn(err.Error(), "fqdn", n,
 					slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
+
 			ch <- answer{name: n, rr: txt}
 		}(p.Label + "." + subdomain)
 	}

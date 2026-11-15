@@ -34,6 +34,7 @@ func TestPlansBindScopeAndMode(t *testing.T) {
 	if bad := NewPlan(sel, "loud"); bad.Status != StatusUnsupported {
 		t.Errorf("unknown mode planned: %+v", bad)
 	}
+
 	wide := graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.0.0.0/8"}
 	if NewPlan(wide, Active).Status != StatusUnsupported || NewPlan(wide, Passive).Status != StatusApprovalRequired {
 		t.Error("active collection of a /8 must be refused, passive allowed")
@@ -102,6 +103,7 @@ func (f *fakeEngine) CreateAsset(_ context.Context, _ uuid.UUID, a oam.Asset) (s
 	if f.seedErr != nil {
 		return "", f.seedErr
 	}
+
 	f.seeded = append(f.seeded, a)
 	return "1", nil
 }
@@ -113,6 +115,7 @@ func (f *fakeEngine) SessionStats(_ context.Context, id uuid.UUID) (*et.SessionS
 	if !ok {
 		return nil, errors.New("no session")
 	}
+
 	return &et.SessionStats{WorkItemsCompleted: s.WorkItemsCompleted, WorkItemsTotal: s.WorkItemsTotal}, nil
 }
 
@@ -131,6 +134,7 @@ func (f *fakeEngine) ListSessions(context.Context) ([]uuid.UUID, error) {
 	for id := range f.sessions {
 		out = append(out, id)
 	}
+
 	return out, nil
 }
 
@@ -148,8 +152,10 @@ func waitState(t *testing.T, m *Manager, id, state string) Run {
 		if r, _ := m.Get(id); r.State == state {
 			return r
 		}
+
 		time.Sleep(5 * time.Millisecond)
 	}
+
 	r, _ := m.Get(id)
 	t.Fatalf("run %s is %s, want %s", id, r.State, state)
 	return r
@@ -175,6 +181,7 @@ func TestManagerRunsFinishAndStop(t *testing.T) {
 	if _, err := m.Start(ctx, a, "tester"); err == nil {
 		t.Error("the same scope was started twice")
 	}
+
 	f.progress(run.ID, 10, 10)
 	done := waitState(t, m, run.ID, StateFinished)
 	if done.Completed != 10 || done.EndedAt.IsZero() {
@@ -186,6 +193,7 @@ func TestManagerRunsFinishAndStop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	f.progress(run.ID, 1, 50)
 	if stopped, err := m.Stop(ctx, run.ID); err != nil || stopped.State != StateStopped {
 		t.Errorf("stop = %+v, %v", stopped, err)
@@ -219,6 +227,7 @@ func TestManagerLimitsTimeoutsAndResume(t *testing.T) {
 		Passive), ""); err == nil {
 		t.Error("the running limit was not enforced")
 	}
+
 	waitState(t, m, run.ID, StateTimedOut)
 	m.Close()
 

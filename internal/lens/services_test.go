@@ -19,7 +19,8 @@ func TestFindServices(t *testing.T) {
 	serviceNow = func() time.Time { return time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC) }
 
 	g := graphtest.ServicesFixture()
-	r, err := FindServices(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"],
+	r, err := FindServices(context.Background(), g,
+		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"],
 		LensLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +33,7 @@ func TestFindServices(t *testing.T) {
 	for _, s := range r.Services {
 		byID[s.Service.ID] = s
 	}
+
 	web, ssh := byID["svc-web"], byID["svc-ssh"]
 	if len(web.Endpoints) != 2 || strings.Join(web.Software, ",") != "server: nginx/1.18.0" ||
 		strings.Join(web.Products, ",") != "nginx" || len(web.Certificates) != 1 || !web.Certificates[0].Expired {
@@ -57,7 +59,8 @@ func TestFindServices(t *testing.T) {
 
 func TestFindServicesWithNone(t *testing.T) {
 	g := graphtest.VendorFixture()
-	r, err := FindServices(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"],
+	r, err := FindServices(context.Background(), g,
+		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"],
 		LensLimits{})
 	if err != nil {
 		t.Fatal(err)

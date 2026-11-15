@@ -319,6 +319,7 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 		if r.Main != nil {
 			family["main"] = graph.AssetLabel(*r.Main)
 		}
+
 		out["family"] = family
 	}
 	if r := inv.OrgGroupReport; r != nil {
@@ -328,6 +329,7 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 				"parent_id": m.ParentID, "relationship": m.Label, "depth": m.Depth,
 				"jurisdiction": m.Jurisdiction, "registration_id": m.RegistrationID})
 		}
+
 		out["org_group"] = members
 	}
 	if r := inv.ServicesReport; r != nil {
@@ -337,10 +339,12 @@ func investigateResult(id string, q Query, inv Investigation, b review.EvidenceB
 				out["services_truncated"] = true
 				break
 			}
+
 			services = append(services, map[string]any{"type": s.ServiceType, "endpoints": s.Endpoints,
 				"ports": s.Ports, "software": s.Software, "identified": s.Identified, "certificates": s.Certificates,
 				"unusual_ports": s.UnusualPorts})
 		}
+
 		out["services"], out["services_by_product"] = services, r.ByProduct
 	}
 	if r := inv.GroupVendorReport; r != nil {

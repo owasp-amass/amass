@@ -133,6 +133,7 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	for _, c := range rules.Classes {
 		classes = append(classes, ExposureClass{Name: c.Name, Title: c.Title, Rationale: c.Rationale})
 	}
+
 	unusual := ExposureClass{Name: ExposureUnusualPort, Title: "Services on unusual ports",
 		Rationale: "services moved to unusual ports are often forgotten and unmonitored"}
 	certs := ExposureClass{Name: ExposureBadCert, Title: "Services with certificate problems",
@@ -195,6 +196,7 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		if !slices.Contains(rules.URLTypes, a.Type) {
 			continue
 		}
+
 		out.URLs++
 		u := graph.ContentString(a, rules.URLField)
 		if u == "" {
@@ -213,12 +215,14 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	if services.Truncated {
 		out.Truncated, out.Reason = true, services.Reason
 	}
+
 	out.Services = len(services.Services)
 	for _, c := range append(classes, unsupported, unusual, certs) {
 		if c.Count > 0 {
 			out.Classes = append(out.Classes, c)
 		}
 	}
+
 	return out, nil
 }
 
@@ -236,6 +240,7 @@ func classOfService(rules exposureRules, svc ExposedService) int {
 			}
 		}
 	}
+
 	return -1
 }
 
@@ -261,6 +266,7 @@ func (s *scope) classOfTitle(rules exposureRules, svc graph.Asset) (int, string,
 			}
 		}
 	}
+
 	return -1, "", nil
 }
 
@@ -284,6 +290,7 @@ func (s *scope) classifyTXT(rules exposureRules, name graph.Asset, note func(int
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -296,8 +303,10 @@ func maskURL(raw string) string {
 				return raw[:scheme+3] + "xxxxx" + raw[at:]
 			}
 		}
+
 		return raw
 	}
+
 	return u.Redacted()
 }
 
@@ -312,6 +321,7 @@ func serviceLabel(svc ExposedService) string {
 	if len(svc.Identified) > 0 {
 		label += " (" + strings.TrimSpace(svc.Identified[0].Product+" "+svc.Identified[0].Version) + ")"
 	}
+
 	return label
 }
 
@@ -322,6 +332,7 @@ func (r ExposureReport) Text() string {
 	if len(r.Owners) > 0 {
 		subject += " and " + strings.Join(r.Owners, ", ")
 	}
+
 	fmt.Fprintf(&b, "Exposure of %s: %d service(s) and %d URL(s) from %d controlled asset(s).\n", subject,
 		r.Services, r.URLs, r.Footprint)
 	if len(r.Classes) == 0 {
@@ -347,5 +358,6 @@ func (r ExposureReport) Facts() []string {
 			out = append(out, c.Name+" "+e)
 		}
 	}
+
 	return out
 }

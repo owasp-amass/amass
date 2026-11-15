@@ -50,6 +50,7 @@ func (u UnsupportedRelease) String() string {
 	if u.EndOfSupport != "" {
 		s += " since " + u.EndOfSupport
 	}
+
 	return s + ")"
 }
 
@@ -58,6 +59,7 @@ var loadSoftwareLifecycle = sync.OnceValue(func() softwareLifecycle {
 	if err := graph.DecodeStrict(softwareLifecycleJSON, &r); err != nil {
 		panic("software_lifecycle.json: " + err.Error())
 	}
+
 	known := map[string]bool{}
 	for _, f := range loadProductFingerprints().Fingerprints {
 		known[f.Product] = true
@@ -78,10 +80,12 @@ var loadSoftwareLifecycle = sync.OnceValue(func() softwareLifecycle {
 				if err != nil {
 					panic("software_lifecycle.json: " + p.Product + " " + l.Series + ": " + err.Error())
 				}
+
 				l.end = t
 			}
 		}
 	}
+
 	return r
 })
 
@@ -94,6 +98,7 @@ func unsupportedRelease(p IdentifiedProduct) (UnsupportedRelease, bool) {
 	if p.Version == "" {
 		return UnsupportedRelease{}, false
 	}
+
 	now := lifecycleNow()
 	for _, pl := range loadSoftwareLifecycle().Products {
 		if pl.Product != p.Product {
@@ -103,10 +108,12 @@ func unsupportedRelease(p IdentifiedProduct) (UnsupportedRelease, bool) {
 			if !inSeries(p.Version, l.Series) || (!l.end.IsZero() && now.Before(l.end)) {
 				continue
 			}
+
 			return UnsupportedRelease{Product: p.Product, Version: p.Version, Series: l.Series,
 				EndOfSupport: l.EndOfSupport, Source: pl.Source}, true
 		}
 	}
+
 	return UnsupportedRelease{}, false
 }
 
@@ -116,6 +123,7 @@ func inSeries(version, series string) bool {
 	if !strings.HasPrefix(version, series) {
 		return false
 	}
+
 	rest := version[len(series):]
 	return rest == "" || rest[0] < '0' || rest[0] > '9'
 }

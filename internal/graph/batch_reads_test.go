@@ -20,8 +20,10 @@ func (l *labeledGraph) all(label string) []Relation {
 	n := map[string]int{"a": 3, "b": 1}[label]
 	var out []Relation
 	for i := 0; i < n; i++ {
-		out = append(out, Relation{ID: fmt.Sprintf("%s%d", label, i), FromID: "r", ToID: fmt.Sprintf("%s-to-%d", label, i), Label: label})
+		out = append(out, Relation{ID: fmt.Sprintf("%s%d", label,
+			i), FromID: "r", ToID: fmt.Sprintf("%s-to-%d", label, i), Label: label})
 	}
+
 	return out
 }
 
@@ -34,8 +36,10 @@ func (l *labeledGraph) EdgesPerLabel(_ context.Context, _, _ string, labels []st
 		if len(all) > per {
 			all, more = all[:per], append(more, label)
 		}
+
 		out = append(out, all...)
 	}
+
 	return out, more, nil
 }
 
@@ -46,11 +50,13 @@ func (l *labeledGraph) EdgesPage(_ context.Context, _, _, label string, _ time.T
 	if cursor != "" {
 		_, _ = fmt.Sscan(cursor, &start)
 	}
+
 	end := min(start+limit, len(all))
 	next := ""
 	if end < len(all) {
 		next = fmt.Sprint(end)
 	}
+
 	return all[start:end], next, nil
 }
 
@@ -80,11 +86,17 @@ func TestReadLabelsOneReadThenPagesWhatIsLeft(t *testing.T) {
 
 func TestFarAssetsBatchesUnknownEnds(t *testing.T) {
 	inner := &countingGraph{calls: map[string]int{}}
-	edges := []Relation{{FromID: "r", ToID: "x"}, {FromID: "y", ToID: "r"}, {FromID: "r", ToID: "x"}, {FromID: "r", ToID: "known"}}
+	edges := []Relation{
+		{FromID: "r", ToID: "x"},
+		{FromID: "y", ToID: "r"},
+		{FromID: "r", ToID: "x"},
+		{FromID: "r", ToID: "known"},
+	}
 	read, err := FarAssets(context.Background(), inner, "r", edges, func(id string) bool { return id == "known" })
 	if err != nil || len(read) != 2 || inner.calls["assets:x,y"] != 1 {
 		t.Fatalf("read %v calls %v err %v", read, inner.calls, err)
 	}
+
 	a, err := AssetFrom(context.Background(), inner, read, "z")
 	if err != nil || a.ID != "a" || inner.calls["asset"] != 1 {
 		t.Fatalf("an asset not batched was not read alone: %v %v", a, inner.calls)

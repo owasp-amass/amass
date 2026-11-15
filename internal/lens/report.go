@@ -26,7 +26,10 @@ var reportLens = SubjectLens{
 	Description: "Write an attack surface report for a domain or organization: key findings first (takeovers, " +
 		"exposed services, unsupported software, expired domains and certificates, email spoofing), then each " +
 		"lens's results. Read-only",
-	Examples: []string{"Write an attack surface report for <domain>", "Summarize the security posture of <organization>"},
+	Examples: []string{
+		"Write an attack surface report for <domain>",
+		"Summarize the security posture of <organization>",
+	},
 }
 
 // The report runs the other registered lenses, so its Find is set once the
@@ -69,6 +72,7 @@ var loadReportRules = sync.OnceValue(func() reportRules {
 	if r.Examples < 1 || len(r.Sections) == 0 {
 		panic("report.json: examples_per_finding and sections are required")
 	}
+
 	return r
 })
 
@@ -83,8 +87,10 @@ type textReport struct {
 	partial      bool
 }
 
-func (t textReport) Text() string            { return t.text }
-func (t textReport) Facts() []string         { return t.facts }
+func (t textReport) Text() string { return t.text }
+
+func (t textReport) Facts() []string { return t.facts }
+
 func (t textReport) Partial() (bool, string) { return t.partial, t.reason }
 
 // reportSection finds the lens a section names: a registered subject lens,
@@ -105,6 +111,7 @@ func reportSection(name string) (sectionFinder, bool) {
 			for _, f := range r.Findings {
 				facts = append(facts, f.Kind+" "+f.Name)
 			}
+
 			return textReport{text: FormatDanglingReport(r), facts: facts, partial: r.Truncated, reason: r.Reason}, err
 		}, true
 	case LensNetwork:
@@ -126,6 +133,7 @@ func reportSection(name string) (sectionFinder, bool) {
 			return textReport{text: FormatChangesReport(r)}, err
 		}, true
 	}
+
 	return nil, false
 }
 
@@ -173,10 +181,12 @@ func FindReport(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, 
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
+
 		find, ok := reportSection(sec.Lens)
 		if !ok {
 			return out, fmt.Errorf("report.json names an unknown lens %q", sec.Lens)
 		}
+
 		part := ReportSection{Lens: sec.Lens, Title: sec.Title}
 		r, err := find(ctx, g, schema, root, limits)
 		if err != nil {
@@ -184,10 +194,12 @@ func FindReport(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, 
 			out.Sections = append(out.Sections, part)
 			continue
 		}
+
 		part.Text = strings.TrimSpace(r.Text())
 		if partial, why := r.Partial(); partial {
 			part.Partial = why
 		}
+
 		out.Sections = append(out.Sections, part)
 
 		for _, fact := range r.Facts() {
@@ -199,12 +211,14 @@ func FindReport(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, 
 				if fr.Lens != sec.Lens || (words[0] != fr.Kind && !(fr.AnyWord && slices.Contains(words, fr.Kind))) {
 					continue
 				}
+
 				key := [2]string{fr.Lens, fr.Kind}
 				kf := found[key]
 				if kf == nil {
 					kf = &KeyFinding{Lens: fr.Lens, Kind: fr.Kind, Title: fr.Title, Priority: fr.Priority}
 					found[key] = kf
 				}
+
 				kf.Count++
 				example := strings.TrimSpace(strings.TrimPrefix(fact, fr.Kind))
 				if fr.AnyWord {
@@ -213,6 +227,7 @@ func FindReport(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, 
 				if len(kf.Examples) < rules.Examples && example != "" {
 					graph.AddUnique(&kf.Examples, example)
 				}
+
 				break
 			}
 		}
@@ -221,6 +236,7 @@ func FindReport(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, 
 	for _, kf := range found {
 		out.Findings = append(out.Findings, *kf)
 	}
+
 	sort.Slice(out.Findings, func(i, j int) bool {
 		a, b := out.Findings[i], out.Findings[j]
 		if a.Priority != b.Priority {
@@ -229,6 +245,7 @@ func FindReport(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, 
 		if a.Count != b.Count {
 			return a.Count > b.Count
 		}
+
 		return a.Title < b.Title
 	})
 	return out, nil
@@ -253,6 +270,7 @@ func (r SurfaceReport) Text() string {
 				b.WriteString("; ...")
 			}
 		}
+
 		b.WriteString("\n")
 	}
 
@@ -273,6 +291,7 @@ func (r SurfaceReport) Text() string {
 		fmt.Fprintf(&b, "\n_Partial sections (a read limit was reached): %s. Raise the limits to cover more._\n",
 			strings.Join(partial, ", "))
 	}
+
 	return b.String()
 }
 
@@ -282,6 +301,7 @@ func (r SurfaceReport) Facts() []string {
 	for _, f := range r.Findings {
 		out = append(out, fmt.Sprintf("%s %s %d", f.Lens, f.Kind, f.Count))
 	}
+
 	return out
 }
 
@@ -292,5 +312,6 @@ func (r SurfaceReport) Partial() (bool, string) {
 			return true, s.Partial
 		}
 	}
+
 	return false, ""
 }

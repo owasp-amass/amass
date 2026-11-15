@@ -94,6 +94,7 @@ func NewPlan(target graph.AssetSelector, mode Mode) Plan {
 				return plan
 			}
 		}
+
 		plan.ScopeType, plan.ScopeValue = "domain", value
 	case target.Type == "IPAddress" && target.Field == "address":
 		addr, err := netip.ParseAddr(value)
@@ -101,6 +102,7 @@ func NewPlan(target graph.AssetSelector, mode Mode) Plan {
 			plan.Reason = "only valid public unicast IPs are supported for collection"
 			return plan
 		}
+
 		plan.ScopeType, plan.ScopeValue = "ip", addr.Unmap().String()
 	case target.Type == "Netblock" && target.Field == "cidr":
 		prefix, err := netip.ParsePrefix(value)
@@ -108,6 +110,7 @@ func NewPlan(target graph.AssetSelector, mode Mode) Plan {
 			plan.Reason = "only public CIDR ranges are supported for collection"
 			return plan
 		}
+
 		prefix = prefix.Masked()
 		if mode == Active && ((prefix.Addr().Is4() && prefix.Bits() < maxActiveIPv4Prefix) ||
 			(prefix.Addr().Is6() && prefix.Bits() < maxActiveIPv6Prefix)) {
@@ -115,6 +118,7 @@ func NewPlan(target graph.AssetSelector, mode Mode) Plan {
 				"range or collect it passively", maxActiveIPv4Prefix, maxActiveIPv6Prefix)
 			return plan
 		}
+
 		plan.ScopeType, plan.ScopeValue = "cidr", prefix.String()
 	case target.Type == "AutonomousSystem" && target.Field == "number":
 		asn, err := strconv.ParseUint(value, 10, 32)
@@ -122,6 +126,7 @@ func NewPlan(target graph.AssetSelector, mode Mode) Plan {
 			plan.Reason = "invalid autonomous system number"
 			return plan
 		}
+
 		plan.ScopeType, plan.ScopeValue = "asn", fmt.Sprint(asn)
 	default:
 		plan.Reason = "this OAM selector has no approved direct enumeration adapter"
@@ -146,6 +151,7 @@ func NewPlan(target graph.AssetSelector, mode Mode) Plan {
 		plan.Reason = "Active collection of this exact target only; the scope is not expanded to newly " +
 			"discovered domains or networks."
 	}
+
 	return plan
 }
 

@@ -38,6 +38,7 @@ func (a Adapter) GetAsset(ctx context.Context, id string) (graph.Asset, error) {
 	if a.Repo == nil {
 		return graph.Asset{}, errors.New("missing OAM repository")
 	}
+
 	defer a.Stats.record("GetAsset", time.Now())
 
 	ent, err := a.Repo.FindEntityById(ctx, id)
@@ -234,6 +235,7 @@ func (a Adapter) createEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, err
 		if err != nil {
 			return nil, fmt.Errorf("entity %s: %w", (*end).ID, err)
 		}
+
 		*end = full
 	}
 
@@ -338,6 +340,7 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	if !ok && !isNeo {
 		return nil, false, errors.New("asset-db version lacks bounded edge reader; upgrade the repository dependency")
 	}
+
 	defer a.Stats.record("EdgesLimited", time.Now())
 
 	// The edge readers use only the entity's ID, so the entity is not
@@ -449,6 +452,7 @@ func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, sin
 		if e.ToEntity.ID == id {
 			dir = "in"
 		}
+
 		out = append(out, graph.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID,
 			Label: schemaLabel(e.Relation), Type: string(e.Relation.RelationType()), Direction: dir,
 			Content: e.Relation, CreatedAt: e.CreatedAt, LastSeen: e.LastSeen})
@@ -563,7 +567,11 @@ func organizationNameVariants(name string) []string {
 // bounded repository content filters. Alias metadata must be explicitly supplied
 // from a curated source; neither aliases nor names imply legal ownership.
 func (a Adapter) ResolveOrganizations(ctx context.Context, query graph.OrganizationQuery, limit int) (graph.OrganizationResolution, error) {
-	result := graph.OrganizationResolution{Query: query, Candidates: []graph.OrganizationCandidate{}, Status: "not_found"}
+	result := graph.OrganizationResolution{
+		Query:      query,
+		Candidates: []graph.OrganizationCandidate{},
+		Status:     "not_found",
+	}
 	if a.Repo == nil {
 		return result, errors.New("missing OAM repository")
 	}

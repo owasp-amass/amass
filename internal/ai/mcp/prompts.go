@@ -62,6 +62,7 @@ func addPrompts(server *mcp.Server) {
 			if err != nil {
 				return nil, err
 			}
+
 			return promptResult(firstSentence(kind.Description), lensRequest(subject, []string{kind.Name})), nil
 		})
 	}
@@ -80,6 +81,7 @@ func addPrompts(server *mcp.Server) {
 	if len(overview) == 0 {
 		return
 	}
+
 	server.AddPrompt(&mcp.Prompt{
 		Name:        overviewPrompt,
 		Title:       "Amass: attack surface overview",
@@ -90,6 +92,7 @@ func addPrompts(server *mcp.Server) {
 		if err != nil {
 			return nil, err
 		}
+
 		return promptResult("Attack surface overview", lensRequest(subject, overview)), nil
 	})
 }
@@ -108,6 +111,7 @@ func promptSubject(req *mcp.GetPromptRequest) (string, error) {
 	if subject == "" {
 		return "", fmt.Errorf("the subject argument (a domain or an organization's name) is required")
 	}
+
 	return subject, nil
 }
 
@@ -137,10 +141,12 @@ func lensRequest(subject string, kinds []string) string {
 	if len(kinds) > 1 {
 		b.WriteString(" once for each of these answer kinds")
 	}
+
 	fmt.Fprintf(&b, " with subject %s:\n", subjectJSON(subject))
 	for _, k := range kinds {
 		fmt.Fprintf(&b, "- answer: %q\n", k)
 	}
+
 	b.WriteString("\nIf the subject is not found, say so and suggest the closest names investigate reports. " +
 		"Summarize the findings most worth attention first, citing evidence items like [E1] from the matching " +
 		"investigation for every claim, then run verify_citations on your summary. Say that the results come " +
@@ -159,6 +165,7 @@ func firstSentence(s string) string {
 	if i := strings.Index(s, ". "); i > 0 {
 		s = s[:i]
 	}
+
 	s = strings.TrimSuffix(strings.TrimSuffix(s, ". Read-only"), ".")
 	return s
 }

@@ -33,7 +33,10 @@ func TestUnsupportedSoftware(t *testing.T) {
 	lifecycleNow = func() time.Time { return time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC) }
 
 	_ = loadSoftwareLifecycle()
-	if u, ok := unsupportedRelease(IdentifiedProduct{Product: "OpenSSL", Version: "1.1.1k"}); !ok || u.Series != "1.1.1" {
+	if u, ok := unsupportedRelease(IdentifiedProduct{
+		Product: "OpenSSL",
+		Version: "1.1.1k",
+	}); !ok || u.Series != "1.1.1" {
 		t.Errorf("OpenSSL 1.1.1k = %+v %v", u, ok)
 	}
 	if _, ok := unsupportedRelease(IdentifiedProduct{Product: "Apache HTTP Server", Version: "2.4.37"}); ok {
@@ -42,11 +45,13 @@ func TestUnsupportedSoftware(t *testing.T) {
 	if _, ok := unsupportedRelease(IdentifiedProduct{Product: "PHP", Version: ""}); ok {
 		t.Error("an unversioned product reported unsupported")
 	}
+
 	// A line is reported only once its end of support has passed.
 	lifecycleNow = func() time.Time { return time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC) }
 	if _, ok := unsupportedRelease(IdentifiedProduct{Product: "PHP", Version: "8.1.2"}); ok {
 		t.Error("PHP 8.1 reported before its end of support")
 	}
+
 	lifecycleNow = func() time.Time { return time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC) }
 
 	// The Server header of the services fixture's web service names Apache
@@ -57,7 +62,10 @@ func TestUnsupportedSoftware(t *testing.T) {
 	for k, v := range svc.Content.(map[string]any) {
 		content[k] = v
 	}
-	content["attributes"] = map[string]any{"Server": []any{"Apache/2.4.37 (Oracle Linux Server) OpenSSL/1.1.1k PHP/7.4.33"}}
+
+	content["attributes"] = map[string]any{
+		"Server": []any{"Apache/2.4.37 (Oracle Linux Server) OpenSSL/1.1.1k PHP/7.4.33"},
+	}
 	svc.Content = content
 	g.Assets["svc-web"] = svc
 
@@ -65,12 +73,14 @@ func TestUnsupportedSoftware(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var found ExposureClass
 	for _, c := range r.Classes {
 		if c.Name == ExposureUnsupported {
 			found = c
 		}
 	}
+
 	text := strings.Join(found.Examples, "\n")
 	if found.Count != 2 || !strings.Contains(text, "OpenSSL 1.1.1k") || !strings.Contains(text, "PHP 7.4.33") ||
 		strings.Contains(text, "Apache") {

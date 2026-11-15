@@ -23,6 +23,7 @@ func TestEdgeEndsAndFQDNScopeOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = repo.Close() }()
 	ctx := context.Background()
 
@@ -39,6 +40,7 @@ func TestEdgeEndsAndFQDNScopeOnSQLite(t *testing.T) {
 			Relation: &oamgen.SimpleRelation{Name: "node"}}); err != nil {
 			t.Fatal(err)
 		}
+
 		grand, err := repo.CreateAsset(ctx, &oamdns.FQDN{Name: fmt.Sprintf("w.h%d.scope.example", i)})
 		if err != nil {
 			t.Fatal(err)
@@ -53,6 +55,7 @@ func TestEdgeEndsAndFQDNScopeOnSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	ends := EdgeEnds(ctx, repo, edges, false)
 	if len(ends) != 3 {
 		t.Fatalf("ends = %v", ends)

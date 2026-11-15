@@ -25,6 +25,7 @@ func TestModelFreePackagesDoNotImportAI(t *testing.T) {
 			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
 				return err
 			}
+
 			f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 			if err != nil {
 				return err
@@ -35,6 +36,7 @@ func TestModelFreePackagesDoNotImportAI(t *testing.T) {
 					t.Errorf("%s imports %s", path, p)
 				}
 			}
+
 			return nil
 		})
 		if err != nil {

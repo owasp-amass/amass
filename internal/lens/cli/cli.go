@@ -77,6 +77,7 @@ func Operations() map[string]string {
 	for name, op := range reviewOps {
 		out[op] = "amass review " + name
 	}
+
 	return out
 }
 
@@ -127,6 +128,7 @@ func runGroup(group string, ops map[string]string, in io.Reader, out, errout io.
 	for n := range ops {
 		names = append(names, n)
 	}
+
 	sort.Strings(names)
 
 	usage := fmt.Sprintf("usage: amass %s <%s> [flags]", group, strings.Join(names, "|"))
@@ -188,7 +190,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", lens.LensMaxAssetsLimit))
 	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one lens run "+
 		"(default 20000, up to %d)", lens.LensMaxReadsLimit))
-	fs.BoolVar(&readStats, "read-stats", false, "Print the database reads the run made and their time to standard error")
+	fs.BoolVar(&readStats, "read-stats", false,
+		"Print the database reads the run made and their time to standard error")
 	fs.DurationVar(&timeout, "investigation-timeout", 8*time.Minute,
 		"Maximum time for one lens or review run (default from AMASS_AI_INVESTIGATION_TIMEOUT, the limit amass ai also uses)")
 	if err := fs.Parse(args); err != nil {
@@ -197,6 +200,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	if fs.NArg() != 1 {
 		return fmt.Errorf("usage: amass %s <name> [flags]; unexpected arguments %v", group, fs.Args())
 	}
+
 	explicit := false
 	fs.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "investigation-timeout" })
 	if v, ok := os.LookupEnv("AMASS_AI_INVESTIGATION_TIMEOUT"); ok && !explicit {
@@ -204,6 +208,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		if err != nil {
 			return fmt.Errorf("AMASS_AI_INVESTIGATION_TIMEOUT: %w", err)
 		}
+
 		timeout = d
 	}
 	if timeout <= 0 || timeout > 2*time.Hour {
@@ -254,6 +259,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 			g.Stats.Write(errout)
 		}()
 	}
+
 	limits := lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -268,6 +274,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		case isMergeProposal(proposalID):
 			return approveMerge(ctx, g, journalPath, proposalID, reviewer, out)
 		}
+
 		return approveProposal(ctx, g, journalPath, proposalID, reviewer, out)
 	case "retract":
 		switch {
@@ -278,6 +285,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		case isMergeProposal(proposalID):
 			return retractMerge(ctx, g, journalPath, proposalID, reviewer, out)
 		}
+
 		return retractProposal(ctx, g, journalPath, proposalID, reviewer, out)
 	case "duplicates":
 		return listDuplicates(ctx, g, journalPath, format, true, out, errout)
@@ -302,6 +310,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		if err != nil {
 			return err
 		}
+
 		return listChanges(ctx, g, domainName, orgName, from, limits, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
@@ -312,6 +321,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		if err != nil {
 			return err
 		}
+
 		opts := lens.Options{Limits: limits}
 		if opts.Since, err = parseSince(since, time.Now()); err != nil {
 			return err
@@ -336,6 +346,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		case "json":
 			return writeJSON(out, r)
 		}
+
 		return fmt.Errorf("%s format %q: use text or json", l.Command, format)
 	}
 

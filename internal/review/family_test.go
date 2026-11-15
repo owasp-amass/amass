@@ -31,6 +31,7 @@ func TestFindOrganizationFamily(t *testing.T) {
 	for _, m := range r.Members {
 		got[m.Organization.ID] = m.Relation
 	}
+
 	want := map[string]string{"jhu": lens.FamilySame, "jhu-arin": lens.FamilySame, "its": lens.FamilyDepartment,
 		"jhmi": lens.FamilyAffiliate, "isp": lens.FamilyOther, "person": lens.FamilySame}
 	for id, rel := range want {
@@ -94,10 +95,12 @@ func familyOf(t *testing.T, g graphtest.FakeGraph, domain string) (lens.FamilyRe
 	for _, m := range r.Members {
 		rel[m.Organization.ID] = m.Relation
 	}
+
 	dedicated := map[string]bool{}
 	for _, n := range r.Networks {
 		dedicated[n.CIDR] = n.Dedicated
 	}
+
 	return r, rel, dedicated
 }
 
@@ -169,6 +172,7 @@ func TestFamilyOrganizationNamedLikeTheDomain(t *testing.T) {
 	if _, ok := rel["unrelated"]; ok {
 		t.Errorf("members = %v", rel)
 	}
+
 	related := map[string]bool{}
 	for _, d := range r.RelatedDomains {
 		related[d.Domain] = true
@@ -212,6 +216,7 @@ func TestFamilyRenameAndCenters(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		g.Cert(fmt.Sprintf("u%d", i), fmt.Sprintf("www%d.utica.edu", i), "uu")
 	}
+
 	g.Cert("c0", "old.utica.edu", "uc")
 
 	r, rel, _ := familyOf(t, g.Graph, "utica.edu")
@@ -230,6 +235,7 @@ func TestFamilyRenameAndCenters(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		n.Cert(fmt.Sprintf("n%d", i), fmt.Sprintf("www%d.nasa.gov", i), "nasa")
 	}
+
 	n.Cert("a0", "ames.nasa.gov", "ames")
 	n.Cert("g0", "gsfc.nasa.gov", "gsfc")
 
@@ -260,6 +266,7 @@ func TestFamilyNamedLikeAcrossSmallNetworks(t *testing.T) {
 	if r.Main == nil || r.Main.ID != "auto" || rel["auto"] != lens.FamilySame {
 		t.Fatalf("main = %+v, members = %v", r.Main, rel)
 	}
+
 	got := map[string]lens.RelatedDomain{}
 	for _, d := range r.RelatedDomains {
 		got[d.Domain] = d
@@ -270,7 +277,8 @@ func TestFamilyNamedLikeAcrossSmallNetworks(t *testing.T) {
 	if d := got["customer.example"]; d.Own || !d.OwnNetwork {
 		t.Errorf("a hosted customer counted as the company's own: %+v", d)
 	}
-	if text := lens.FormatFamilyReport(r); !strings.Contains(text, "customer.example (3 names, 10.2.0.0/24, hosted on") {
+	if text := lens.FormatFamilyReport(r); !strings.Contains(text,
+		"customer.example (3 names, 10.2.0.0/24, hosted on") {
 		t.Errorf("report does not set the hosted domain apart:\n%s", text)
 	}
 }
@@ -287,6 +295,7 @@ func TestFamilyUnitVariantsAndMemberNetworks(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		g.Cert(fmt.Sprintf("n%d", i), fmt.Sprintf("www%d.nasa.gov", i), "nasa")
 	}
+
 	g.Cert("nj", "jpl.nasa.gov", "njpl")
 	g.Cert("j0", "a.jpl.nasa.gov", "jpl")
 	g.Cert("j1", "b.jpl.nasa.gov", "jpl")
@@ -314,6 +323,7 @@ func TestFamilyUnitsByName(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		g.Cert(fmt.Sprintf("u%d", i), fmt.Sprintf("www%d.rochester.edu", i), "ur")
 	}
+
 	g.Cert("m0", "med.rochester.edu", "urmc")
 
 	_, rel, _ := familyOf(t, g.Graph, "rochester.edu")
@@ -328,6 +338,7 @@ func TestFamilyUnitsByName(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		c.Cert(fmt.Sprintf("a%d", i), fmt.Sprintf("www%d.mcc.example", i), "a")
 	}
+
 	c.Cert("b0", "portal.mcc.example", "b")
 
 	_, rel, _ = familyOf(t, c.Graph, "mcc.example")
@@ -357,6 +368,7 @@ func TestFamilyReadsDoNotGrowWithUnrelatedOrganizations(t *testing.T) {
 		if r.Main == nil || r.Main.ID != "acme" || len(rel) != 1 {
 			t.Fatalf("main = %+v, members = %v", r.Main, rel)
 		}
+
 		return r.Reads
 	}
 

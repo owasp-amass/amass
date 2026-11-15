@@ -93,6 +93,7 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 	if op != nil {
 		instructions += operatorInstructions
 	}
+
 	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
 		&mcp.ServerOptions{GetSessionID: newSessionID, Instructions: instructions})
 	for _, spec := range toolSpecs(runner) {
@@ -129,6 +130,7 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 	if op != nil {
 		addOperatorTools(server, op, runner)
 	}
+
 	return server
 }
 

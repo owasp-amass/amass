@@ -26,6 +26,7 @@ func FootprintGraph(r lens.ControlledReport) ([]Node, []Edge) {
 		if i, ok := index[a.ID]; ok {
 			return i
 		}
+
 		i := len(nodes)
 		index[a.ID] = i
 		label := strings.ReplaceAll(graph.AssetLabel(a), "\"", "")
@@ -47,10 +48,12 @@ func FootprintGraph(r lens.ControlledReport) ([]Node, []Edge) {
 			if seen[key] || !ok1 || !ok2 {
 				continue
 			}
+
 			seen[key] = true
 			edges = append(edges, Edge{From: from, To: to, Label: e.Label, Title: e.Label})
 		}
 	}
+
 	return nodes, edges
 }
 
@@ -62,10 +65,12 @@ func MermaidSummary(nodes []Node, edges []Edge) string {
 	for _, n := range nodes {
 		counts[n.Type]++
 	}
+
 	types := make([]string, 0, len(counts))
 	for t := range counts {
 		types = append(types, t)
 	}
+
 	sort.Strings(types)
 
 	id := map[string]string{}
@@ -82,21 +87,26 @@ func MermaidSummary(nodes []Node, edges []Edge) string {
 		if e.From < 0 || e.From >= len(nodes) || e.To < 0 || e.To >= len(nodes) {
 			continue
 		}
+
 		links[link{nodes[e.From].Type, e.Label, nodes[e.To].Type}]++
 	}
+
 	keys := make([]link, 0, len(links))
 	for k := range links {
 		keys = append(keys, k)
 	}
+
 	sort.Slice(keys, func(i, j int) bool {
 		if links[keys[i]] != links[keys[j]] {
 			return links[keys[i]] > links[keys[j]]
 		}
+
 		return fmt.Sprint(keys[i]) < fmt.Sprint(keys[j])
 	})
 	for _, k := range keys {
 		fmt.Fprintf(&b, "  %s -->|\"%s (%d)\"| %s\n", id[k.from], safe(k.label), links[k], id[k.to])
 	}
+
 	return b.String()
 }
 
@@ -106,6 +116,7 @@ func MermaidDetail(nodes []Node, edges []Edge, maxNodes int) string {
 	if len(nodes) == 0 || len(nodes) > maxNodes {
 		return ""
 	}
+
 	var b strings.Builder
 	b.WriteString("flowchart LR\n")
 	for _, n := range nodes {
@@ -114,6 +125,7 @@ func MermaidDetail(nodes []Node, edges []Edge, maxNodes int) string {
 	for _, e := range edges {
 		fmt.Fprintf(&b, "  n%d -->|\"%s\"| n%d\n", e.From, safe(e.Label), e.To)
 	}
+
 	return b.String()
 }
 
@@ -131,5 +143,6 @@ func safe(s string) string {
 	if b.Len() == 0 {
 		return "unknown"
 	}
+
 	return b.String()
 }

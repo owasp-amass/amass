@@ -111,6 +111,7 @@ func FindDuplicateOrganizations(ctx context.Context, g graph.Graph) (DuplicateRe
 
 		s.profiles[o.ID] = p
 	}
+
 	s.report.Organizations = len(s.profiles)
 
 	for _, pair := range s.pairs() {
@@ -149,6 +150,7 @@ func FindDuplicateOrganizations(ctx context.Context, g graph.Graph) (DuplicateRe
 		if ci.Score != cj.Score {
 			return ci.Score > cj.Score
 		}
+
 		return ci.Survivor.ID+ci.Duplicate.ID < cj.Survivor.ID+cj.Duplicate.ID
 	})
 
@@ -171,6 +173,7 @@ func (s *dupSearch) groupCandidates(cands []DuplicateCandidate) []DuplicateCandi
 			parent[id] = r
 			return r
 		}
+
 		parent[id] = id
 		return id
 	}
@@ -187,16 +190,19 @@ func (s *dupSearch) groupCandidates(cands []DuplicateCandidate) []DuplicateCandi
 		r := find(id)
 		members[r] = append(members[r], id)
 	}
+
 	survivor := map[string]string{}
 	for r, ids := range members {
 		if len(ids) < 3 {
 			continue
 		}
+
 		sort.Strings(ids)
 		best := s.profiles[ids[0]]
 		for _, id := range ids[1:] {
 			best, _ = chooseSurvivor(best, s.profiles[id])
 		}
+
 		survivor[r] = best.asset.ID
 	}
 
@@ -209,6 +215,7 @@ func (s *dupSearch) groupCandidates(cands []DuplicateCandidate) []DuplicateCandi
 			keep[i] = true
 			continue
 		}
+
 		r := find(c.Survivor.ID)
 		top, grouped := survivor[r]
 		if !grouped {
@@ -242,8 +249,10 @@ func (s *dupSearch) groupCandidates(cands []DuplicateCandidate) []DuplicateCandi
 		if _, grouped := survivor[find(c.Survivor.ID)]; grouped && linked(c) {
 			c.Group = len(members[find(c.Survivor.ID)])
 		}
+
 		out = append(out, c)
 	}
+
 	return out
 }
 
@@ -328,6 +337,7 @@ func (s *dupSearch) labelEdges(id, dir string, labels []string) (map[string][]gr
 			s.truncate(partialRead(s.report.Reads >= dupMaxReads, id, dir, label))
 		}
 	}
+
 	return byLabel, nil
 }
 
@@ -346,6 +356,7 @@ func (s *dupSearch) firstEdges(id, dir, label string, limit int) ([]graph.Relati
 	if len(edges) > limit {
 		edges = edges[:limit]
 	}
+
 	return edges, err
 }
 
@@ -457,6 +468,7 @@ func (s *dupSearch) profile(o graph.Asset) (*orgProfile, error) {
 				if dir == "in" {
 					other = e.FromID
 				}
+
 				p.related[other] = true
 			}
 		}
@@ -498,6 +510,7 @@ func (p *orgProfile) addIdentifier(idtype, value string) {
 	if p.ids[idtype] == nil {
 		p.ids[idtype] = map[string]bool{}
 	}
+
 	p.ids[idtype][value] = true
 }
 
@@ -515,6 +528,7 @@ func brandName(name string) string {
 	for i, w := range words {
 		words[i] = strings.Trim(w, ".,;:()\"'")
 	}
+
 	words = slices.DeleteFunc(words, func(w string) bool { return w == "" })
 
 	forms := legalForms()
@@ -527,6 +541,7 @@ func brandName(name string) string {
 			words = words[:len(words)-1]
 			continue
 		}
+
 		break
 	}
 
@@ -559,6 +574,7 @@ func (s *dupSearch) pairs() [][2]string {
 	for id := range s.profiles {
 		ids = append(ids, id)
 	}
+
 	sort.Strings(ids)
 
 	for _, id := range ids {
@@ -590,6 +606,7 @@ func (s *dupSearch) pairs() [][2]string {
 	for k := range buckets {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	for _, k := range keys {
 		members := buckets[k]
@@ -778,6 +795,7 @@ func firstKey(m map[string]bool) string {
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	if len(keys) == 0 {
 		return ""
@@ -814,6 +832,7 @@ func FormatDuplicateReport(r DuplicateReport) string {
 	if r.Truncated {
 		fmt.Fprintf(&b, " Incomplete: %s.", r.Reason)
 	}
+
 	b.WriteString("\n")
 	if len(r.Candidates) == 0 {
 		b.WriteString("No duplicate organizations found.\n")
@@ -835,6 +854,7 @@ func FormatDuplicateReport(r DuplicateReport) string {
 			if def.Strength == StrengthNegative {
 				mark = "-"
 			}
+
 			fmt.Fprintf(&b, "  %s %s (%s): %s\n", mark, def.Title, def.Strength, s.Via)
 		}
 	}

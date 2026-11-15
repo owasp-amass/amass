@@ -25,6 +25,7 @@ func TestPolicyNamesCiteSources(t *testing.T) {
 		case seen[p.Label]:
 			t.Errorf("%s is listed twice", p.Label)
 		}
+
 		seen[p.Label] = true
 	}
 }

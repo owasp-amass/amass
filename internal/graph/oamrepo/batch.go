@@ -38,12 +38,14 @@ func (s *ReadStats) record(method string, start time.Time) {
 	if s == nil {
 		return
 	}
+
 	d := time.Since(start)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.calls == nil {
 		s.calls, s.took = map[string]int{}, map[string]time.Duration{}
 	}
+
 	s.calls[method]++
 	s.took[method] += d
 }
@@ -53,12 +55,14 @@ func (s *ReadStats) Write(w io.Writer) {
 	if s == nil {
 		return
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	methods := make([]string, 0, len(s.calls))
 	for m := range s.calls {
 		methods = append(methods, m)
 	}
+
 	sort.Strings(methods)
 	var calls int
 	var took time.Duration
@@ -68,6 +72,7 @@ func (s *ReadStats) Write(w io.Writer) {
 		_, _ = fmt.Fprintf(w, "%-14s %7d reads %10s total %10s mean\n", m, n, d.Round(time.Millisecond),
 			(d / time.Duration(n)).Round(time.Microsecond))
 	}
+
 	_, _ = fmt.Fprintf(w, "%-14s %7d reads %10s total\n", "all", calls, took.Round(time.Millisecond))
 }
 
@@ -78,6 +83,7 @@ func (a Adapter) GetAssets(ctx context.Context, ids []string) (map[string]graph.
 	if a.Repo == nil {
 		return nil, errors.New("missing OAM repository")
 	}
+
 	defer a.Stats.record("GetAssets", time.Now())
 
 	out := make(map[string]graph.Asset, len(ids))
@@ -89,6 +95,7 @@ func (a Adapter) GetAssets(ctx context.Context, ids []string) (map[string]graph.
 			if _, done := out[id]; done {
 				continue
 			}
+
 			ent, err := a.Repo.FindEntityById(ctx, id)
 			if err != nil {
 				continue // absent, as with the batch read
@@ -97,6 +104,7 @@ func (a Adapter) GetAssets(ctx context.Context, ids []string) (map[string]graph.
 				out[id] = asset
 			}
 		}
+
 		return out, nil
 	}
 
@@ -110,9 +118,11 @@ func (a Adapter) GetAssets(ctx context.Context, ids []string) (map[string]graph.
 			if err != nil {
 				return nil, err
 			}
+
 			out[asset.ID] = asset
 		}
 	}
+
 	return out, nil
 }
 
@@ -134,6 +144,7 @@ func (a Adapter) EdgesPerLabel(ctx context.Context, id, direction string, labels
 	if !ok {
 		return a.edgesEachLabel(ctx, id, direction, labels, since, perLabel)
 	}
+
 	defer a.Stats.record("EdgesPerLabel", time.Now())
 
 	// A port relation may be stored under its own name (tcp_port_443), so a
@@ -143,6 +154,7 @@ func (a Adapter) EdgesPerLabel(ctx context.Context, id, direction string, labels
 	if slices.Contains(labels, "port") || len(labels) > maxBatchLabels {
 		stored = nil
 	}
+
 	edges, moreStored, err := reader.ReadEdgesPerLabel(ctx, &dbt.Entity{ID: id}, direction, since, perLabel, stored...)
 	if err != nil {
 		return nil, nil, err
@@ -152,6 +164,7 @@ func (a Adapter) EdgesPerLabel(ctx context.Context, id, direction string, labels
 	for _, l := range labels {
 		want[l] = true
 	}
+
 	// The OAM label of each stored label read, for the labels with more.
 	schemaOf := map[string]string{}
 	out := make([]graph.Relation, 0, len(edges))
@@ -159,11 +172,13 @@ func (a Adapter) EdgesPerLabel(ctx context.Context, id, direction string, labels
 		if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
 			return nil, nil, errors.New("malformed labeled edge")
 		}
+
 		label := schemaLabel(e.Relation)
 		schemaOf[e.Relation.Label()] = label
 		if len(want) > 0 && !want[label] {
 			continue
 		}
+
 		out = append(out, relationOf(e, id))
 	}
 
@@ -177,6 +192,7 @@ func (a Adapter) EdgesPerLabel(ctx context.Context, id, direction string, labels
 			more = append(more, label)
 		}
 	}
+
 	sort.Strings(more)
 	return out, more, nil
 }
@@ -190,6 +206,7 @@ func (a Adapter) edgesEachLabel(ctx context.Context, id, direction string, label
 	if len(labels) == 0 {
 		return nil, nil, errors.New("this repository reads edges per label only for named labels")
 	}
+
 	var out []graph.Relation
 	var more []string
 	for _, l := range labels {
@@ -197,11 +214,13 @@ func (a Adapter) edgesEachLabel(ctx context.Context, id, direction string, label
 		if err != nil {
 			return nil, nil, err
 		}
+
 		out = append(out, edges...)
 		if m {
 			more = append(more, l)
 		}
 	}
+
 	return out, more, nil
 }
 
@@ -211,6 +230,7 @@ func relationOf(e *dbt.Edge, id string) graph.Relation {
 	if e.ToEntity.ID == id {
 		dir = "in"
 	}
+
 	return graph.Relation{ID: e.ID, FromID: e.FromEntity.ID, ToID: e.ToEntity.ID, Label: schemaLabel(e.Relation),
 		Type: string(e.Relation.RelationType()), Direction: dir, Content: e.Relation, CreatedAt: e.CreatedAt,
 		LastSeen: e.LastSeen}

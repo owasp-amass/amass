@@ -74,6 +74,7 @@ func corporateLabels(t *semantics.Table) []string {
 	for l := range set {
 		out = append(out, l)
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -119,6 +120,7 @@ func (s *groupSearch) asset(id string) (graph.Asset, error) {
 	if err == nil {
 		s.assets[id] = a
 	}
+
 	return a, err
 }
 
@@ -210,6 +212,7 @@ func FindCorporateGroup(ctx context.Context, g graph.Graph, root graph.Asset) (G
 		if s.cycle != "" {
 			reason += ": " + s.cycle
 		}
+
 		s.truncate(reason)
 	}
 
@@ -236,6 +239,7 @@ func (s *groupSearch) climb(subject graph.Asset) ([]graph.Asset, error) {
 			for _, id := range level {
 				tops = append(tops, s.assets[id])
 			}
+
 			break
 		}
 
@@ -259,6 +263,7 @@ func (s *groupSearch) climb(subject graph.Asset) ([]graph.Asset, error) {
 				}
 			}
 		}
+
 		level = next
 	}
 
@@ -291,6 +296,7 @@ func (s *groupSearch) descend(tops []graph.Asset) error {
 		if err != nil {
 			return err
 		}
+
 		sort.Slice(children, func(i, j int) bool { return children[i].ToID < children[j].ToID })
 		for _, e := range children {
 			if seen[e.ToID] {
@@ -324,6 +330,7 @@ func FormatGroupReport(r GroupReport) string {
 	} else {
 		fmt.Fprintf(&b, "Corporate group of %s", subject)
 	}
+
 	fmt.Fprintf(&b, " (%d organization(s), %d reads), from stored %s relationships.\n", len(r.Members), r.Reads,
 		strings.Join(r.Labels, " and "))
 
@@ -337,6 +344,7 @@ func FormatGroupReport(r GroupReport) string {
 		for _, t := range r.Tops {
 			names = append(names, graph.AssetLabel(t))
 		}
+
 		fmt.Fprintf(&b, "Sources disagree on the ultimate parent: %s.\n", strings.Join(names, "; "))
 	} else if len(r.Tops) == 1 && r.Tops[0].ID != r.Subject.ID {
 		fmt.Fprintf(&b, "Ultimate parent: %s.\n", graph.AssetLabel(r.Tops[0]))
@@ -358,6 +366,7 @@ func FormatGroupReport(r GroupReport) string {
 		if m.Label != "" {
 			b.WriteString(m.Label + ": ")
 		}
+
 		b.WriteString(graph.AssetLabel(m.Organization))
 		var reg []string
 		for _, v := range []string{m.Jurisdiction, m.RegistrationID} {
@@ -371,6 +380,7 @@ func FormatGroupReport(r GroupReport) string {
 		if m.Organization.ID == r.Subject.ID {
 			b.WriteString(" <- asked about")
 		}
+
 		b.WriteString("\n")
 		for _, c := range children[m.Organization.ID] {
 			write(c)
@@ -384,6 +394,7 @@ func FormatGroupReport(r GroupReport) string {
 	if r.Truncated {
 		b.WriteString(" Results are partial (" + r.Reason + ").")
 	}
+
 	b.WriteString("\n")
 	return b.String()
 }

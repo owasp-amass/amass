@@ -562,6 +562,7 @@ func (a Agent) thirdPartyLens(ctx context.Context, root graph.Asset, out Investi
 	} else {
 		report, err = lens.SearchThirdParties(ctx, a.Runner.Graph, a.Runner.Catalog, root)
 	}
+
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "third_party_lens", OutputPaths: len(report.Vendors),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {
@@ -576,6 +577,7 @@ func (a Agent) thirdPartyLens(ctx context.Context, root graph.Asset, out Investi
 	if root.Type == "FQDN" {
 		out.Answer = strings.TrimRight(lens.FormatVendorReport(report), "\n")
 	}
+
 	return out, nil
 }
 

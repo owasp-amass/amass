@@ -42,6 +42,7 @@ func (a *ApprovalLinks) now() time.Time {
 	if a.Now != nil {
 		return a.Now()
 	}
+
 	return time.Now()
 }
 
@@ -50,14 +51,17 @@ func (a *ApprovalLinks) New(message string, act func() (string, error)) (string,
 	if a.BaseURL == "" {
 		return "", time.Time{}, errors.New("the server does not know its public URL (AMASS_AI_MCP_PUBLIC_URL)")
 	}
+
 	id := newSessionID()
 	if id == "" {
 		return "", time.Time{}, errors.New("could not create a link")
 	}
+
 	ttl := a.TTL
 	if ttl <= 0 {
 		ttl = defaultApprovalTTL
 	}
+
 	expires := a.now().Add(ttl)
 
 	a.mu.Lock()
@@ -73,6 +77,7 @@ func (a *ApprovalLinks) New(message string, act func() (string, error)) (string,
 	if len(a.pending) >= maxApprovals {
 		return "", time.Time{}, errors.New("too many actions await approval; wait for them to expire")
 	}
+
 	a.pending[id] = &pendingApproval{message: message, act: act, expires: expires}
 	return strings.TrimSuffix(a.BaseURL, "/") + approvalPrefix + id, expires, nil
 }
@@ -88,6 +93,7 @@ func (a *ApprovalLinks) get(id string, take bool) (*pendingApproval, bool) {
 		delete(a.pending, id)
 		return nil, false
 	}
+
 	return p, true
 }
 
@@ -124,6 +130,7 @@ func (a *ApprovalLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			page.Title, page.Result = "Nothing to approve", gone
 			break
 		}
+
 		page.Message = p.message
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -131,6 +138,7 @@ func (a *ApprovalLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
 		}
+
 		p, ok := a.get(id, true)
 		switch {
 		case !ok:
@@ -151,6 +159,7 @@ func (a *ApprovalLinks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "use GET or POST", http.StatusMethodNotAllowed)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = approvalPage.Execute(w, page)
 }

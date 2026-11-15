@@ -56,6 +56,7 @@ func postureFixture() graphtest.VendorGraph {
 			g.Links[i].Content = map[string]any{"header": map[string]any{"rr_type": 15}, "preference": 10}
 		}
 	}
+
 	add("_dmarc.colgate.edu", "FQDN", "_dmarc.colgate.edu", map[string]any{"name": "_dmarc.colgate.edu"})
 	link("colgate.edu", "node", "_dmarc.colgate.edu")
 	g.EvidenceByID = map[string][]graph.Evidence{
@@ -135,7 +136,8 @@ func TestFindDomains(t *testing.T) {
 	for _, f := range r.Findings {
 		got[f.Kind+" "+f.Domain] = true
 	}
-	if !got[DomainExpiring+" colgate.edu"] || !got[DomainNoDNSSEC+" colgate.edu"] || got[DomainUnlocked+" colgate.edu"] {
+	if !got[DomainExpiring+" colgate.edu"] || !got[DomainNoDNSSEC+" colgate.edu"] || got[DomainUnlocked+
+		" colgate.edu"] {
 		t.Errorf("findings = %+v", r.Findings)
 	}
 	if !strings.Contains(r.Text(), "registrar EDUCAUSE, expires 2027-07-31") {
@@ -149,6 +151,7 @@ func TestFindDomains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	unlocked := false
 	for _, f := range r.Findings {
 		unlocked = unlocked || (f.Kind == DomainUnlocked && f.Domain == "colgate.edu")
@@ -194,7 +197,8 @@ func TestFindEmailSecurity(t *testing.T) {
 	for _, f := range r.Findings {
 		got[f.Kind+" "+f.Domain] = true
 	}
-	if !got[EmailSPFSoftfail+" colgate.edu"] || !got[EmailDMARCMonitor+" colgate.edu"] || got[EmailNoSPF+" colgate.edu"] {
+	if !got[EmailSPFSoftfail+" colgate.edu"] || !got[EmailDMARCMonitor+" colgate.edu"] || got[EmailNoSPF+
+		" colgate.edu"] {
 		t.Errorf("findings = %+v", r.Findings)
 	}
 	if !strings.Contains(r.Text(), "DMARC monitoring only") {
@@ -238,6 +242,7 @@ func TestSubjectLensesAreRegistered(t *testing.T) {
 		if seen[l.Name] || seen[l.Command] {
 			t.Errorf("%s is registered twice", l.Name)
 		}
+
 		seen[l.Name], seen[l.Command] = true, true
 	}
 }

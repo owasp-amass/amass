@@ -72,6 +72,7 @@ func run() error {
 			return errors.New("AMASS_AI_MCP_OPERATOR_TOKEN must be a strong random secret (at least 32 " +
 				"characters) different from AMASS_AI_MCP_TOKEN")
 		}
+
 		op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{
 			ConfigFile:          *cfgFile,
 			RunJournal:          os.Getenv("AMASS_AI_MCP_RUN_JOURNAL"),
@@ -82,6 +83,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("operator mode: %w", err)
 		}
+
 		defer release()
 		server.OperatorToken, server.Operator = opToken, op
 		fmt.Fprintln(os.Stderr, "mcp: operator mode enabled for the operator token")

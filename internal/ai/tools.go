@@ -34,6 +34,7 @@ func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) 
 	if err := r.Limits.Validate(); err != nil {
 		return nil, err
 	}
+
 	// One tool call reads each asset and edge list once, however many of its
 	// lenses or steps ask; the next call reads the database afresh.
 	r.Graph = graph.Cached(r.Graph)

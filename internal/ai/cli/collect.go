@@ -38,6 +38,7 @@ func collectTarget(ctx context.Context, cfg *config.Config, plan ai.CollectionPl
 	if approved == "" || approved != plan.ID {
 		return errors.New("collection requires -approve-collection matching the exact plan id")
 	}
+
 	asset, err := collect.Configure(cfg, plan)
 	if err != nil {
 		return err

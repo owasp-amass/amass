@@ -41,6 +41,7 @@ func EntitiesByIds(ctx context.Context, db repository.Repository, ids []string) 
 			out[id] = e
 		}
 	}
+
 	return out
 }
 
@@ -55,6 +56,7 @@ func edgeEnds(edges []*dbt.Edge, in bool) []string {
 			ids = append(ids, e.ToEntity.ID)
 		}
 	}
+
 	return ids
 }
 

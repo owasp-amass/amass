@@ -102,6 +102,7 @@ func newScope(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, ro
 	if schema == nil || meaning == nil {
 		return nil, errors.New("the " + name + " lens requires relationship semantics")
 	}
+
 	bounded, ok := g.(graph.BoundedGraph)
 	if !ok {
 		return nil, errors.New("bounded graph reader required")
@@ -119,6 +120,7 @@ func newScope(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, ro
 	if err != nil {
 		return nil, err
 	}
+
 	s.owners = owners
 	roots = append(roots, owners...)
 
@@ -147,6 +149,7 @@ func (s *scope) ownerNames() []string {
 	for _, o := range s.owners {
 		out = append(out, graph.AssetLabel(o))
 	}
+
 	return out
 }
 
@@ -161,6 +164,7 @@ func (s *scope) spent() bool {
 		s.w.truncate("database read limit")
 		return true
 	}
+
 	return false
 }
 
@@ -183,6 +187,7 @@ func (s *scope) subject() string {
 			label += ", " + o
 		}
 	}
+
 	return label
 }
 
@@ -209,5 +214,6 @@ func (b lensBase) partialNote() string {
 	if !b.Truncated {
 		return ""
 	}
+
 	return " Results are partial (" + b.Reason + "); raise -max-assets or -max-reads to cover more."
 }

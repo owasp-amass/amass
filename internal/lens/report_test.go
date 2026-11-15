@@ -20,6 +20,7 @@ func TestReportRules(t *testing.T) {
 		if _, ok := reportSection(s.Lens); !ok || s.Title == "" {
 			t.Errorf("section %+v", s)
 		}
+
 		sections[s.Lens] = true
 	}
 	for _, f := range rules.Findings {
@@ -51,6 +52,7 @@ func TestFindReport(t *testing.T) {
 			t.Errorf("%s: %s", s.Lens, s.Error)
 		}
 	}
+
 	text := r.Text()
 	for _, want := range []string{"# Attack surface report: colgate.edu", "## Key findings", "## Dangling DNS",
 		"## Email security", "```text", "not a live scan"} {

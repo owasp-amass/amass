@@ -28,6 +28,7 @@ func TestWatchesScheduleRuns(t *testing.T) {
 	if _, err := w.Add(plan, time.Hour, "tester"); err == nil {
 		t.Error("a watch more often than the minimum was accepted")
 	}
+
 	x, err := w.Add(plan, 24*time.Hour, "tester")
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +42,7 @@ func TestWatchesScheduleRuns(t *testing.T) {
 	if got.LastRunID == "" || !got.NextRunAt.Equal(now.Add(24*time.Hour)) || len(f.seeded) != 1 {
 		t.Fatalf("after the first tick: %+v", got)
 	}
+
 	run, _ := m.Get(got.LastRunID)
 	if run.ApprovedBy != x.ID+", approved by tester" {
 		t.Errorf("approved by = %q", run.ApprovedBy)

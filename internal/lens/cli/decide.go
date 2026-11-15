@@ -61,5 +61,6 @@ func Decide(ctx context.Context, g oamrepo.Adapter, journalPath, decision, id, r
 	default:
 		err = fmt.Errorf("decision must be %s, %s or %s", DecisionApprove, DecisionReject, DecisionRetract)
 	}
+
 	return out.String(), err
 }

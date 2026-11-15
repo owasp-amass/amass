@@ -113,6 +113,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	if schema == nil || meaning == nil {
 		return out, errors.New("the services lens requires relationship semantics")
 	}
+
 	bounded, ok := g.(graph.BoundedGraph)
 	if !ok {
 		return out, errors.New("bounded graph reader required")
@@ -138,6 +139,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	if err != nil {
 		return out, err
 	}
+
 	out.Footprint = len(owned)
 
 	rules := loadServiceRules()
@@ -169,6 +171,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 				if err != nil {
 					return out, err
 				}
+
 				services[s.other.ID] = svc
 				ids = append(ids, s.other.ID)
 			}
@@ -179,6 +182,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 			if port != "" {
 				endpoint += ":" + strings.Split(port, "/")[0]
 			}
+
 			graph.AddUnique(&svc.Endpoints, endpoint)
 			if port != "" {
 				graph.AddUnique(&svc.Ports, port)
@@ -198,6 +202,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		if kind == "" {
 			kind = "unknown"
 		}
+
 		out.ByType[kind]++
 		for _, p := range svc.Ports {
 			out.ByPort[p]++
@@ -206,6 +211,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 			out.ByProduct[strings.TrimSpace(p.Product+" "+p.Version)]++
 		}
 	}
+
 	sort.SliceStable(out.Services, func(i, j int) bool {
 		a, b := out.Services[i], out.Services[j]
 		if serviceNotable(a) != serviceNotable(b) {
@@ -214,6 +220,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		if len(a.Endpoints) != len(b.Endpoints) {
 			return len(a.Endpoints) > len(b.Endpoints)
 		}
+
 		return a.Service.ID < b.Service.ID
 	})
 
@@ -261,6 +268,7 @@ func softwareHeaders(svc graph.Asset, names []string) []string {
 	if err != nil {
 		return nil
 	}
+
 	var f struct {
 		Attributes map[string][]string `json:"attributes"`
 	}
@@ -279,6 +287,7 @@ func softwareHeaders(svc graph.Asset, names []string) []string {
 			}
 		}
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -291,6 +300,7 @@ func certificateOf(cert graph.Asset, warningDays int) ServiceCertificate {
 	if c.Subject == "" {
 		c.Subject = graph.AssetLabel(cert)
 	}
+
 	c.SelfIssued = c.Issuer != "" && strings.EqualFold(c.Issuer, c.Subject)
 
 	if t, err := time.Parse(time.RFC3339, c.NotAfter); err == nil {
@@ -314,6 +324,7 @@ func portExpected(rules serviceRules, kind, port string) bool {
 	if _, err := fmt.Sscanf(port, "%d", &n); err != nil {
 		return true
 	}
+
 	return slices.Contains(ports, n)
 }
 
@@ -337,6 +348,7 @@ func FormatServicesReport(r ServicesReport) string {
 	if len(r.Owners) > 0 {
 		scope += " and " + strings.Join(r.Owners, ", ")
 	}
+
 	fmt.Fprintf(&b, "Services exposed by %s: %d service(s) on %d host(s), from %d controlled asset(s) (%d reads).\n",
 		scope, len(r.Services), r.Hosts, r.Footprint, r.Reads)
 	if len(r.Services) == 0 {
@@ -350,16 +362,19 @@ func FormatServicesReport(r ServicesReport) string {
 		for k := range m {
 			keys = append(keys, k)
 		}
+
 		sort.Slice(keys, func(i, j int) bool {
 			if m[keys[i]] != m[keys[j]] {
 				return m[keys[i]] > m[keys[j]]
 			}
+
 			return keys[i] < keys[j]
 		})
 		parts := make([]string, 0, len(keys))
 		for _, k := range keys {
 			parts = append(parts, fmt.Sprintf("%s %d", k, m[k]))
 		}
+
 		fmt.Fprintf(&b, "%s: %s\n", title, strings.Join(parts, ", "))
 	}
 	counts("By type", r.ByType)
@@ -383,7 +398,8 @@ func FormatServicesReport(r ServicesReport) string {
 		for _, c := range s.Certificates {
 			switch {
 			case c.Expired:
-				notes = append(notes, fmt.Sprintf("expired certificate for %s since %s (%s)", c.Subject, c.NotAfter, where))
+				notes = append(notes, fmt.Sprintf("expired certificate for %s since %s (%s)", c.Subject,
+					c.NotAfter, where))
 			case c.ExpiresSoon:
 				notes = append(notes, fmt.Sprintf("certificate for %s expires %s (%s)", c.Subject, c.NotAfter, where))
 			}
@@ -405,6 +421,7 @@ func FormatServicesReport(r ServicesReport) string {
 		if kind == "" {
 			kind = "service"
 		}
+
 		fmt.Fprintf(&b, "  %s on %s (%s)", kind, strings.Join(s.Endpoints, ", "), strings.Join(s.Ports, ", "))
 		if len(s.Software) > 0 {
 			fmt.Fprintf(&b, "; %s", strings.Join(s.Software, "; "))
@@ -414,6 +431,7 @@ func FormatServicesReport(r ServicesReport) string {
 			for _, p := range s.Identified {
 				names = append(names, strings.TrimSpace(p.Product+" "+p.Version))
 			}
+
 			fmt.Fprintf(&b, "; runs %s", strings.Join(names, ", "))
 		}
 		if len(s.Products) > 0 {
@@ -428,6 +446,7 @@ func FormatServicesReport(r ServicesReport) string {
 				fmt.Fprintf(&b, " until %s", c.NotAfter)
 			}
 		}
+
 		b.WriteString("\n")
 	}
 
@@ -436,6 +455,7 @@ func FormatServicesReport(r ServicesReport) string {
 	if r.Truncated {
 		fmt.Fprintf(&b, " Results are partial (%s); raise -max-assets or -max-reads to cover more.", r.Reason)
 	}
+
 	b.WriteString("\n")
 	return b.String()
 }

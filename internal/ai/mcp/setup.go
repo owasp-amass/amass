@@ -61,6 +61,7 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 			if err := config.AcquireConfig(opts.Dir, opts.ConfigFile, fresh); err != nil {
 				return nil, err
 			}
+
 			return fresh, nil
 		},
 		Journal:     opts.RunJournal,
@@ -83,6 +84,7 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 				if s, ok := foundSince(ctx, runner, run).(string); ok {
 					return s
 				}
+
 				return ""
 			}}
 		ctx, cancel := context.WithCancel(context.Background())
@@ -98,5 +100,6 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 			op.KeyLinks = &KeyLinks{BaseURL: opts.PublicURL, Path: path}
 		}
 	}
+
 	return op, func() { stopWatches(); m.Close(); c.Close() }, nil
 }

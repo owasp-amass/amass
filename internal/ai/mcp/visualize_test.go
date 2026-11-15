@@ -29,6 +29,7 @@ func (g namedGraph) ResolveAsset(_ context.Context, s graph.AssetSelector, _ int
 			out.Candidates = append(out.Candidates, graph.OrganizationCandidate{Asset: a})
 		}
 	}
+
 	return out, nil
 }
 
@@ -49,6 +50,7 @@ func TestVisualizeDrawsAndLinks(t *testing.T) {
 	if isErr {
 		t.Fatal(text)
 	}
+
 	var out struct {
 		Mermaid, MermaidDetail string
 		Assets                 int
@@ -67,6 +69,7 @@ func TestVisualizeDrawsAndLinks(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode != 200 || !strings.Contains(string(body), "colgate.edu") {

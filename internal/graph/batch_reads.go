@@ -14,6 +14,7 @@ func FarAssets(ctx context.Context, g Graph, id string, edges []Relation, have f
 	if _, ok := g.(AssetBatchReader); !ok {
 		return nil, nil
 	}
+
 	var ids []string
 	want := map[string]bool{}
 	for _, e := range edges {
@@ -24,9 +25,11 @@ func FarAssets(ctx context.Context, g Graph, id string, edges []Relation, have f
 		if other == "" || other == id || want[other] || (have != nil && have(other)) {
 			continue
 		}
+
 		want[other] = true
 		ids = append(ids, other)
 	}
+
 	return AssetsByID(ctx, g, ids)
 }
 
@@ -38,6 +41,7 @@ func AssetsByID(ctx context.Context, g Graph, ids []string) (map[string]Asset, e
 	if !ok || len(ids) < 2 {
 		return nil, nil
 	}
+
 	return batch.GetAssets(ctx, ids)
 }
 
@@ -47,5 +51,6 @@ func AssetFrom(ctx context.Context, g Graph, read map[string]Asset, id string) (
 	if a, ok := read[id]; ok {
 		return a, nil
 	}
+
 	return g.GetAsset(ctx, id)
 }

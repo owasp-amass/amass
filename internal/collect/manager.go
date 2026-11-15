@@ -98,6 +98,7 @@ func (m *Manager) now() time.Time {
 	if m.Now != nil {
 		return m.Now()
 	}
+
 	return time.Now()
 }
 
@@ -105,6 +106,7 @@ func orDefault[T int | time.Duration](v, d T) T {
 	if v > 0 {
 		return v
 	}
+
 	return d
 }
 
@@ -113,16 +115,19 @@ func (m *Manager) load() {
 	if m.loaded {
 		return
 	}
+
 	m.loaded = true
 	m.runs = map[string]*Run{}
 	m.cancels = map[string]context.CancelFunc{}
 	if m.Journal == "" {
 		return
 	}
+
 	f, err := os.Open(m.Journal)
 	if err != nil {
 		return
 	}
+
 	defer func() { _ = f.Close() }()
 
 	lines := bufio.NewScanner(f)
@@ -140,14 +145,17 @@ func (m *Manager) record(r *Run) {
 	if m.Journal == "" {
 		return
 	}
+
 	data, err := json.Marshal(r)
 	if err != nil {
 		return
 	}
+
 	f, err := os.OpenFile(m.Journal, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
+
 	_, _ = f.Write(append(data, '\n'))
 	_ = f.Close()
 }
@@ -163,6 +171,7 @@ func (m *Manager) Resume(ctx context.Context) error {
 			pending = append(pending, r)
 		}
 	}
+
 	m.mu.Unlock()
 	if len(pending) == 0 {
 		return nil
@@ -172,6 +181,7 @@ func (m *Manager) Resume(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list engine sessions: %w", err)
 	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, r := range pending {
@@ -180,10 +190,12 @@ func (m *Manager) Resume(ctx context.Context) error {
 			m.supervise(token, r)
 			continue
 		}
+
 		r.State, r.EndedAt = StateLost, m.now()
 		r.Error = "the engine no longer has this session"
 		m.record(r)
 	}
+
 	return nil
 }
 
@@ -206,6 +218,7 @@ func (m *Manager) Start(ctx context.Context, plan Plan, approvedBy string) (Run,
 			}
 		}
 	}
+
 	m.mu.Unlock()
 	if limit := orDefault(m.MaxRunning, DefaultMaxRunning); running >= limit {
 		return Run{}, fmt.Errorf("%d enumerations are already running (the limit); stop one or wait", running)
@@ -215,10 +228,12 @@ func (m *Manager) Start(ctx context.Context, plan Plan, approvedBy string) (Run,
 	if err != nil {
 		return Run{}, fmt.Errorf("load configuration: %w", err)
 	}
+
 	asset, err := Configure(cfg, plan)
 	if err != nil {
 		return Run{}, err
 	}
+
 	token, err := m.Engine.CreateSession(ctx, cfg)
 	if err != nil {
 		return Run{}, fmt.Errorf("create the enumeration session: %w", err)
@@ -275,6 +290,7 @@ func (m *Manager) poll(ctx context.Context, token uuid.UUID, id string) {
 			m.mu.Unlock()
 			return
 		}
+
 		now := m.now()
 		end := ""
 		switch {
@@ -290,6 +306,7 @@ func (m *Manager) poll(ctx context.Context, token uuid.UUID, id string) {
 			if completed != r.Completed || total != r.Total {
 				r.LastProgressAt = now
 			}
+
 			r.Completed, r.Total = completed, total
 			if total > 0 && completed >= total {
 				settled++
@@ -309,6 +326,7 @@ func (m *Manager) poll(ctx context.Context, token uuid.UUID, id string) {
 			m.mu.Unlock()
 			continue
 		}
+
 		r.State, r.EndedAt = end, now
 		delete(m.cancels, id)
 		m.record(r)
@@ -336,6 +354,7 @@ func (m *Manager) Stop(ctx context.Context, id string) (Run, error) {
 		cancel()
 		delete(m.cancels, id)
 	}
+
 	r.State, r.EndedAt = StateStopped, m.now()
 	m.record(r)
 	out := *r
@@ -348,6 +367,7 @@ func (m *Manager) Stop(ctx context.Context, id string) (Run, error) {
 	if err := m.Engine.TerminateSession(ctx, token); err != nil {
 		return out, fmt.Errorf("the run was marked stopped but the engine did not end the session: %w", err)
 	}
+
 	return out, nil
 }
 
@@ -360,6 +380,7 @@ func (m *Manager) Get(id string) (Run, bool) {
 	if !ok {
 		return Run{}, false
 	}
+
 	return *r, true
 }
 
@@ -372,6 +393,7 @@ func (m *Manager) Runs() []Run {
 	for _, r := range m.runs {
 		out = append(out, *r)
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
 	return out
 }
@@ -383,6 +405,7 @@ func (m *Manager) Close() {
 	for _, cancel := range m.cancels {
 		cancel()
 	}
+
 	m.cancels = map[string]context.CancelFunc{}
 	m.mu.Unlock()
 	m.wg.Wait()

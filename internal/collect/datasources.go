@@ -34,10 +34,12 @@ func DataSourcesPath(cfg *config.Config) (string, error) {
 	if cfg == nil {
 		return "", errors.New("no configuration")
 	}
+
 	raw, ok := cfg.Options["datasources"].(string)
 	if !ok || raw == "" {
 		return "", errors.New("the configuration names no datasources file (options.datasources)")
 	}
+
 	return cfg.AbsPathFromConfigDir(raw)
 }
 
@@ -60,12 +62,14 @@ func DataSourceStatus(path string) ([]SourceStatus, error) {
 		if ds == nil || ds.Name == "" {
 			continue
 		}
+
 		s := &SourceStatus{Name: ds.Name}
 		for _, c := range ds.Creds {
 			if c != nil && (c.Apikey != "" || c.Secret != "" || c.Password != "" || c.Username != "") {
 				s.Accounts++
 			}
 		}
+
 		s.Configured = s.Accounts > 0
 		byName[strings.ToLower(ds.Name)] = s
 	}
@@ -80,6 +84,7 @@ func DataSourceStatus(path string) ([]SourceStatus, error) {
 	for _, s := range byName {
 		out = append(out, *s)
 	}
+
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, nil
 }
@@ -104,6 +109,7 @@ func SetDataSourceCredentials(path, source, account string, cred config.Credenti
 	if err != nil {
 		return err
 	}
+
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
@@ -138,6 +144,7 @@ func SetDataSourceCredentials(path, source, account string, cred config.Credenti
 		entry = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{scalar("name"), scalar(source)}}
 		list.Content = append(list.Content, entry)
 	}
+
 	creds := mapValue(entry, "creds")
 	if creds == nil || creds.Kind != yaml.MappingNode {
 		creds = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
@@ -151,6 +158,7 @@ func SetDataSourceCredentials(path, source, account string, cred config.Credenti
 			acct.Content = append(acct.Content, scalar(kv[0]), quoted(kv[1]))
 		}
 	}
+
 	setMapValue(creds, account, acct)
 
 	var buf bytes.Buffer
@@ -159,6 +167,7 @@ func SetDataSourceCredentials(path, source, account string, cred config.Credenti
 	if err := enc.Encode(&doc); err != nil {
 		return err
 	}
+
 	_ = enc.Close()
 
 	// Check the result loads before replacing the file.
@@ -166,10 +175,12 @@ func SetDataSourceCredentials(path, source, account string, cred config.Credenti
 	if err := yaml.Unmarshal(buf.Bytes(), &check); err != nil {
 		return fmt.Errorf("the updated file would not load: %w", err)
 	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
 	}
+
 	return os.WriteFile(path, buf.Bytes(), info.Mode().Perm())
 }
 
@@ -188,6 +199,7 @@ func mapValue(m *yaml.Node, key string) *yaml.Node {
 			return m.Content[i+1]
 		}
 	}
+
 	return nil
 }
 
@@ -198,5 +210,6 @@ func setMapValue(m *yaml.Node, key string, v *yaml.Node) {
 			return
 		}
 	}
+
 	m.Content = append(m.Content, scalar(key), v)
 }

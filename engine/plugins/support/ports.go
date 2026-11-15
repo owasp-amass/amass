@@ -43,12 +43,14 @@ func ScopePorts(cfg *config.Config, known []int) []int {
 	if cfg == nil || cfg.Scope == nil {
 		return nil
 	}
+
 	var out []int
 	for _, p := range known {
 		if slices.Contains(cfg.Scope.Ports, p) {
 			out = append(out, p)
 		}
 	}
+
 	return out
 }
 
@@ -58,11 +60,13 @@ func HTTPPorts(cfg *config.Config) []int {
 	if cfg == nil || cfg.Scope == nil {
 		return nil
 	}
+
 	var out []int
 	for _, p := range cfg.Scope.Ports {
 		if !ClaimedPort(p) {
 			out = append(out, p)
 		}
 	}
+
 	return out
 }
