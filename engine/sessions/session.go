@@ -212,9 +212,9 @@ func (s *Session) Kill() {
 	// The client may be gone when a session ends, so the engine's own log
 	// gets the database calls too.
 	s.dbstats.log(s.log)
-	s.dbstats.log(slog.Default().With("session", s.id.String()))
+	s.dbstats.log(s.engineLog())
 	s.netUsage.Log(s.log, netUsageMessage)
-	s.netUsage.Log(slog.Default().With("session", s.id.String()), netUsageMessage)
+	s.netUsage.Log(s.engineLog(), netUsageMessage)
 	s.cancel()
 	s.finished = true
 	s.clients.CloseIdleConnections()
@@ -228,6 +228,18 @@ const netUsageMessage = "shared network use"
 // so sessions that run at the same time can be compared while they run.
 var netUsageEvery = 10 * time.Minute
 
+// engineLog is the engine's own log, which the engine writes to its
+// configured destination (syslog in the Docker setup), with the session's
+// ID; slog.Default writes to the engine's standard output.
+func (s *Session) engineLog() *slog.Logger {
+	l := slog.Default()
+	if s.mgr != nil && s.mgr.logger != nil {
+		l = s.mgr.logger
+	}
+
+	return l.With("session", s.id.String())
+}
+
 func (s *Session) logNetUsage() {
 	tick := time.NewTicker(netUsageEvery)
 	defer tick.Stop()
@@ -237,7 +249,7 @@ func (s *Session) logNetUsage() {
 		case <-s.done:
 			return
 		case <-tick.C:
-			s.netUsage.Log(slog.Default().With("session", s.id.String()), netUsageMessage+" so far")
+			s.netUsage.Log(s.engineLog(), netUsageMessage+" so far")
 		}
 	}
 }
