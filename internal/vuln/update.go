@@ -49,6 +49,8 @@ type Updater struct {
 	Pause time.Duration
 	pause time.Duration
 	last  time.Time
+	// lastDistro is when a distribution's source was last asked.
+	lastDistro time.Time
 }
 
 // UpdateResult summarizes a refresh.
@@ -146,6 +148,12 @@ func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error)
 		res.CVEs += len(p.CVEs)
 	}
 
+	// the distributions' own judgment of the CVEs just read
+	failed = append(failed, u.updateDistros(ctx, cat, d)...)
+	if ctx.Err() != nil {
+		return res, ctx.Err()
+	}
+
 	if kev, err := u.fetchKEV(ctx, cat.KEVFeed); err == nil {
 		d.KEV, d.KEVFetchedAt = kev, u.now().UTC()
 	} else {
@@ -156,6 +164,7 @@ func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error)
 		u.logf("KEV catalog: not fetched: %v", err)
 		failed = append(failed, "the KEV catalog")
 	}
+
 	res.KEV = len(d.KEV)
 
 	// the catalog's hash is recorded only when all of it was fetched, so the
@@ -168,8 +177,8 @@ func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error)
 		return res, err
 	}
 	if len(failed) > 0 {
-		return res, fmt.Errorf("%d of %d not fetched, kept from before and asked again at the next refresh: %s",
-			len(failed), len(cat.cpes())+1, strings.Join(failed, ", "))
+		return res, fmt.Errorf("%d of %d sources not fetched, kept from before and asked again at the next "+
+			"refresh: %s", len(failed), len(cat.cpes())+len(cat.Distributions)+1, strings.Join(failed, ", "))
 	}
 
 	return res, nil
@@ -426,6 +435,7 @@ func (u *Updater) getOnce(ctx context.Context, rawURL string, nvd bool, v any) (
 			msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 			detail = " " + strings.TrimSpace(string(msg))
 		}
+
 		err := fmt.Errorf("%s: %s%s", req.URL.Host, resp.Status, strings.TrimRight(detail, " "))
 
 		// NVD refuses with 403 when the rate limit is passed

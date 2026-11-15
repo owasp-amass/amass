@@ -440,7 +440,7 @@ func FormatServicesReport(r ServicesReport) string {
 		if len(s.Identified) > 0 {
 			names := make([]string, 0, len(s.Identified))
 			for _, p := range s.Identified {
-				names = append(names, strings.TrimSpace(p.Product+" "+p.Version))
+				names = append(names, p.Label())
 			}
 
 			fmt.Fprintf(&b, "; runs %s", strings.Join(names, ", "))

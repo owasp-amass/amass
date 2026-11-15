@@ -27,6 +27,8 @@ type Data struct {
 	Products     map[string]*ProductData `json:"products"`
 	// KEV holds the CVEs in CISA's catalog, by CVE ID.
 	KEV map[string]KEVEntry `json:"kev"`
+	// Distros holds each distribution family's own judgment of the CVEs.
+	Distros map[string]*DistroData `json:"distributions,omitempty"`
 }
 
 // ProductData is the CVEs of one CPE name.
@@ -69,7 +71,8 @@ const dataAbout = "Vulnerability data for the products in Amass's vulnerabilitie
 
 // Load reads a data file; a missing file is empty data.
 func Load(path string) (*Data, error) {
-	d := &Data{About: dataAbout, Products: map[string]*ProductData{}, KEV: map[string]KEVEntry{}}
+	d := &Data{About: dataAbout, Products: map[string]*ProductData{}, KEV: map[string]KEVEntry{},
+		Distros: map[string]*DistroData{}}
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return d, nil
@@ -85,6 +88,9 @@ func Load(path string) (*Data, error) {
 	}
 	if d.KEV == nil {
 		d.KEV = map[string]KEVEntry{}
+	}
+	if d.Distros == nil {
+		d.Distros = map[string]*DistroData{}
 	}
 
 	return d, nil

@@ -18,7 +18,7 @@
       "pattern": "^([0-9][0-9.]*)$", "version": 1,
       "source": "https://techcommunity.microsoft.com/blog/iis-support-blog/remove-unwanted-http-response-headers/369710"},
     {"product": "PHP", "vendor": "The PHP Group", "header": "x-powered-by",
-      "pattern": "^PHP(?:/([0-9][0-9A-Za-z.\\-]*))?", "version": 1,
+      "pattern": "^PHP(?:/([0-9][0-9A-Za-z.]*))?", "version": 1,
       "source": "https://php.net/manual/en/security.hiding.php"},
     {"product": "PHP", "vendor": "The PHP Group", "header": "server",
       "pattern": "\\bPHP/([0-9][0-9A-Za-z.\\-]*)", "version": 1,

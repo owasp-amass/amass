@@ -54,6 +54,7 @@ func (c productFingerprints) validate() error {
 		if f.Version < 0 || f.Version > re.NumSubexp() {
 			return fmt.Errorf("fingerprint %s: version group %d is not in the pattern", f.Product, f.Version)
 		}
+
 		c.Fingerprints[i].re = re
 		c.Fingerprints[i].Header = strings.ToLower(f.Header)
 	}
@@ -83,6 +84,25 @@ type IdentifiedProduct struct {
 	// Source is the documentation the fingerprint cites.
 	Evidence string `json:"evidence"`
 	Source   string `json:"source"`
+	// Distribution is the Linux distribution the same header or banner
+	// names, whose data Family applies, and Package the distribution's
+	// package version when the banner gives its revision.
+	Distribution string `json:"distribution,omitempty"`
+	Family       string `json:"distribution_family,omitempty"`
+	Package      string `json:"package,omitempty"`
+}
+
+// Label names the product, its version and distribution.
+func (p IdentifiedProduct) Label() string {
+	l := strings.TrimSpace(p.Product + " " + p.Version)
+	switch {
+	case p.Package != "" && p.Distribution != "":
+		l += " (" + p.Distribution + " package " + p.Package + ")"
+	case p.Distribution != "":
+		l += " (" + p.Distribution + ")"
+	}
+
+	return l
 }
 
 // identifyProducts matches a service's stored response headers and banner
@@ -92,6 +112,7 @@ func identifyProducts(svc graph.Asset) []IdentifiedProduct {
 	if err != nil {
 		return nil
 	}
+
 	var f struct {
 		Type       string              `json:"service_type"`
 		Output     string              `json:"output"`
@@ -105,6 +126,7 @@ func identifyProducts(svc graph.Asset) []IdentifiedProduct {
 	for k, v := range f.Attributes {
 		headers[strings.ToLower(k)] = append(headers[strings.ToLower(k)], v...)
 	}
+
 	banner := strings.TrimSpace(strings.SplitN(f.Output, "\n", 2)[0])
 
 	var out []IdentifiedProduct
@@ -119,6 +141,14 @@ func identifyProducts(svc graph.Asset) []IdentifiedProduct {
 		if fp.Version > 0 {
 			p.Version = m[fp.Version]
 		}
+		// a distribution counts only when the same header or banner names it
+		if name, family, rev := identifyDistribution(value, p.Version); name != "" {
+			p.Distribution, p.Family = name, family
+			if rev != "" && p.Version != "" {
+				p.Package = p.Version + "-" + rev
+			}
+		}
+
 		key := p.Product + "|" + p.Version
 		if seen[key] {
 			return
@@ -133,6 +163,7 @@ func identifyProducts(svc graph.Asset) []IdentifiedProduct {
 				return
 			}
 		}
+
 		seen[key] = true
 		out = append(out, p)
 	}

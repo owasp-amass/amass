@@ -23,6 +23,9 @@ type Match struct {
 	// AllVersions is set when NVD names the product for every version,
 	// with no version or range, which says nothing about this version.
 	AllVersions bool `json:"all_versions,omitempty"`
+	// Distro is the server's distribution's verdict on the CVE, when its
+	// data was read.
+	Distro *DistroVerdict `json:"distribution,omitempty"`
 }
 
 // Status says whether a product version could be checked.

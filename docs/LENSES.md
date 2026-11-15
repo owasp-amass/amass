@@ -337,9 +337,32 @@ saved, and the next refresh asks for it again.
 `amass vuln-update -every 24h` keeps running and refreshes the data once a
 day (NVD asks for no more than once every two hours); so does the MCP server.
 
-Matching is by the version in stored headers and banners: distributions
-often backport fixes without changing the version, and software can hide or
-fake it, so confirm a CVE with the vendor's advisory.
+Matching is by the version in stored headers and banners. A Linux
+distribution backports fixes without changing the version it first shipped,
+so a server's upstream version alone overstates its CVEs: Apache 2.4.37 on
+Red Hat Enterprise Linux 8 matches over a hundred CVEs Red Hat has fixed
+since. When the same header or banner that identified the software names the
+distribution (`Apache/2.4.37 (Red Hat Enterprise Linux)`,
+`OpenSSH_9.6p1 Ubuntu-3ubuntu13.5`, `PHP/8.2.7-1~deb12u1`;
+`internal/semantics/distributions.json`), the lens judges each CVE by that
+distribution's own records for the release the version belongs to:
+
+- settled, and not counted: the distribution says the CVE does not affect
+  it, or the banner names a package release that has the fix;
+- fixed by an update: the distribution fixed it in a package update the host
+  may or may not have installed (a header names the version, not the
+  package release, except in some banners);
+- still applies: the distribution has not fixed it, or does not track it.
+
+`amass vuln-update` reads that data for the catalog's packages and the CVEs
+it holds: Debian's security tracker, Ubuntu's CVE API, and Red Hat's
+Security Data API (a CVE at a time for those Red Hat has not fixed in every
+release, at most 400 a refresh, each read again when its advisories change
+or after 30 days). Requests to Ubuntu and Red Hat are spaced a second apart.
+Rebuilds of a distribution (Rocky Linux, AlmaLinux, Oracle Linux, CentOS)
+are named, but their CVEs are matched by version alone, since their own
+errata, published on their own schedule, are not read. Software can hide or
+fake its version, so confirm a CVE with the vendor's advisory.
 
 ## Lookalike domains
 
