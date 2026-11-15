@@ -168,7 +168,7 @@ func TestMarshalJSON(t *testing.T) {
 
 	// Test case 1: MarshalJSON returns the expected JSON bytes
 	t.Run("MarshalJSON returns the expected JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"recursive":true,"min_for_recursive":1,"flip_words":true,"flip_numbers":true,"add_words":true,"add_numbers":true,"min_for_word_flip":2,"edit_distance":1,"rigid_boundaries":false,"minimum_ttl":1440,"resolvers":null,"resolvers_qps":5,"trusted_qps":15,"datasource_config":{},"transformations":{}}
 `)
 		got, err := c.JSON()
 		if err != nil {
@@ -187,7 +187,7 @@ func TestMarshalJSON(t *testing.T) {
 	}
 	// Test case 2: MarshalJSON unescapes HTML entities in the JSON bytes
 	t.Run("MarshalJSON unescapes HTML entities in the JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[21,22,25,80,110,143,443,465,587,993,995,2375,2379,5984,6443,8000,8080,8443,8500,8888,9200,9443,10000,10250]},"options":{"database":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432"},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"recursive":true,"min_for_recursive":1,"flip_words":true,"flip_numbers":true,"add_words":true,"add_numbers":true,"min_for_word_flip":2,"edit_distance":1,"rigid_boundaries":false,"minimum_ttl":1440,"resolvers":null,"resolvers_qps":5,"trusted_qps":15,"datasource_config":{},"transformations":{}}
 `)
 		expectedString := string(expected)
 		got, err := c.JSON()

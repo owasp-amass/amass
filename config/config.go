@@ -60,7 +60,7 @@ type Config struct {
 	Scope *Scope `yaml:"scope,omitempty" json:"scope,omitempty"`
 
 	// Defines options like datasources config path and stuff like that
-	Options map[string]interface{} `yaml:"options,omitempty" json:"-"`
+	Options map[string]interface{} `yaml:"options,omitempty" json:"options,omitempty"`
 
 	// Optional inference and classifier configuration; never enables AI by itself.
 	AI *AISettings `yaml:"ai,omitempty" json:"ai,omitempty"`
@@ -81,7 +81,7 @@ type Config struct {
 	GraphDBs []*Database `yaml:"-" json:"database,omitempty"`
 
 	// The maximum number of concurrent DNS queries
-	MaxDNSQueries int `yaml:"-" json:"-"`
+	MaxDNSQueries int `yaml:"-" json:"max_dns_queries,omitempty"`
 
 	// The list of words to use when generating names
 	Wordlist []string `yaml:"-" json:"wordlist,omitempty"`
@@ -90,26 +90,26 @@ type Config struct {
 	BruteForcing bool `yaml:"-" json:"brute_force,omitempty"`
 
 	// Will recursive brute forcing be performed?
-	Recursive bool `yaml:"-" json:"-"`
+	Recursive bool `yaml:"-" json:"recursive,omitempty"`
 
 	// Minimum number of subdomain discoveries before performing recursive brute forcing
-	MinForRecursive int `yaml:"-" json:"-"`
+	MinForRecursive int `yaml:"-" json:"min_for_recursive,omitempty"`
 
 	// Maximum depth for bruteforcing
-	MaxDepth int `yaml:"-" json:"-"`
+	MaxDepth int `yaml:"-" json:"max_depth,omitempty"`
 
 	// Will discovered subdomain name alterations be generated?
 	Alterations    bool     `yaml:"-" json:"alterations,omitempty"`
-	FlipWords      bool     `yaml:"-" json:"-"`
-	FlipNumbers    bool     `yaml:"-" json:"-"`
-	AddWords       bool     `yaml:"-" json:"-"`
-	AddNumbers     bool     `yaml:"-" json:"-"`
-	MinForWordFlip int      `yaml:"-" json:"-"`
-	EditDistance   int      `yaml:"-" json:"-"`
+	FlipWords      bool     `yaml:"-" json:"flip_words,omitempty"`
+	FlipNumbers    bool     `yaml:"-" json:"flip_numbers,omitempty"`
+	AddWords       bool     `yaml:"-" json:"add_words,omitempty"`
+	AddNumbers     bool     `yaml:"-" json:"add_numbers,omitempty"`
+	MinForWordFlip int      `yaml:"-" json:"min_for_word_flip,omitempty"`
+	EditDistance   int      `yaml:"-" json:"edit_distance,omitempty"`
 	AltWordlist    []string `yaml:"-" json:"alt_worldlist,omitempty"`
 
 	// Only access the data sources for names and return results?
-	Passive bool `yaml:"-" json:"-"`
+	Passive bool `yaml:"-" json:"passive,omitempty"`
 
 	// Determines if zone transfers will be attempted
 	Active bool `yaml:"active,omitempty" json:"active,omitempty"`
@@ -126,28 +126,28 @@ type Config struct {
 	} `yaml:"-" json:"-"`
 
 	// The minimum number of minutes that data source responses will be reused
-	MinimumTTL int `yaml:"-" json:"-"`
+	MinimumTTL int `yaml:"-" json:"minimum_ttl,omitempty"`
 
 	// Type of DNS records to query for
-	RecordTypes []string `yaml:"-" json:"-"`
+	RecordTypes []string `yaml:"-" json:"record_types,omitempty"`
 
 	// Resolver settings
 	Resolvers        []string `yaml:"-" json:"resolvers"`
-	ResolversQPS     int      `yaml:"-" json:"-"`
+	ResolversQPS     int      `yaml:"-" json:"resolvers_qps,omitempty"`
 	TrustedResolvers []string `yaml:"-" json:"trusted_resolvers,omitempty"`
-	TrustedQPS       int      `yaml:"-" json:"-"`
+	TrustedQPS       int      `yaml:"-" json:"trusted_qps,omitempty"`
 
 	// Option for verbose logging and output
-	Verbose bool `yaml:"-" json:"-"`
+	Verbose bool `yaml:"-" json:"verbose,omitempty"`
 
 	// Names provided to seed the enumeration
-	ProvidedNames []string `yaml:"-" json:"-"`
+	ProvidedNames []string `yaml:"-" json:"provided_names,omitempty"`
 
 	// The regular expressions for the root domains added to the enumeration
 	regexps map[string]*regexp.Regexp `yaml:"-" json:"-"`
 
 	// Mode should be determined based on scripts utilized
-	Mode string `yaml:"-" json:"-"`
+	Mode string `yaml:"-" json:"mode,omitempty"`
 
 	// The data source configurations
 	DataSrcConfigs *DataSourceConfig `yaml:"-" json:"datasource_config"`
