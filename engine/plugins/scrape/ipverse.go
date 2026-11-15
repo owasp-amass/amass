@@ -5,7 +5,6 @@
 package scrape
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,8 +13,6 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
-	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"golang.org/x/time/rate"
@@ -27,7 +24,6 @@ type ipverse struct {
 	log    *slog.Logger
 	rlimit *rate.Limiter
 	source *et.Source
-	asns   map[int]struct{}
 }
 
 func NewIPVerse() et.Plugin {
@@ -41,7 +37,6 @@ func NewIPVerse() et.Plugin {
 			Name:       "GitHub-IPVerse",
 			Confidence: 90,
 		},
-		asns: make(map[int]struct{}),
 	}
 }
 
@@ -79,16 +74,21 @@ func (v *ipverse) check(e *et.Event) error {
 		return errors.New("failed to extract the AutonomousSystem asset")
 	}
 
-	if _, found := v.asns[as.Number]; found {
+	// asked once within the TTL; a failed request is asked again later
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.AutonomousSystem), string(oam.Netblock), v.name)
+	if err != nil {
+		return err
+	}
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, v.source, since) {
 		return nil
 	}
 
-	rec := v.query(e.Session, e.Entity)
+	rec := v.query(e.Session, as.Number)
 	if rec == nil {
 		return nil
 	}
-	v.asns[as.Number] = struct{}{}
 
+	support.MarkAssetMonitored(e.Session, e.Entity, v.source)
 	for _, cidr := range append(rec.CIDRs.IPv4, rec.CIDRs.IPv6...) {
 		_ = support.AddNetblock(e.Session, cidr, as.Number, v.source)
 	}
@@ -103,23 +103,14 @@ type record struct {
 	} `json:"subnets"`
 }
 
-func (v *ipverse) query(sess et.Session, asset *dbt.Entity) *record {
-	_ = support.WaitLimit(sess.Ctx(), v.rlimit)
-	sess.NetSem().Acquire()
-	as := asset.Asset.(*oamnet.AutonomousSystem)
-
-	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
-	defer cancel()
-
-	resp, err := amasshttp.RequestWebPage(ctx,
-		sess.Clients().General, &amasshttp.Request{URL: fmt.Sprintf(v.fmtstr, as.Number)})
-	sess.NetSem().Release()
-	if err != nil || resp.Body == "" {
+func (v *ipverse) query(sess et.Session, asn int) *record {
+	body, ok := fetchPage(sess, v.rlimit, fmt.Sprintf(v.fmtstr, asn))
+	if !ok {
 		return nil
 	}
 
 	var result record
-	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
 		return nil
 	}
 	return &result

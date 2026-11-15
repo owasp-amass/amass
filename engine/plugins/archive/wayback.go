@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -110,7 +112,8 @@ func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
 	resp, err := amasshttp.RequestWebPage(ctx,
 		e.Session.Clients().General, &amasshttp.Request{URL: w.URL + end})
 	e.Session.NetSem().Release()
-	if err != nil {
+	// a refusal or rate limit is not read as an answer
+	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
 		return nil
 	}
 
@@ -128,7 +131,7 @@ func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
 		}
 		u := url[0]
 
-		if n := amassdns.AnySubdomainRegex().FindString(u); n != "" {
+		if n := strings.ToLower(amassdns.AnySubdomainRegex().FindString(u)); n != "" {
 			// if the subdomain is not in scope, skip it
 			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: n}, 0); conf > 0 {
 				subs.Insert(n)
