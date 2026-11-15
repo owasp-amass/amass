@@ -135,10 +135,11 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 			continue
 		}
 
-		// compare some of the service attributes to find a match
+		// compare some of the service attributes to find a match; a header
+		// may be stored with no values
 		for _, key := range []string{"Server", "X-Powered-By"} {
-			if server1, ok := serv.Attributes[key]; ok && server1[0] != "" {
-				if server2, ok := s.Attributes[key]; ok && server1[0] == server2[0] {
+			if server1 := serv.Attributes[key]; len(server1) > 0 && server1[0] != "" {
+				if server2 := s.Attributes[key]; len(server2) > 0 && server1[0] == server2[0] {
 					num++
 				} else {
 					num--

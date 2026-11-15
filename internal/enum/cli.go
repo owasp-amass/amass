@@ -265,6 +265,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	done := make(chan struct{}, 1)
 	go func() {
 		var previous, finished int
+		var last *et.SessionStats
 		timeoutDur := time.Duration(args.Timeout) * time.Minute
 
 		term := time.NewTimer(timeoutDur)
@@ -282,6 +283,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 				}
 			case <-t.C:
 				if stats, err := getStats(c, token); err == nil && stats != nil {
+					last = stats
 					if !args.Options.Silent {
 						stotal := max(count, stats.WorkItemsTotal)
 						scomplete := max(0, stats.WorkItemsCompleted)
@@ -306,6 +308,16 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 					}
 				}
 			case <-term.C:
+				// Say why the session ends, so a stalled enumeration can be told
+				// from one that finished its work.
+				msg := fmt.Sprintf("No progress for %d minute(s); ending the session (-timeout).", args.Timeout)
+				if last != nil {
+					msg += fmt.Sprintf(" %d of %d work items were complete.", last.WorkItemsCompleted,
+						last.WorkItemsTotal)
+				}
+
+				_, _ = afmt.Y.Fprintln(color.Error, msg)
+				l.Warn(msg)
 				close(done)
 				return
 			}
