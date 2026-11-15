@@ -5,45 +5,11 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
-	"github.com/owasp-amass/amass/v5/internal/lens"
 )
-
-// listChanges prints what changed since a time in what a domain (-d) or an
-// organization (-org) controls. It reads only.
-func listChanges(ctx context.Context, graph groupGraph, domain, org string, since time.Time,
-	limits lens.LensLimits, format string, explicit bool, out io.Writer) error {
-	if err := limits.Validate(); err != nil {
-		return err
-	}
-
-	root, err := groupRoot(ctx, graph, domain, org)
-	if err != nil {
-		return err
-	}
-
-	r, err := lens.FindChanges(ctx, graph, oamrepo.Catalog{}, root, since, limits)
-	if err != nil {
-		return err
-	}
-
-	switch {
-	case !explicit || format == "text":
-		_, err := fmt.Fprint(out, lens.FormatChangesReport(r))
-		return err
-	case format == "json":
-		return writeJSON(out, r)
-	}
-
-	return fmt.Errorf("changes format %q: use text or json", format)
-}
 
 // parseSince reads -since: a date, an RFC 3339 time, or an age before now
 // in days (7d) or as a duration (72h). Empty means the lens's default.

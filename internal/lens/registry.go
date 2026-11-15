@@ -55,6 +55,10 @@ type SubjectLens struct {
 // SubjectLenses lists the registered subject lenses.
 func SubjectLenses() []SubjectLens {
 	return []SubjectLens{
+		servicesLens,
+		networkLens,
+		danglingLens,
+		changesLens,
 		certificatesLens,
 		domainsLens,
 		emailLens,

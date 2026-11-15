@@ -22,14 +22,17 @@ func TestAskServices(t *testing.T) {
 	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"services","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{
+		PlanCatalog: graphtest.TestOAMCatalog,
+	},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(), "What services does colgate.edu expose?", AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ServicesReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "runs nginx 1.18.0") {
+	if !isReport[lens.ServicesReport](res.LensReport) || model.calls != 1 || !strings.Contains(res.Answer,
+		"runs nginx 1.18.0") {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 
@@ -37,7 +40,13 @@ func TestAskServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []string{lens.LensServices, lens.LensGroupVendors, lens.LensNetwork, lens.LensDangling, lens.LensChanges} {
+	for _, kind := range []string{
+		lens.LensServices,
+		lens.LensGroupVendors,
+		lens.LensNetwork,
+		lens.LensDangling,
+		lens.LensChanges,
+	} {
 		if !strings.Contains(string(raw), `"`+kind+`"`) {
 			t.Errorf("the goal schema does not offer the %s answer", kind)
 		}
@@ -51,14 +60,17 @@ func TestAskNetwork(t *testing.T) {
 	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"network","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{
+		PlanCatalog: graphtest.TestOAMCatalog,
+	},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(), "Which IP ranges belong to colgate.edu?", AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.NetworkReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "149.43.0.0/16") ||
+	if !isReport[lens.NetworkReport](res.LensReport) || model.calls != 1 || !strings.Contains(res.Answer,
+		"149.43.0.0/16") ||
 		!strings.Contains(res.Answer, "FASTLY") {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
@@ -71,14 +83,18 @@ func TestAskDanglingDNS(t *testing.T) {
 	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"dangling_dns","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{
+		PlanCatalog: graphtest.TestOAMCatalog,
+	},
 		Limits: graph.DefaultLimits()}}
 
-	res, err := agent.AskAdaptive(context.Background(), "Could any colgate.edu subdomain be taken over?", AdaptiveOptions{})
+	res, err := agent.AskAdaptive(context.Background(), "Could any colgate.edu subdomain be taken over?",
+		AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.DanglingReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "Dangling DNS of colgate.edu") {
+	if !isReport[lens.DanglingReport](res.LensReport) || model.calls != 1 || !strings.Contains(res.Answer,
+		"Dangling DNS of colgate.edu") {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 }
@@ -90,14 +106,17 @@ func TestAskChanges(t *testing.T) {
 	reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 		`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"changes","columns":[]}`
 	model := &plannerModel{replies: []string{reply}}
-	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+	agent := Agent{Model: model, Runner: ToolRunner{Graph: g, Catalog: graphtest.VendorCatalog{
+		PlanCatalog: graphtest.TestOAMCatalog,
+	},
 		Limits: graph.DefaultLimits()}}
 
 	res, err := agent.AskAdaptive(context.Background(), "What changed recently for colgate.edu?", AdaptiveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ChangesReport == nil || model.calls != 1 || !strings.Contains(res.Answer, "Changes to colgate.edu and Colgate University since") {
+	if !isReport[lens.ChangesReport](res.LensReport) || model.calls != 1 || !strings.Contains(res.Answer,
+		"Changes to colgate.edu and Colgate University since") {
 		t.Fatalf("calls %d, answer:\n%s", model.calls, res.Answer)
 	}
 }
@@ -110,8 +129,10 @@ func TestAskRegisteredLenses(t *testing.T) {
 			if _, ok := answerKind(l.Name); ok {
 				t.Errorf("%s needs a second subject but is an answer kind", l.Name)
 			}
+
 			continue
 		}
+
 		g := graphtest.VendorFixture()
 		reply := `{"subject":{"type":"FQDN","field":"name","value":"colgate.edu"},"target_types":[],` +
 			`"direction":"both","purpose":"connected","relationships":[],"path_rule":"","answer":"` + l.Name +
@@ -128,4 +149,10 @@ func TestAskRegisteredLenses(t *testing.T) {
 			t.Errorf("%s: calls %d, answer:\n%s", l.Name, model.calls, res.Answer)
 		}
 	}
+}
+
+// isReport reports whether an investigation's lens report has type T.
+func isReport[T lens.Report](r lens.Report) bool {
+	_, ok := r.(T)
+	return ok
 }

@@ -40,11 +40,7 @@ type Investigation struct {
 	GapReport         *lens.OwnershipGapReport `json:"ownership_gap_report,omitempty"`
 	FamilyReport      *lens.FamilyReport       `json:"family_report,omitempty"`
 	OrgGroupReport    *lens.GroupReport        `json:"org_group_report,omitempty"`
-	ServicesReport    *lens.ServicesReport     `json:"services_report,omitempty"`
 	GroupVendorReport *lens.GroupVendorReport  `json:"group_vendor_report,omitempty"`
-	NetworkReport     *lens.NetworkReport      `json:"network_report,omitempty"`
-	DanglingReport    *lens.DanglingReport     `json:"dangling_report,omitempty"`
-	ChangesReport     *lens.ChangesReport      `json:"changes_report,omitempty"`
 	// LensReport is the report of a registered subject lens.
 	LensReport         lens.Report                   `json:"lens_report,omitempty"`
 	Narrative          *Narrative                    `json:"narrative,omitempty"`

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
-	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
 // The question evaluation set records user questions with what a correct
@@ -166,39 +165,8 @@ func resultLabels(inv Investigation) []string {
 			out = append(out, c.Decision+" "+c.Type+" "+c.Asset)
 		}
 	}
-	if r := inv.ServicesReport; r != nil {
-		for _, s := range r.Services {
-			for _, p := range s.Identified {
-				out = append(out, strings.TrimSpace("runs "+p.Product+" "+p.Version))
-			}
-			out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
-		}
-	}
 	if r := inv.LensReport; r != nil {
 		out = append(out, r.Facts()...)
-	}
-	if r := inv.ChangesReport; r != nil {
-		for _, groups := range [][]lens.ChangeGroup{r.NewAssets, r.NewRelations, r.QuietAssets, r.QuietRelations} {
-			for _, g := range groups {
-				out = append(out, g.Examples...)
-			}
-		}
-	}
-	if r := inv.DanglingReport; r != nil {
-		for _, f := range r.Findings {
-			out = append(out, f.Kind+" "+f.Name+" -> "+f.Target)
-		}
-	}
-	if r := inv.NetworkReport; r != nil {
-		for _, n := range r.Networks {
-			out = append(out, n.CIDR)
-		}
-		for _, a := range r.ASNs {
-			out = append(out, a.Number)
-		}
-		for _, h := range r.Hosting {
-			out = append(out, "hosted by "+h.Party)
-		}
 	}
 	if r := inv.GroupVendorReport; r != nil {
 		for _, v := range r.Vendors {

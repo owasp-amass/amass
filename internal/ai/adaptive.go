@@ -714,16 +714,8 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		return a.familyLens(ctx, root, out)
 	case lens.LensOrgGroup:
 		return a.orgGroupLens(ctx, root, out)
-	case lens.LensServices:
-		return a.servicesLens(ctx, root, out)
 	case lens.LensGroupVendors:
 		return a.groupVendorsLens(ctx, root, out)
-	case lens.LensNetwork:
-		return a.networkLens(ctx, root, out)
-	case lens.LensDangling:
-		return a.danglingLens(ctx, root, out)
-	case lens.LensChanges:
-		return a.changesLens(ctx, root, out)
 	}
 	if l, ok := lens.SubjectLensNamed(q.Lens); ok && !l.NeedsOther {
 		return a.reportLens(ctx, l, root, out)

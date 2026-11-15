@@ -43,10 +43,6 @@ var lensOps = map[string]string{
 	"identity":      "identity-conflicts",
 	"person-named":  "person-named",
 	"vendors":       "vendors",
-	"services":      "services",
-	"network":       "network",
-	"dangling":      "dangling",
-	"changes":       "changes",
 }
 
 // The registered subject lenses are amass lens commands too.
@@ -299,19 +295,6 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listFamily(ctx, g, domainName, journalPath, format, true, out, errout)
 	case "org-group":
 		return listGroup(ctx, g, domainName, orgName, format, true, out)
-	case "services":
-		return listServices(ctx, g, domainName, orgName, limits, format, true, out)
-	case "network":
-		return listNetwork(ctx, g, domainName, orgName, limits, format, true, out)
-	case "dangling":
-		return listDangling(ctx, g, domainName, orgName, limits, format, true, out)
-	case "changes":
-		from, err := parseSince(since, time.Now())
-		if err != nil {
-			return err
-		}
-
-		return listChanges(ctx, g, domainName, orgName, from, limits, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
 	}

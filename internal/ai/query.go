@@ -127,14 +127,6 @@ func (q Query) Describe() string {
 		return fmt.Sprintf("Show the organizations, networks and related domains in the family of %s.", subject)
 	case lens.LensOrgGroup:
 		return fmt.Sprintf("Show the corporate group (ultimate parent, subsidiaries and units) of %s.", subject)
-	case lens.LensServices:
-		return fmt.Sprintf("List the services, software and certificates stored for what %s controls.", subject)
-	case lens.LensChanges:
-		return fmt.Sprintf("Show what changed recently in what %s controls.", subject)
-	case lens.LensDangling:
-		return fmt.Sprintf("Find the DNS records of what %s controls that may point at something it no longer holds.", subject)
-	case lens.LensNetwork:
-		return fmt.Sprintf("Show the address space, autonomous systems and hosting of what %s controls.", subject)
 	case lens.LensGroupVendors:
 		return fmt.Sprintf("List the vendors used across the corporate group of %s.", subject)
 	case lens.LensTable:

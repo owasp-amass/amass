@@ -130,56 +130,6 @@ var answerKinds = []AnswerKind{
 		},
 	},
 	{
-		Name: lens.LensServices,
-		Description: "List the services stored for what a domain or organization controls: where each listens, " +
-			"its type, the software its responses name (identified product and version), its certificates, and " +
-			"what stands out (unusual ports, expired or self-issued certificates). Services come from past probes, " +
-			"not a live scan. Read-only; nothing is written.",
-		Subjects: []string{"Organization", "FQDN"},
-		Targets:  "[]",
-		Examples: []string{
-			"What services does <domain> expose?",
-			"Which software and versions run on <organization>'s servers?",
-			"Does <domain> have expired certificates or services on unusual ports?",
-		},
-	},
-	{
-		Name: lens.LensNetwork,
-		Description: "Show the network infrastructure of what a domain or organization controls: its netblocks and " +
-			"autonomous systems, where its names are hosted, unused space, other domains in its space. Read-only",
-		Subjects: []string{"Organization", "FQDN"},
-		Targets:  "[]",
-		Examples: []string{
-			"What network infrastructure does <organization> have?",
-			"Which IP ranges and autonomous systems belong to <domain>?",
-			"Where is <domain> hosted: its own networks or a cloud provider?",
-		},
-	},
-	{
-		Name: lens.LensChanges,
-		Description: "Show what changed recently in what a domain or organization controls: records first stored in the last " +
-			"30 days, and records later enumerations stopped seeing. Read-only",
-		Subjects: []string{"Organization", "FQDN"},
-		Targets:  "[]",
-		Examples: []string{
-			"What changed recently for <domain>?",
-			"What new assets does <organization> have this month?",
-			"Which of <domain>'s records disappeared lately?",
-		},
-	},
-	{
-		Name: lens.LensDangling,
-		Description: "Find DNS records of what a domain or organization controls that may point at something it no longer " +
-			"holds: aliases to deleted cloud resources (subdomain takeover), lapsed domains, stale addresses. Read-only",
-		Subjects: []string{"Organization", "FQDN"},
-		Targets:  "[]",
-		Examples: []string{
-			"Does <domain> have dangling DNS records?",
-			"Which of <organization>'s subdomains could be taken over?",
-			"Do any of <domain>'s CNAMEs point at deleted cloud resources?",
-		},
-	},
-	{
 		Name: lens.LensGroupVendors,
 		Description: "List the outside parties a whole corporate group depends on: the vendors of each " +
 			"organization in the group (parent, subsidiaries and units) merged, with how many and which group " +
@@ -590,8 +540,7 @@ func narrowGoalSchema(base llm.JSONSchema, kind AnswerKind, schema graph.SchemaC
 // target types, hops or columns, besides the third-party lens: the ones
 // wired here and every registered lens.SubjectLens.
 var subjectLens = map[string]bool{lens.LensOwnershipGaps: true, LensFamily: true, lens.LensOrgGroup: true,
-	lens.LensServices: true, lens.LensGroupVendors: true, lens.LensNetwork: true, lens.LensDangling: true,
-	lens.LensChanges: true}
+	lens.LensGroupVendors: true}
 
 // subjectLensKind stands for every subject lens in switches that treat
 // them alike.

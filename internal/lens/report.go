@@ -93,44 +93,12 @@ func (t textReport) Facts() []string { return t.facts }
 
 func (t textReport) Partial() (bool, string) { return t.partial, t.reason }
 
-// reportSection finds the lens a section names: a registered subject lens,
-// or one of the lenses answered before the registry existed.
+// reportSection finds the registered subject lens a section names.
 func reportSection(name string) (sectionFinder, bool) {
 	if l, ok := SubjectLensNamed(name); ok && !l.NeedsOther && l.Name != LensReport {
 		return func(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 			limits LensLimits) (Report, error) {
 			return l.Find(ctx, g, schema, root, Options{Limits: limits})
-		}, true
-	}
-	switch name {
-	case LensDangling, "dangling":
-		return func(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
-			limits LensLimits) (Report, error) {
-			r, err := FindDanglingDNS(ctx, g, schema, root, limits)
-			var facts []string
-			for _, f := range r.Findings {
-				facts = append(facts, f.Kind+" "+f.Name)
-			}
-
-			return textReport{text: FormatDanglingReport(r), facts: facts, partial: r.Truncated, reason: r.Reason}, err
-		}, true
-	case LensNetwork:
-		return func(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
-			limits LensLimits) (Report, error) {
-			r, err := FindNetworkInfrastructure(ctx, g, schema, root, limits)
-			return textReport{text: FormatNetworkReport(r), partial: r.Truncated, reason: r.Reason}, err
-		}, true
-	case LensServices:
-		return func(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
-			limits LensLimits) (Report, error) {
-			r, err := FindServices(ctx, g, schema, root, limits)
-			return textReport{text: FormatServicesReport(r), partial: r.Truncated, reason: r.Reason}, err
-		}, true
-	case LensChanges:
-		return func(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
-			limits LensLimits) (Report, error) {
-			r, err := FindChanges(ctx, g, schema, root, time.Time{}, limits)
-			return textReport{text: FormatChangesReport(r)}, err
 		}, true
 	}
 
