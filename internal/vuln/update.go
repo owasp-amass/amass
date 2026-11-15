@@ -420,8 +420,13 @@ func (u *Updater) getOnce(ctx context.Context, rawURL string, nvd bool, v any) (
 
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		err := fmt.Errorf("%s: %s %s", req.URL.Host, resp.Status, strings.TrimSpace(string(msg)))
+		// an HTML error page says nothing the status does not
+		var detail string
+		if !strings.Contains(resp.Header.Get("Content-Type"), "html") {
+			msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			detail = " " + strings.TrimSpace(string(msg))
+		}
+		err := fmt.Errorf("%s: %s%s", req.URL.Host, resp.Status, strings.TrimRight(detail, " "))
 
 		// NVD refuses with 403 when the rate limit is passed
 		switch {
