@@ -142,6 +142,12 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 
 	var results []*fingerprint
 	for _, target := range targets {
+		// Space this host's fingerprints; each opens several TLS connections,
+		// and a stopped session ends the loop.
+		if err := support.PaceProbe(e, target.asset.Asset.Key()); err != nil {
+			break
+		}
+
 		portrel := target.port.Relation.(*oamgen.PortRelation)
 		if fp, err := support.JARMFingerprint(e.Session, target.asset.Asset, portrel); err == nil && fp != "" {
 			results = append(results, &fingerprint{

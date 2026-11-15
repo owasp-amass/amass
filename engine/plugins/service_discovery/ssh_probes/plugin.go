@@ -102,7 +102,13 @@ func (sp *sshProbing) check(e *et.Event) error {
 	}
 
 	var findings []*support.Finding
-	for _, port := range support.ScopePorts(e.Session.Config(), sshPorts) {
+	for _, port := range support.ShufflePorts(support.ScopePorts(e.Session.Config(), sshPorts)) {
+		// Space this host's probes so the session does not reach it with a
+		// burst across ports; a stopped session ends the loop.
+		if err := support.PaceProbe(e, ip.Address.String()); err != nil {
+			break
+		}
+
 		f, o := sp.probe(e, e.Entity, ip, port)
 		if f != nil {
 			findings = append(findings, f)

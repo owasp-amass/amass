@@ -97,7 +97,13 @@ func (bp *bannerProbing) check(e *et.Event) error {
 	}
 
 	var findings []*support.Finding
-	for _, port := range support.ScopePorts(e.Session.Config(), bp.cat.probedPorts()) {
+	for _, port := range support.ShufflePorts(support.ScopePorts(e.Session.Config(), bp.cat.probedPorts())) {
+		// Space this host's probes so the session does not reach it with a
+		// burst across ports; a stopped session ends the loop.
+		if err := support.PaceProbe(e, ip.Address.String()); err != nil {
+			break
+		}
+
 		findings = append(findings, bp.probe(e, e.Entity, ip, port)...)
 	}
 

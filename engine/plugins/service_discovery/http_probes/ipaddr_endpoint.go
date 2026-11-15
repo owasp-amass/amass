@@ -102,7 +102,7 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 	var findings []*support.Finding
 
 	var count int
-	ports := support.HTTPPorts(e.Session.Config())
+	ports := support.ShufflePorts(support.HTTPPorts(e.Session.Config()))
 	fch := make(chan []*support.Finding, len(ports))
 	for _, port := range ports {
 		count++
@@ -120,6 +120,13 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 
 func (r *ipaddrEndpoint) probeOnePort(e *et.Event, ipaddr *dbt.Entity, port int, ch chan []*support.Finding) {
 	ip := ipaddr.Asset.(*network.IPAddress)
+
+	// Space this host's probes so its ports are not all reached at once; a
+	// stopped session returns no finding for this port.
+	if err := support.PaceProbe(e, ip.Address.String()); err != nil {
+		ch <- nil
+		return
+	}
 
 	a := ip.Address.String()
 	if ip.Type == "IPv6" {

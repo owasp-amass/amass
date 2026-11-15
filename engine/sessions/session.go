@@ -87,7 +87,9 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 	startTime := time.Now()
 	numOfSessions := mgr.NumOfSessions() + 1
 	usage := &et.NetUsage{}
-	ctx, cancel := context.WithCancel(et.WithNetUsage(context.Background(), usage))
+	ctx := et.WithNetUsage(context.Background(), usage)
+	ctx = et.WithProbePacer(ctx, probePacer(cfg))
+	ctx, cancel := context.WithCancel(ctx)
 	// Create a new session object
 	s := &Session{
 		netUsage:     usage,
@@ -313,6 +315,50 @@ func runMetadata(cfg *config.Config) map[string]any {
 
 	return map[string]any{"mode": mode, "rigid": cfg.Rigid, "brute_forcing": cfg.BruteForcing,
 		"alterations": cfg.Alterations}
+}
+
+// Probe pacing defaults, in milliseconds: an active-enumeration probe to a
+// host is held until at least defaultProbePaceMS has passed since the
+// previous probe to that host, plus up to defaultProbeJitterMS of random
+// spread. The default is modest so that, with many hosts probed at once, an
+// enumeration keeps its pace while no single host sees a simultaneous burst
+// across ports. The options "probe_pace_ms" and "probe_jitter_ms" override
+// them, and a pace of 0 turns pacing off.
+const (
+	defaultProbePaceMS   = 500
+	defaultProbeJitterMS = 1500
+)
+
+// probePacer builds a session's probe pacer from its configuration.
+func probePacer(cfg *config.Config) *et.ProbePacer {
+	pace := optionMS(cfg, "probe_pace_ms", defaultProbePaceMS)
+	jitter := optionMS(cfg, "probe_jitter_ms", defaultProbeJitterMS)
+	return et.NewProbePacer(time.Duration(pace)*time.Millisecond, time.Duration(jitter)*time.Millisecond)
+}
+
+// optionMS reads a non-negative millisecond option, falling back to def when
+// it is absent or not a non-negative number.
+func optionMS(cfg *config.Config, name string, def int) int {
+	if cfg == nil || cfg.Options == nil {
+		return def
+	}
+
+	switch v := cfg.Options[name].(type) {
+	case int:
+		if v >= 0 {
+			return v
+		}
+	case int64:
+		if v >= 0 {
+			return int(v)
+		}
+	case float64:
+		if v >= 0 {
+			return int(v)
+		}
+	}
+
+	return def
 }
 
 // netUsageMessage begins the log lines with a session's share of the

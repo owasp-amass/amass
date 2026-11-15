@@ -100,7 +100,7 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 	var findings []*support.Finding
 
 	var count int
-	ports := support.HTTPPorts(e.Session.Config())
+	ports := support.ShufflePorts(support.HTTPPorts(e.Session.Config()))
 	fch := make(chan []*support.Finding, len(ports))
 	for _, port := range ports {
 		count++
@@ -118,6 +118,14 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 
 func (fe *fqdnEndpoint) probeOnePort(e *et.Event, host *dbt.Entity, port int, ch chan []*support.Finding) {
 	fqdn := host.Asset.(*oamdns.FQDN)
+
+	// Space this host's probes so its ports are not all reached at once; a
+	// stopped session returns no finding for this port.
+	if err := support.PaceProbe(e, fqdn.Name); err != nil {
+		ch <- nil
+		return
+	}
+
 	addr := fqdn.Name + ":" + strconv.Itoa(port)
 
 	proto := "https"
