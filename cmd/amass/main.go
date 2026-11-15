@@ -40,13 +40,12 @@ import (
 	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
 	"github.com/owasp-amass/amass/v5/internal/subs"
 	"github.com/owasp-amass/amass/v5/internal/tools"
-	"github.com/owasp-amass/amass/v5/internal/track"
 	"github.com/owasp-amass/amass/v5/internal/viz"
 	vulncli "github.com/owasp-amass/amass/v5/internal/vuln/cli"
 )
 
 const (
-	usageMsg string = "[ai|assoc|engine|enum|lens|review|subs|track|viz|vuln-update] [options]"
+	usageMsg string = "[ai|assoc|engine|enum|lens|review|subs|viz|vuln-update] [options]"
 )
 
 type Args struct {
@@ -67,7 +66,6 @@ var subcommands = []subDesc{
 	{"lens", lenscli.LensDescription},
 	{"review", lenscli.ReviewDescription},
 	{"subs", subs.Description},
-	{"track", track.Description},
 	{"viz", viz.Description},
 	{"vuln-update", vulncli.Description},
 }
@@ -172,8 +170,6 @@ func main() {
 		lenscli.ReviewWorkflow(cmdName, os.Args[2:])
 	case "subs":
 		subs.CLIWorkflow(cmdName, os.Args[2:])
-	case "track":
-		track.CLIWorkflow(cmdName, os.Args[2:])
 	case "viz":
 		viz.CLIWorkflow(cmdName, os.Args[2:])
 	case "vuln-update":
