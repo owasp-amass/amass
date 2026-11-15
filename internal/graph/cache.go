@@ -25,6 +25,7 @@ type fullGraph interface {
 	OrganizationResolver
 	AssetBatchReader
 	LabeledEdgeReader
+	MultiEdgeReader
 }
 
 // maxCached bounds the reads one cached graph keeps.
@@ -227,4 +228,48 @@ func (c *cachedGraph) EdgesPerLabel(ctx context.Context, id, dir string, labels 
 type labeledResult struct {
 	edges []Relation
 	more  []string
+}
+
+// EdgesForAssets reads the edges of the assets not already read and keeps
+// each asset's result as its EdgesLimited read, so a later bounded read of
+// one of them is answered from memory.
+func (c *cachedGraph) EdgesForAssets(ctx context.Context, ids []string, dir string, since time.Time,
+	perAsset int) (map[string][]Relation, map[string]bool, error) {
+	key := func(id string) string {
+		return fmt.Sprintf("l\x00%s\x00%s\x00%s\x00%d\x00%d", id, dir, "", since.UnixNano(), perAsset)
+	}
+
+	out := make(map[string][]Relation, len(ids))
+	more := map[string]bool{}
+	var missing []string
+	asked := map[string]bool{}
+	for _, id := range ids {
+		if v, ok := c.get(key(id)); ok {
+			r := v.(edgesResult)
+			out[id] = slices.Clone(r.edges)
+			if r.more {
+				more[id] = true
+			}
+		} else if !asked[id] {
+			asked[id] = true
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return out, more, nil
+	}
+
+	read, partial, err := c.inner.EdgesForAssets(ctx, missing, dir, since, perAsset)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, id := range missing {
+		c.put(key(id), edgesResult{edges: read[id], more: partial[id]})
+		out[id] = slices.Clone(read[id])
+		if partial[id] {
+			more[id] = true
+		}
+	}
+
+	return out, more, nil
 }

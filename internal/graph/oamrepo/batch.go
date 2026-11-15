@@ -235,3 +235,69 @@ func relationOf(e *dbt.Edge, id string) graph.Relation {
 		Type: string(e.Relation.RelationType()), Direction: dir, Content: e.Relation, CreatedAt: e.CreatedAt,
 		LastSeen: e.LastSeen}
 }
+
+// EdgesForAssets reads the edges of many assets in one direction with up to
+// perAsset edges for each: in one query per batch with asset-db's
+// ReadEdgesForEntities when the repository has it, otherwise one
+// EdgesLimited read per asset.
+func (a Adapter) EdgesForAssets(ctx context.Context, ids []string, direction string, since time.Time,
+	perAsset int) (map[string][]graph.Relation, map[string]bool, error) {
+	if a.Repo == nil {
+		return nil, nil, errors.New("missing repository")
+	}
+
+	out := make(map[string][]graph.Relation, len(ids))
+	more := map[string]bool{}
+	reader, ok := a.Repo.(interface {
+		ReadEdgesForEntities(context.Context, []string, string, time.Time, int, ...string) (map[string][]*dbt.Edge,
+			[]string, error)
+	})
+	if !ok {
+		for _, id := range ids {
+			edges, m, err := a.EdgesLimited(ctx, id, direction, "", since, perAsset)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			out[id] = edges
+			if m {
+				more[id] = true
+			}
+		}
+
+		return out, more, nil
+	}
+
+	defer a.Stats.record("EdgesForAssets", time.Now())
+
+	for chunk := range slices.Chunk(ids, maxBatchIDs) {
+		read, partial, err := reader.ReadEdgesForEntities(ctx, chunk, direction, since, perAsset)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for id, edges := range read {
+			if len(edges) > perAsset {
+				return nil, nil, errors.New("repository violated bounded edge limit")
+			}
+
+			rels := make([]graph.Relation, 0, len(edges))
+			for _, e := range edges {
+				if e == nil || e.Relation == nil || e.FromEntity == nil || e.ToEntity == nil {
+					return nil, nil, errors.New("malformed batched edge")
+				}
+
+				rels = append(rels, relationOf(e, id))
+			}
+
+			out[id] = rels
+		}
+		for _, id := range partial {
+			more[id] = true
+		}
+	}
+
+	return out, more, nil
+}
+
+var _ graph.MultiEdgeReader = Adapter{}

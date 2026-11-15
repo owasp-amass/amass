@@ -109,7 +109,20 @@ func assertBatchReads(t *testing.T, repo repository.Repository, fallback bool) {
 			t.Fatalf("%s: in edges %v more %v err %v", name, edges, more, err)
 		}
 	}
-	if batch.Stats.calls["GetAssets"] != 1 || batch.Stats.calls["EdgesPerLabel"] != 2 {
+	for name, a := range adapters {
+		got, more, err := a.EdgesForAssets(ctx, []string{root.ID, ids[0], "987654321"}, "out", time.Time{}, 3)
+		if err != nil || len(got[root.ID]) != 3 || !more[root.ID] || len(got[ids[0]]) != 0 || len(more) != 1 {
+			t.Fatalf("%s: out edges %v more %v err %v", name, got, more, err)
+		}
+
+		in, more, err := a.EdgesForAssets(ctx, []string{ids[1], svc.ID}, "in", time.Time{}, 3)
+		if err != nil || len(more) != 0 || len(in[ids[1]]) != 1 || len(in[svc.ID]) != 1 ||
+			in[svc.ID][0].Label != "port" || in[svc.ID][0].Direction != "in" {
+			t.Fatalf("%s: in edges %v more %v err %v", name, in, more, err)
+		}
+	}
+	if batch.Stats.calls["GetAssets"] != 1 || batch.Stats.calls["EdgesPerLabel"] != 2 ||
+		batch.Stats.calls["EdgesForAssets"] != 2 {
 		t.Errorf("stats %v", batch.Stats.calls)
 	}
 }

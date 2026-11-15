@@ -141,6 +141,22 @@ func TestLensSameWithBatchReads(t *testing.T) {
 	if n := batched.Stats.calls["GetAsset"]; n > 10 {
 		t.Errorf("%d single asset reads remain", n)
 	}
+
+	// A footprint cut short by the asset limit samples the same assets.
+	small := lens.LensLimits{MaxAssets: 40}
+	with, err = lens.FindServices(ctx, batched, Catalog{}, root, small)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	without, err = lens.FindServices(ctx, unbatched{a: Adapter{Repo: repo}}, Catalog{}, root, small)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !with.Truncated || stripReads(with) != stripReads(without) {
+		t.Fatalf("the limited lens differs with batch reads:\n%s\n---\n%s", lens.FormatServicesReport(with),
+			lens.FormatServicesReport(without))
+	}
 }
 
 // stripReads is a report's services without its read count.

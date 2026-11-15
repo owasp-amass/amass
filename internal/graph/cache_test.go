@@ -83,6 +83,17 @@ func (c *countingGraph) EdgesPerLabel(context.Context, string, string, []string,
 	return []Relation{{ID: "e"}}, []string{"node"}, nil
 }
 
+func (c *countingGraph) EdgesForAssets(_ context.Context, ids []string, _ string, _ time.Time, _ int) (map[string][]Relation, map[string]bool, error) {
+	c.n("multi")
+	c.calls["multi:"+strings.Join(ids, ",")]++
+	out := map[string][]Relation{}
+	for _, id := range ids {
+		out[id] = []Relation{{ID: "e-" + id, FromID: id}}
+	}
+
+	return out, map[string]bool{"busy": true}, nil
+}
+
 func TestCachedGraphReadsOnce(t *testing.T) {
 	inner := &countingGraph{calls: map[string]int{}}
 	g := Cached(inner)
@@ -151,6 +162,30 @@ func TestCachedGraphBatchReadsOnlyMissing(t *testing.T) {
 		t.Errorf("the batch read asked for %v", inner.calls)
 	}
 	if _, err := g.GetAssets(ctx, []string{"a", "b"}); err != nil || inner.calls["assets"] != 1 {
+		t.Errorf("cached assets were read again: %v", inner.calls)
+	}
+}
+
+// A batched edge read keeps each asset's edges as its bounded read, and
+// reads only the assets not already read.
+func TestCachedGraphEdgesForAssets(t *testing.T) {
+	inner := &countingGraph{calls: map[string]int{}}
+	g := Cached(inner)
+	ctx := context.Background()
+	m := g.(MultiEdgeReader)
+
+	got, more, err := m.EdgesForAssets(ctx, []string{"x", "busy"}, "out", time.Time{}, 5)
+	if err != nil || len(got["x"]) != 1 || !more["busy"] {
+		t.Fatalf("got %v more %v err %v", got, more, err)
+	}
+
+	edges, partial, err := g.(BoundedGraph).EdgesLimited(ctx, "busy", "out", "", time.Time{}, 5)
+	if err != nil || len(edges) != 1 || !partial || inner.calls["limited"] != 0 {
+		t.Errorf("the bounded read was not answered from the batch: %v %v %v", edges, partial, inner.calls)
+	}
+
+	if _, _, err := m.EdgesForAssets(ctx, []string{"x", "y"}, "out", time.Time{}, 5); err != nil ||
+		inner.calls["multi:y"] != 1 {
 		t.Errorf("cached assets were read again: %v", inner.calls)
 	}
 }

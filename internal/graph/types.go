@@ -106,6 +106,16 @@ type LabeledEdgeReader interface {
 		perLabel int) (edges []Relation, more []string, err error)
 }
 
+// MultiEdgeReader reads the edges of many assets in one direction ("in" or
+// "out") with up to perAsset (1..MaxEdgeRead) edges for each, in one read.
+// The result holds each asset's edges by ID; more names the assets with
+// edges beyond perAsset. Each asset's edges are what EdgesLimited returns
+// for it alone.
+type MultiEdgeReader interface {
+	EdgesForAssets(ctx context.Context, ids []string, direction string, since time.Time,
+		perAsset int) (edges map[string][]Relation, more map[string]bool, err error)
+}
+
 type Limits struct {
 	MaxDepth     int
 	MaxNodes     int

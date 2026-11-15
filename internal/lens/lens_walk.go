@@ -194,7 +194,20 @@ type lensWalker struct {
 	// controls edge: a group rollup scans each group organization on its
 	// own, so a parent's scan leaves its subsidiaries to theirs.
 	stopAt map[string]bool
+	// prefetched holds bounded edge reads made for several assets at once,
+	// by asset ID and direction, until neighbors uses them.
+	prefetched map[string]prefetchedEdges
 }
+
+// prefetchedEdges is one asset's bounded edge read in one direction.
+type prefetchedEdges struct {
+	edges []graph.Relation
+	more  bool
+}
+
+// footprintBatch is how many assets the footprint walk admits, and reads
+// the edges of, at a time.
+const footprintBatch = 64
 
 func newLensWalker(ctx context.Context, g graph.Graph, bounded graph.BoundedGraph, meaning graph.MeaningFunc, relations []graph.RelationshipSchema, root graph.Asset, report *ThirdPartyReport) *lensWalker {
 	return &lensWalker{
@@ -242,20 +255,29 @@ func (w *lensWalker) neighbors(id string) ([]graph.Relation, error) {
 
 	var all []graph.Relation
 	for _, dir := range []string{"out", "in"} {
-		if w.report.Reads >= w.maxReads {
-			w.truncate("database read limit")
-			break
-		}
+		var edges []graph.Relation
+		var more bool
+		if p, ok := w.prefetched[id+"\x00"+dir]; ok {
+			delete(w.prefetched, id+"\x00"+dir)
+			edges, more = p.edges, p.more
+		} else {
+			if w.report.Reads >= w.maxReads {
+				w.truncate("database read limit")
+				break
+			}
 
-		w.report.Reads++
-		edges, more, err := w.bounded.EdgesLimited(w.ctx, id, dir, "", time.Time{}, lensMaxPerAsset)
-		if err != nil {
-			return nil, err
+			w.report.Reads++
+			var err error
+			edges, more, err = w.bounded.EdgesLimited(w.ctx, id, dir, "", time.Time{}, lensMaxPerAsset)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if more {
 			// One busy relationship (an FQDN's subdomains, a netblock's
 			// addresses) can fill the read; read each label on its own so
 			// the others are complete.
+			var err error
 			if edges, err = w.neighborsByLabel(id, dir); err != nil {
 				return nil, err
 			}
@@ -361,6 +383,70 @@ func (w *lensWalker) neighborsPerLabel(lr graph.LabeledEdgeReader, a graph.Asset
 	}
 
 	return out, nil
+}
+
+// prefetchEdges reads, when the graph can, the bounded edges of the assets
+// ids not yet read in one read per direction, and the assets at their far
+// ends in one batch. neighbors then uses them as its own reads.
+func (w *lensWalker) prefetchEdges(ids []string) error {
+	multi, ok := w.bounded.(graph.MultiEdgeReader)
+	if !ok {
+		return nil
+	}
+
+	var need []string
+	for _, id := range ids {
+		if _, done := w.edges[id]; done {
+			continue
+		}
+		if _, done := w.prefetched[id+"\x00out"]; done {
+			continue
+		}
+
+		need = append(need, id)
+	}
+	if len(need) < 2 {
+		return nil
+	}
+	if w.prefetched == nil {
+		w.prefetched = map[string]prefetchedEdges{}
+	}
+
+	var far []graph.Relation
+	for _, dir := range []string{"out", "in"} {
+		if w.report.Reads >= w.maxReads {
+			return nil // neighbors reports the read limit
+		}
+
+		w.report.Reads++
+		read, more, err := multi.EdgesForAssets(w.ctx, need, dir, time.Time{}, lensMaxPerAsset)
+		if err != nil {
+			return err
+		}
+
+		for _, id := range need {
+			w.prefetched[id+"\x00"+dir] = prefetchedEdges{edges: read[id], more: more[id]}
+			far = append(far, read[id]...)
+		}
+	}
+
+	var ends []string
+	want := map[string]bool{}
+	for _, e := range far {
+		for _, id := range []string{e.FromID, e.ToID} {
+			if _, known := w.assets[id]; !known && id != "" && !want[id] {
+				want[id] = true
+				ends = append(ends, id)
+			}
+		}
+	}
+
+	read, err := graph.AssetsByID(w.ctx, w.graph, ends)
+	for id, a := range read {
+		w.assets[id] = a
+	}
+
+	return err
 }
 
 // prefetch reads the assets at the far end of edges that are not yet known
@@ -583,6 +669,42 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 
 		return waiting{}, false
 	}
+	// upcoming lists, without taking them, up to n assets next would admit
+	// in turn that would then be followed, so their edges can be read with
+	// the asset being followed now.
+	upcoming := func(n int) []string {
+		offset := map[string]int{}
+		var out []string
+		seen := map[string]bool{}
+		t := turn
+		for empty := 0; len(out) < n && len(kinds) > 0 && empty < len(kinds); {
+			kind := kinds[t%len(kinds)]
+			t++
+			found := false
+			for offset[kind] < len(pending[kind]) {
+				c := pending[kind][offset[kind]]
+				offset[kind]++
+				if _, done := owned[c.asset.ID]; done || seen[c.asset.ID] {
+					continue
+				}
+
+				seen[c.asset.ID] = true
+				found = true
+				if c.asset.Type != "Person" && !last[c.asset.Type] && (w.expand == nil || w.expand[c.asset.Type]) {
+					out = append(out, c.asset.ID)
+				}
+
+				break
+			}
+			if found {
+				empty = 0
+			} else {
+				empty++
+			}
+		}
+
+		return out
+	}
 
 	for {
 		if err := w.ctx.Err(); err != nil {
@@ -615,6 +737,25 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 		queue = queue[1:]
 		if cur.Type == "Person" {
 			continue
+		}
+
+		// When the asset's edges are not read yet, read them with those of
+		// the assets queued or next in turn.
+		_, read := w.edges[cur.ID]
+		_, ahead := w.prefetched[cur.ID+"\x00out"]
+		if !read && !ahead {
+			batch := []string{cur.ID}
+			for _, id := range queue[:min(len(queue), footprintBatch-1)] {
+				if owned[id].Type != "Person" {
+					batch = append(batch, id)
+				}
+			}
+			if len(batch) < footprintBatch && len(owned) < w.maxAssets {
+				batch = append(batch, upcoming(min(footprintBatch-len(batch), w.maxAssets-len(owned)))...)
+			}
+			if err := w.prefetchEdges(batch); err != nil {
+				return nil, nil, err
+			}
 		}
 
 		steps, err := w.steps(cur)

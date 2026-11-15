@@ -512,11 +512,14 @@ amass lens vendors -d jhu.edu -max-assets 10000 -max-reads 100000 -investigation
 
 `-read-stats` prints, after the result, how many database reads of each kind
 the run made and how long they took, to measure a lens against a database.
-A lens reads the assets at the far end of an asset's edges in one batch, and
-an asset with more edges than one read returns has each relationship's first
-edges read in one query; only a relationship with more is then paged on its
-own. Both use asset-db's `FindEntitiesByIds` and `ReadEdgesPerLabel`, and fall
-back to one read at a time on a repository without them.
+A lens reads the edges of the asset it follows together with those of the
+next assets in turn (up to 64, in one query per direction) and the assets at
+their far ends in one batch. An asset with more edges than one read returns
+has each relationship's first edges read in one query; only a relationship
+with more is then paged on its own. These use asset-db's
+`ReadEdgesForEntities`, `FindEntitiesByIds` and `ReadEdgesPerLabel`, and fall
+back to one read at a time on a repository without them. Reading ahead does
+not change which assets a limited footprint samples.
 The same batch reads serve the graph search and guided investigation tools,
 the duplicate, identity, corporate group and person-named checks, `amass viz`
 and the enumeration engine's name-to-address lookups, and each MCP tool call
