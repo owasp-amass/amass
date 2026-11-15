@@ -122,6 +122,10 @@ func (v *V1Handlers) CreateSessionHandler(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid configuration", err)
 		return
 	}
+	if config.Scope == nil {
+		writeError(w, http.StatusBadRequest, "invalid configuration", errors.New("the configuration has no scope"))
+		return
+	}
 	// Populate FROM/TO in transformations
 	for k, t := range config.Transformations {
 		_ = t.Split(k)
@@ -222,11 +226,20 @@ func (v *V1Handlers) GetStatsHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "session not found", ErrNotFound)
 		return
 	}
+	// encode under the lock, and write after it, so a slow client does not
+	// hold up the session's updates
 	stats := sess.Stats()
-
 	stats.RLock()
-	writeJSON(w, http.StatusOK, stats)
+	body, err := json.Marshal(stats)
 	stats.RUnlock()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode the statistics", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // GetScopeHandler godoc

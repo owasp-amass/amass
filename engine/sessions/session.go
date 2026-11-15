@@ -67,6 +67,9 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 	if cfg == nil {
 		cfg = config.NewConfig()
 	}
+	if cfg.Scope == nil {
+		return nil, errors.New("the configuration has no scope")
+	}
 
 	clients, err := NewClients(len(cfg.Scope.Ports))
 	if err != nil {

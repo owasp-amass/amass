@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -82,14 +84,13 @@ func (v *V1Handlers) PutAsset(ctx context.Context, sess et.Session, asset oam.As
 	}
 
 	var entity *dbt.Entity
-	ents, err := sess.DB().FindEntitiesByContent(ctx, asset.AssetType(), time.Time{}, 1, filter)
-	if err == nil {
+	if ents, err := sess.DB().FindEntitiesByContent(ctx, asset.AssetType(), time.Time{}, 1,
+		filter); err == nil && len(ents) > 0 && ents[0] != nil {
 		entity = ents[0]
-	} else {
-		entity, err = sess.DB().CreateAsset(ctx, asset)
-		if err != nil {
-			return entity.ID, err
-		}
+	} else if entity, err = sess.DB().CreateAsset(ctx, asset); err != nil {
+		return "", err
+	} else if entity == nil {
+		return "", errors.New("the asset was not stored")
 	}
 
 	// Create and schedule new event
@@ -106,28 +107,37 @@ func (v *V1Handlers) PutAsset(ctx context.Context, sess et.Session, asset oam.As
 	return entity.ID, nil
 }
 
+// putWorkers is how many assets of a bulk request are stored at once, so a
+// large request does not take every database connection.
+const putWorkers = 8
+
 func (v *V1Handlers) PutAssets(ctx context.Context, sess et.Session, assets []oam.Asset) (int64, error) {
-	ch := make(chan error, 100)
+	work := make(chan oam.Asset)
+	var failed atomic.Int64
+	var wg sync.WaitGroup
 
-	for _, asset := range assets {
-		go func(a oam.Asset) {
-			_, err := v.PutAsset(ctx, sess, a)
-			ch <- err
-		}(asset)
-	}
+	for range min(putWorkers, len(assets)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-	var failed int64
-	for range assets {
-		if err := <-ch; err != nil {
-			failed++
-		}
+			for a := range work {
+				if _, err := v.PutAsset(ctx, sess, a); err != nil {
+					failed.Add(1)
+				}
+			}
+		}()
 	}
-	close(ch)
+	for _, a := range assets {
+		work <- a
+	}
+	close(work)
+	wg.Wait()
 
-	if failed != 0 {
-		v.log.Warn("some assets failed to ingest", "failed", failed, "total", len(assets))
+	if n := failed.Load(); n != 0 {
+		v.log.Warn("some assets failed to ingest", "failed", n, "total", len(assets))
 	}
-	return int64(len(assets)) - failed, nil
+	return int64(len(assets)) - failed.Load(), nil
 }
 
 func parseAsset(atype string, raw json.RawMessage) (oam.Asset, error) {
