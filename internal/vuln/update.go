@@ -115,6 +115,13 @@ func (u *Updater) Update(ctx context.Context, path string) (UpdateResult, error)
 		prev := d.Products[cpe]
 		full := prev == nil || started.Sub(prev.FetchedAt) > nvdMaxChangeDays*24*time.Hour
 
+		// NVD asks not to be asked again within two hours
+		if !full && started.Sub(prev.FetchedAt) < MinRefresh {
+			res.Products++
+			res.CVEs += len(prev.CVEs)
+			continue
+		}
+
 		// changes are read into a copy, so a failure keeps the previous data
 		var since time.Time
 		p := &ProductData{CVEs: map[string]*CVE{}}

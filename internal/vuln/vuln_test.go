@@ -155,8 +155,15 @@ func TestUpdateAndCheck(t *testing.T) {
 		t.Errorf("unknown product: %s", status)
 	}
 
+	// A refresh within two hours does not ask NVD again.
+	f.queries = nil
+	now = now.Add(time.Hour)
+	if res, err = u.Update(context.Background(), path); err != nil || len(f.queries) != 0 || res.CVEs != 3 {
+		t.Errorf("within two hours: %+v, %v, queries %v", res, err, f.queries)
+	}
+
 	// The next refresh asks only for what changed since.
-	now = now.Add(24 * time.Hour)
+	now = now.Add(23 * time.Hour)
 	f.queries = nil
 	if res, err = u.Update(context.Background(), path); err != nil {
 		t.Fatal(err)
