@@ -52,7 +52,8 @@ func TestConfigReachesTheEngineOverJSON(t *testing.T) {
 			got.MaxDepth, got.Recursive, got.MinForRecursive)
 	}
 	if !got.FlipWords || !got.FlipNumbers || !got.AddWords || !got.AddNumbers || got.EditDistance != 2 {
-		t.Errorf("name-alteration settings were lost: %+v", got)
+		t.Errorf("name-alteration settings were lost: flip_words=%v flip_numbers=%v add_words=%v add_numbers=%v edit_distance=%d",
+			got.FlipWords, got.FlipNumbers, got.AddWords, got.AddNumbers, got.EditDistance)
 	}
 	if len(got.RecordTypes) != 3 {
 		t.Errorf("record types were lost: %v", got.RecordTypes)
