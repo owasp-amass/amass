@@ -30,12 +30,15 @@ type Adapter struct {
 	// Neo4jDatabase names the Neo4j database when Repo is asset-db's Neo4j
 	// repository; empty selects the server default. See Neo4jDatabaseName.
 	Neo4jDatabase string
+	// Stats, when set, counts the reads lenses make and their time.
+	Stats *ReadStats
 }
 
 func (a Adapter) GetAsset(ctx context.Context, id string) (graph.Asset, error) {
 	if a.Repo == nil {
 		return graph.Asset{}, errors.New("missing OAM repository")
 	}
+	defer a.Stats.record("GetAsset", time.Now())
 
 	ent, err := a.Repo.FindEntityById(ctx, id)
 	if err != nil {
@@ -335,15 +338,15 @@ func (a Adapter) EdgesLimited(ctx context.Context, id, direction, label string, 
 	if !ok && !isNeo {
 		return nil, false, errors.New("asset-db version lacks bounded edge reader; upgrade the repository dependency")
 	}
+	defer a.Stats.record("EdgesLimited", time.Now())
 
-	ent, err := a.Repo.FindEntityById(ctx, id)
-	if err != nil {
-		return nil, false, err
-	}
-
+	// The edge readers use only the entity's ID, so the entity is not
+	// fetched: that saved two queries on every read.
+	ent := &dbt.Entity{ID: id}
 	labels := storedLabels(label)
 	var edges []*dbt.Edge
 	var more bool
+	var err error
 	if ok {
 		edges, more, err = bounded.ReadEdgesLimited(ctx, ent, direction, since, limit, labels...)
 	} else {
@@ -407,11 +410,8 @@ func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, sin
 		}
 	}
 
-	ent, err := a.Repo.FindEntityById(ctx, id)
-	if err != nil {
-		return nil, "", err
-	}
-
+	defer a.Stats.record("EdgesPage", time.Now())
+	ent := &dbt.Entity{ID: id}
 	pager, ok := a.Repo.(interface {
 		ReadEdgesPage(context.Context, *dbt.Entity, string, time.Time, *dbt.EdgeCursor, int, ...string) ([]*dbt.Edge, *dbt.EdgeCursor, error)
 	})
@@ -420,6 +420,7 @@ func (a Adapter) EdgesPage(ctx context.Context, id, direction, label string, sin
 	labels := storedLabels(label)
 	var edges []*dbt.Edge
 	var next *dbt.EdgeCursor
+	var err error
 	switch {
 	case ok:
 		edges, next, err = pager.ReadEdgesPage(ctx, ent, direction, since, after, limit, labels...)

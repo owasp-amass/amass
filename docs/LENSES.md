@@ -509,6 +509,14 @@ callers pass `max_assets` to `investigate`. A larger run takes longer and may ne
 amass lens vendors -d jhu.edu -max-assets 10000 -max-reads 100000 -investigation-timeout 20m
 ```
 
+`-read-stats` prints, after the result, how many database reads of each kind
+the run made and how long they took, to measure a lens against a database.
+A lens reads the assets at the far end of an asset's edges in one batch, and
+an asset with more edges than one read returns has each relationship's first
+edges read in one query; only a relationship with more is then paged on its
+own. Both use asset-db's `FindEntitiesByIds` and `ReadEdgesPerLabel`, and fall
+back to one read at a time on a repository without them.
+
 These are stored records, not verified contracts: a token or SPF include can
 outlive the service.
 

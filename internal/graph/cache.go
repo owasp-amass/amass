@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -22,6 +23,8 @@ type fullGraph interface {
 	AssetResolver
 	OrganizationLookup
 	OrganizationResolver
+	AssetBatchReader
+	LabeledEdgeReader
 }
 
 // maxCached bounds the reads one cached graph keeps.
@@ -160,4 +163,49 @@ func (c *cachedGraph) LookupOrganizations(ctx context.Context, name string, limi
 
 func (c *cachedGraph) ResolveOrganizations(ctx context.Context, q OrganizationQuery, limit int) (OrganizationResolution, error) {
 	return c.inner.ResolveOrganizations(ctx, q, limit)
+}
+
+func (c *cachedGraph) GetAssets(ctx context.Context, ids []string) (map[string]Asset, error) {
+	out := make(map[string]Asset, len(ids))
+	var missing []string
+	asked := map[string]bool{}
+	for _, id := range ids {
+		if v, ok := c.get("a\x00" + id); ok {
+			out[id] = v.(Asset)
+		} else if !asked[id] {
+			asked[id] = true
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return out, nil
+	}
+	found, err := c.inner.GetAssets(ctx, missing)
+	if err != nil {
+		return nil, err
+	}
+	for id, a := range found {
+		c.put("a\x00"+id, a)
+		out[id] = a
+	}
+	return out, nil
+}
+
+func (c *cachedGraph) EdgesPerLabel(ctx context.Context, id, dir string, labels []string, since time.Time,
+	perLabel int) ([]Relation, []string, error) {
+	key := fmt.Sprintf("b\x00%s\x00%s\x00%s\x00%d\x00%d", id, dir, strings.Join(labels, ","), since.UnixNano(), perLabel)
+	if v, ok := c.get(key); ok {
+		r := v.(labeledResult)
+		return slices.Clone(r.edges), slices.Clone(r.more), nil
+	}
+	edges, more, err := c.inner.EdgesPerLabel(ctx, id, dir, labels, since, perLabel)
+	if err == nil {
+		c.put(key, labeledResult{edges: edges, more: more})
+	}
+	return slices.Clone(edges), slices.Clone(more), err
+}
+
+type labeledResult struct {
+	edges []Relation
+	more  []string
 }

@@ -158,7 +158,7 @@ func runGroup(group string, ops map[string]string, in io.Reader, out, errout io.
 }
 
 // boolFlags are the flags that take no value.
-var boolFlags = map[string]bool{"h": true, "help": true}
+var boolFlags = map[string]bool{"h": true, "help": true, "read-stats": true}
 
 // run parses the flags and runs op, the last argument.
 func run(group string, _ io.Reader, out, errout io.Writer, args []string) error {
@@ -167,6 +167,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	var dir, configPath, journalPath, outputFormat, domainName, orgName, proposalID, reviewer, since string
 	var withDomain, withOrg string
 	var lensAssets, lensReads int
+	var readStats bool
 	var timeout time.Duration
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
@@ -187,6 +188,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		"(default 2000, up to %d); larger runs may need a longer -investigation-timeout", lens.LensMaxAssetsLimit))
 	fs.IntVar(&lensReads, "max-reads", 0, fmt.Sprintf("Maximum database reads of one lens run "+
 		"(default 20000, up to %d)", lens.LensMaxReadsLimit))
+	fs.BoolVar(&readStats, "read-stats", false, "Print the database reads the run made and their time to standard error")
 	fs.DurationVar(&timeout, "investigation-timeout", 8*time.Minute,
 		"Maximum time for one lens or review run (default from AMASS_AI_INVESTIGATION_TIMEOUT, the limit amass ai also uses)")
 	if err := fs.Parse(args); err != nil {
@@ -244,6 +246,14 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 
 	defer func() { _ = repo.Close() }()
 	g := oamrepo.Adapter{Repo: repo, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
+	if readStats {
+		g.Stats = &oamrepo.ReadStats{}
+		start := time.Now()
+		defer func() {
+			_, _ = fmt.Fprintf(errout, "\nDatabase reads (%s elapsed):\n", time.Since(start).Round(time.Millisecond))
+			g.Stats.Write(errout)
+		}()
+	}
 	limits := lens.LensLimits{MaxAssets: lensAssets, MaxReads: lensReads}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

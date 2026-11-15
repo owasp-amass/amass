@@ -279,6 +279,10 @@ func (w *lensWalker) neighborsByLabel(id, dir string) ([]graph.Relation, error) 
 		labels = w.withoutDescent(a.Type, labels)
 	}
 
+	if lr, ok := w.bounded.(graph.LabeledEdgeReader); ok && len(labels) > 0 {
+		return w.neighborsPerLabel(lr, a, dir, labels)
+	}
+
 	seen := map[string]bool{}
 	var out []graph.Relation
 	for _, label := range labels {
@@ -303,6 +307,87 @@ func (w *lensWalker) neighborsByLabel(id, dir string) ([]graph.Relation, error) 
 	}
 
 	return out, nil
+}
+
+// neighborsPerLabel is neighborsByLabel with one read of every label's first
+// edges; only a label with more is then read on its own, a page at a time.
+func (w *lensWalker) neighborsPerLabel(lr graph.LabeledEdgeReader, a graph.Asset, dir string,
+	labels []string) ([]graph.Relation, error) {
+	seen := map[string]bool{}
+	var out []graph.Relation
+	add := func(edges []graph.Relation) {
+		for _, e := range edges {
+			if !seen[e.ID] {
+				seen[e.ID] = true
+				out = append(out, e)
+			}
+		}
+	}
+
+	if w.report.Reads >= w.maxReads {
+		w.truncate("database read limit")
+		return out, nil
+	}
+	w.report.Reads++
+	edges, more, err := lr.EdgesPerLabel(w.ctx, a.ID, dir, labels, time.Time{}, lensMaxPerAsset)
+	if err != nil {
+		return nil, err
+	}
+	add(edges)
+
+	_, pages := w.graph.(graph.PagedGraph)
+	for _, label := range more {
+		if !pages {
+			w.truncate(fmt.Sprintf("more than %d %s %s edges on %s %s", lensMaxPerAsset, dir, label, a.Type,
+				graph.AssetLabel(a)))
+			continue
+		}
+		if w.report.Reads >= w.maxReads {
+			w.truncate("database read limit")
+			break
+		}
+		edges, m, limit, err := w.readLabel(a.ID, dir, label)
+		if err != nil {
+			return nil, err
+		}
+		if m {
+			w.truncate(fmt.Sprintf("more than %d %s %s edges on %s %s", limit, dir, label, a.Type, graph.AssetLabel(a)))
+		}
+		add(edges)
+	}
+	return out, nil
+}
+
+// prefetch reads the assets at the far end of edges that are not yet known
+// in one batch, when the graph can.
+func (w *lensWalker) prefetch(cur graph.Asset, edges []graph.Relation) error {
+	batch, ok := w.graph.(graph.AssetBatchReader)
+	if !ok {
+		return nil
+	}
+	var ids []string
+	want := map[string]bool{}
+	for _, e := range edges {
+		other := e.ToID
+		if e.FromID != cur.ID {
+			other = e.FromID
+		}
+		if _, known := w.assets[other]; !known && other != "" && other != cur.ID && !want[other] {
+			want[other] = true
+			ids = append(ids, other)
+		}
+	}
+	if len(ids) < 2 {
+		return nil
+	}
+	found, err := batch.GetAssets(w.ctx, ids)
+	if err != nil {
+		return err
+	}
+	for id, a := range found {
+		w.assets[id] = a
+	}
+	return nil
 }
 
 // readLabel reads the edges of id with one label in one direction. When the
@@ -407,6 +492,10 @@ type step struct {
 func (w *lensWalker) steps(cur graph.Asset) ([]step, error) {
 	edges, err := w.neighbors(cur.ID)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := w.prefetch(cur, edges); err != nil {
 		return nil, err
 	}
 

@@ -91,6 +91,21 @@ type PagedGraph interface {
 	EdgesPage(context.Context, string, string, string, time.Time, string, int) ([]Relation, string, error)
 }
 
+// AssetBatchReader reads many assets at once. The result holds the assets
+// found, by ID; an ID with no asset is absent.
+type AssetBatchReader interface {
+	GetAssets(ctx context.Context, ids []string) (map[string]Asset, error)
+}
+
+// LabeledEdgeReader reads an asset's edges in one direction with up to
+// perLabel (1..MaxEdgeRead) edges for each of the labels (every label when
+// none are given) in one read. more names the labels with edges beyond
+// perLabel; each label's edges are what EdgesLimited returns for it alone.
+type LabeledEdgeReader interface {
+	EdgesPerLabel(ctx context.Context, id, direction string, labels []string, since time.Time,
+		perLabel int) (edges []Relation, more []string, err error)
+}
+
 type Limits struct {
 	MaxDepth     int
 	MaxNodes     int

@@ -6,6 +6,7 @@ package graph
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -53,6 +54,21 @@ func (c *countingGraph) ResolveOrganizations(context.Context, OrganizationQuery,
 	c.n("resolveorg")
 	return OrganizationResolution{}, nil
 }
+func (c *countingGraph) GetAssets(_ context.Context, ids []string) (map[string]Asset, error) {
+	c.n("assets")
+	c.calls["assets:"+strings.Join(ids, ",")]++
+	out := map[string]Asset{}
+	for _, id := range ids {
+		if id != "missing" {
+			out[id] = Asset{ID: id}
+		}
+	}
+	return out, nil
+}
+func (c *countingGraph) EdgesPerLabel(context.Context, string, string, []string, time.Time, int) ([]Relation, []string, error) {
+	c.n("perlabel")
+	return []Relation{{ID: "e"}}, []string{"node"}, nil
+}
 
 func TestCachedGraphReadsOnce(t *testing.T) {
 	inner := &countingGraph{calls: map[string]int{}}
@@ -73,8 +89,12 @@ func TestCachedGraphReadsOnce(t *testing.T) {
 		if next != "next" {
 			t.Error("the page cursor was lost")
 		}
+		_, labels, _ := g.(LabeledEdgeReader).EdgesPerLabel(ctx, "a", "out", []string{"node"}, time.Time{}, 5)
+		if len(labels) != 1 || labels[0] != "node" {
+			t.Error("the labels with more were lost")
+		}
 	}
-	for _, k := range []string{"asset", "edges", "evidence", "limited", "page"} {
+	for _, k := range []string{"asset", "edges", "evidence", "limited", "page", "perlabel"} {
 		if inner.calls[k] != 1 {
 			t.Errorf("%s read %d times", k, inner.calls[k])
 		}
@@ -89,6 +109,30 @@ func TestCachedGraphReadsOnce(t *testing.T) {
 	edges[0].ID = "changed"
 	if again, _ := g.Edges(ctx, "a", "out", "", time.Time{}); again[0].ID != "e" {
 		t.Error("the cache returned a shared slice")
+	}
+}
+
+// A batch read asks only for the assets not already read.
+func TestCachedGraphBatchReadsOnlyMissing(t *testing.T) {
+	inner := &countingGraph{calls: map[string]int{}}
+	cached := Cached(inner)
+	g := cached.(AssetBatchReader)
+	ctx := context.Background()
+	if _, err := cached.GetAsset(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := g.GetAssets(ctx, []string{"a", "b", "missing", "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got["b"].ID != "b" {
+		t.Errorf("got %v", got)
+	}
+	if inner.calls["assets:b,missing"] != 1 {
+		t.Errorf("the batch read asked for %v", inner.calls)
+	}
+	if _, err := g.GetAssets(ctx, []string{"a", "b"}); err != nil || inner.calls["assets"] != 1 {
+		t.Errorf("cached assets were read again: %v", inner.calls)
 	}
 }
 
