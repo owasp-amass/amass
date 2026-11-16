@@ -10,6 +10,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"math/big"
 	"slices"
 	"strings"
@@ -130,5 +131,43 @@ func TestMailProviderOf(t *testing.T) {
 		if !strings.HasPrefix(p.Source, "https://") {
 			t.Errorf("mail provider %s cites no documentation", p.Provider)
 		}
+	}
+}
+
+func TestSPFLookupCount(t *testing.T) {
+	cases := map[string]int{
+		"v=spf1 -all":                                        0,
+		"v=spf1 ip4:192.0.2.0/24 -all":                       0,
+		"v=spf1 a mx include:a.com ~all":                     3,
+		"v=spf1 include:a.com redirect=b.com":                2,
+		"v=spf1 a:x.com mx:y.com ptr exists:%{i}.z.com -all": 4,
+	}
+	for spf, want := range cases {
+		if got := spfLookupCount(spf); got != want {
+			t.Errorf("spfLookupCount(%q) = %d, want %d", spf, got, want)
+		}
+	}
+}
+
+func TestFindEmailSecurityFlagsSPFLookupLimit(t *testing.T) {
+	g := graphtest.VendorFixture()
+	var b strings.Builder
+	b.WriteString("v=spf1")
+	for i := 0; i < 11; i++ {
+		fmt.Fprintf(&b, " include:spf%d.example", i)
+	}
+	b.WriteString(" ~all")
+	if g.EvidenceByID == nil {
+		g.EvidenceByID = map[string][]graph.Evidence{}
+	}
+	g.EvidenceByID["colgate.edu"] = []graph.Evidence{graphtest.TXTRecord(b.String())}
+
+	r, err := FindEmailSecurity(context.Background(), g,
+		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(r.Findings, func(f EmailFinding) bool { return f.Kind == EmailSPFManyLookups }) {
+		t.Errorf("findings = %v, want spf_too_many_lookups", r.Findings)
 	}
 }

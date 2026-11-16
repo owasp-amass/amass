@@ -120,6 +120,12 @@
       "priority": 2
     },
     {
+      "lens": "email",
+      "kind": "spf_too_many_lookups",
+      "title": "SPF records over the DNS-lookup limit",
+      "priority": 2
+    },
+    {
       "lens": "certificates",
       "kind": "expired",
       "title": "Expired certificates",

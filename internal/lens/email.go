@@ -39,19 +39,20 @@ var emailLens = SubjectLens{
 
 // Email finding kinds, most severe first.
 const (
-	EmailSPFPermissive = "spf_allows_anyone"
-	EmailNoSPF         = "no_spf"
-	EmailParked        = "unprotected_non_mail_domain"
-	EmailNoDMARC       = "no_dmarc"
-	EmailDMARCMonitor  = "dmarc_monitor_only"
-	EmailDKIMWeak      = "weak_dkim_key"
-	EmailDMARCPartial  = "dmarc_partial"
-	EmailSPFSoftfail   = "spf_softfail"
-	EmailDKIMRevoked   = "revoked_dkim_key"
+	EmailSPFPermissive  = "spf_allows_anyone"
+	EmailSPFManyLookups = "spf_too_many_lookups"
+	EmailNoSPF          = "no_spf"
+	EmailParked         = "unprotected_non_mail_domain"
+	EmailNoDMARC        = "no_dmarc"
+	EmailDMARCMonitor   = "dmarc_monitor_only"
+	EmailDKIMWeak       = "weak_dkim_key"
+	EmailDMARCPartial   = "dmarc_partial"
+	EmailSPFSoftfail    = "spf_softfail"
+	EmailDKIMRevoked    = "revoked_dkim_key"
 )
 
-var emailOrder = []string{EmailSPFPermissive, EmailNoSPF, EmailParked, EmailNoDMARC, EmailDMARCMonitor,
-	EmailDKIMWeak, EmailDMARCPartial, EmailSPFSoftfail, EmailDKIMRevoked}
+var emailOrder = []string{EmailSPFPermissive, EmailSPFManyLookups, EmailNoSPF, EmailParked, EmailNoDMARC,
+	EmailDMARCMonitor, EmailDKIMWeak, EmailDMARCPartial, EmailSPFSoftfail, EmailDKIMRevoked}
 
 // MailDomain is the mail posture of one registered domain.
 type MailDomain struct {
@@ -376,6 +377,11 @@ func emailFindings(m MailDomain, rules emailRules) []EmailFinding {
 		add(EmailSPFSoftfail, "its SPF record ends in "+all+", which marks forged mail but does not reject it", "spf")
 	}
 
+	if n := spfLookupCount(m.SPF); n > spfDNSLookupMechanisms {
+		add(EmailSPFManyLookups, fmt.Sprintf("its SPF record already uses %d DNS-lookup mechanisms, over the limit "+
+			"of %d, so receivers return permerror and ignore it", n, spfDNSLookupMechanisms), "spf")
+	}
+
 	switch {
 	case m.DMARC == "":
 		add(EmailNoDMARC,
@@ -404,6 +410,32 @@ func emailFindings(m MailDomain, rules emailRules) []EmailFinding {
 	}
 
 	return out
+}
+
+// spfDNSLookupMechanisms is the RFC 7208 limit on the DNS-lookup mechanisms an
+// SPF record may evaluate; beyond it a receiver returns permerror and SPF stops
+// protecting the domain.
+const spfDNSLookupMechanisms = 10
+
+// spfLookupCount counts the DNS-lookup mechanisms in an SPF record's own terms
+// (include, a, mx, ptr, exists and redirect). It does not follow includes, so
+// it undercounts the cumulative total; a count already over the limit from the
+// record's own terms is a definite permerror, with no false positives.
+func spfLookupCount(record string) int {
+	n := 0
+	for _, term := range strings.Fields(strings.ToLower(record)) {
+		t := strings.TrimLeft(term, "+-~?")
+		switch {
+		case t == "a" || strings.HasPrefix(t, "a:") || strings.HasPrefix(t, "a/"),
+			t == "mx" || strings.HasPrefix(t, "mx:") || strings.HasPrefix(t, "mx/"),
+			t == "ptr" || strings.HasPrefix(t, "ptr:"),
+			strings.HasPrefix(t, "include:"),
+			strings.HasPrefix(t, "exists:"),
+			strings.HasPrefix(t, "redirect="):
+			n++
+		}
+	}
+	return n
 }
 
 // dkimKeyHealth classifies a DKIM TXT record's public key: "revoked" when the
