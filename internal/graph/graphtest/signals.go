@@ -19,3 +19,9 @@ func CAARecord(data string) graph.Evidence {
 	return graph.Evidence{Kind: "DNSRecordProperty", Property: map[string]any{"property_name": "dns_record",
 		"header": map[string]any{"rr_type": graph.RRTypeCAA, "class": 1}, "data": data}}
 }
+
+// SimpleProp builds an Evidence entry for a stored general.SimpleProperty.
+func SimpleProp(name, value string) graph.Evidence {
+	return graph.Evidence{Kind: "SimpleProperty",
+		Property: map[string]any{"property_name": name, "property_value": value}}
+}

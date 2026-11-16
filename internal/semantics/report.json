@@ -98,6 +98,12 @@
       "priority": 1
     },
     {
+      "lens": "domains",
+      "kind": "zone_transfer",
+      "title": "Zone transfer (AXFR) exposed by a nameserver",
+      "priority": 1
+    },
+    {
       "lens": "vulnerable",
       "kind": "kev",
       "title": "Known exploited vulnerabilities in identified software",

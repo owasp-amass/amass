@@ -279,6 +279,37 @@ func TestFindDomains(t *testing.T) {
 	}
 }
 
+func TestFindDomainsZoneTransfer(t *testing.T) {
+	defer func(f func() time.Time) { domainsNow = f }(domainsNow)
+	domainsNow = func() time.Time { return time.Date(2027, 7, 1, 0, 0, 0, 0, time.UTC) }
+
+	g := postureFixture()
+	g.EvidenceByID["colgate.edu"] = append(g.EvidenceByID["colgate.edu"],
+		graphtest.SimpleProp("zone_transfer", "ns1.colgate.edu"))
+
+	r, err := FindDomains(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, f := range r.Findings {
+		if f.Kind == DomainZoneTransfer && f.Domain == "colgate.edu" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("a zone transfer exposure was not reported: %+v", r.Findings)
+	}
+	// It is the most severe finding, so it sorts first.
+	if r.Findings[0].Kind != DomainZoneTransfer {
+		t.Errorf("zone transfer did not sort to the top: %+v", r.Findings)
+	}
+	if !strings.Contains(r.Text(), "Zone transfer exposed") {
+		t.Errorf("report lacks the zone transfer section:\n%s", r.Text())
+	}
+}
+
 func TestFindEmailSecurity(t *testing.T) {
 	g := postureFixture()
 	r, err := FindEmailSecurity(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})

@@ -217,6 +217,7 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 	apexEnt := d.plugin.getApex(subdomain)
 	d.queryPolicies(e, apexEnt, subdomain)
 	d.queryCAA(e, apexEnt, subdomain)
+	d.queryAXFR(e, apexEnt, subdomain)
 
 	srvs := NamesByTier(Tier3)
 	rch := make(chan []*relSubs, len(srvs))

@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -34,16 +35,18 @@ var domainsLens = SubjectLens{
 
 // Domain finding kinds, most severe first.
 const (
-	DomainExpired    = "expired"
-	DomainExpiring   = "expiring"
-	DomainUnlocked   = "no_transfer_lock"
-	DomainNoRecord   = "no_registration"
-	DomainNoDNSSEC   = "unsigned"
-	domainsExamples  = 3
-	domainUnknownTag = "unknown"
+	DomainZoneTransfer = "zone_transfer"
+	DomainExpired      = "expired"
+	DomainExpiring     = "expiring"
+	DomainUnlocked     = "no_transfer_lock"
+	DomainNoRecord     = "no_registration"
+	DomainNoDNSSEC     = "unsigned"
+	domainsExamples    = 3
+	domainUnknownTag   = "unknown"
 )
 
-var domainOrder = []string{DomainExpired, DomainExpiring, DomainUnlocked, DomainNoRecord, DomainNoDNSSEC}
+var domainOrder = []string{DomainZoneTransfer, DomainExpired, DomainExpiring, DomainUnlocked, DomainNoRecord,
+	DomainNoDNSSEC}
 
 // DomainEntry is one registered domain of the subject.
 type DomainEntry struct {
@@ -58,6 +61,9 @@ type DomainEntry struct {
 	// and RDAP records are stored without it.
 	DNSSEC      *bool    `json:"dnssec,omitempty"`
 	NameServers []string `json:"name_servers,omitempty"`
+	// ZoneTransfer names the authoritative nameservers that answered a zone
+	// transfer (AXFR) for the domain, exposing its entire zone.
+	ZoneTransfer []string `json:"zone_transfer,omitempty"`
 }
 
 // DomainFinding is one domain that stands out.
@@ -182,6 +188,9 @@ func FindDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 				return out, err
 			}
 		}
+		if n, ok := names[d]; ok && n.ID != "" {
+			e.ZoneTransfer = s.zoneTransferServers(n.ID)
+		}
 		if e.Registrar != "" {
 			registrars.add("registrars", e.Registrar, d)
 		}
@@ -203,6 +212,35 @@ func FindDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 	out.Registrars, out.DNS = registrars.list("registrars"), registrars.list("dns")
 	out.Findings = findings
 	return out, nil
+}
+
+// zoneTransferServers returns the authoritative nameservers recorded as
+// having answered a zone transfer for the apex, read from its zone_transfer
+// properties.
+func (s *scope) zoneTransferServers(id string) []string {
+	evidence, err := s.w.graph.Evidence(s.w.ctx, id, 100)
+	if err != nil {
+		return nil
+	}
+
+	seen := map[string]bool{}
+	var out []string
+	for _, ev := range evidence {
+		data, err := json.Marshal(ev.Property)
+		if err != nil {
+			continue
+		}
+		var p struct {
+			Name  string `json:"property_name"`
+			Value string `json:"property_value"`
+		}
+		if json.Unmarshal(data, &p) == nil && p.Name == "zone_transfer" && p.Value != "" && !seen[p.Value] {
+			seen[p.Value] = true
+			out = append(out, p.Value)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // registrationOf finds the registration record of a registered domain,
@@ -299,6 +337,11 @@ func contentStrings(a graph.Asset, field string) []string {
 
 func domainFindings(e DomainEntry, rules domainRules) []DomainFinding {
 	var out []DomainFinding
+	if len(e.ZoneTransfer) > 0 {
+		out = append(out, DomainFinding{Kind: DomainZoneTransfer, Domain: e.Domain,
+			Detail: "an authoritative nameserver answered a zone transfer (AXFR), exposing the entire zone: " +
+				strings.Join(e.ZoneTransfer, ", ")})
+	}
 	if !e.Registered {
 		return append(out, DomainFinding{Kind: DomainNoRecord, Domain: e.Domain,
 			Detail: "no registration record is stored; its expiry and registrar are unknown"})
@@ -340,8 +383,9 @@ func (r DomainsReport) Text() string {
 	fmt.Fprintf(&b, "Registered domains of %s: %d from %d controlled asset(s) (%d reads).\n", subject, len(r.Domains),
 		r.Footprint, r.Reads)
 
-	titles := map[string]string{DomainExpired: "Expired", DomainExpiring: "Expiring soon",
-		DomainUnlocked: "No transfer lock", DomainNoRecord: "No registration stored", DomainNoDNSSEC: "Not signed (DNSSEC)"}
+	titles := map[string]string{DomainZoneTransfer: "Zone transfer exposed", DomainExpired: "Expired",
+		DomainExpiring: "Expiring soon", DomainUnlocked: "No transfer lock",
+		DomainNoRecord: "No registration stored", DomainNoDNSSEC: "Not signed (DNSSEC)"}
 	for _, kind := range domainOrder {
 		var lines []string
 		for _, f := range r.Findings {
