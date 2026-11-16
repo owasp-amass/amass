@@ -18,6 +18,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/lookalike"
 	mtasts "github.com/owasp-amass/amass/v5/engine/plugins/mta_sts"
 	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
+	securitytxt "github.com/owasp-amass/amass/v5/engine/plugins/security_txt"
 	bannerp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/banner_probes"
 	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	hp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/http_probes"
@@ -63,6 +64,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	hp.NewHTTPProbing,
 	lookalike.NewLookalikes,
 	mtasts.NewMTASTS,
+	securitytxt.NewSecurityTxt,
 	sshp.NewSSHProbing,
 	bannerp.NewBannerProbing,
 	rdap.NewRDAP,
