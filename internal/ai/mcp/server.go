@@ -96,36 +96,19 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
 		&mcp.ServerOptions{GetSessionID: newSessionID, Instructions: instructions})
-	for _, spec := range toolSpecs(runner) {
-		name := spec.Name
-		server.AddTool(&mcp.Tool{Name: name, Description: spec.Description, InputSchema: spec.Parameters},
-			func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				var args json.RawMessage
-				if req.Params != nil {
-					args = req.Params.Arguments
-				}
-
-				ctx, cancel := context.WithTimeout(ctx, ai.ToolTimeout(name))
-				defer cancel()
-
-				result, err := runTool(ctx, runner, model, store, name, args)
-				if err != nil {
-					// Tool failures are results the model can read, not protocol errors.
-					return &mcp.CallToolResult{
-							IsError: true,
-							Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
-						},
-						nil
-				}
-
-				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(result)}}}, nil
-			})
+	// Model-facing tools are declared as capabilities and registered through
+	// one path; the tier decides who may call each (operator tools require
+	// operator mode).
+	caps := readCapabilities(runner, model, store)
+	if runner.Catalog != nil {
+		caps = append(caps, visualizeCapability(runner, links))
 	}
+
+	registerCapabilities(server, caps, op != nil)
 
 	if runner.Catalog != nil {
 		// The prompts ask for the investigate tool, which needs the catalog.
 		addPrompts(server)
-		addVisualizeTool(server, runner, links)
 	}
 	if op != nil {
 		addOperatorTools(server, op, runner)

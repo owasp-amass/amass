@@ -188,9 +188,9 @@ func footprint(ctx context.Context, runner ai.ToolRunner, subject string) ([]viz
 	return nodes, edges, report, nil
 }
 
-// addVisualizeTool registers the visualize tool; links is nil without an
-// HTTP server to serve drawings.
-func addVisualizeTool(server *mcp.Server, runner ai.ToolRunner, links *VizLinks) {
+// visualizeCapability is the read-only footprint drawing tool; links is nil
+// without an HTTP server to serve drawings.
+func visualizeCapability(runner ai.ToolRunner, links *VizLinks) capability {
 	desc := "Draw what a domain or organization controls as a Mermaid diagram: assets grouped by type with " +
 		"counts and the relations joining them, and every asset when there are few. Show the mermaid text to " +
 		"the user in a mermaid code block."
@@ -198,12 +198,13 @@ func addVisualizeTool(server *mcp.Server, runner ai.ToolRunner, links *VizLinks)
 		desc += " Also returns a link to an interactive graph and a GEXF file for Gephi, valid for an hour."
 	}
 
-	server.AddTool(&mcp.Tool{Name: ToolVisualize, Title: "Draw an Amass footprint", Description: desc,
+	return capability{tier: tierRead, tool: &mcp.Tool{Name: ToolVisualize, Title: "Draw an Amass footprint",
+		Description: desc,
 		InputSchema: map[string]any{"type": "object", "required": []string{"subject"}, "additionalProperties": false,
 			"properties": map[string]any{"subject": map[string]any{"type": "string",
 				"description": "A domain such as example.com, or an organization's name"}}},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: boolPtr(false)}},
-		func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		handle: func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var a struct{ Subject string }
 			if req.Params != nil && len(req.Params.Arguments) > 0 {
 				if err := json.Unmarshal(req.Params.Arguments, &a); err != nil {
@@ -234,5 +235,6 @@ func addVisualizeTool(server *mcp.Server, runner ai.ToolRunner, links *VizLinks)
 			}
 
 			return jsonResult(out), nil
-		})
+		},
+	}
 }
