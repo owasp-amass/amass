@@ -18,6 +18,7 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | [Shared registrant details](#shared_registrant_details) | strong | identity | 0.45 |
 | [Shared DNS verification token](#txt_verification_token) | strong | identity | 0.45 |
 | [Certificate key reuse](#certificate_key_reuse) | strong | identity | 0.45 |
+| [Certificate public key reuse](#certificate_public_key_reuse) | strong | identity | 0.45 |
 | [Issued by the organization's private CA](#private_ca_issuance) | strong | identity | 0.45 |
 | [Name or mail servers run by the organization](#self_hosted_dns) | strong | operation | 0.35 |
 | [Email authentication delegated to the organization](#email_auth_reference) | strong | operation | 0.35 |
@@ -92,6 +93,23 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 **Can still mislead when:**
 
 - A hosting or CDN provider that reuses one key across its customers' certificates (the 50-certificate limit catches large providers).
+
+<a id="certificate_public_key_reuse"></a>
+## Certificate public key reuse
+
+`certificate_public_key_reuse`: strong identity signal, weight 0.45.
+
+**Finds:** A certificate whose public key (the SHA-256 of its SubjectPublicKeyInfo) matches a certificate the organization controls; the candidate is the name that certificate was issued to.
+
+**Why it counts:** The public key hash identifies the key pair itself, whatever the subject key identifier, which some certificates omit or set non-standardly. Two certificates with the same public key were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.
+
+**Guards:**
+
+- A public key shared by more than 50 certificates never counts.
+
+**Can still mislead when:**
+
+- A hosting or CDN provider that reuses one key pair across its customers' certificates (the 50-certificate limit catches large providers).
 
 <a id="private_ca_issuance"></a>
 ## Issued by the organization's private CA

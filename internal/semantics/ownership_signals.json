@@ -79,6 +79,25 @@
       ]
     },
     {
+      "id": "certificate_public_key_reuse",
+      "title": "Certificate public key reuse",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.45,
+      "matcher": "shared_certificate_field",
+      "params": {
+        "attribute": "public_key_sha256"
+      },
+      "finds": "A certificate whose public key (the SHA-256 of its SubjectPublicKeyInfo) matches a certificate the organization controls; the candidate is the name that certificate was issued to.",
+      "rationale": "The public key hash identifies the key pair itself, whatever the subject key identifier, which some certificates omit or set non-standardly. Two certificates with the same public key were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.",
+      "guards": [
+        "A public key shared by more than 50 certificates never counts."
+      ],
+      "counter_indications": [
+        "A hosting or CDN provider that reuses one key pair across its customers' certificates (the 50-certificate limit catches large providers)."
+      ]
+    },
+    {
       "id": "private_ca_issuance",
       "title": "Issued by the organization's private CA",
       "kind": "identity",

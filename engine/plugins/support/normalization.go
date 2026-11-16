@@ -5,6 +5,7 @@
 package support
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
@@ -233,6 +234,18 @@ func KeyIDString(id []byte) string {
 	return strings.Join(parts, ":")
 }
 
+// publicKeySHA256 is the lower-case hex SHA-256 of a certificate's DER
+// SubjectPublicKeyInfo: a stable identifier for the public key itself, so two
+// certificates built from the same key pair share it.
+func publicKeySHA256(cert *x509.Certificate) string {
+	if len(cert.RawSubjectPublicKeyInfo) == 0 {
+		return ""
+	}
+
+	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return hex.EncodeToString(sum[:])
+}
+
 func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 	if cert == nil {
 		return nil
@@ -251,6 +264,7 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 		CRLDistributionPoints: cert.CRLDistributionPoints,
 		SubjectKeyID:          KeyIDString(cert.SubjectKeyId),
 		AuthorityKeyID:        KeyIDString(cert.AuthorityKeyId),
+		PublicKeySHA256:       publicKeySHA256(cert),
 	}
 
 	if cert.KeyUsage&x509.KeyUsageDigitalSignature > 0 {
