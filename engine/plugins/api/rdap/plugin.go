@@ -42,6 +42,8 @@ type rdapPlugin struct {
 	autnum   *autnum
 	netblock *netblock
 	ipnet    *ipnet
+	domain   *domain
+	domrec   *domrec
 	source   *et.Source
 }
 
@@ -181,6 +183,50 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		return err
 	}
 
+	rd.domain = &domain{
+		name:   rd.name + "-Domain-Handler",
+		plugin: rd,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       rd,
+		Name:         rd.domain.name,
+		Position:     14,
+		Exclusive:    true,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.DomainRecord)},
+		EventType:    oam.FQDN,
+		Callback:     rd.domain.check,
+	}); err != nil {
+		return err
+	}
+
+	rd.domrec = &domrec{
+		name:   rd.name + "-Domain-Record-Handler",
+		plugin: rd,
+		transforms: []string{
+			string(oam.FQDN),
+			string(oam.URL),
+			string(oam.ContactRecord),
+			string(oam.Person),
+			string(oam.Organization),
+			string(oam.Location),
+			string(oam.Identifier),
+			string(oam.Phone),
+		},
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       rd,
+		Name:         rd.domrec.name,
+		Position:     2,
+		Exclusive:    true,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   rd.domrec.transforms,
+		EventType:    oam.DomainRecord,
+		Callback:     rd.domrec.check,
+	}); err != nil {
+		return err
+	}
+
 	rd.log.Info("Plugin started")
 	return nil
 }
@@ -193,20 +239,42 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	roles := stringset.New(entity.Roles...)
 	defer roles.Close()
 
-	u := rd.getJSONLink(entity.Links)
-	if u == nil {
+	_, isDomain := asset.Asset.(*oamreg.DomainRecord)
+
+	// A domain record's contacts use the DomainRecord relation labels the
+	// semantics catalog knows (registrant_contact, …); an IP record keeps the
+	// labels the IP handlers already use.
+	var rel string
+	switch {
+	case roles.Has("registrant") && level == 1:
+		if isDomain {
+			rel = "registrant_contact"
+		} else {
+			rel = "registrant"
+		}
+	case roles.Has("administrative"):
+		rel = "admin_contact"
+	case roles.Has("technical"):
+		rel = "technical_contact"
+	case isDomain && roles.Has("billing"):
+		rel = "billing_contact"
+	case isDomain && roles.Has("registrar"):
+		rel = "registrar_contact"
+	case !isDomain && roles.Has("abuse"):
+		rel = "abuse_contact"
+	default:
 		return
 	}
 
-	var rel string
-	if roles.Has("registrant") && level == 1 {
-		rel = "registrant"
-	} else if roles.Has("administrative") {
-		rel = "admin_contact"
-	} else if roles.Has("abuse") {
-		rel = "abuse_contact"
-	} else if roles.Has("technical") {
-		rel = "technical_contact"
+	u := rd.getJSONLink(entity.Links)
+	// IP registration contacts are keyed by their RDAP self link; a domain
+	// contact is often redacted with no link, so it is keyed by the record
+	// and its role instead.
+	discoveredAt := ""
+	if u != nil {
+		discoveredAt = u.Raw
+	} else if isDomain {
+		discoveredAt = recordContactKey(asset, rel)
 	} else {
 		return
 	}
@@ -214,7 +282,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Minute)
 	defer cancel()
 
-	cr, err := e.Session.DB().CreateAsset(ctx, &contact.ContactRecord{DiscoveredAt: u.Raw})
+	cr, err := e.Session.DB().CreateAsset(ctx, &contact.ContactRecord{DiscoveredAt: discoveredAt})
 	if err != nil || cr == nil {
 		return
 	}
@@ -225,9 +293,11 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		name = "AutnumRecord: " + v.Handle
 	case *oamreg.IPNetRecord:
 		name = "IPNetRecord: " + v.Handle
+	case *oamreg.DomainRecord:
+		name = "DomainRecord: " + v.Domain
 	}
 
-	if m.IsMatch(string(oam.URL)) {
+	if u != nil && m.IsMatch(string(oam.URL)) {
 		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
 			_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "url"}, src)
 		}
@@ -280,7 +350,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		From:     asset,
 		FromName: name,
 		To:       cr,
-		ToName:   "ContactRecord: " + u.Raw,
+		ToName:   "ContactRecord: " + discoveredAt,
 		Rel:      &general.SimpleRelation{Name: rel},
 	})
 	// process the relation immediately
@@ -324,6 +394,21 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	for _, ent := range entity.Entities {
 		rd.storeEntity(e, level, &ent, asset, rd.source, m)
 	}
+}
+
+// recordContactKey identifies a registration contact that has no RDAP self
+// link by the record it belongs to and its role, so the same redacted contact
+// is one asset across reruns.
+func recordContactKey(asset *dbt.Entity, rel string) string {
+	switch v := asset.Asset.(type) {
+	case *oamreg.DomainRecord:
+		return v.Domain + " " + rel
+	case *oamreg.IPNetRecord:
+		return v.Handle + " " + rel
+	case *oamreg.AutnumRecord:
+		return v.Handle + " " + rel
+	}
+	return rel
 }
 
 func (rd *rdapPlugin) getJSONLink(links []rdap.Link) *url.URL {
