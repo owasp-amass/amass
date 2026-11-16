@@ -90,18 +90,6 @@
       "priority": 1
     },
     {
-      "lens": "domains",
-      "kind": "expiring",
-      "title": "Domain registrations expiring soon",
-      "priority": 1
-    },
-    {
-      "lens": "domains",
-      "kind": "no_transfer_lock",
-      "title": "Domains without a registrar transfer lock",
-      "priority": 2
-    },
-    {
       "lens": "vulnerable",
       "kind": "kev",
       "title": "Known exploited vulnerabilities in identified software",
