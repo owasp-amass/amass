@@ -114,3 +114,48 @@ func journalWithProposal(t *testing.T) (string, review.OwnershipProposal) {
 
 	return path, p
 }
+
+func TestAttributionStatusReportsModelAndData(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "review.jsonl")
+
+	// No model and no reviews yet.
+	var out bytes.Buffer
+	if err := attributionStatus(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "No attribution model is trained") ||
+		!strings.Contains(out.String(), "0 approved, 0 rejected") {
+		t.Fatalf("empty status = %q", out.String())
+	}
+
+	// Reviewed proposals and a trained model.
+	j := &review.Journal{Path: path}
+	for i := 0; i < 90; i++ {
+		edge := lens.ProposedEdge{FromID: fmt.Sprint(i), Label: "organization", RelationType: "SimpleRelation", ToID: "o"}
+		p := review.OwnershipProposal{ID: review.ProposalID(edge), Edge: edge}
+		outcome := review.OwnershipOutcome{ProposalID: p.ID, Status: review.ProposalApplied, Reviewer: "jeff", EdgeID: "e"}
+		if i%2 == 0 {
+			p.Signals = []string{"identity via ContactRecord phone Phone", "identity via ContactRecord location Location"}
+		} else {
+			p.Signals = []string{"hosting via FQDN dns_record IPAddress"}
+			outcome.Status, outcome.EdgeID = review.ProposalRejected, ""
+		}
+		if _, err := j.SubmitOwnership([]review.OwnershipProposal{p}); err != nil {
+			t.Fatal(err)
+		}
+		if err := j.RecordOwnership(outcome); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := trainAttribution(path, "", &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	if err := attributionStatus(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "is trained at") || !strings.Contains(out.String(), "45 approved, 45 rejected") {
+		t.Fatalf("trained status = %q", out.String())
+	}
+}

@@ -70,10 +70,64 @@ func trainAttribution(journalPath, output string, out io.Writer) error {
 
 	_, err = fmt.Fprintf(out, "Trained %s from %d reviewed proposals (%d held out): accuracy %.2f, precision %.2f, "+
 		"recall %.2f.\nAutomatic writes need a probability of %.2f. Saved to %s; the engine uses it from the next "+
-		"enumeration.\n", model.ModelID, metrics.TrainingExamples+metrics.HoldoutExamples, metrics.HoldoutExamples,
+		"enumeration, and `amass ai` and the MCP ownership-gap answers rank and decide candidates with it "+
+		"immediately.\n", model.ModelID, metrics.TrainingExamples+metrics.HoldoutExamples, metrics.HoldoutExamples,
 		metrics.HoldoutAccuracy, metrics.HoldoutPotentialPrecision, metrics.HoldoutPotentialRecall,
 		model.ReviewThreshold, output)
 	return err
+}
+
+// attributionStatus reports whether an ownership model is trained beside the
+// journal, what it decides with, and how much reviewed data is on hand to
+// (re)train. It opens no database and needs no model provider.
+func attributionStatus(journalPath string, out io.Writer) error {
+	if journalPath == "" {
+		return errors.New("-journal required")
+	}
+
+	path := ai.AttributionModelPath(journalPath)
+	model, err := ai.LoadAttributionModel(path)
+	if err != nil {
+		return err
+	}
+
+	entries, err := (&review.Journal{Path: journalPath}).OwnershipEntries()
+	if err != nil {
+		return err
+	}
+
+	var approved, rejected int
+	for _, e := range entries {
+		// Departments are decided on other evidence, so they are not labels.
+		if e.Proposal.Kind != "" {
+			continue
+		}
+		switch label, ok := ai.OwnershipLabel(e); {
+		case !ok:
+		case label == "unrelated":
+			rejected++
+		default:
+			approved++
+		}
+	}
+
+	if model == nil {
+		_, _ = fmt.Fprintf(out, "No attribution model is trained at %s.\nThe engine, `amass ai` and the MCP "+
+			"ownership-gap answers all decide with the static signal weights until one is trained.\n", path)
+	} else {
+		_, _ = fmt.Fprintf(out, "Attribution model %s is trained at %s.\n%d features (%s); automatic writes and "+
+			"proposals need a probability of %.2f.\nThe engine, `amass ai` and the MCP ownership-gap answers all "+
+			"rank and decide candidates with it.\n", model.ModelID, path, len(model.Features()), model.FeatureVersion,
+			model.ReviewThreshold)
+	}
+
+	_, _ = fmt.Fprintf(out, "Review journal %s holds %d labeled example(s) for training: %d approved, %d rejected.\n",
+		journalPath, approved+rejected, approved, rejected)
+	if approved+rejected == 0 {
+		_, _ = fmt.Fprintln(out, "Review proposals with `amass review proposals`, then train with "+
+			"`amass ai train-attribution`.")
+	}
+	return nil
 }
 
 // reviewProposals asks the model for advice on pending proposals without

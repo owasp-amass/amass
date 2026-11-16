@@ -40,7 +40,7 @@ const Description = "Ask questions with a language model, MCP tools, and model-a
 // their proposals are amass lens and amass review (package internal/lens/cli);
 // amass ai still runs them by their old names, with a note.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"train-attribution", "review", "config"}
+	"train-attribution", "attribution-status", "review", "config"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -311,6 +311,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	switch operation {
 	case "train-attribution":
 		return trainAttribution(journalPath, modelOutput, out)
+	case "attribution-status":
+		return attributionStatus(journalPath, out)
 	case "review":
 		if provider == nil {
 			return errors.New("-model required: review asks the model for advice on pending proposals")
