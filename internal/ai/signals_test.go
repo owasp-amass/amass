@@ -377,3 +377,61 @@ func TestNamesUnderOwnedDomainsAreOwned(t *testing.T) {
 		t.Errorf("a name under colgate.edu became a candidate: %+v", c)
 	}
 }
+
+// TestRegistrantEmailDomainSignal: an unowned domain whose registrant uses a
+// different mailbox at the same custom domain as a controlled registration is
+// linked by the email-domain signal, while a shared free-mail domain is not.
+func TestRegistrantEmailDomainSignal(t *testing.T) {
+	g := signalsFixture()
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	link := func(from, label, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+	email := func(id, addr string) {
+		add(id, "Identifier", id, map[string]any{"id": addr, "id_type": "email"})
+	}
+	sibling := func(domain, crID, idID, addr string) {
+		add(domain, "FQDN", domain, map[string]any{"name": domain})
+		add("dr-"+domain, "DomainRecord", domain, map[string]any{"domain": domain})
+		add(crID, "ContactRecord", "https://rdap.example/"+crID, nil)
+		email(idID, addr)
+		link(domain, "registration", "dr-"+domain)
+		link("dr-"+domain, "registrant_contact", crID)
+		link(crID, "id", idID)
+	}
+
+	// Colgate's controlled registration contact has a custom-domain mailbox
+	// and a free-webmail one.
+	email("email:admin@colgate.edu", "admin@colgate.edu")
+	email("email:colgate.alumni@gmail.com", "colgate.alumni@gmail.com")
+	link("cr-colgate", "id", "email:admin@colgate.edu")
+	link("cr-colgate", "id", "email:colgate.alumni@gmail.com")
+
+	// An unowned domain registered with a different mailbox at colgate.edu,
+	// and one sharing only the gmail.com webmail domain.
+	sibling("colgate-labs.org", "cr-labs", "email:webmaster@colgate.edu", "webmaster@colgate.edu")
+	sibling("free.example", "cr-free", "email:someone@gmail.com", "someone@gmail.com")
+
+	r := signalsReport(t, g)
+
+	c := candidateByID(r, "cr-labs")
+	if c == nil {
+		t.Fatalf("cr-labs is not a candidate: %+v", r.Candidates)
+	}
+	if !slices.Contains(signalIDs(c), "shared_registrant_email_domain") {
+		t.Errorf("cr-labs signals = %v, want shared_registrant_email_domain", signalIDs(c))
+	}
+	// One strong signal alone waits for review, and it attaches to the subject.
+	if c.Decision != lens.GapReview || c.Attachment == nil ||
+		c.Attachment.String() != "ContactRecord https://rdap.example/cr-labs --organization--> Organization Colgate University" {
+		t.Errorf("decision %s, attachment %v", c.Decision, c.Attachment)
+	}
+
+	// A shared free-webmail domain identifies no owner, so it gives no signal.
+	if fc := candidateByID(r, "cr-free"); fc != nil && slices.Contains(signalIDs(fc), "shared_registrant_email_domain") {
+		t.Errorf("a free-mail domain gave an email-domain signal: %+v", fc)
+	}
+}

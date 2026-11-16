@@ -16,6 +16,7 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | Signal | Strength | Kind | Weight |
 | --- | --- | --- | --- |
 | [Shared registrant details](#shared_registrant_details) | strong | identity | 0.45 |
+| [Shared registrant email domain](#shared_registrant_email_domain) | strong | identity | 0.40 |
 | [Shared DNS verification token](#txt_verification_token) | strong | identity | 0.45 |
 | [Certificate key reuse](#certificate_key_reuse) | strong | identity | 0.45 |
 | [Certificate public key reuse](#certificate_public_key_reuse) | strong | identity | 0.45 |
@@ -55,6 +56,26 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - Resellers and agencies sometimes register assets for clients with their own details.
 - A university or holding company address can be shared by legally separate tenants or affiliates.
+
+<a id="shared_registrant_email_domain"></a>
+## Shared registrant email domain
+
+`shared_registrant_email_domain`: strong identity signal, weight 0.40.
+
+**Finds:** A registration contact the organization does not yet own whose email address is at the same custom domain as a contact of a domain the organization controls, such as admin@acme.com and security@acme.com.
+
+**Why it counts:** A registrant email address is a mailbox at a domain the registrant controls. Two registrations whose contacts use the same custom mail domain were almost always made by the same organization, even when the mailboxes differ, which a match on the exact email address misses. The registered domain is compared, so a mailbox at a subdomain still counts.
+
+**Guards:**
+
+- Webmail and free-email domains never count (this signal's free_mail).
+- A mail domain carried by more than 50 registration contacts never counts: a provider, registrar or free service, not one owner.
+- Redaction and privacy-service placeholders never count (the contacts are reached through stored identifiers, which the placeholder guards exclude).
+
+**Can still mislead when:**
+
+- A parent company or shared-services provider may register domains for several affiliates from one mailbox domain.
+- Resellers and agencies sometimes register client domains using their own email domain.
 
 <a id="txt_verification_token"></a>
 ## Shared DNS verification token

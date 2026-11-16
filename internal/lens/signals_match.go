@@ -161,7 +161,11 @@ func (g *gapSearch) valueSignalsOf(a graph.Asset, pass int) error {
 	case "TLSCertificate":
 		return g.certificateSignals(a)
 	case "DomainRecord":
-		return g.nameserverSignals(a)
+		if err := g.nameserverSignals(a); err != nil {
+			return err
+		}
+
+		return g.emailDomainSignals(a)
 	}
 
 	return nil

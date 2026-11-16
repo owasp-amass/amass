@@ -22,6 +22,55 @@
       ]
     },
     {
+      "id": "shared_registrant_email_domain",
+      "title": "Shared registrant email domain",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.4,
+      "matcher": "registrant_email_domain",
+      "params": {
+        "free_mail": [
+          "gmail.com",
+          "googlemail.com",
+          "outlook.com",
+          "hotmail.com",
+          "live.com",
+          "msn.com",
+          "yahoo.com",
+          "ymail.com",
+          "aol.com",
+          "icloud.com",
+          "me.com",
+          "mac.com",
+          "proton.me",
+          "protonmail.com",
+          "pm.me",
+          "gmx.com",
+          "gmx.net",
+          "mail.com",
+          "zoho.com",
+          "yandex.com",
+          "yandex.ru",
+          "fastmail.com",
+          "tutanota.com",
+          "qq.com",
+          "163.com",
+          "126.com"
+        ]
+      },
+      "finds": "A registration contact the organization does not yet own whose email address is at the same custom domain as a contact of a domain the organization controls, such as admin@acme.com and security@acme.com.",
+      "rationale": "A registrant email address is a mailbox at a domain the registrant controls. Two registrations whose contacts use the same custom mail domain were almost always made by the same organization, even when the mailboxes differ, which a match on the exact email address misses. The registered domain is compared, so a mailbox at a subdomain still counts.",
+      "guards": [
+        "Webmail and free-email domains never count (this signal's free_mail).",
+        "A mail domain carried by more than 50 registration contacts never counts: a provider, registrar or free service, not one owner.",
+        "Redaction and privacy-service placeholders never count (the contacts are reached through stored identifiers, which the placeholder guards exclude)."
+      ],
+      "counter_indications": [
+        "A parent company or shared-services provider may register domains for several affiliates from one mailbox domain.",
+        "Resellers and agencies sometimes register client domains using their own email domain."
+      ]
+    },
+    {
       "id": "txt_verification_token",
       "title": "Shared DNS verification token",
       "kind": "identity",

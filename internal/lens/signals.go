@@ -41,13 +41,14 @@ const (
 	matchFingerprint       = "service_fingerprint"
 	matchNameToken         = "name_token"
 	matchParkedPage        = "parked_page"
+	matchEmailDomain       = "registrant_email_domain"
 	signalCatalogMaxWeight = 1
 )
 
 var signalMatchers = map[string]bool{matchSharedAttribute: true, matchInfrastructure: true, matchColisting: true,
 	matchTXTToken: true, matchCertificateField: true, matchDNSIntoFootprint: true, matchTXTReference: true,
 	matchHTTPRedirect: true, matchReverseDNS: true, matchNameserverSet: true, matchFingerprint: true,
-	matchNameToken: true, matchParkedPage: true}
+	matchNameToken: true, matchParkedPage: true, matchEmailDomain: true}
 
 // SignalParams configures a signal's matcher.
 type SignalParams struct {
@@ -64,6 +65,9 @@ type SignalParams struct {
 	Phrases       []string `json:"phrases,omitempty"`
 	AssetTypes    []string `json:"asset_types,omitempty"`
 	IgnoreValues  []string `json:"ignore_values,omitempty"`
+	// FreeMail lists the webmail domains the registrant email-domain signal
+	// never pivots on, since many unrelated parties register with them.
+	FreeMail []string `json:"free_mail,omitempty"`
 	// IDTypes, LegalForms and NamesMustAgree configure the duplicate
 	// organization signals in duplicate_signals.json.
 	IDTypes        []string `json:"id_types,omitempty"`

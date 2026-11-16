@@ -246,6 +246,118 @@ func (g *gapSearch) nameserverSignals(dr graph.Asset) error {
 // signal of the service_fingerprint matcher names its property and the
 // asset types that carry it. A service's candidates are the names and
 // addresses serving it; a URL is its own candidate.
+// registrationContactLabels are the DomainRecord relations whose contact the
+// registrant email-domain signal pivots from.
+var registrationContactLabels = map[string]bool{
+	"registrant_contact": true, "admin_contact": true, "technical_contact": true, "billing_contact": true,
+}
+
+// emailDomainSignals finds other registration contacts whose email address is
+// at the same custom domain as a contact of this controlled domain
+// registration. Two registrations whose contacts use one organization's mail
+// domain (admin@acme.com and security@acme.com) are almost always controlled
+// by the same party, a link a shared exact email value misses.
+func (g *gapSearch) emailDomainSignals(dr graph.Asset) error {
+	def, ok := firstSignal(matchEmailDomain)
+	if !ok || g.values == nil {
+		return nil
+	}
+
+	free := make(map[string]bool, len(def.Params.FreeMail))
+	for _, d := range def.Params.FreeMail {
+		free[strings.ToLower(d)] = true
+	}
+
+	steps, err := g.w.steps(dr)
+	if err != nil {
+		return err
+	}
+
+	// The email domains of this registration's own contacts, each with the
+	// controlled contact it came from, for the witness.
+	owners := map[string]graph.Asset{}
+	for _, s := range steps {
+		if !s.forward || !registrationContactLabels[s.edge.Label] || s.other.Type != "ContactRecord" {
+			continue
+		}
+		for _, dom := range g.contactEmailDomains(s.other) {
+			if dom != "" && !free[dom] {
+				owners[dom] = s.other
+			}
+		}
+	}
+
+	for dom, ctl := range owners {
+		if !g.read() {
+			return nil
+		}
+
+		others, more, err := g.values.FindByAttribute(g.w.ctx, "Identifier", "id", dom, true, GapMaxShared+1)
+		if err != nil {
+			return err
+		}
+		// A mail domain carried by many registrants is a provider or a free
+		// service, not one owner's.
+		if more || len(others) > GapMaxShared {
+			continue
+		}
+
+		for _, id := range others {
+			if !strings.EqualFold(graph.ContentString(id, "id_type"), "email") {
+				continue
+			}
+			if _, dom2, ok := strings.Cut(strings.ToLower(graph.ContentString(id, "id")), "@"); !ok ||
+				graph.RegisteredDomain(dom2) != dom {
+				continue
+			}
+
+			g.w.assets[id.ID] = id
+			idSteps, err := g.w.steps(id)
+			if err != nil {
+				return err
+			}
+			for _, t := range idSteps {
+				if t.forward || t.edge.Label != "id" || t.other.Type != "ContactRecord" {
+					continue
+				}
+				if _, mine := g.owned[t.other.ID]; mine || t.other.ID == ctl.ID {
+					continue
+				}
+
+				witness := append(g.pathTo(dr.ID), matched(ctl, t.other, "same_email_domain", "@"+dom))
+				g.add(t.other, def.ID, "ContactRecord email domain ContactRecord", witness)
+			}
+		}
+	}
+
+	return nil
+}
+
+// contactEmailDomains returns the registered domains of a contact record's
+// email identifiers.
+func (g *gapSearch) contactEmailDomains(cr graph.Asset) []string {
+	steps, err := g.w.steps(cr)
+	if err != nil {
+		return nil
+	}
+
+	var out []string
+	seen := map[string]bool{}
+	for _, s := range steps {
+		if !s.forward || s.edge.Label != "id" || s.other.Type != "Identifier" ||
+			!strings.EqualFold(graph.ContentString(s.other, "id_type"), "email") {
+			continue
+		}
+		if _, dom, ok := strings.Cut(strings.ToLower(graph.ContentString(s.other, "id")), "@"); ok && dom != "" {
+			if reg := graph.RegisteredDomain(dom); reg != "" && !seen[reg] {
+				seen[reg] = true
+				out = append(out, reg)
+			}
+		}
+	}
+	return out
+}
+
 func (g *gapSearch) fingerprintSignals(owned graph.Asset) error {
 	defs := signalsByMatcher(matchFingerprint)
 	if len(defs) == 0 {
