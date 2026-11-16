@@ -35,6 +35,10 @@ type Server struct {
 	// Operator, when set, adds the tools that start enumerations, review
 	// proposals and manage data sources.
 	Operator *Operator
+	// ConfigFile is the Amass configuration file the config assistant reads
+	// and, in operator mode, writes; empty leaves apply_config disabled and
+	// the describe/validate tools working from the schema alone.
+	ConfigFile string
 }
 
 // Serve runs one MCP session over in and out until the client disconnects
@@ -44,7 +48,7 @@ func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		s.Evidence = ai.NewEvidenceStore()
 	}
 
-	server := newSDKServer(s.Runner, s.Model, s.Evidence, s.Operator, nil)
+	server := newSDKServer(s.Runner, s.Model, s.Evidence, s.Operator, nil, s.ConfigFile)
 	reader := &eofReader{Reader: in}
 	err := server.Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(reader), Writer: nopWriteCloser{out}})
 	if err != nil && reader.closed() && ctx.Err() == nil {
@@ -88,7 +92,7 @@ func (nopWriteCloser) Close() error { return nil }
 // newSDKServer builds an MCP server with every read-only tool: the graph
 // tools and the investigation tools.
 func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, op *Operator,
-	links *VizLinks) *mcp.Server {
+	links *VizLinks, configFile string) *mcp.Server {
 	instructions := serverInstructions + readOnlyInstructions
 	if op != nil {
 		instructions = serverInstructions + operatorInstructions
@@ -103,6 +107,7 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 	if runner.Catalog != nil {
 		caps = append(caps, visualizeCapability(runner, links))
 	}
+	caps = append(caps, configAssistCapabilities(configFile)...)
 	if op != nil {
 		caps = append(caps, operatorCapabilities(op, runner)...)
 	}

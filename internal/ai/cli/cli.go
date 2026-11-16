@@ -366,7 +366,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	if operation == "mcp" {
 		// MCP is a long-running stdio service, not a 2-minute investigation.
 		cancel()
-		server := mcp.Server{Runner: runner}
+		server := mcp.Server{Runner: runner, ConfigFile: configPath}
 		if mcpOperator {
 			// Whoever can start this process may act: stdio has no token.
 			op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{Dir: dir, ConfigFile: configPath,

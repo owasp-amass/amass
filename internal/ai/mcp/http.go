@@ -37,6 +37,9 @@ type HTTPServer struct {
 	Operator      *Operator
 	// Viz, when set, serves the interactive drawings visualize links to.
 	Viz *VizLinks
+	// ConfigFile is the Amass configuration file the config assistant reads
+	// and, in operator mode, writes; see Server.ConfigFile.
+	ConfigFile string
 	// SessionTTL is how long an idle session stays valid; MaxSessions caps
 	// concurrent sessions (the least recently used is evicted first).
 	SessionTTL  time.Duration
@@ -272,13 +275,13 @@ func (s *HTTPServer) sdkHandler(operator bool) http.Handler {
 
 		store := s.Evidence
 		s.mu.Unlock()
-		reader := newSDKServer(s.Runner, s.Model, store, nil, s.Viz)
+		reader := newSDKServer(s.Runner, s.Model, store, nil, s.Viz, s.ConfigFile)
 		s.sdk = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return reader },
 			&mcp.StreamableHTTPOptions{JSONResponse: true, SessionTimeout: s.ttl()})
 		if s.Operator != nil {
 			// Event streams let the server ask the user to approve an action
 			// in the middle of a tool call (MCP elicitation).
-			op := newSDKServer(s.Runner, s.Model, store, s.Operator, s.Viz)
+			op := newSDKServer(s.Runner, s.Model, store, s.Operator, s.Viz, s.ConfigFile)
 			s.sdkOperator = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return op },
 				&mcp.StreamableHTTPOptions{SessionTimeout: s.ttl()})
 		}

@@ -60,6 +60,8 @@ func run() error {
 		// The vendors lens reports TXT tokens the DNS-SD plugin does not know.
 		KnownVerification: dnssd.IsVerificationRecord,
 	}, token)
+	// The config assistant reads this file, and writes it in operator mode.
+	server.ConfigFile = *cfgFile
 
 	// Interactive drawings are served at links the visualize tool returns.
 	if public := os.Getenv("AMASS_AI_MCP_PUBLIC_URL"); public != "" {
