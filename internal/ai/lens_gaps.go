@@ -35,5 +35,6 @@ func (a Agent) gapLens(ctx context.Context, root graph.Asset, out Investigation)
 	out.GapReport = &report
 	out.Incomplete = report.Truncated
 	out.Answer = lens.GapAnswer(report)
+	out.Diagram = GapDiagram(report)
 	return out, nil
 }
