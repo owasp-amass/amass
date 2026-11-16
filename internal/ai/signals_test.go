@@ -476,3 +476,42 @@ func TestEmailDomainSignalSpansIPAndDomainRegistrations(t *testing.T) {
 		t.Errorf("cr-partner signals = %v, want shared_registrant_email_domain", signalIDs(c))
 	}
 }
+
+// TestDKIMKeyReuseSignal: an unowned domain publishing the same DKIM public
+// key as a controlled domain is linked by the DKIM-key signal.
+func TestDKIMKeyReuseSignal(t *testing.T) {
+	g := signalsFixture()
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	fqdn := func(name string) { add(name, "FQDN", name, map[string]any{"name": name}) }
+	link := func(from, label, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+	txt := "v=DKIM1; k=rsa; p=" + strings.Repeat("A", 216)
+
+	// Colgate's controlled apex publishes a DKIM key under a selector.
+	fqdn("sel._domainkey.colgate.edu")
+	link("colgate.edu", "node", "sel._domainkey.colgate.edu")
+	g.EvidenceByID["sel._domainkey.colgate.edu"] = []graph.Evidence{graphtest.TXTRecord(txt)}
+
+	// An unowned domain publishes the same DKIM key under its own selector.
+	fqdn("colgate-mail.org")
+	add("dr-mail", "DomainRecord", "colgate-mail.org", map[string]any{"domain": "colgate-mail.org"})
+	add("cr-mail", "ContactRecord", "https://rdap.example/mail", nil)
+	fqdn("default._domainkey.colgate-mail.org")
+	link("colgate-mail.org", "registration", "dr-mail")
+	link("dr-mail", "registrant_contact", "cr-mail")
+	link("colgate-mail.org", "node", "default._domainkey.colgate-mail.org")
+	g.EvidenceByID["default._domainkey.colgate-mail.org"] = []graph.Evidence{graphtest.TXTRecord(txt)}
+
+	r := signalsReport(t, g)
+	c := candidateByID(r, "colgate-mail.org")
+	if c == nil {
+		t.Fatalf("colgate-mail.org is not a candidate: %+v", r.Candidates)
+	}
+	if !slices.Contains(signalIDs(c), "dkim_key_reuse") {
+		t.Errorf("colgate-mail.org signals = %v, want dkim_key_reuse", signalIDs(c))
+	}
+}

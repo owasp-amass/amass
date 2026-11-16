@@ -17,6 +17,7 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | --- | --- | --- | --- |
 | [Shared registrant details](#shared_registrant_details) | strong | identity | 0.45 |
 | [Shared registrant email domain](#shared_registrant_email_domain) | strong | identity | 0.40 |
+| [DKIM signing key reuse](#dkim_key_reuse) | strong | identity | 0.40 |
 | [Shared DNS verification token](#txt_verification_token) | strong | identity | 0.45 |
 | [Certificate key reuse](#certificate_key_reuse) | strong | identity | 0.45 |
 | [Certificate public key reuse](#certificate_public_key_reuse) | strong | identity | 0.45 |
@@ -76,6 +77,25 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A parent company or shared-services provider may register domains for several affiliates from one mailbox domain.
 - Resellers and agencies sometimes register client domains using their own email domain.
+
+<a id="dkim_key_reuse"></a>
+## DKIM signing key reuse
+
+`dkim_key_reuse`: strong identity signal, weight 0.40.
+
+**Finds:** A domain the organization does not yet own that publishes the same DKIM public key as a domain the organization controls.
+
+**Why it counts:** A DKIM public key in DNS pairs with a private key held by whoever signs the domain's mail. The same public key on two domains means their mail is signed by the same private key, so the same party operates both.
+
+**Guards:**
+
+- Only DKIM records (v=DKIM1) with a non-empty public key count; a revoked key (empty p=) never counts.
+- A key published by more than 50 domains never counts: a mail provider's shared or CNAME-delegated key, not one owner's.
+- Only the DKIM selectors the collector probes are seen, so a shared key under an unprobed selector is missed, not miscounted.
+
+**Can still mislead when:**
+
+- A mail provider or marketing platform may publish one DKIM key, through CNAME delegation, across many customers' domains (the 50-domain limit catches large ones).
 
 <a id="txt_verification_token"></a>
 ## Shared DNS verification token

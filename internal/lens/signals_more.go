@@ -338,6 +338,109 @@ func (g *gapSearch) emailDomainSignals(rec graph.Asset) error {
 	return nil
 }
 
+// dkimSignals finds domains that publish the same DKIM public key as a
+// controlled apex. A DKIM key in DNS pairs with a private key held by whoever
+// signs the domain's mail, so the same public key on two domains means their
+// mail is signed by the same private key, hence the same operator.
+func (g *gapSearch) dkimSignals(apex graph.Asset) error {
+	def, ok := firstSignal(matchDKIMKey)
+	if !ok || g.values == nil {
+		return nil
+	}
+
+	apexName := graph.FQDNName(apex)
+	steps, err := g.w.steps(apex)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range steps {
+		// The DKIM keys live at <selector>._domainkey.<apex> names below the
+		// apex, each linked to it as a node.
+		if !s.forward || s.edge.Label != "node" || s.other.Type != "FQDN" ||
+			!strings.HasSuffix(graph.FQDNName(s.other), "._domainkey."+apexName) {
+			continue
+		}
+		if !g.read() {
+			return nil
+		}
+
+		txts, err := g.txtRecords(s.other)
+		if err != nil {
+			return err
+		}
+		for _, txt := range txts {
+			key := dkimPublicKey(txt)
+			if len(key) < 40 {
+				// Too short to be a real public key, or a revoked empty key.
+				continue
+			}
+
+			others, more, err := g.values.FindByTagValue(g.w.ctx, "FQDN", graph.DNSRecordProperty, key, true,
+				GapMaxShared+1)
+			if err != nil {
+				return err
+			}
+			// A key published by many domains is a provider's shared or
+			// CNAME-delegated key, not one owner's.
+			if more || len(others) > GapMaxShared {
+				continue
+			}
+
+			for _, o := range others {
+				if o.ID == s.other.ID {
+					continue
+				}
+				// The candidate is the other key's registered domain, not the
+				// _domainkey name that carries it.
+				cand, ok := g.apexOfDKIM(o)
+				if !ok {
+					continue
+				}
+
+				witness := append(g.pathTo(apex.ID), matched(s.other, o, "same_dkim_key", "p="+key[:12]+"…"))
+				g.add(cand, def.ID, "FQDN DKIM key FQDN", witness)
+			}
+		}
+	}
+
+	return nil
+}
+
+// apexOfDKIM resolves a <selector>._domainkey.<apex> name to its registered
+// domain's apex asset, found as the node it hangs below.
+func (g *gapSearch) apexOfDKIM(child graph.Asset) (graph.Asset, bool) {
+	want := graph.RegisteredDomain(graph.FQDNName(child))
+	if want == "" {
+		return graph.Asset{}, false
+	}
+
+	steps, err := g.w.steps(child)
+	if err != nil {
+		return graph.Asset{}, false
+	}
+	for _, s := range steps {
+		if !s.forward && s.edge.Label == "node" && s.other.Type == "FQDN" && graph.FQDNName(s.other) == want {
+			return s.other, true
+		}
+	}
+	return graph.Asset{}, false
+}
+
+// dkimPublicKey returns the base64 public key of a DKIM TXT record (the p=
+// tag), or empty when the record is not DKIM or the key is revoked.
+func dkimPublicKey(txt string) string {
+	if !hasPrefixFold(strings.TrimSpace(txt), "v=DKIM1") {
+		return ""
+	}
+	for _, part := range strings.Split(txt, ";") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(part), "p="); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // contactEmailDomains returns the registered domains of a contact record's
 // email identifiers.
 func (g *gapSearch) contactEmailDomains(cr graph.Asset) []string {

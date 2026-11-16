@@ -155,6 +155,9 @@ func (g *gapSearch) valueSignalsOf(a graph.Asset, pass int) error {
 			if err := g.txtSignals(a); err != nil {
 				return err
 			}
+			if err := g.dkimSignals(a); err != nil {
+				return err
+			}
 
 			return g.redirectSignals(a)
 		}

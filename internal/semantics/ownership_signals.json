@@ -71,6 +71,24 @@
       ]
     },
     {
+      "id": "dkim_key_reuse",
+      "title": "DKIM signing key reuse",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.4,
+      "matcher": "dkim_key",
+      "finds": "A domain the organization does not yet own that publishes the same DKIM public key as a domain the organization controls.",
+      "rationale": "A DKIM public key in DNS pairs with a private key held by whoever signs the domain's mail. The same public key on two domains means their mail is signed by the same private key, so the same party operates both.",
+      "guards": [
+        "Only DKIM records (v=DKIM1) with a non-empty public key count; a revoked key (empty p=) never counts.",
+        "A key published by more than 50 domains never counts: a mail provider's shared or CNAME-delegated key, not one owner's.",
+        "Only the DKIM selectors the collector probes are seen, so a shared key under an unprobed selector is missed, not miscounted."
+      ],
+      "counter_indications": [
+        "A mail provider or marketing platform may publish one DKIM key, through CNAME delegation, across many customers' domains (the 50-domain limit catches large ones)."
+      ]
+    },
+    {
       "id": "txt_verification_token",
       "title": "Shared DNS verification token",
       "kind": "identity",
