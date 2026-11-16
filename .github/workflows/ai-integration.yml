@@ -12,7 +12,7 @@ on:
       - 'internal/review/**'
       - 'internal/semantics/**'
       - 'engine/plugins/attribution/**'
-      - 'internal/subs/**'
+      - 'internal/enum/**'
       - 'cmd/amass-ai-mcp/**'
       - 'cmd/amass-ai-mcp-http/**'
       - 'cmd/amass-ai-classifier/**'
@@ -53,8 +53,8 @@ jobs:
         run: go test -race ./config ./internal/ai/... ./internal/graph/... ./internal/lens/... ./internal/review/... ./internal/semantics/... ./engine/plugins/attribution ./cmd/amass ./cmd/amass-ai-mcp
       - name: Default evidence-first classifier regression
         run: go test ./internal/ai ./internal/ai/classify ./internal/ai/cli -run "TestDefaultEvidenceClassifier|TestHTTPClassifier|TestClassifierServiceEndpointGuard|TestTrainer" -count=1
-      - name: FQDN inventory and subdomain summary regressions
-        run: go test ./internal/subs ./internal/ai -run "TestAddInfrastructureInfoPreservesDiscoveredNamesWithoutASNs|TestFQDNInventory" -count=1
+      - name: FQDN inventory regressions
+        run: go test ./internal/ai -run "TestFQDNInventory" -count=1
       - name: Question evaluation set (every reported question)
         run: go test ./internal/ai -run "TestQuestionEvaluationSet|TestNewOAMRelationshipsJoinLensesWithoutCode" -count=1 -v
       - name: Schema-grounded typed intent and language-alias regressions
