@@ -216,6 +216,7 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 	// links names that resolve, so that they are found from the domain.
 	apexEnt := d.plugin.getApex(subdomain)
 	d.queryPolicies(e, apexEnt, subdomain)
+	d.queryCAA(e, apexEnt, subdomain)
 
 	srvs := NamesByTier(Tier3)
 	rch := make(chan []*relSubs, len(srvs))
