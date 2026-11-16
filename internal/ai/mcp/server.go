@@ -103,15 +103,15 @@ func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore
 	if runner.Catalog != nil {
 		caps = append(caps, visualizeCapability(runner, links))
 	}
+	if op != nil {
+		caps = append(caps, operatorCapabilities(op, runner)...)
+	}
 
-	registerCapabilities(server, caps, op != nil)
+	registerCapabilities(server, caps, op)
 
 	if runner.Catalog != nil {
 		// The prompts ask for the investigate tool, which needs the catalog.
 		addPrompts(server)
-	}
-	if op != nil {
-		addOperatorTools(server, op, runner)
 	}
 
 	return server

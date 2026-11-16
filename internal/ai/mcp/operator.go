@@ -76,8 +76,14 @@ Operator mode: this connection can also collect data and change the database, ea
 
 func boolPtr(b bool) *bool { return &b }
 
-// addOperatorTools registers the operator tools on server.
-func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
+// operatorCapabilities returns the operator tools as capabilities. Every one
+// is operator tier, so the registry serves them only to a connection acting
+// as an operator. The tools that collect data or write to the database declare
+// their approval step (approve) rather than calling gate themselves, so the
+// framework enforces consent; review_proposal keeps its own handler because it
+// gates only the decisions that write (approve and retract), not a rejection.
+func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
+	var caps []capability
 	target := map[string]any{"type": "string",
 		"description": "The exact target: a domain (example.com), an IP address, a CIDR range or an AS number (AS15169)"}
 	mode := map[string]any{"type": "string", "enum": []string{string(collect.Passive), string(collect.Active)},
@@ -99,11 +105,14 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 		return schema
 	}
 
+	// add declares a tool that runs directly; a handler error is returned to the
+	// model as a tool result, as before.
 	add := func(name, title, desc string, schema map[string]any, ann *mcp.ToolAnnotations,
 		h func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error)) {
 		ann.Title = title
-		server.AddTool(&mcp.Tool{Name: name, Title: title, Description: desc, InputSchema: schema, Annotations: ann},
-			func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		caps = append(caps, capability{tier: tierOperator,
+			tool: &mcp.Tool{Name: name, Title: title, Description: desc, InputSchema: schema, Annotations: ann},
+			handle: func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				var args json.RawMessage
 				if req.Params != nil {
 					args = req.Params.Arguments
@@ -115,7 +124,18 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				}
 
 				return res, nil
-			})
+			}})
+	}
+	// approveAction declares a tool whose action always needs the user's
+	// consent: h validates the call and returns the approval message and the
+	// act to run, and the registry passes both to gate.
+	approveAction := func(name, title, desc string, schema map[string]any, ann *mcp.ToolAnnotations,
+		h func(context.Context, *mcp.CallToolRequest, json.RawMessage) (string,
+			func(via string) (*mcp.CallToolResult, error), error)) {
+		ann.Title = title
+		caps = append(caps, capability{tier: tierOperator,
+			tool:    &mcp.Tool{Name: name, Title: title, Description: desc, InputSchema: schema, Annotations: ann},
+			approve: h})
 	}
 	readOnly := func() *mcp.ToolAnnotations {
 		return &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: boolPtr(false)}
@@ -147,7 +167,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 					"mode, also and expand, and this plan_id. The user is asked to approve it."}), nil
 		})
 
-	add(ToolStartEnumeration, "Start an Amass enumeration",
+	approveAction(ToolStartEnumeration, "Start an Amass enumeration",
 		"Start the enumeration a plan_enumeration call described. Collects data from the Internet about the "+
 			"target and stores it in the Asset Database; the user is asked to approve it first.",
 		obj([]string{"target", "plan_id"}, map[string]any{"target": target, "mode": mode, "also": also,
@@ -156,7 +176,8 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				"description": "The plan_id plan_enumeration returned",
 			}}),
 		&mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
-		func(ctx context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+		func(ctx context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (string,
+			func(via string) (*mcp.CallToolResult, error), error) {
 			var a struct {
 				Target string
 				Mode   string
@@ -165,23 +186,23 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				PlanID string `json:"plan_id"`
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
-				return nil, err
+				return "", nil, err
 			}
 			if op.Collect == nil {
-				return nil, errors.New("this server cannot start enumerations: no engine is configured")
+				return "", nil, errors.New("this server cannot start enumerations: no engine is configured")
 			}
 
 			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
 			if plan.Status != collect.StatusApprovalRequired {
-				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
+				return "", nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return nil, errors.New("plan_id does not match this target, mode, also and expand; call plan_enumeration " +
-					"again and show the user the new plan")
+				return "", nil, errors.New("plan_id does not match this target, mode, also and expand; call " +
+					"plan_enumeration again and show the user the new plan")
 			}
 
 			msg := fmt.Sprintf("Start a %s?\n\n%s", plan.Summary(), plan.Effects)
-			return op.gate(req, msg, func(via string) (*mcp.CallToolResult, error) {
+			return msg, func(via string) (*mcp.CallToolResult, error) {
 				sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 				defer cancel()
 				run, err := op.Collect.Start(sctx, plan, approver(req, via))
@@ -191,7 +212,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 
 				return jsonResult(map[string]any{"run": run,
 					"next": "Check progress with enumeration_status; runs end on their own when the work is done."}), nil
-			})
+			}, nil
 		})
 
 	add(ToolEnumerationStatus, "Amass enumeration status",
@@ -260,7 +281,8 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			"every_hours": map[string]any{"type": "integer", "minimum": int(collect.MinWatchInterval.Hours()),
 				"maximum": 24 * 90, "description": "Hours between runs, such as 24 for daily or 168 for weekly"}}),
 		&mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
-		func(ctx context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+		func(_ context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (string,
+			func(via string) (*mcp.CallToolResult, error), error) {
 			var a struct {
 				Target     string
 				Mode       string
@@ -270,24 +292,25 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 				EveryHours int    `json:"every_hours"`
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
-				return nil, err
+				return "", nil, err
 			}
 			if op.Watches == nil {
-				return nil, errors.New("this server cannot keep watches")
+				return "", nil, errors.New("this server cannot keep watches")
 			}
 
 			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
 			if plan.Status != collect.StatusApprovalRequired {
-				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
+				return "", nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return nil, errors.New("plan_id does not match this target, mode, also and expand; call plan_enumeration again")
+				return "", nil, errors.New("plan_id does not match this target, mode, also and expand; call " +
+					"plan_enumeration again")
 			}
 
 			every := time.Duration(a.EveryHours) * time.Hour
 			msg := fmt.Sprintf("Run a %s every %d hours, starting now, until the watch is stopped?\n\n%s",
 				plan.Summary(), a.EveryHours, plan.Effects)
-			return op.gate(req, msg, func(via string) (*mcp.CallToolResult, error) {
+			return msg, func(via string) (*mcp.CallToolResult, error) {
 				w, err := op.Watches.Add(plan, every, approver(req, via))
 				if err != nil {
 					return nil, err
@@ -295,7 +318,7 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 
 				return jsonResult(map[string]any{"watch": w,
 					"next": "The first run starts within a minute. list_watches shows what each run found."}), nil
-			})
+			}, nil
 		})
 
 	add(ToolListWatches, "Amass watches",
@@ -439,6 +462,8 @@ func addOperatorTools(server *mcp.Server, op *Operator, runner ai.ToolRunner) {
 			return jsonResult(map[string]any{"url": link, "expires": expires.Format(time.RFC3339),
 				"next": "Give the user this link to open in a browser on the computer running Amass. It works once."}), nil
 		})
+
+	return caps
 }
 
 // confirmKey names the approval input request.

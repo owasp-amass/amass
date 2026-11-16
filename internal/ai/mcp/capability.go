@@ -29,10 +29,22 @@ const (
 // actions and, ahead, the config assistant — is declared as a capability so
 // there is one registration path, one dispatch, and the access tier is a
 // property of the tool rather than a function of where it was wired.
+//
+// A capability sets exactly one of handle and approve. handle runs the tool
+// directly. approve declares that the action always needs the user's consent:
+// it validates the request and returns the message to show and the act to
+// carry out, and the framework — not the handler — passes both to the
+// operator's gate, so an action that writes or collects cannot be registered
+// without its approval step.
 type capability struct {
 	tool   *mcp.Tool
 	tier   tier
 	handle func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error)
+	// approve validates the call and returns the approval message and the act
+	// to run once the user approves, or an error to return to the model. It is
+	// used only by operator tier capabilities, where gate is available.
+	approve func(context.Context, *mcp.CallToolRequest, json.RawMessage) (string,
+		func(via string) (*mcp.CallToolResult, error), error)
 }
 
 // availableTo reports whether a connection may be served this capability. A
@@ -43,10 +55,36 @@ func (c capability) availableTo(operator bool) bool {
 }
 
 // registerCapabilities adds each capability the connection may use to the
-// server through one path.
-func registerCapabilities(server *mcp.Server, caps []capability, operator bool) {
+// server through one path. op is the operator the connection acts as, or nil
+// for a read-only connection; it decides which capabilities are available and
+// enforces the approval step for the ones that declare it.
+func registerCapabilities(server *mcp.Server, caps []capability, op *Operator) {
 	for _, c := range caps {
-		if !c.availableTo(operator) {
+		if !c.availableTo(op != nil) {
+			continue
+		}
+		if c.approve != nil {
+			if op == nil {
+				// An approval-gated capability cannot run without an operator to
+				// gate it; availableTo keeps this from happening.
+				continue
+			}
+
+			approve := c.approve
+			server.AddTool(c.tool, func(ctx context.Context,
+				req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				var args json.RawMessage
+				if req.Params != nil {
+					args = req.Params.Arguments
+				}
+
+				msg, act, err := approve(ctx, req, args)
+				if err != nil {
+					return errorResult(err), nil
+				}
+
+				return op.gate(req, msg, act)
+			})
 			continue
 		}
 
