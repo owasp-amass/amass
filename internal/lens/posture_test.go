@@ -111,6 +111,74 @@ func TestFindCertificates(t *testing.T) {
 	}
 }
 
+func TestCAAAuthorizedCAs(t *testing.T) {
+	cas := caaAuthorizedCAs([]string{
+		`0 issue "letsencrypt.org"`,
+		`0 issuewild "digicert.com; cansignhttpexchanges=yes"`,
+		`0 iodef "mailto:security@colgate.edu"`,
+		`0 issue ";"`,
+	})
+	want := []string{"digicert.com", "letsencrypt.org"}
+	if len(cas) != len(want) {
+		t.Fatalf("authorized CAs = %v, want %v", cas, want)
+	}
+	for i := range want {
+		if cas[i] != want[i] {
+			t.Fatalf("authorized CAs = %v, want %v", cas, want)
+		}
+	}
+	// A policy of only iodef (no issue/issuewild) authorizes no CA.
+	if cas := caaAuthorizedCAs([]string{`0 iodef "mailto:x@y"`}); len(cas) != 0 {
+		t.Errorf("iodef-only policy authorized %v", cas)
+	}
+}
+
+func TestFindCertificatesCAA(t *testing.T) {
+	defer func(f func() time.Time) { certificateNow = f }(certificateNow)
+	certificateNow = func() time.Time { return time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC) }
+
+	// Without CAA on the apex, the lens reports a no_caa finding.
+	g := postureFixture()
+	r, err := FindCertificates(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.AuthorizedCAs) != 0 {
+		t.Errorf("authorized CAs without a policy = %+v", r.AuthorizedCAs)
+	}
+	noCAA := false
+	for _, f := range r.Findings {
+		if f.Kind == CertNoCAA {
+			noCAA = true
+		}
+	}
+	if !noCAA {
+		t.Errorf("a domain without CAA was not flagged: %+v", r.Findings)
+	}
+
+	// With a CAA policy, the lens reports the authorized CAs and no finding.
+	g = postureFixture()
+	g.EvidenceByID["colgate.edu"] = append(g.EvidenceByID["colgate.edu"],
+		graphtest.CAARecord(`0 issue "letsencrypt.org"`),
+		graphtest.CAARecord(`0 issuewild "digicert.com"`))
+	r, err = FindCertificates(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.AuthorizedCAs) != 1 || r.AuthorizedCAs[0].Domain != "colgate.edu" ||
+		len(r.AuthorizedCAs[0].CAs) != 2 {
+		t.Fatalf("authorized CAs = %+v", r.AuthorizedCAs)
+	}
+	for _, f := range r.Findings {
+		if f.Kind == CertNoCAA {
+			t.Errorf("a domain with a CAA policy was flagged no_caa: %+v", r.Findings)
+		}
+	}
+	if !strings.Contains(r.Text(), "Authorized to issue (CAA):") {
+		t.Errorf("report lacks the CAA section:\n%s", r.Text())
+	}
+}
+
 // A certificate that names its subject only in its alternative names is
 // reported by the first name it covers.
 func TestFindCertificatesWithoutCommonName(t *testing.T) {

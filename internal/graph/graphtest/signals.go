@@ -12,3 +12,10 @@ func TXTRecord(data string) graph.Evidence {
 	return graph.Evidence{Kind: "DNSRecordProperty", Property: map[string]any{"property_name": "dns_record",
 		"header": map[string]any{"rr_type": graph.RRTypeTXT, "class": 1}, "data": data}}
 }
+
+// CAARecord builds an Evidence entry for a stored CAA record, its data
+// rendered as `<flags> <tag> "<value>"`.
+func CAARecord(data string) graph.Evidence {
+	return graph.Evidence{Kind: "DNSRecordProperty", Property: map[string]any{"property_name": "dns_record",
+		"header": map[string]any{"rr_type": graph.RRTypeCAA, "class": 1}, "data": data}}
+}

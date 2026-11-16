@@ -17,6 +17,7 @@ const (
 
 const (
 	RRTypeTXT = 16
+	RRTypeCAA = 257
 )
 
 // TXTValues returns the TXT record values stored for an asset.
@@ -43,6 +44,37 @@ func TXTValues(ctx context.Context, graph Graph, id string) ([]string, error) {
 		if json.Unmarshal(data, &p) == nil && p.Name == DNSRecordProperty && p.Header.RRType == RRTypeTXT &&
 			p.Data != "" {
 			out = append(out, strings.Trim(p.Data, `"`))
+		}
+	}
+
+	return out, nil
+}
+
+// CAAValues returns the CAA record rdata strings stored for an asset, each
+// rendered as `<flags> <tag> "<value>"`, such as `0 issue "letsencrypt.org"`.
+func CAAValues(ctx context.Context, graph Graph, id string) ([]string, error) {
+	evidence, err := graph.Evidence(ctx, id, 100)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, e := range evidence {
+		data, err := json.Marshal(e.Property)
+		if err != nil {
+			continue
+		}
+
+		var p struct {
+			Name   string `json:"property_name"`
+			Header struct {
+				RRType int `json:"rr_type"`
+			} `json:"header"`
+			Data string `json:"data"`
+		}
+		if json.Unmarshal(data, &p) == nil && p.Name == DNSRecordProperty && p.Header.RRType == RRTypeCAA &&
+			p.Data != "" {
+			out = append(out, p.Data)
 		}
 	}
 

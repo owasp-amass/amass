@@ -44,9 +44,10 @@ const (
 	CertOverlong   = "overlong_validity"
 	CertWildcard   = "wildcard"
 	CertShared     = "covers_other_domains"
+	CertNoCAA      = "no_caa"
 )
 
-var certOrder = []string{CertExpired, CertExpiring, CertWeak, CertSelfIssued, CertOverlong, CertWildcard, CertShared}
+var certOrder = []string{CertExpired, CertExpiring, CertWeak, CertSelfIssued, CertOverlong, CertWildcard, CertShared, CertNoCAA}
 
 // CertificateFinding is one certificate that stands out.
 type CertificateFinding struct {
@@ -66,8 +67,18 @@ type CertificatesReport struct {
 	lensBase
 	Certificates int `json:"certificates"`
 	// Issuers are the authorities that issued the certificates, by count.
-	Issuers  []ChangeGroup        `json:"issuers"`
-	Findings []CertificateFinding `json:"findings"`
+	Issuers []ChangeGroup `json:"issuers"`
+	// AuthorizedCAs lists, per owned apex domain that publishes a CAA
+	// policy, the certificate authorities that policy permits to issue.
+	AuthorizedCAs []DomainCAs          `json:"authorized_cas,omitempty"`
+	Findings      []CertificateFinding `json:"findings"`
+}
+
+// DomainCAs is the set of certificate authorities a domain's CAA policy
+// authorizes to issue certificates for it.
+type DomainCAs struct {
+	Domain string   `json:"domain"`
+	CAs    []string `json:"cas"`
 }
 
 var certificatesJSON = semantics.File("certificates.json")
@@ -172,6 +183,10 @@ func FindCertificates(ctx context.Context, g graph.Graph, schema graph.SchemaCat
 		findings = append(findings, f...)
 	}
 
+	authorized, noCAA := s.certificateAuthority()
+	out.AuthorizedCAs = authorized
+	findings = append(findings, noCAA...)
+
 	rank := map[string]int{}
 	for i, k := range certOrder {
 		rank[k] = i
@@ -192,6 +207,96 @@ func FindCertificates(ctx context.Context, g graph.Graph, schema graph.SchemaCat
 	out.Issuers = issuers.list("issuers")
 	out.Findings = findings
 	return out, nil
+}
+
+// certificateAuthority reads the CAA policy of each owned apex domain and
+// reports which certificate authorities it authorizes. A domain that
+// publishes no issuance policy (no CAA, or only iodef) lets any CA issue for
+// it, which is reported as a no_caa finding.
+func (s *scope) certificateAuthority() ([]DomainCAs, []CertificateFinding) {
+	var authorized []DomainCAs
+	var without []string
+	seen := map[string]bool{}
+	for _, id := range s.order {
+		if s.spent() {
+			break
+		}
+		a := s.owned[id]
+		if a.Type != "FQDN" {
+			continue
+		}
+		name := graph.FQDNName(a)
+		if name == "" || name != graph.RegisteredDomain(name) || reservedName(name) || seen[name] {
+			continue
+		}
+		seen[name] = true
+
+		values, err := graph.CAAValues(s.w.ctx, s.w.graph, id)
+		if err != nil {
+			continue
+		}
+		if cas := caaAuthorizedCAs(values); len(cas) > 0 {
+			authorized = append(authorized, DomainCAs{Domain: name, CAs: cas})
+		} else {
+			without = append(without, name)
+		}
+	}
+
+	sort.Slice(authorized, func(i, j int) bool { return authorized[i].Domain < authorized[j].Domain })
+	sort.Strings(without)
+
+	var findings []CertificateFinding
+	if len(without) > 0 {
+		examples := without
+		if len(examples) > 5 {
+			examples = examples[:5]
+		}
+		findings = append(findings, CertificateFinding{
+			Kind:     CertNoCAA,
+			Subject:  without[0],
+			Names:    len(without),
+			Examples: examples,
+			Detail: fmt.Sprintf("%d owned domain(s) publish no CAA policy, so any certificate authority "+
+				"may issue certificates for them", len(without)),
+		})
+	}
+	return authorized, findings
+}
+
+// caaAuthorizedCAs extracts the certificate authorities permitted by a set of
+// CAA records. Each record reads `<flags> <tag> "<value>"`; only issue and
+// issuewild tags restrict issuance, and the authority is the hostname before
+// any parameters. An empty value (`;`) forbids issuance and authorizes no CA.
+func caaAuthorizedCAs(values []string) []string {
+	seen := map[string]bool{}
+	var cas []string
+	for _, v := range values {
+		tag, value, ok := parseCAA(v)
+		if !ok || (tag != "issue" && tag != "issuewild") {
+			continue
+		}
+		ca := strings.TrimSpace(value)
+		if i := strings.IndexByte(ca, ';'); i >= 0 {
+			ca = strings.TrimSpace(ca[:i])
+		}
+		if ca == "" || seen[ca] {
+			continue
+		}
+		seen[ca] = true
+		cas = append(cas, ca)
+	}
+	sort.Strings(cas)
+	return cas
+}
+
+// parseCAA splits a CAA rdata string `<flags> <tag> "<value>"` into its tag
+// and unquoted value.
+func parseCAA(s string) (tag, value string, ok bool) {
+	fields := strings.SplitN(strings.TrimSpace(s), " ", 3)
+	if len(fields) != 3 {
+		return "", "", false
+	}
+	return strings.ToLower(fields[1]), strings.Trim(fields[2], `"`), true
 }
 
 // certificate reads one certificate's names, services and issuer and
@@ -333,15 +438,26 @@ func (r CertificatesReport) Text() string {
 			fmt.Fprintf(&b, "  %s: %d, e.g. %s\n", i.Key, i.Count, strings.Join(i.Examples, ", "))
 		}
 	}
+	if len(r.AuthorizedCAs) > 0 {
+		b.WriteString("\nAuthorized to issue (CAA):\n")
+		for _, d := range r.AuthorizedCAs {
+			fmt.Fprintf(&b, "  %s: %s\n", d.Domain, strings.Join(d.CAs, ", "))
+		}
+	}
 
 	titles := map[string]string{CertExpired: "Expired", CertExpiring: "Expiring soon",
 		CertWeak: "Weak signature algorithm", CertSelfIssued: "Self-issued", CertOverlong: "Longer than allowed",
-		CertWildcard: "Wildcards", CertShared: "Covering other domains"}
+		CertWildcard: "Wildcards", CertShared: "Covering other domains", CertNoCAA: "No CAA policy"}
 	for _, kind := range certOrder {
 		var lines []string
 		for _, f := range r.Findings {
 			if f.Kind == kind {
-				line := fmt.Sprintf("  %s (%s): %s", f.Subject, f.Issuer, f.Detail)
+				var line string
+				if kind == CertNoCAA {
+					line = "  " + f.Detail
+				} else {
+					line = fmt.Sprintf("  %s (%s): %s", f.Subject, f.Issuer, f.Detail)
+				}
 				if len(f.Examples) > 0 && kind != CertShared {
 					line += "; e.g. " + strings.Join(f.Examples, ", ")
 				}
