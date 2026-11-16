@@ -42,7 +42,10 @@ type SubdomainName struct {
 	// Records are the DNS record types stored for the name (A, MX, TXT and
 	// so on), sorted. An empty list means the name was discovered but no DNS
 	// record was verified for it.
-	Records   []string `json:"records,omitempty"`
+	Records []string `json:"records,omitempty"`
+	// Aliases are the names a CNAME chain points through, in order, so the
+	// raw target is shown rather than only the addresses it resolves to.
+	Aliases   []string `json:"aliases,omitempty"`
 	Addresses []string `json:"addresses,omitempty"`
 	// Aliased marks a name whose addresses are reached through a CNAME
 	// chain rather than stored on the name itself.
@@ -146,6 +149,9 @@ func (sc *subScan) resolve(name graph.Asset) (SubdomainName, error) {
 	}
 
 	entry.Aliased = res.Aliased()
+	for _, alias := range res.Aliases {
+		graph.AddUnique(&entry.Aliases, graph.FQDNName(alias))
+	}
 
 	countedAS := map[string]bool{}
 	countedNet := map[string]bool{}
@@ -320,11 +326,11 @@ func (r SubdomainsReport) Text() string {
 		}
 
 		line := n.Name + " [" + strings.Join(n.Records, ", ") + "]"
+		if len(n.Aliases) > 0 {
+			line += " -> " + strings.Join(n.Aliases, " -> ")
+		}
 		if len(n.Addresses) > 0 {
 			line += " -> " + strings.Join(n.Addresses, ", ")
-			if n.Aliased {
-				line += " (via alias)"
-			}
 		}
 
 		fmt.Fprintf(&b, "  %s\n", line)

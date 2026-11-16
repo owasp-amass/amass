@@ -59,8 +59,13 @@ func recordTypesOf(w *lensWalker, name graph.Asset) ([]string, error) {
 		return nil, err
 	}
 	for _, s := range steps {
+		// A dns-purpose relation carries an RR type only when it is an actual
+		// record; one with no type (verified_for, for example) is a different
+		// kind of relationship, not a record, so skip it.
 		if s.forward && s.purpose == rules.DNSPurpose {
-			set[rules.recordTypeName(relationRRType(s.edge))] = true
+			if rr := relationRRType(s.edge); rr != 0 {
+				set[rules.recordTypeName(rr)] = true
+			}
 		}
 	}
 

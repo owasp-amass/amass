@@ -117,7 +117,8 @@ func TestFindSubdomainsFollowsAliasesAndRanges(t *testing.T) {
 
 	names := subdomainsByName(r)
 	cdn := names["cdn.colgate.edu"]
-	if !cdn.Aliased || len(cdn.Addresses) != 2 || cdn.Addresses[0] != "13.32.1.1" {
+	if !cdn.Aliased || len(cdn.Addresses) != 2 || cdn.Addresses[0] != "13.32.1.1" ||
+		len(cdn.Aliases) != 1 || cdn.Aliases[0] != "d1.cloudfront.net" {
 		t.Errorf("aliased name = %+v", cdn)
 	}
 	if n := groupCount(r.ByAutonomousSystem, "AS16509 (AMAZON-02)"); n != 1 {
