@@ -27,6 +27,7 @@ import (
 )
 
 var pluginNewFuncs = []func() et.Plugin{
+	api.NewAnubis,
 	api.NewBinaryEdge,
 	api.NewCertSpotter,
 	api.NewChaos,
@@ -40,6 +41,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewPassiveTotal,
 	api.NewProspeo,
 	api.NewSecurityTrails,
+	api.NewThreatMiner,
 	//api.NewURLScan,
 	api.NewVirusTotal,
 	api.NewZetalytics,
