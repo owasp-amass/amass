@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v5/engine/plugins/lookalike"
+	mtasts "github.com/owasp-amass/amass/v5/engine/plugins/mta_sts"
 	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
 	bannerp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/banner_probes"
 	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
@@ -61,6 +62,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
 	lookalike.NewLookalikes,
+	mtasts.NewMTASTS,
 	sshp.NewSSHProbing,
 	bannerp.NewBannerProbing,
 	rdap.NewRDAP,
