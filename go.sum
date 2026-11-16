@@ -36,8 +36,12 @@ github.com/caffix/pipeline v0.3.1-0.20260303045422-389f03cd4573 h1:zhUXUZkWtmd7T
 github.com/caffix/pipeline v0.3.1-0.20260303045422-389f03cd4573/go.mod h1:C0kyrTEhrDL675c1oLfq5gWjIaBItEuXPDHB89Bp9zw=
 github.com/caffix/queue v0.4.1-0.20260303044231-38e3190f084d h1:gOj4O04Z7gIg/EMM3r/Yobzhu15btgCDvcH+uOZfCv8=
 github.com/caffix/queue v0.4.1-0.20260303044231-38e3190f084d/go.mod h1:TG0xRz5IXKbo/YDDBlHTGYWVvO6RES2yqBXF+xuP0wg=
+github.com/caffix/queue v0.4.1-0.20261024025115-6facdac4cb31 h1:KOSQh/Sf0l71G0GQtwychqrYYPP+q8xxUkN9cV1ZjGc=
+github.com/caffix/queue v0.4.1-0.20261024025115-6facdac4cb31/go.mod h1:GJtajiY/BiO/pFRmsD4BZhVyBBnQvI9do5Fy0iuQb1s=
 github.com/caffix/stringset v0.2.1-0.20260303044338-0122c4694af1 h1:lrYQ3sYLFkD/ptawis66Luk7/0FMDvCfwo86lp1iKm4=
 github.com/caffix/stringset v0.2.1-0.20260303044338-0122c4694af1/go.mod h1:7vfonc1Ha23yE4MutmEjnP/DD9w6yMB+n9Frr4URfeU=
+github.com/caffix/stringset v0.2.1-0.20261024023700-d473a986fc28 h1:CeG0GZNSaeHGYko8onifjYiOopIgzetFh4WN3FnEcm4=
+github.com/caffix/stringset v0.2.1-0.20261024023700-d473a986fc28/go.mod h1:DXymjXjZ64yAlPi7zxDmmz0wNI48pjuOALBf2QJkL18=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -240,6 +244,8 @@ github.com/owasp-amass/open-asset-model v0.15.2-0.20261116161148-3a125c73b259 h1
 github.com/owasp-amass/open-asset-model v0.15.2-0.20261116161148-3a125c73b259/go.mod h1:lNpoDkozJlcCDJvJ3utYqNOZJi/lRlkM1KLHHEDYc80=
 github.com/owasp-amass/resolve v0.10.0 h1:ju0vmWNimFlEH+GpIIa/uB97c9cRWqoOmDc5tqOzbNc=
 github.com/owasp-amass/resolve v0.10.0/go.mod h1:3uESEBPVXJMGoopA1CViALt44C2frruypc2OFKRytr4=
+github.com/owasp-amass/resolve v0.10.1 h1:oVgY1mkcgxWPMits6ZAMjT9IdFcsXsGPE/1iZqex8ys=
+github.com/owasp-amass/resolve v0.10.1/go.mod h1:U5k7VLq8i7Vbq68hH+2mFbwxUiolrQWIVTOAnO+h9F4=
 github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=
 github.com/pierrec/lz4/v4 v4.1.33/go.mod h1:7SE9MC2STkNtL4PIwGhjmyVwvILaGI9/COYQNBhKM/c=
 github.com/pioz/countries v0.2.2 h1:/azGjMXnjNxb8SiMJg1VWX7Hl6faOGc0Y3gi2F5NZGs=

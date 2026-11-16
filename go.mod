@@ -10,8 +10,8 @@ require (
 	github.com/caffix/fullname_parser v0.0.0-20260303050922-5979016ffef9
 	github.com/caffix/jarm-go v0.0.0-20260306052330-3d837f3b03fc
 	github.com/caffix/pipeline v0.3.1-0.20260303045422-389f03cd4573
-	github.com/caffix/queue v0.4.1-0.20260303044231-38e3190f084d
-	github.com/caffix/stringset v0.2.1-0.20260303044338-0122c4694af1
+	github.com/caffix/queue v0.4.1-0.20261024025115-6facdac4cb31
+	github.com/caffix/stringset v0.2.1-0.20261024023700-d473a986fc28
 	github.com/cheggaaa/pb/v3 v3.2.1
 	github.com/fatih/color v1.19.0
 	github.com/google/uuid v1.6.1-0.20241114170450-2d3c2a9cc518
@@ -27,7 +27,7 @@ require (
 	github.com/openrdap/rdap v0.10.2
 	github.com/owasp-amass/asset-db v0.24.6-0.20261116053710-e4dd350a4b44
 	github.com/owasp-amass/open-asset-model v0.15.2-0.20261116161148-3a125c73b259
-	github.com/owasp-amass/resolve v0.10.0
+	github.com/owasp-amass/resolve v0.10.1
 	github.com/pioz/countries v0.2.2
 	github.com/samber/slog-common v0.22.0
 	github.com/samber/slog-syslog/v2 v2.5.4
