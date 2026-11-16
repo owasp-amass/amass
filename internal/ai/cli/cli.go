@@ -40,7 +40,7 @@ const Description = "Ask questions with a language model, MCP tools, and model-a
 // their proposals are amass lens and amass review (package internal/lens/cli);
 // amass ai still runs them by their old names, with a note.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
-	"train-attribution", "review"}
+	"train-attribution", "review", "config"}
 
 func CLIWorkflow(_ string, args []string) {
 	if err := Run(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
@@ -79,7 +79,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	var maxTokens, contextTokens int
 	var temperatureFlag string
 	var think, showTrace, narrate, mcpOperator bool
-	var classifierReview, allowHTTP bool
+	var classifierReview, allowHTTP, applyConfig bool
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&endpoint, "endpoint", "", "Provider endpoint (defaults depend on provider)")
@@ -139,6 +139,9 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.BoolVar(&showTrace, "trace", false, "Print stage timings and model usage to stderr after ask")
 	fs.BoolVar(&mcpOperator, "operator", false,
 		"mcp: also offer the operator tools (start enumerations, review proposals, manage data sources)")
+	fs.BoolVar(&applyConfig, "approve-config", false,
+		"config: write the suggested configuration to -config without prompting (otherwise it is only shown, or "+
+			"you are asked at an interactive terminal)")
 	fs.BoolVar(&narrate, "narrate", false,
 		"After ask, have the model write a short cited summary, verified against the answer's evidence")
 	fs.DurationVar(&modelTimeout, "model-timeout", 3*time.Minute,
@@ -283,7 +286,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	// collection and the other proposal operations never build a model
 	// client, so a model setting cannot break them.
 	usesModel := operation == "plan" || operation == "ask" || operation == "eval" || operation == "infer" ||
-		operation == "scan" || operation == "review"
+		operation == "scan" || operation == "review" || operation == "config"
 	var provider llm.Model
 	if usesModel && modelName != "" {
 		var err error
@@ -336,6 +339,20 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		}
 
 		return writeJSON(out, q)
+	}
+	if operation == "config" {
+		// The config assistant reads the schema, the current file and the model;
+		// it never opens the Asset Database.
+		if provider == nil {
+			return errors.New("-model required: config asks the model to suggest a configuration")
+		}
+		if question == "" {
+			return errors.New("-question required: describe the configuration you want")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
+		defer cancel()
+		return configAssist(ctx, in, out, errout, provider, configPath, question, applyConfig)
 	}
 
 	repo := tools.OpenGraphDatabase(cfg)
