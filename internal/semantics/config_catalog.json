@@ -1,0 +1,46 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Describes every Amass configuration setting so the AI config assistant can explain settings and propose changes grounded in the schema, not in hardcoded prose. Paths use dots: scope.domains, options.database. The transformations.* and datasources.* entries describe the per-item fields of a FROM->TO transformation and of a data source. A test fails when a config struct field or documented option has no entry here, so add an entry when a field is added. Nothing here enables collection or names a specific target; it only describes the schema.",
+  "sections": {
+    "seed": "Where an enumeration starts: the existing knowledge about the target (its domains, known names, address space, or company). The one section you really need; every seed entry is also in scope.",
+    "scope": "The boundary a discovered asset must fall within to be kept. Unless the run is -rigid, the engine may widen it as evidence appears, so it is a starting boundary, not a hard cap.",
+    "options": "Operational settings: the database, the engine, DNS resolvers, brute-force and alteration wordlists, active-probe pacing, and the default transform values.",
+    "transformations": "Which Open Asset Model asset-type transitions the engine collects, and each one's TTL, confidence, priority and excluded data sources. A key is FROM->TO, where TO is an asset type, ALL (every transition from that type), NONE (collect nothing from that type), or a data source name.",
+    "datasources": "The external data sources and their per-source credentials and TTLs, kept in the datasources.yaml file named by options.datasources.",
+    "ai": "Optional model, classifier and attribution settings. Advisory only; it never turns AI on by itself."
+  },
+  "fields": {
+    "active": {"section": "options", "type": "boolean", "default": "false", "description": "Whether active collection is allowed: zone transfers, certificate name grabs and service probes that contact the target directly. Passive collection is the default. The -active command-line flag sets it.", "example": "true"},
+    "rigid_boundaries": {"section": "scope", "type": "boolean", "default": "false", "description": "When true, the scope never expands: only assets inside the configured scope are kept. When false, the engine may add assets it finds strong evidence belong to the target. The -rigid flag sets it.", "example": "true"},
+
+    "scope.domains": {"section": "scope", "type": "list of registered domain names", "description": "Registered domains allowed in scope. A name is in scope when it is one of these or a subdomain of one.", "example": "owasp.org"},
+    "scope.ips": {"section": "scope", "type": "list of IP addresses and ranges", "description": "IP addresses allowed in scope. Single addresses, dash ranges (192.0.2.3-8) and full ranges (192.0.2.10-192.0.2.20) are accepted.", "example": "192.0.2.1"},
+    "scope.cidrs": {"section": "scope", "type": "list of CIDR ranges", "description": "CIDR ranges allowed in scope; an address inside one is in scope.", "example": "192.0.2.0/24"},
+    "scope.asns": {"section": "scope", "type": "list of integers", "description": "Autonomous system numbers allowed in scope; the networks they announce are in scope.", "example": "64496"},
+    "scope.organizations": {"section": "scope", "type": "list of company names", "description": "Organizations (corporations) discovered assets must be attributable to. In the seed, a starting point the engine resolves to the company's domains, networks and systems.", "example": "Example Corporation"},
+    "scope.ports": {"section": "scope", "type": "list of integers or ranges", "description": "Ports active enumeration may probe on in-scope addresses. Omit to probe every port the probes know; list ports only to narrow that. Ranges such as 8000-8010 work.", "example": "443"},
+    "scope.blacklist": {"section": "scope", "type": "list of subdomain names", "description": "Subdomains that will never be investigated, even when otherwise in scope.", "example": "internal.owasp.org"},
+    "scope.names": {"section": "seed", "type": "list of DNS names", "description": "Seed only. Known DNS names (leads), usually subdomains of an in-scope domain, supplied so the enumeration does not overlook them. Each lead's registered domain is added to the scope. The -nf flag adds names the same way.", "example": "vpn.owasp.org"},
+    "scope.names_file": {"section": "seed", "type": "file path", "description": "Seed only. A file of seed DNS names, one per line; its names are treated as leads like seed.names.", "example": "./known-names.txt"},
+
+    "options.datasources": {"section": "options", "type": "file path", "description": "Path to the datasources.yaml file holding data source credentials and TTLs.", "example": "./datasources.yaml"},
+    "options.database": {"section": "options", "type": "connection string", "default": "a local SQLite database under the output directory", "description": "The asset database connection string. PostgreSQL (postgres://...) and Neo4j (neo4j://... or bolt://...) are supported; without this a local SQLite database is used.", "example": "postgres://amass:password@assetdb:5432/assetdb"},
+    "options.engine": {"section": "options", "type": "URL", "default": "http://127.0.0.1:4000 (a local engine is started when none is given)", "description": "URL of the collection engine the client connects to.", "example": "http://127.0.0.1:4000"},
+    "options.resolvers": {"section": "options", "type": "list of IP addresses", "description": "Untrusted DNS resolvers used for name resolution.", "example": "8.8.8.8"},
+    "options.bruteforce": {"section": "options", "type": "object {enabled, wordlists}", "default": "disabled", "description": "DNS brute forcing: enabled on/off and the wordlist files it uses.", "example": "enabled: true"},
+    "options.alterations": {"section": "options", "type": "object {enabled, wordlists}", "default": "disabled", "description": "Name alteration generation: enabled on/off and the wordlist files it uses.", "example": "enabled: true"},
+    "options.default_transform_values": {"section": "options", "type": "object {ttl, confidence, priority}", "default": "ttl 1440, confidence 50, priority 5", "description": "Defaults applied to a transformation that does not set its own ttl, confidence or priority.", "example": "ttl: 1440"},
+    "options.minimum_ttl": {"section": "options", "type": "integer minutes", "default": "1440", "description": "The smallest TTL applied to data source responses; a source's shorter TTL is raised to this.", "example": "1440"},
+    "options.probe_pace_ms": {"section": "options", "type": "integer milliseconds", "default": "500", "description": "Minimum spacing between active probes to one host, so a host is not reached by a burst across ports. 0 turns pacing off. Only hosts you control should be probed without pacing.", "example": "500"},
+    "options.probe_jitter_ms": {"section": "options", "type": "integer milliseconds", "default": "1500", "description": "Additional random spread added to the probe pace, so a host's probes do not arrive on a fixed rhythm.", "example": "1500"},
+
+    "transformations.ttl": {"section": "transformations", "type": "integer minutes", "description": "How long a FROM->TO result is reused before it is collected again. A larger value re-collects less often.", "example": "43200"},
+    "transformations.confidence": {"section": "transformations", "type": "integer 0-100", "description": "The minimum confidence a result of this transition needs to be kept.", "example": "50"},
+    "transformations.priority": {"section": "transformations", "type": "integer", "description": "The relative order in which this transition runs; lower runs sooner.", "example": "5"},
+    "transformations.exclude": {"section": "transformations", "type": "list of data source names", "description": "Data sources not to use for this transition, when the rest are still wanted.", "example": "WHOIS"},
+
+    "datasources.name": {"section": "datasources", "type": "string", "description": "The data source the entry configures, matching a source Amass knows.", "example": "GLEIF"},
+    "datasources.ttl": {"section": "datasources", "type": "integer minutes", "description": "How long this source's responses are reused before the source is queried again.", "example": "10080"},
+    "datasources.creds": {"section": "datasources", "type": "object of named credential sets {username, password, apikey, secret}", "description": "The source's credentials. Secrets are entered by the operator, never by a model.", "example": "apikey: YOUR_KEY"}
+  }
+}
