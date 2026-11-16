@@ -28,6 +28,10 @@
       "title": "Vulnerability disclosure"
     },
     {
+      "lens": "headers",
+      "title": "Web security headers"
+    },
+    {
       "lens": "lookalikes",
       "title": "Lookalike domains"
     },

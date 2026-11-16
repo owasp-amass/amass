@@ -27,6 +27,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens domains -d <domain>` or `-org <name>` | Its registered domains: registrar, expiry, transfer lock, DNSSEC and DNS providers |
 | `amass lens email -d <domain>` or `-org <name>` | Its mail providers and SPF, DMARC and DKIM records, and which domains can be spoofed |
 | `amass lens disclosure -d <domain>` or `-org <name>` | How it invites vulnerability reports: security.txt contacts, policy and encryption links, and which files have expired |
+| `amass lens headers -d <domain>` or `-org <name>` | The HTTP security headers of its web services: HSTS, CSP, clickjacking and MIME-sniffing protection, cookie flags, and what is missing |
 | `amass lens exposure -d <domain>` or `-org <name>` | What it exposes that deserves attention: remote access, databases, file sharing, management interfaces, login pages |
 | `amass lens concentration -d <domain>` or `-org <name>` | How much it relies on single providers for DNS, registration, certificates, hosting and mail |
 | `amass lens coverage -d <domain>` or `-org <name>` | How complete the stored data is, and what collection would fill each gap |
