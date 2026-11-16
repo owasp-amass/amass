@@ -6,6 +6,9 @@ package lens
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"regexp"
 	"slices"
@@ -41,12 +44,14 @@ const (
 	EmailParked        = "unprotected_non_mail_domain"
 	EmailNoDMARC       = "no_dmarc"
 	EmailDMARCMonitor  = "dmarc_monitor_only"
+	EmailDKIMWeak      = "weak_dkim_key"
 	EmailDMARCPartial  = "dmarc_partial"
 	EmailSPFSoftfail   = "spf_softfail"
+	EmailDKIMRevoked   = "revoked_dkim_key"
 )
 
 var emailOrder = []string{EmailSPFPermissive, EmailNoSPF, EmailParked, EmailNoDMARC, EmailDMARCMonitor,
-	EmailDMARCPartial, EmailSPFSoftfail}
+	EmailDKIMWeak, EmailDMARCPartial, EmailSPFSoftfail, EmailDKIMRevoked}
 
 // MailDomain is the mail posture of one registered domain.
 type MailDomain struct {
@@ -56,6 +61,10 @@ type MailDomain struct {
 	DMARC        string   `json:"dmarc,omitempty"`
 	DMARCPolicy  string   `json:"dmarc_policy,omitempty"`
 	DKIMSelector []string `json:"dkim_selectors,omitempty"`
+	// DKIMWeak lists selectors whose key is a weak RSA key (under 1024 bits),
+	// DKIMRevoked those whose key is revoked (an empty p= tag).
+	DKIMWeak    []string `json:"dkim_weak,omitempty"`
+	DKIMRevoked []string `json:"dkim_revoked,omitempty"`
 }
 
 // EmailFinding is one domain that stands out.
@@ -140,6 +149,8 @@ func FindEmailSecurity(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 	rules := loadEmailRules()
 	apexes := map[string]graph.Asset{}
 	dkim := map[string][]string{}
+	dkimWeak := map[string][]string{}
+	dkimRevoked := map[string][]string{}
 	for _, id := range s.order {
 		a := s.owned[id]
 		if a.Type != "FQDN" {
@@ -163,10 +174,26 @@ func FindEmailSecurity(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 			if err != nil {
 				return out, err
 			}
-			if slices.ContainsFunc(txt, func(t string) bool { return hasPrefixFold(t, rules.DKIMPrefix) }) {
+			for _, t := range txt {
+				if !hasPrefixFold(t, rules.DKIMPrefix) {
+					continue
+				}
+
 				list := dkim[d]
 				graph.AddUnique(&list, sel)
 				dkim[d] = list
+
+				switch status, bits := dkimKeyHealth(t); status {
+				case "revoked":
+					l := dkimRevoked[d]
+					graph.AddUnique(&l, sel)
+					dkimRevoked[d] = l
+				case "weak":
+					l := dkimWeak[d]
+					graph.AddUnique(&l, fmt.Sprintf("%s (%d-bit RSA)", sel, bits))
+					dkimWeak[d] = l
+				}
+				break
 			}
 		}
 	}
@@ -189,6 +216,8 @@ func FindEmailSecurity(ctx context.Context, g graph.Graph, schema graph.SchemaCa
 		}
 
 		m.DKIMSelector = dkim[d]
+		m.DKIMWeak = dkimWeak[d]
+		m.DKIMRevoked = dkimRevoked[d]
 		for _, p := range m.MailServers {
 			providers.add("providers", p, d)
 		}
@@ -365,7 +394,50 @@ func emailFindings(m MailDomain, rules emailRules) []EmailFinding {
 			"a domain that sends no mail can still be spoofed", rules.NoneSPF), "dmarc")
 	}
 
+	for _, w := range m.DKIMWeak {
+		add(EmailDKIMWeak, "its DKIM key at "+w+" is a weak RSA key under 1024 bits, which is feasible to forge",
+			"dkim")
+	}
+	for _, sel := range m.DKIMRevoked {
+		add(EmailDKIMRevoked, "its DKIM record at "+sel+"."+rules.DKIMLabel+
+			" has an empty p= (a revoked key), so that selector cannot sign mail", "dkim")
+	}
+
 	return out
+}
+
+// dkimKeyHealth classifies a DKIM TXT record's public key: "revoked" when the
+// p= tag is present but empty, "weak" (with the key size) when it is an RSA key
+// under 1024 bits, and "" otherwise — including ed25519 keys, which are short
+// but strong, and keys that cannot be parsed, which are not flagged.
+func dkimKeyHealth(txt string) (string, int) {
+	tags := map[string]string{}
+	for _, part := range strings.Split(txt, ";") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(part), "="); ok {
+			tags[strings.ToLower(strings.TrimSpace(k))] = strings.TrimSpace(v)
+		}
+	}
+
+	p, ok := tags["p"]
+	if ok && p == "" {
+		return "revoked", 0
+	}
+	if kt := strings.ToLower(tags["k"]); kt != "" && kt != "rsa" {
+		return "", 0
+	}
+
+	der, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(p), ""))
+	if err != nil {
+		return "", 0
+	}
+	pub, err := x509.ParsePKIXPublicKey(der)
+	if err != nil {
+		return "", 0
+	}
+	if key, ok := pub.(*rsa.PublicKey); ok && key.N.BitLen() < 1024 {
+		return "weak", key.N.BitLen()
+	}
+	return "", 0
 }
 
 // Text implements Report.

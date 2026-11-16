@@ -210,6 +210,12 @@
       "priority": 3
     },
     {
+      "lens": "email",
+      "kind": "weak_dkim_key",
+      "title": "Weak DKIM signing keys",
+      "priority": 3
+    },
+    {
       "lens": "concentration",
       "kind": "single_point_of_failure",
       "any_word": true,
