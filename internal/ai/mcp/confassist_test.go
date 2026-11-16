@@ -78,15 +78,20 @@ func TestDescribeConfigSection(t *testing.T) {
 	}
 
 	var out struct {
-		Fields   map[string]json.RawMessage `json:"fields"`
-		Template string                     `json:"template"`
+		Fields map[string]struct {
+			Section string `json:"section"`
+		} `json:"fields"`
+		Template string `json:"template"`
 	}
 	if err := json.Unmarshal([]byte(resultText(res)), &out); err != nil {
 		t.Fatal(err)
 	}
-	for path := range out.Fields {
-		if !strings.HasPrefix(path, "scope") {
-			t.Errorf("section scope returned an unrelated field: %s", path)
+	if len(out.Fields) == 0 {
+		t.Error("section scope returned no fields")
+	}
+	for path, f := range out.Fields {
+		if f.Section != "scope" {
+			t.Errorf("section scope returned a field from %q: %s", f.Section, path)
 		}
 	}
 	if out.Template != "" {

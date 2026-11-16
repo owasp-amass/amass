@@ -83,7 +83,15 @@ func registerCapabilities(server *mcp.Server, caps []capability, op *Operator) {
 					return errorResult(err), nil
 				}
 
-				return op.gate(req, msg, act)
+				// gate returns the elicitation request (first call) or the act's
+				// result; a refusal or a failed action comes back as an error,
+				// which the model reads as a tool result, not a protocol error.
+				res, err := op.gate(req, msg, act)
+				if err != nil {
+					return errorResult(err), nil
+				}
+
+				return res, nil
 			})
 			continue
 		}
