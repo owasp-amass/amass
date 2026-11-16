@@ -296,6 +296,24 @@ relations:
   - {source: Service, label: terms_of_service, relation_type: SimpleRelation, destination: URL,
      attribution: attribute, purpose: web,
      note: "Terms of service document."}
+  - {source: Service, label: security_contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: third_party, purpose: contact, vendor: false,
+     note: "Security contact from the service's security.txt (RFC 9116); whom to report issues to, which may be the operator or an external platform."}
+  - {source: Service, label: security_policy, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Vulnerability-disclosure policy linked from the service's security.txt."}
+  - {source: Service, label: security_canonical, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Canonical URL(s) of the service's security.txt, for integrity checking."}
+  - {source: Service, label: security_encryption, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Encryption key (such as a PGP key) linked from the service's security.txt."}
+  - {source: Service, label: security_acknowledgments, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Security acknowledgments page linked from the service's security.txt."}
+  - {source: Service, label: security_hiring, relation_type: SimpleRelation, destination: URL,
+     attribution: attribute, purpose: web,
+     note: "Security hiring page linked from the service's security.txt."}
   - {source: TLSCertificate, label: common_name, relation_type: SimpleRelation, destination: FQDN,
      attribution: same_subject, purpose: certificate,
      note: "Subject common name (engine scope association)."}
