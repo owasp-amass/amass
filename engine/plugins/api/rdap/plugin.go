@@ -191,7 +191,10 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		Plugin:       rd,
 		Name:         rd.domain.name,
 		Position:     14,
-		Exclusive:    true,
+		// Shares the stage with the WHOIS FQDN handler: RDAP and WHOIS are
+		// peer registration sources that both enrich the apex DomainRecord,
+		// so neither is exclusive at this position.
+		Exclusive:    false,
 		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.DomainRecord)},
 		EventType:    oam.FQDN,
@@ -218,7 +221,9 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		Plugin:       rd,
 		Name:         rd.domrec.name,
 		Position:     2,
-		Exclusive:    true,
+		// Peer of the WHOIS DomainRecord handler at this stage; both enrich
+		// the record from their own source, so neither is exclusive.
+		Exclusive:    false,
 		MaxInstances: support.MidHandlerInstances,
 		Transforms:   rd.domrec.transforms,
 		EventType:    oam.DomainRecord,
