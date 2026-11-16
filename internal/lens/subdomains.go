@@ -35,9 +35,14 @@ var subdomainsLens = SubjectLens{
 	},
 }
 
-// SubdomainName is one controlled name and the addresses it resolves to.
+// SubdomainName is one controlled name, the DNS record types stored for it,
+// and the addresses it resolves to.
 type SubdomainName struct {
-	Name      string   `json:"name"`
+	Name string `json:"name"`
+	// Records are the DNS record types stored for the name (A, MX, TXT and
+	// so on), sorted. An empty list means the name was discovered but no DNS
+	// record was verified for it.
+	Records   []string `json:"records,omitempty"`
 	Addresses []string `json:"addresses,omitempty"`
 	// Aliased marks a name whose addresses are reached through a CNAME
 	// chain rather than stored on the name itself.
@@ -47,10 +52,14 @@ type SubdomainName struct {
 // SubdomainsReport is the result of the subdomains lens.
 type SubdomainsReport struct {
 	lensBase
-	// Names are the controlled names, sorted. Resolved counts those with at
-	// least one stored address.
-	Names    []SubdomainName `json:"names"`
-	Resolved int             `json:"resolved"`
+	// Names are the controlled names, sorted. WithRecords counts those that
+	// have at least one stored DNS record, Resolving those with at least one
+	// stored address, and DiscoveredOnly those that were discovered but have
+	// no stored DNS record at all.
+	Names          []SubdomainName `json:"names"`
+	WithRecords    int             `json:"with_records"`
+	Resolving      int             `json:"resolving"`
+	DiscoveredOnly int             `json:"discovered_only"`
 	// ByAutonomousSystem and ByNetblock count the names whose addresses fall
 	// into each, most names first.
 	ByAutonomousSystem []ChangeGroup `json:"by_autonomous_system,omitempty"`
@@ -103,8 +112,13 @@ func FindSubdomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 		}
 
 		out.Names = append(out.Names, entry)
+		if len(entry.Records) > 0 {
+			out.WithRecords++
+		} else {
+			out.DiscoveredOnly++
+		}
 		if len(entry.Addresses) > 0 {
-			out.Resolved++
+			out.Resolving++
 		}
 	}
 
@@ -119,6 +133,12 @@ func FindSubdomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 // name under each address's netblock and autonomous system.
 func (sc *subScan) resolve(name graph.Asset) (SubdomainName, error) {
 	entry := SubdomainName{Name: graph.FQDNName(name)}
+
+	records, err := recordTypesOf(sc.s.w, name)
+	if err != nil {
+		return entry, err
+	}
+	entry.Records = records
 
 	res, err := resolveName(sc.s.w, name)
 	if err != nil {
@@ -283,8 +303,9 @@ func (r SubdomainsReport) Text() string {
 		subject += " and " + strings.Join(r.Owners, ", ")
 	}
 
-	fmt.Fprintf(&b, "Subdomains of %s: %d name(s), %d with a stored address (%d reads).\n", subject, len(r.Names),
-		r.Resolved, r.Reads)
+	fmt.Fprintf(&b, "Subdomains of %s: %d name(s), %d with DNS records, %d resolving to an address, "+
+		"%d discovered without records (%d reads).\n", subject, len(r.Names), r.WithRecords, r.Resolving,
+		r.DiscoveredOnly, r.Reads)
 
 	if len(r.Names) == 0 {
 		b.WriteString("\nNo controlled name is stored.\n")
@@ -293,17 +314,20 @@ func (r SubdomainsReport) Text() string {
 
 	b.WriteString("\n")
 	for _, n := range r.Names {
-		if len(n.Addresses) == 0 {
-			fmt.Fprintf(&b, "  %s\n", n.Name)
+		if len(n.Records) == 0 {
+			fmt.Fprintf(&b, "  %s (discovered, no DNS records)\n", n.Name)
 			continue
 		}
 
-		line := strings.Join(n.Addresses, ", ")
-		if n.Aliased {
-			line += " (via alias)"
+		line := n.Name + " [" + strings.Join(n.Records, ", ") + "]"
+		if len(n.Addresses) > 0 {
+			line += " -> " + strings.Join(n.Addresses, ", ")
+			if n.Aliased {
+				line += " (via alias)"
+			}
 		}
 
-		fmt.Fprintf(&b, "  %s -> %s\n", n.Name, line)
+		fmt.Fprintf(&b, "  %s\n", line)
 	}
 
 	if len(r.ByAutonomousSystem) > 0 {

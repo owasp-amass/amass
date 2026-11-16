@@ -170,8 +170,21 @@ func VendorFixture() VendorGraph {
 		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
 	}
 	link := func(from, label, to, rt string) {
-		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
-			Type: rt})
+		rel := graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label, Type: rt}
+		if label == "dns_record" {
+			// Stored DNS records carry their RR type, as real records do.
+			rr := 1 // A, an address record, by default
+			switch {
+			case rt == "PrefDNSRelation":
+				rr = 15 // MX
+			case rt == "SRVDNSRelation":
+				rr = 33 // SRV
+			case rt == "BasicDNSRelation" && g.Assets[to].Type == "FQDN":
+				rr = 5 // CNAME: a record naming another name
+			}
+			rel.Content = map[string]any{"header": map[string]any{"rr_type": rr}}
+		}
+		g.Links = append(g.Links, rel)
 	}
 	named := func(id, typ, name string) { add(id, typ, name, map[string]any{"name": name}) }
 

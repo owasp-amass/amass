@@ -6,9 +6,11 @@ package lens
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
 )
 
@@ -33,6 +35,11 @@ func groupCount(groups []ChangeGroup, key string) int {
 
 func TestFindSubdomains(t *testing.T) {
 	g := graphtest.VendorFixture()
+	// The apex carries records with no address target (MX as a relation, TXT
+	// and CAA as properties); all are record types the lens should report.
+	g.EvidenceByID = map[string][]graph.Evidence{
+		"colgate.edu": {graphtest.TXTRecord("v=spf1 -all"), graphtest.CAARecord(`0 issue "letsencrypt.org"`)},
+	}
 	catalog := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
 
 	r, err := FindSubdomains(context.Background(), g, catalog, g.Assets["colgate.edu"], LensLimits{})
@@ -44,16 +51,30 @@ func TestFindSubdomains(t *testing.T) {
 	if _, ok := names["colgate.edu"]; !ok {
 		t.Errorf("the root name is not listed: %v", r.Names)
 	}
-	if www := names["www.colgate.edu"]; len(www.Addresses) != 1 || www.Addresses[0] != "151.101.1.1" || www.Aliased {
+	if www := names["www.colgate.edu"]; len(www.Addresses) != 1 || www.Addresses[0] != "151.101.1.1" ||
+		www.Aliased || !slices.Equal(www.Records, []string{"A"}) {
 		t.Errorf("www = %+v", www)
 	}
 	if portal := names["portal.colgate.edu"]; len(portal.Addresses) != 1 || portal.Addresses[0] != "149.43.1.1" {
 		t.Errorf("portal = %+v", portal)
 	}
+	// The apex's records come from a relation (MX) and from properties (TXT,
+	// CAA), and it has no address of its own.
+	if apex := names["colgate.edu"]; !slices.Equal(apex.Records, []string{"CAA", "MX", "TXT"}) ||
+		len(apex.Addresses) != 0 {
+		t.Errorf("apex records = %+v", apex)
+	}
 
-	// Only the two names with an address record resolve.
-	if r.Resolved != 2 {
-		t.Errorf("resolved = %d, expected 2 (%+v)", r.Resolved, r.Names)
+	// Two names resolve to an address; the apex has records but no address.
+	if r.Resolving != 2 {
+		t.Errorf("resolving = %d, expected 2 (%+v)", r.Resolving, r.Names)
+	}
+	if r.WithRecords < 3 {
+		t.Errorf("with_records = %d, expected at least 3 (%+v)", r.WithRecords, r.Names)
+	}
+	if len(r.Names) != r.WithRecords+r.DiscoveredOnly {
+		t.Errorf("name classification does not add up: %d names, %d with records, %d discovered-only",
+			len(r.Names), r.WithRecords, r.DiscoveredOnly)
 	}
 
 	if n := groupCount(r.ByAutonomousSystem, "AS1289 (COLGATE-UNIVERSITY)"); n != 1 {
@@ -73,8 +94,9 @@ func TestFindSubdomains(t *testing.T) {
 	}
 
 	text := r.Text()
-	for _, want := range []string{"www.colgate.edu -> 151.101.1.1", "portal.colgate.edu -> 149.43.1.1",
-		"AS1289 (COLGATE-UNIVERSITY): 1 name(s)", "149.43.0.0/16 (AS1289): 1 name(s)"} {
+	for _, want := range []string{"www.colgate.edu [A] -> 151.101.1.1", "portal.colgate.edu [A] -> 149.43.1.1",
+		"colgate.edu [CAA, MX, TXT]", "AS1289 (COLGATE-UNIVERSITY): 1 name(s)",
+		"149.43.0.0/16 (AS1289): 1 name(s)"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("report lacks %q:\n%s", want, text)
 		}

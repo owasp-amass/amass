@@ -63,7 +63,7 @@ var loadCoverageRules = sync.OnceValue(func() coverageRules {
 	if err := graph.DecodeStrict(coverageJSON, &r); err != nil {
 		panic("coverage.json: " + err.Error())
 	}
-	for _, g := range []string{"names_without_address", "domains_without_registration",
+	for _, g := range []string{"names_without_records", "domains_without_registration",
 		"netblocks_without_registration", "addresses_without_netblock", "stale_assets"} {
 		if r.Gaps[g] == "" {
 			panic("coverage.json: gaps." + g + " is required")
@@ -130,13 +130,13 @@ func FindCoverage(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		a := s.owned[id]
 		switch a.Type {
 		case "FQDN":
-			gaps["names_without_address"].Of++
-			res, err := resolveName(s.w, a)
+			gaps["names_without_records"].Of++
+			records, err := recordTypesOf(s.w, a)
 			if err != nil {
 				return out, err
 			}
-			if len(res.Addresses) == 0 && !res.Aliased() {
-				miss("names_without_address", graph.FQDNName(a))
+			if len(records) == 0 {
+				miss("names_without_records", graph.FQDNName(a))
 			}
 		case "Netblock", "IPAddress":
 			steps, err := s.w.steps(a)

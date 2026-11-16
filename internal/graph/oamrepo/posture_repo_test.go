@@ -71,7 +71,7 @@ func checkPostureLenses(t *testing.T, repo repository.Repository) {
 		lens.LensCertificates: {lens.CertExpired + " www.example.edu", lens.CertWeak + " www.example.edu"},
 		lens.LensDomains:      {lens.DomainExpired + " example.edu", lens.DomainUnlocked + " example.edu"},
 		lens.LensEmail:        {lens.EmailSPFPermissive + " example.edu", "mail by mailhost-example.com"},
-		lens.LensCoverage:     {"names_without_address 2 of 2"},
+		lens.LensCoverage:     {"names_without_records 1 of 2"},
 	}
 	for name, facts := range want {
 		l, ok := lens.SubjectLensNamed(name)

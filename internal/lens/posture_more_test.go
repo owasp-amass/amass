@@ -149,13 +149,15 @@ func TestFindCoverage(t *testing.T) {
 	for _, gp := range r.Gaps {
 		gaps[gp.Name] = gp
 	}
-	if gp := gaps["names_without_address"]; gp.Missing != 2 || gp.Of != 4 {
-		t.Errorf("names without address = %+v", gp)
+	// colgate.edu (MX + TXT) and _dmarc.colgate.edu (TXT) have records though
+	// no address, so the only gap is a name with no DNS record of any kind.
+	if gp := gaps["names_without_records"]; gp.Missing != 0 || gp.Of != 4 {
+		t.Errorf("names without records = %+v", gp)
 	}
 	if gp := gaps["domains_without_registration"]; gp.Missing != 0 || gp.Of != 1 {
 		t.Errorf("domains without registration = %+v", gp)
 	}
-	if r.ByType["FQDN"] != 4 || !strings.Contains(r.Text(), "names without address: 2 of 4 (50%)") {
+	if r.ByType["FQDN"] != 4 || !strings.Contains(r.Text(), "names without records: 0 of 4 (0%)") {
 		t.Errorf("report:\n%s", r.Text())
 	}
 }

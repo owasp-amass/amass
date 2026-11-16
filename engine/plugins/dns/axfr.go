@@ -82,7 +82,7 @@ func (d *dnsSubs) attemptAXFR(e *et.Event, apex *dbt.Entity, zone, server string
 			continue
 		}
 		d.recordZoneTransfer(e, apex, zone, server)
-		d.ingestZone(e, zone, records)
+		d.ingestZone(e, apex, zone, records)
 		e.Session.Log().Info("zone transfer succeeded", "zone", zone, "nameserver", server,
 			"records", len(records), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		return
@@ -137,8 +137,11 @@ func (d *dnsSubs) recordZoneTransfer(e *et.Event, apex *dbt.Entity, zone, server
 
 // ingestZone turns the owner names of a transferred zone into in-scope FQDN
 // assets and dispatches them, so the rest of the pipeline resolves and stores
-// them as it would any other discovered name.
-func (d *dnsSubs) ingestZone(e *et.Event, zone string, records []dns.RR) {
+// them as it would any other discovered name. Each name is linked below the
+// apex, as the apex handler links names that resolve, so that a name appears
+// in the controlled footprint even before (or without) a DNS record of its
+// own: the zone transfer is the evidence it was discovered.
+func (d *dnsSubs) ingestZone(e *et.Event, apex *dbt.Entity, zone string, records []dns.RR) {
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 
@@ -163,6 +166,7 @@ func (d *dnsSubs) ingestZone(e *et.Event, zone string, records []dns.RR) {
 			Source:     d.plugin.source.Name,
 			Confidence: d.plugin.source.Confidence,
 		})
+		d.linkBelow(e, apex, entity)
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    name,
 			Entity:  entity,

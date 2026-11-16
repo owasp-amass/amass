@@ -5,7 +5,10 @@
 package lens
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
+	"sort"
 	"sync"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -23,6 +26,81 @@ type dnsRules struct {
 	DelegationRRTypes []int    `json:"delegation_rr_types"`
 	MailRRTypes       []int    `json:"mail_rr_types"`
 	MaxAliasDepth     int      `json:"max_alias_depth"`
+	// RecordTypeNames maps a stored record's numeric RR type to its label.
+	RecordTypeNames map[int]string `json:"record_type_names"`
+}
+
+// recordTypeName is the label for a stored record's numeric RR type, or
+// TYPE<number> when the type is not named in the configuration.
+func (r dnsRules) recordTypeName(rr int) string {
+	if name, ok := r.RecordTypeNames[rr]; ok {
+		return name
+	}
+
+	return fmt.Sprintf("TYPE%d", rr)
+}
+
+// recordRRTypeEvidence bounds how many of a name's properties are read when
+// gathering its record types.
+const recordRRTypeEvidence = 100
+
+// recordTypesOf returns the DNS record types stored on a name, as sorted
+// labels. It reads both the name's record relations (A, AAAA, CNAME, NS, MX,
+// SRV and the like, which point at another asset) and its record properties
+// (TXT, CAA and the like, which have no target). An empty result means the
+// name was discovered but no DNS record was verified for it, which the
+// relations would otherwise prove.
+func recordTypesOf(w *lensWalker, name graph.Asset) ([]string, error) {
+	rules := loadDNSRules()
+	set := map[string]bool{}
+
+	steps, err := w.steps(name)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range steps {
+		if s.forward && s.purpose == rules.DNSPurpose {
+			set[rules.recordTypeName(relationRRType(s.edge))] = true
+		}
+	}
+
+	evidence, err := w.graph.Evidence(w.ctx, name.ID, recordRRTypeEvidence)
+	if err != nil {
+		return nil, err
+	}
+	for _, ev := range evidence {
+		if rr := dnsPropertyRRType(ev); rr != 0 {
+			set[rules.recordTypeName(rr)] = true
+		}
+	}
+
+	out := make([]string, 0, len(set))
+	for t := range set {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// dnsPropertyRRType returns the RR type of a stored DNS record property, or 0
+// when the evidence is not one.
+func dnsPropertyRRType(ev graph.Evidence) int {
+	data, err := json.Marshal(ev.Property)
+	if err != nil {
+		return 0
+	}
+
+	var p struct {
+		Name   string `json:"property_name"`
+		Header struct {
+			RRType int `json:"rr_type"`
+		} `json:"header"`
+	}
+	if json.Unmarshal(data, &p) != nil || p.Name != graph.DNSRecordProperty {
+		return 0
+	}
+
+	return p.Header.RRType
 }
 
 var loadDNSRules = sync.OnceValue(func() dnsRules {
