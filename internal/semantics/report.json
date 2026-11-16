@@ -24,6 +24,10 @@
       "title": "Email security"
     },
     {
+      "lens": "disclosure",
+      "title": "Vulnerability disclosure"
+    },
+    {
       "lens": "lookalikes",
       "title": "Lookalike domains"
     },
@@ -130,6 +134,12 @@
       "kind": "mta_sts_not_enforced",
       "title": "MTA-STS declared but not enforced",
       "priority": 2
+    },
+    {
+      "lens": "disclosure",
+      "kind": "expired",
+      "title": "Expired security.txt files",
+      "priority": 3
     },
     {
       "lens": "certificates",

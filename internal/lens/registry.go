@@ -65,6 +65,7 @@ func SubjectLenses() []SubjectLens {
 		certificatesLens,
 		domainsLens,
 		emailLens,
+		disclosureLens,
 		exposureLens,
 		concentrationLens,
 		coverageLens,
