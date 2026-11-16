@@ -22,6 +22,7 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 | [Certificate key reuse](#certificate_key_reuse) | strong | identity | 0.45 |
 | [Certificate public key reuse](#certificate_public_key_reuse) | strong | identity | 0.45 |
 | [Issued by the organization's private CA](#private_ca_issuance) | strong | identity | 0.45 |
+| [security.txt points to the organization](#security_txt_reference) | supporting | operation | 0.25 |
 | [Name or mail servers run by the organization](#self_hosted_dns) | strong | operation | 0.35 |
 | [Email authentication delegated to the organization](#email_auth_reference) | strong | operation | 0.35 |
 | [Hosted on the organization's infrastructure](#hosting_in_footprint) | supporting | hosting | 0.20 |
@@ -170,6 +171,26 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A managed PKI provider can operate one private CA for several customers.
 - A public root missing from public_issuers would wrongly count until it is added.
+
+<a id="security_txt_reference"></a>
+## security.txt points to the organization
+
+`security_txt_reference`: supporting operation signal, weight 0.25.
+
+**Finds:** A name the organization does not yet own whose security.txt names a security contact at the organization's domain, or gives a canonical or policy URL in the organization's namespace.
+
+**Why it counts:** A security.txt is published by whoever runs the site, and its contact and canonical URL are normally the operator's own. A file that reports to the organization's mailbox or points to the organization's canonical copy was usually published for the organization.
+
+**Guards:**
+
+- The contact host or URL host must be one of the organization's apex domains or a name below one; a name that merely contains it never counts.
+- A value shared by more than 50 services never counts.
+- Never proposes on its own; it needs a strong signal.
+
+**Can still mislead when:**
+
+- A managed security provider or bug-bounty platform may publish one organization's contact across several clients' files.
+- A template copied between unrelated sites can carry another organization's canonical URL.
 
 <a id="self_hosted_dns"></a>
 ## Name or mail servers run by the organization

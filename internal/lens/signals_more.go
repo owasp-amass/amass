@@ -441,6 +441,97 @@ func dkimPublicKey(txt string) string {
 	return ""
 }
 
+// securityTxtLinkLabels are the Service relations whose target URL a
+// security.txt reference signal checks for the organization's namespace.
+var securityTxtLinkLabels = map[string]bool{
+	"security_canonical": true, "security_policy": true, "security_encryption": true,
+	"security_acknowledgments": true, "security_hiring": true,
+}
+
+// securityTxtRefSignals finds names the organization does not yet own whose
+// security.txt names a contact at the organization's domain or a canonical or
+// policy URL in its namespace. A security.txt is published by whoever runs the
+// site, so pointing it at the organization is operator evidence.
+func (g *gapSearch) securityTxtRefSignals(apex graph.Asset) error {
+	def, ok := firstSignal(matchSecurityTxtRef)
+	if !ok || g.values == nil {
+		return nil
+	}
+	name := strings.ToLower(graph.AssetLabel(apex))
+	if name == "" {
+		return nil
+	}
+
+	// A canonical, policy or other link whose host is in the org namespace.
+	if g.read() {
+		urls, more, err := g.values.FindByAttribute(g.w.ctx, "URL", "url", name, true, GapMaxShared+1)
+		if err != nil {
+			return err
+		}
+		if !more && len(urls) <= GapMaxShared {
+			for _, u := range urls {
+				if !HostWithin(graph.ContentString(u, "host"), name) {
+					continue
+				}
+				if svc, ok := g.reverseVia(u, securityTxtLinkLabels); ok {
+					g.addSecurityTxtCandidate(apex, svc, "canonical "+graph.AssetLabel(u), def)
+				}
+			}
+		}
+	}
+
+	// A security contact mailbox at the org domain, via the contact record.
+	if g.read() {
+		ids, more, err := g.values.FindByAttribute(g.w.ctx, "Identifier", "id", name, true, GapMaxShared+1)
+		if err != nil {
+			return err
+		}
+		if !more && len(ids) <= GapMaxShared {
+			for _, id := range ids {
+				if !strings.EqualFold(graph.ContentString(id, "id_type"), "email") {
+					continue
+				}
+				if _, host, ok := strings.Cut(strings.ToLower(graph.ContentString(id, "id")), "@"); !ok ||
+					!HostWithin(host, name) {
+					continue
+				}
+				cr, ok := g.reverseVia(id, map[string]bool{"id": true})
+				if !ok {
+					continue
+				}
+				if svc, ok := g.reverseVia(cr, map[string]bool{"security_contact": true}); ok {
+					g.addSecurityTxtCandidate(apex, svc, "contact "+graph.ContentString(id, "id"), def)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// reverseVia returns the asset that points to target through one of labels.
+func (g *gapSearch) reverseVia(target graph.Asset, labels map[string]bool) (graph.Asset, bool) {
+	steps, err := g.w.steps(target)
+	if err != nil {
+		return graph.Asset{}, false
+	}
+	for _, s := range steps {
+		if !s.forward && labels[s.edge.Label] {
+			return s.other, true
+		}
+	}
+	return graph.Asset{}, false
+}
+
+// addSecurityTxtCandidate adds the FQDN that a referencing service hangs off.
+func (g *gapSearch) addSecurityTxtCandidate(apex, service graph.Asset, detail string, def OwnershipSignal) {
+	host, ok := g.reverseVia(service, map[string]bool{"port": true})
+	if !ok || host.Type != "FQDN" {
+		return
+	}
+	witness := append(g.pathTo(apex.ID), matched(apex, host, "security_txt_reference", detail))
+	g.add(host, def.ID, "FQDN security.txt FQDN", witness)
+}
+
 // contactEmailDomains returns the registered domains of a contact record's
 // email identifiers.
 func (g *gapSearch) contactEmailDomains(cr graph.Asset) []string {

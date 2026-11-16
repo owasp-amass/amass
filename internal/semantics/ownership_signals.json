@@ -254,6 +254,25 @@
       ]
     },
     {
+      "id": "security_txt_reference",
+      "title": "security.txt points to the organization",
+      "kind": "operation",
+      "strength": "supporting",
+      "weight": 0.25,
+      "matcher": "security_txt_reference",
+      "finds": "A name the organization does not yet own whose security.txt names a security contact at the organization's domain, or gives a canonical or policy URL in the organization's namespace.",
+      "rationale": "A security.txt is published by whoever runs the site, and its contact and canonical URL are normally the operator's own. A file that reports to the organization's mailbox or points to the organization's canonical copy was usually published for the organization.",
+      "guards": [
+        "The contact host or URL host must be one of the organization's apex domains or a name below one; a name that merely contains it never counts.",
+        "A value shared by more than 50 services never counts.",
+        "Never proposes on its own; it needs a strong signal."
+      ],
+      "counter_indications": [
+        "A managed security provider or bug-bounty platform may publish one organization's contact across several clients' files.",
+        "A template copied between unrelated sites can carry another organization's canonical URL."
+      ]
+    },
+    {
       "id": "self_hosted_dns",
       "title": "Name or mail servers run by the organization",
       "kind": "operation",

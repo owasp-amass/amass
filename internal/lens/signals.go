@@ -43,13 +43,15 @@ const (
 	matchParkedPage        = "parked_page"
 	matchEmailDomain       = "registrant_email_domain"
 	matchDKIMKey           = "dkim_key"
+	matchSecurityTxtRef    = "security_txt_reference"
 	signalCatalogMaxWeight = 1
 )
 
 var signalMatchers = map[string]bool{matchSharedAttribute: true, matchInfrastructure: true, matchColisting: true,
 	matchTXTToken: true, matchCertificateField: true, matchDNSIntoFootprint: true, matchTXTReference: true,
 	matchHTTPRedirect: true, matchReverseDNS: true, matchNameserverSet: true, matchFingerprint: true,
-	matchNameToken: true, matchParkedPage: true, matchEmailDomain: true, matchDKIMKey: true}
+	matchNameToken: true, matchParkedPage: true, matchEmailDomain: true, matchDKIMKey: true,
+	matchSecurityTxtRef: true}
 
 // SignalParams configures a signal's matcher.
 type SignalParams struct {

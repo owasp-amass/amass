@@ -515,3 +515,47 @@ func TestDKIMKeyReuseSignal(t *testing.T) {
 		t.Errorf("colgate-mail.org signals = %v, want dkim_key_reuse", signalIDs(c))
 	}
 }
+
+// TestSecurityTxtReferenceSignal: an unowned service whose security.txt points
+// its canonical URL, or its security contact, into the organization's
+// namespace is linked by the security_txt_reference signal.
+func TestSecurityTxtReferenceSignal(t *testing.T) {
+	g := signalsFixture()
+	add := func(id, typ string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: id, Content: content}
+	}
+	fqdn := func(name string) { add(name, "FQDN", map[string]any{"name": name}) }
+	link := func(from, label, to, rt string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: rt})
+	}
+
+	// An unowned site whose security.txt canonical URL is in colgate.edu.
+	fqdn("partner-run.example")
+	add("svc-a", "Service", map[string]any{"service_type": "web-service"})
+	add("url-canon", "URL", map[string]any{"url": "https://colgate.edu/.well-known/security.txt",
+		"host": "colgate.edu"})
+	link("partner-run.example", "port", "svc-a", "PortRelation")
+	link("svc-a", "security_canonical", "url-canon", "SimpleRelation")
+
+	// An unowned site whose security contact is a mailbox at colgate.edu.
+	fqdn("vendor-site.example")
+	add("svc-b", "Service", map[string]any{"service_type": "web-service"})
+	add("cr-b", "ContactRecord", nil)
+	add("id-b", "Identifier", map[string]any{"id": "security@colgate.edu", "id_type": "email"})
+	link("vendor-site.example", "port", "svc-b", "PortRelation")
+	link("svc-b", "security_contact", "cr-b", "SimpleRelation")
+	link("cr-b", "id", "id-b", "SimpleRelation")
+
+	r := signalsReport(t, g)
+	for _, id := range []string{"partner-run.example", "vendor-site.example"} {
+		c := candidateByID(r, id)
+		if c == nil {
+			t.Errorf("%s is not a candidate: %+v", id, r.Candidates)
+			continue
+		}
+		if !slices.Contains(signalIDs(c), "security_txt_reference") {
+			t.Errorf("%s signals = %v, want security_txt_reference", id, signalIDs(c))
+		}
+	}
+}
