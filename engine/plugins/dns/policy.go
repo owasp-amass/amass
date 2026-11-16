@@ -51,6 +51,18 @@ var PolicyNames = []PolicyName{
 		Source: "https://mailchimp.com/developer/transactional/docs/authentication-delivery/"},
 	{Label: "mte2._domainkey", Purpose: "DKIM key (Mailchimp Transactional)",
 		Source: "https://mailchimp.com/developer/transactional/docs/authentication-delivery/"},
+	{Label: "protonmail._domainkey", Purpose: "DKIM key (Proton Mail)",
+		Source: "https://proton.me/support/anti-spoofing-custom-domain"},
+	{Label: "protonmail2._domainkey", Purpose: "DKIM key (Proton Mail)",
+		Source: "https://proton.me/support/anti-spoofing-custom-domain"},
+	{Label: "protonmail3._domainkey", Purpose: "DKIM key (Proton Mail)",
+		Source: "https://proton.me/support/anti-spoofing-custom-domain"},
+	{Label: "fm1._domainkey", Purpose: "DKIM key (Fastmail)",
+		Source: "https://www.fastmail.help/hc/en-us/articles/360060591153"},
+	{Label: "fm2._domainkey", Purpose: "DKIM key (Fastmail)",
+		Source: "https://www.fastmail.help/hc/en-us/articles/360060591153"},
+	{Label: "fm3._domainkey", Purpose: "DKIM key (Fastmail)",
+		Source: "https://www.fastmail.help/hc/en-us/articles/360060591153"},
 }
 
 // queryPolicies asks for the TXT records of each policy name below apex and
