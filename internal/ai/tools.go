@@ -13,6 +13,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 type ToolRunner struct {
@@ -25,6 +26,10 @@ type ToolRunner struct {
 	// LensLimits bounds the lenses investigations run; zero keeps the
 	// lenses' defaults.
 	LensLimits lens.LensLimits
+	// Attribution, when set, is the trained ownership model. The ownership-gap
+	// answer ranks and decides its candidates with it, the same way automatic
+	// attribution does; without one, the signal rules decide.
+	Attribution review.OwnershipScorer
 }
 
 func (r ToolRunner) Run(ctx context.Context, name string, args json.RawMessage) (json.RawMessage, error) {

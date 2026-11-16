@@ -10,6 +10,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
 // gapLens answers an ownership-gap lens query from root.
@@ -19,6 +20,13 @@ func (a Agent) gapLens(ctx context.Context, root graph.Asset, out Investigation)
 	out.recordTrace(started, InvestigationTraceEvent{Stage: "ownership_gap_lens", OutputPaths: len(report.Candidates),
 		GraphNodes: report.Footprint, Incomplete: err != nil || report.Truncated, Detail: report.Reason})
 	if err != nil {
+		out.Incomplete = true
+		return out, err
+	}
+
+	// A trained ownership model ranks and decides the candidates the same way
+	// automatic attribution does; without one, the rules' decision stands.
+	if err := review.ScoreGapCandidates(&report, a.Runner.Attribution); err != nil {
 		out.Incomplete = true
 		return out, err
 	}

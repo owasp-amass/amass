@@ -147,6 +147,23 @@ func LoadAttributionModel(path string) (*classify.LinearModel, error) {
 	return m, nil
 }
 
+// LoadAttributionScorer loads the trained ownership model beside journalPath
+// as a review.OwnershipScorer, or returns a nil scorer (and no error) when
+// there is no model, so callers can set it unconditionally and let the rules
+// decide when none has been trained.
+func LoadAttributionScorer(journalPath string) (review.OwnershipScorer, error) {
+	if journalPath == "" {
+		return nil, nil
+	}
+
+	m, err := LoadAttributionModel(AttributionModelPath(journalPath))
+	if err != nil || m == nil {
+		return nil, err
+	}
+
+	return OwnershipModel{LinearModel: m}, nil
+}
+
 // OwnershipModel decides automatic attribution with a trained ownership
 // model.
 type OwnershipModel struct{ *classify.LinearModel }

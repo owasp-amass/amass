@@ -62,6 +62,15 @@ func run() error {
 	}, token)
 	// The config assistant reads this file, and writes it in operator mode.
 	server.ConfigFile = *cfgFile
+	// The ownership-gap answer uses the trained attribution model, if one has
+	// been trained beside the review journal.
+	if _, journal, err := cfg.AIAttribution(os.LookupEnv); err == nil {
+		if scorer, err := ai.LoadAttributionScorer(journal); err != nil {
+			return fmt.Errorf("load attribution model: %w", err)
+		} else {
+			server.Runner.Attribution = scorer
+		}
+	}
 
 	// Interactive drawings are served at links the visualize tool returns.
 	if public := os.Getenv("AMASS_AI_MCP_PUBLIC_URL"); public != "" {

@@ -378,6 +378,13 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	g := oamrepo.Adapter{Repo: repo, Aliases: aliases, Neo4jDatabase: oamrepo.Neo4jDatabaseName(cfg)}
 	runner := ai.ToolRunner{Graph: g, Limits: graph.DefaultLimits(), Catalog: oamrepo.Catalog{},
 		KnownVerification: dnssd.IsVerificationRecord}
+	// The ownership-gap answer uses the trained attribution model when one has
+	// been trained beside the review journal.
+	if scorer, err := ai.LoadAttributionScorer(journalPath); err != nil {
+		return fmt.Errorf("load attribution model: %w", err)
+	} else {
+		runner.Attribution = scorer
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), investigationTimeout)
 	defer cancel()
 	if operation == "mcp" {
