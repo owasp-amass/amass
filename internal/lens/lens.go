@@ -353,6 +353,17 @@ func (d dependencyScan) party(a graph.Asset) (string, string, bool, []graph.Witn
 		_, own := d.owned[org.ID]
 		return graph.AssetLabel(org), org.ID, own, c.witness(org.ID, d.w.assets), nil
 	}
+	// A netblock a provider publishes as its own names that provider as the
+	// operator, from the provider's authoritative range feed. This is the
+	// cloud or CDN hosting the address, more precise than the block's
+	// registrant, so it is preferred when stored.
+	if org, from, s, ok, err := d.cloudProvider(c.visited); err != nil {
+		return "", "", false, nil, err
+	} else if ok {
+		_, own := d.owned[org.ID]
+		witness := append(c.witness(from.ID, d.w.assets), WitnessOf(s.edge, from, org))
+		return graph.AssetLabel(org), org.ID, own, witness, nil
+	}
 	for _, v := range c.visited {
 		steps, err := d.w.steps(v)
 		if err != nil {
@@ -399,6 +410,29 @@ func (d dependencyScan) party(a graph.Asset) (string, string, bool, []graph.Witn
 
 	name, id, own, best, err := d.fallbackName(c.visited)
 	return name, id, own, c.witness(best, d.w.assets), err
+}
+
+// cloudProvider returns the cloud or CDN provider an address or netblock is
+// published under, reached through a network-purpose provider edge into an
+// Organization (the only infrastructure/network transition that targets an
+// Organization), with the asset and step it was found on so the caller can
+// witness it. It reads what a provider's own range feed recorded, not
+// ownership.
+func (d dependencyScan) cloudProvider(visited []graph.Asset) (graph.Asset, graph.Asset, step, bool, error) {
+	for _, v := range visited {
+		steps, err := d.w.steps(v)
+		if err != nil {
+			return graph.Asset{}, graph.Asset{}, step{}, false, err
+		}
+		for _, s := range steps {
+			if s.forward && s.attr == graph.AttrInfrastructure && s.purpose == "network" &&
+				s.other.Type == "Organization" {
+				return s.other, v, s, true, nil
+			}
+		}
+	}
+
+	return graph.Asset{}, graph.Asset{}, step{}, false, nil
 }
 
 // netblockByRange returns the most specific stored netblock whose range

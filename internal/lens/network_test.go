@@ -142,6 +142,52 @@ func TestFindNetworkInfrastructure(t *testing.T) {
 	}
 }
 
+// TestNetworkHostingNamesCloudProvider checks that an address published in a
+// provider's range feed, stored as a Netblock -> provider -> Organization,
+// is attributed to that provider in the hosting breakdown, with no AS or
+// registrant on the block.
+func TestNetworkHostingNamesCloudProvider(t *testing.T) {
+	g := graphtest.VendorFixture()
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	link := func(from, label, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+
+	add("host.colgate.edu", "FQDN", "host.colgate.edu", map[string]any{"name": "host.colgate.edu"})
+	add("ip-cloud", "IPAddress", "52.95.4.5", map[string]any{"address": "52.95.4.5"})
+	add("nb-cloud", "Netblock", "52.95.0.0/16", map[string]any{"cidr": "52.95.0.0/16"})
+	add("org-aws", "Organization", "org-aws", map[string]any{"name": "Amazon Web Services"})
+	link("colgate.edu", "node", "host.colgate.edu")
+	g.Links = append(g.Links, graph.Relation{ID: "host-a", FromID: "host.colgate.edu", ToID: "ip-cloud",
+		Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
+	link("nb-cloud", "contains", "ip-cloud")
+	// The provider the range feed published; no AS announces the block and no
+	// registrant is stored, so only the provider edge can name it.
+	link("nb-cloud", "provider", "org-aws")
+
+	r, err := FindNetworkInfrastructure(context.Background(), g,
+		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var aws *HostingShare
+	for i := range r.Hosting {
+		if strings.EqualFold(r.Hosting[i].Party, "Amazon Web Services") {
+			aws = &r.Hosting[i]
+		}
+	}
+	if aws == nil {
+		t.Fatalf("the cloud provider is not a hosting party: %+v", r.Hosting)
+	}
+	if aws.Own || aws.Names != 1 || strings.Join(aws.Examples, ",") != "host.colgate.edu" {
+		t.Errorf("cloud provider hosting = %+v", aws)
+	}
+}
+
 func TestFindNetworkInfrastructureLimits(t *testing.T) {
 	g := networkFixture()
 	catalog := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}

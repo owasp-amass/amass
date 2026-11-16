@@ -12,6 +12,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
 	"github.com/owasp-amass/amass/v5/engine/plugins/brute"
+	"github.com/owasp-amass/amass/v5/engine/plugins/cloud"
 	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
@@ -52,6 +53,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	aviato.NewAviato,
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,
+	cloud.NewCloudRanges,
 	dns.NewDNS,
 	dnssd.NewDNSPlugin,
 	enrich.NewBannerURLs,

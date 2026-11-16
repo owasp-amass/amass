@@ -69,6 +69,7 @@ var oamSemantics = map[string]graph.RelationMeaning{
 	"Identifier|registration_agency|SimpleRelation|ContactRecord":      {Attribution: "third_party", Purpose: "identity", Vendor: true},
 	"Location|id|SimpleRelation|Identifier":                            {Attribution: "attribute", Purpose: "identity", Vendor: true},
 	"Netblock|contains|SimpleRelation|IPAddress":                       {Attribution: "same_subject", Purpose: "network", Vendor: true},
+	"Netblock|provider|SimpleRelation|Organization":                    {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 	"Netblock|registration|SimpleRelation|IPNetRecord":                 {Attribution: "same_subject", Purpose: "registration", Vendor: true},
 	"Organization|account|SimpleRelation|Account":                      {Attribution: "controls", Purpose: "identity", Vendor: true},
 	"Organization|funding_source|SimpleRelation|Organization":          {Attribution: "attribute", Purpose: "financial", Vendor: true},
