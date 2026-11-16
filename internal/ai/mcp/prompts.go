@@ -25,13 +25,14 @@ How to answer questions:
 2. Use the graph tools (resolve_asset, resolve_organization, find_assets, walk_relations and the others) to find the exact name of a subject, or to look at specific assets and relationships the answer kinds do not cover.
 3. Cite evidence items like [E1] for every claim, and run verify_citations on your final prose with the investigation_id before presenting it.
 4. To show how a domain's or organization's assets connect, call visualize and put its mermaid text in a mermaid code block; give the user its interactive link when there is one.
-5. Report only what the database stores. Results come from past enumerations, not live scans; say so. A large footprint is sampled across kinds of asset up to a limit; when a result is partial, say so and offer to run it again with a larger max_assets.`
+5. Report only what the database stores. Results come from past enumerations, not live scans; say so. A large footprint is sampled across kinds of asset up to a limit; when a result is partial, say so and offer to run it again with a larger max_assets.
+6. To read or change how enumerations run, use the configuration tools: describe_config gives the schema, the current settings (data source credentials masked) and a template; validate_config checks a complete draft and shows a masked diff. Never put data source credentials in a configuration.`
 
 // readOnlyInstructions end the instructions of a connection without the
 // operator token.
 const readOnlyInstructions = `
 
-This connection is read-only: it never writes to the database and never starts an enumeration. When the user wants data collected, tell them an operator connection (the operator token) can plan and start enumerations they approve.`
+This connection is read-only: it never writes to the database and never starts an enumeration. You can read and check the configuration (describe_config, validate_config) but not apply it. When the user wants data collected or the configuration changed, tell them an operator connection (the operator token) can plan and start enumerations, and apply configuration changes, that they approve.`
 
 // promptPrefix names the server's prompts so they group together in
 // clients that list prompts from several servers.

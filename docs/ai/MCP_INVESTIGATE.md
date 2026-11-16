@@ -72,6 +72,28 @@ well when there are at most 40, and, from the HTTP server when
 GEXF file for Gephi (valid for an hour, served on localhost). Drawings
 cover up to 3,000 assets.
 
+## Configuration
+
+Two read-only tools let the assistant read and check the Amass
+configuration. The server runs no model of its own, so the assistant is
+the one that drafts a configuration from what these return; writing it
+needs operator mode (`apply_config`, below).
+
+| Tool | What it does |
+| --- | --- |
+| `describe_config` | Returns the configuration schema (sections, and every field with its type, default, description and an example), the current configuration with data source credentials masked, and a commented template to start a new file from. `section` narrows it to seed, scope, options, transformations, datasources or ai. |
+| `validate_config` | Checks a complete configuration draft with the real Amass loader and shows how it differs from the current one (credentials masked), without changing anything. |
+
+Data source credentials never pass through the assistant: they are masked
+in what `describe_config` returns and in every diff, and `apply_config`
+refuses a draft that sets any. Keys are entered by the operator through
+`data_source_key_link`.
+
+A terminal user gets the same help from the locally configured model with
+`amass ai config -question "..." -config <file>`, which shows the proposed
+configuration and a masked diff and writes it only on approval (at the
+prompt, or ahead of time with `-approve-config`).
+
 ## Operator mode
 
 A server started with an operator configuration also offers tools that act:
@@ -89,6 +111,7 @@ A server started with an operator configuration also offers tools that act:
 | `review_proposal` | Approves, rejects or retracts a proposal; approving and retracting write to the Asset Database after the user approves. |
 | `data_sources` | Lists which data sources have credentials, never the credentials. |
 | `data_source_key_link` | Gives the user a one-time local link (15 minutes, single use) to a form that writes a data source's credentials to the datasources file; the key never passes through the assistant. |
+| `apply_config` | Writes a complete configuration draft (see `describe_config` and `validate_config`) to the configuration file after the user approves it and sees the exact masked diff. Refuses a draft that sets data source credentials. |
 
 Over HTTP the operator tools are offered only to clients that present
 `AMASS_AI_MCP_OPERATOR_TOKEN`, which must differ from the read-only token;
@@ -97,8 +120,8 @@ a session belongs to the token that opened it. Over stdio,
 whoever can start the process. Operator sessions use event streams so the
 server can ask for approval in the middle of a tool call.
 
-Approval: `start_enumeration` and the writing `review_proposal` decisions
-ask the user first, in order of preference:
+Approval: `start_enumeration`, `apply_config` and the writing
+`review_proposal` decisions ask the user first, in order of preference:
 
 1. the client's own dialog (MCP elicitation: an input-required result on
    protocol 2026-07-28, an `elicitation/create` request on earlier

@@ -72,7 +72,8 @@ Operator mode: this connection can also collect data and change the database, ea
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run.
 - list_proposals shows the ownership, merge, identity and person-named proposals awaiting review; review_proposal approves, rejects or retracts one (approving and retracting write to the database and ask the user first).
 - watch_target re-runs a planned enumeration on a schedule (at most every 6 hours) after the user approves it once; list_watches shows each watch with what its last run found, and stop_watch removes one.
-- data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.`
+- data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.
+- To change how enumerations run, draft a complete configuration (describe_config gives the schema, current settings and a template), check it with validate_config, then call apply_config with the same content; the user approves the exact change and sees a masked diff. Never put data source credentials in a configuration; the operator adds keys through data_source_key_link.`
 
 func boolPtr(b bool) *bool { return &b }
 
