@@ -271,7 +271,7 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			return jsonResult(map[string]any{"run": run}), nil
 		})
 
-	add(ToolWatchTarget, "Watch a target with Amass",
+	approveAction(ToolWatchTarget, "Watch a target with Amass",
 		"Re-run the enumeration a plan_enumeration call described on a schedule, so changes to the target are "+
 			"collected without asking each time. The user approves the watch once; it runs until stop_watch.",
 		obj([]string{"target", "plan_id", "every_hours"}, map[string]any{"target": target, "mode": mode,
