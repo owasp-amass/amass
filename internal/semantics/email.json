@@ -21,7 +21,8 @@
   "sources": {
     "spf": "https://www.rfc-editor.org/rfc/rfc7208",
     "dmarc": "https://www.rfc-editor.org/rfc/rfc7489",
-    "dkim": "https://www.rfc-editor.org/rfc/rfc6376"
+    "dkim": "https://www.rfc-editor.org/rfc/rfc6376",
+    "mta_sts": "https://www.rfc-editor.org/rfc/rfc8461"
   },
   "mail_providers": [
     {

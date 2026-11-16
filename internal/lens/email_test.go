@@ -171,3 +171,32 @@ func TestFindEmailSecurityFlagsSPFLookupLimit(t *testing.T) {
 		t.Errorf("findings = %v, want spf_too_many_lookups", r.Findings)
 	}
 }
+
+func TestFindEmailSecurityFlagsMTASTSTesting(t *testing.T) {
+	g := graphtest.VendorFixture()
+	if g.EvidenceByID == nil {
+		g.EvidenceByID = map[string][]graph.Evidence{}
+	}
+	// The mta-sts.<domain> host and its HTTPS service, with the policy's mode
+	// recorded as a service property.
+	g.Assets["mta-sts.colgate.edu"] = graph.Asset{ID: "mta-sts.colgate.edu", Type: "FQDN",
+		Key: "mta-sts.colgate.edu", Content: map[string]any{"name": "mta-sts.colgate.edu"}}
+	g.Assets["svc-mtasts"] = graph.Asset{ID: "svc-mtasts", Type: "Service", Key: "svc-mtasts",
+		Content: map[string]any{"service_type": "web-service"}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "colgate.edu-node-mta-sts", FromID: "colgate.edu", ToID: "mta-sts.colgate.edu",
+			Label: "node", Type: "SimpleRelation"},
+		graph.Relation{ID: "mta-sts-port-svc", FromID: "mta-sts.colgate.edu", ToID: "svc-mtasts",
+			Label: "port", Type: "PortRelation"})
+	g.EvidenceByID["svc-mtasts"] = []graph.Evidence{{Property: map[string]any{
+		"property_name": "mta_sts_mode", "property_value": "testing"}}}
+
+	r, err := FindEmailSecurity(context.Background(), g,
+		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(r.Findings, func(f EmailFinding) bool { return f.Kind == EmailMTASTSTesting }) {
+		t.Errorf("findings = %v, want mta_sts_not_enforced", r.Findings)
+	}
+}

@@ -46,13 +46,14 @@ const (
 	EmailNoDMARC        = "no_dmarc"
 	EmailDMARCMonitor   = "dmarc_monitor_only"
 	EmailDKIMWeak       = "weak_dkim_key"
+	EmailMTASTSTesting  = "mta_sts_not_enforced"
 	EmailDMARCPartial   = "dmarc_partial"
 	EmailSPFSoftfail    = "spf_softfail"
 	EmailDKIMRevoked    = "revoked_dkim_key"
 )
 
 var emailOrder = []string{EmailSPFPermissive, EmailSPFManyLookups, EmailNoSPF, EmailParked, EmailNoDMARC,
-	EmailDMARCMonitor, EmailDKIMWeak, EmailDMARCPartial, EmailSPFSoftfail, EmailDKIMRevoked}
+	EmailDMARCMonitor, EmailDKIMWeak, EmailMTASTSTesting, EmailDMARCPartial, EmailSPFSoftfail, EmailDKIMRevoked}
 
 // MailDomain is the mail posture of one registered domain.
 type MailDomain struct {
@@ -66,6 +67,10 @@ type MailDomain struct {
 	// DKIMRevoked those whose key is revoked (an empty p= tag).
 	DKIMWeak    []string `json:"dkim_weak,omitempty"`
 	DKIMRevoked []string `json:"dkim_revoked,omitempty"`
+	// MTASTSMode is the domain's MTA-STS enforcement mode (enforce, testing
+	// or none), read from the mta-sts.<domain> service, or "" when none is
+	// stored.
+	MTASTSMode string `json:"mta_sts_mode,omitempty"`
 }
 
 // EmailFinding is one domain that stands out.
@@ -321,7 +326,35 @@ func (s *scope) mailDomain(domain string, apex graph.Asset, rules emailRules) (M
 		}
 	}
 
+	m.MTASTSMode = s.mtaSTSMode(domain)
+
 	return m, nil
+}
+
+// mtaSTSMode returns the MTA-STS enforcement mode published for the domain,
+// read from the mta-sts.<domain> HTTPS service's stored property, or "" when
+// no policy is stored.
+func (s *scope) mtaSTSMode(domain string) string {
+	host, ok := s.lookupName("mta-sts." + domain)
+	if !ok {
+		return ""
+	}
+
+	steps, err := s.w.steps(host)
+	if err != nil {
+		return ""
+	}
+	for _, st := range steps {
+		if !st.forward || st.edge.Label != "port" || st.other.Type != "Service" {
+			continue
+		}
+		if ev, err := s.w.graph.Evidence(s.w.ctx, st.other.ID, 100); err == nil {
+			if vals := propertyValues(ev, "mta_sts_mode"); len(vals) > 0 {
+				return strings.ToLower(vals[0])
+			}
+		}
+	}
+	return ""
 }
 
 // mailProviderOf names the provider whose documented MX hosts include host,
@@ -398,6 +431,11 @@ func emailFindings(m MailDomain, rules emailRules) []EmailFinding {
 		m.DMARCPolicy != "reject") {
 		add(EmailParked, fmt.Sprintf("has no mail server stored but does not publish %q and a DMARC reject policy; "+
 			"a domain that sends no mail can still be spoofed", rules.NoneSPF), "dmarc")
+	}
+
+	if m.MTASTSMode != "" && m.MTASTSMode != "enforce" {
+		add(EmailMTASTSTesting, "its MTA-STS policy is mode="+m.MTASTSMode+", so it is declared but not enforced; "+
+			"senders may still deliver over plaintext or to a mismatched server", "mta_sts")
 	}
 
 	for _, w := range m.DKIMWeak {

@@ -126,6 +126,12 @@
       "priority": 2
     },
     {
+      "lens": "email",
+      "kind": "mta_sts_not_enforced",
+      "title": "MTA-STS declared but not enforced",
+      "priority": 2
+    },
+    {
       "lens": "certificates",
       "kind": "expired",
       "title": "Expired certificates",
