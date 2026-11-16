@@ -84,6 +84,11 @@ func TestFindHeaders(t *testing.T) {
 	if len(r.Services) != 1 || r.Services[0].Host != "colgate.edu" || !r.Services[0].HTTPS {
 		t.Fatalf("services = %+v", r.Services)
 	}
+	// Missing lists missing hardening headers only; the insecure cookie is a
+	// finding, not a nameless "missing header".
+	if slices.Contains(r.Services[0].Missing, "") {
+		t.Errorf("Missing has an empty header name: %+v", r.Services[0].Missing)
+	}
 	kinds := map[string]bool{}
 	for _, f := range r.Findings {
 		kinds[f.Kind] = true

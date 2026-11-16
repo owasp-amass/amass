@@ -108,7 +108,11 @@ func FindHeaders(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog,
 
 			sh := ServiceHeaders{Host: graph.FQDNName(host), HTTPS: https}
 			for _, f := range evaluateHeaders(headers, cookies, https) {
-				sh.Missing = append(sh.Missing, f.header)
+				// Only a missing hardening header names a header; other gaps
+				// (an insecure cookie) are reported as findings alone.
+				if f.header != "" {
+					sh.Missing = append(sh.Missing, f.header)
+				}
 				out.Findings = append(out.Findings, HeadersFinding{Kind: f.kind, Host: sh.Host, Detail: f.detail})
 			}
 			sort.Strings(sh.Missing)
