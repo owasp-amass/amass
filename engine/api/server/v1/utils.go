@@ -78,13 +78,22 @@ func looksLikeJSONObject(raw json.RawMessage) bool {
 }
 
 func (v *V1Handlers) PutAsset(ctx context.Context, sess et.Session, asset oam.Asset) (string, error) {
-	filter, err := defaultContentFilter(asset)
-	if err != nil {
-		return "", err
-	}
-
 	var entity *dbt.Entity
-	if ents, err := sess.DB().FindEntitiesByContent(ctx, asset.AssetType(), time.Time{}, 1,
+	if asset.AssetType() == oam.TLSCertificate {
+		// A TLS certificate is identified by its issuer and serial together
+		// (RFC 5280 makes a serial unique per issuer only), which a single
+		// column content filter cannot express; finding by serial alone could
+		// match a different issuer's certificate. CreateAsset upserts by the
+		// full identity, so store it directly.
+		var err error
+		if entity, err = sess.DB().CreateAsset(ctx, asset); err != nil {
+			return "", err
+		} else if entity == nil {
+			return "", errors.New("the asset was not stored")
+		}
+	} else if filter, err := defaultContentFilter(asset); err != nil {
+		return "", err
+	} else if ents, err := sess.DB().FindEntitiesByContent(ctx, asset.AssetType(), time.Time{}, 1,
 		filter); err == nil && len(ents) > 0 && ents[0] != nil {
 		entity = ents[0]
 	} else if entity, err = sess.DB().CreateAsset(ctx, asset); err != nil {
@@ -270,11 +279,12 @@ func defaultContentFilter(asset oam.Asset) (dbt.ContentFilters, error) {
 		return dbt.ContentFilters{"name": asset.Key()}, nil
 	case oam.Service:
 		return dbt.ContentFilters{"unique_id": asset.Key()}, nil
-	case oam.TLSCertificate:
-		return dbt.ContentFilters{"serial_number": asset.Key()}, nil
 	case oam.URL:
 		return dbt.ContentFilters{"url": asset.Key()}, nil
 	}
 
+	// A TLS certificate is identified by issuer and serial together, not by a
+	// single column, so PutAsset stores it with CreateAsset and never asks for
+	// its content filter.
 	return nil, errors.New("invalid asset type")
 }
