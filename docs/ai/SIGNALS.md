@@ -62,9 +62,9 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 `shared_registrant_email_domain`: strong identity signal, weight 0.40.
 
-**Finds:** A registration contact the organization does not yet own whose email address is at the same custom domain as a contact of a domain the organization controls, such as admin@acme.com and security@acme.com.
+**Finds:** A registration contact the organization does not yet own whose email address is at the same custom domain as a contact of a registration the organization controls, such as admin@acme.com and security@acme.com. The controlled registration can be a domain, IP network or autonomous-system record.
 
-**Why it counts:** A registrant email address is a mailbox at a domain the registrant controls. Two registrations whose contacts use the same custom mail domain were almost always made by the same organization, even when the mailboxes differ, which a match on the exact email address misses. The registered domain is compared, so a mailbox at a subdomain still counts.
+**Why it counts:** A registrant email address is a mailbox at a domain the registrant controls. Two registrations whose contacts use the same custom mail domain were almost always made by the same organization, even when the mailboxes differ, which a match on the exact email address misses. Domain, network and autonomous-system registrations all carry these contacts, so the signal links assets across them. The registered domain is compared, so a mailbox at a subdomain still counts.
 
 **Guards:**
 

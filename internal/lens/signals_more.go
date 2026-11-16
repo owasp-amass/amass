@@ -246,18 +246,23 @@ func (g *gapSearch) nameserverSignals(dr graph.Asset) error {
 // signal of the service_fingerprint matcher names its property and the
 // asset types that carry it. A service's candidates are the names and
 // addresses serving it; a URL is its own candidate.
-// registrationContactLabels are the DomainRecord relations whose contact the
-// registrant email-domain signal pivots from.
+// registrationContactLabels are the registration relations whose contact the
+// registrant email-domain signal pivots from, across domain records
+// (registrant_contact, …) and IP network and autonomous-system records
+// (registrant). Abuse contacts are left out: they are usually the provider's
+// abuse desk, not the owner's.
 var registrationContactLabels = map[string]bool{
 	"registrant_contact": true, "admin_contact": true, "technical_contact": true, "billing_contact": true,
+	"registrant": true,
 }
 
 // emailDomainSignals finds other registration contacts whose email address is
-// at the same custom domain as a contact of this controlled domain
-// registration. Two registrations whose contacts use one organization's mail
-// domain (admin@acme.com and security@acme.com) are almost always controlled
-// by the same party, a link a shared exact email value misses.
-func (g *gapSearch) emailDomainSignals(dr graph.Asset) error {
+// at the same custom domain as a contact of this controlled registration (a
+// domain, IP network or autonomous-system record). Two registrations whose
+// contacts use one organization's mail domain (admin@acme.com and
+// security@acme.com) are almost always controlled by the same party, a link a
+// shared exact email value misses.
+func (g *gapSearch) emailDomainSignals(rec graph.Asset) error {
 	def, ok := firstSignal(matchEmailDomain)
 	if !ok || g.values == nil {
 		return nil
@@ -268,7 +273,7 @@ func (g *gapSearch) emailDomainSignals(dr graph.Asset) error {
 		free[strings.ToLower(d)] = true
 	}
 
-	steps, err := g.w.steps(dr)
+	steps, err := g.w.steps(rec)
 	if err != nil {
 		return err
 	}
@@ -324,7 +329,7 @@ func (g *gapSearch) emailDomainSignals(dr graph.Asset) error {
 					continue
 				}
 
-				witness := append(g.pathTo(dr.ID), matched(ctl, t.other, "same_email_domain", "@"+dom))
+				witness := append(g.pathTo(rec.ID), matched(ctl, t.other, "same_email_domain", "@"+dom))
 				g.add(t.other, def.ID, "ContactRecord email domain ContactRecord", witness)
 			}
 		}

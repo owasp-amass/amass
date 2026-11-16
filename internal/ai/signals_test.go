@@ -435,3 +435,44 @@ func TestRegistrantEmailDomainSignal(t *testing.T) {
 		t.Errorf("a free-mail domain gave an email-domain signal: %+v", fc)
 	}
 }
+
+// TestEmailDomainSignalSpansIPAndDomainRegistrations: the email domain of a
+// controlled IP-network registration contact links an unowned domain whose
+// registrant uses the same mail domain, across registration kinds.
+func TestEmailDomainSignalSpansIPAndDomainRegistrations(t *testing.T) {
+	g := signalsFixture()
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	link := func(from, label, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+	email := func(id, addr string) { add(id, "Identifier", id, map[string]any{"id": addr, "id_type": "email"}) }
+
+	// Colgate's controlled network registration has its own operations contact
+	// at a custom mail domain.
+	add("cr-netops", "ContactRecord", "https://rdap.example/netops", nil)
+	email("email:noc@colgate-net.example", "noc@colgate-net.example")
+	link("ipnet-own", "registrant", "cr-netops")
+	link("cr-netops", "id", "email:noc@colgate-net.example")
+
+	// An unowned domain registered with a different mailbox at that same mail
+	// domain: the same operator, found across network and domain registration.
+	add("partner.example", "FQDN", "partner.example", map[string]any{"name": "partner.example"})
+	add("dr-partner", "DomainRecord", "partner.example", map[string]any{"domain": "partner.example"})
+	add("cr-partner", "ContactRecord", "https://rdap.example/partner", nil)
+	email("email:admin@colgate-net.example", "admin@colgate-net.example")
+	link("partner.example", "registration", "dr-partner")
+	link("dr-partner", "registrant_contact", "cr-partner")
+	link("cr-partner", "id", "email:admin@colgate-net.example")
+
+	r := signalsReport(t, g)
+	c := candidateByID(r, "cr-partner")
+	if c == nil {
+		t.Fatalf("cr-partner is not a candidate: %+v", r.Candidates)
+	}
+	if !slices.Contains(signalIDs(c), "shared_registrant_email_domain") {
+		t.Errorf("cr-partner signals = %v, want shared_registrant_email_domain", signalIDs(c))
+	}
+}

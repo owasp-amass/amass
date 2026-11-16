@@ -166,6 +166,10 @@ func (g *gapSearch) valueSignalsOf(a graph.Asset, pass int) error {
 		}
 
 		return g.emailDomainSignals(a)
+	case "IPNetRecord", "AutnumRecord":
+		// Network and autonomous-system registrations carry the same kind of
+		// contacts as domains, so their email domains pivot the same way.
+		return g.emailDomainSignals(a)
 	}
 
 	return nil
