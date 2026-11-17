@@ -57,13 +57,13 @@ func queryNSF(h *source, e *et.Event, orgent *dbt.Entity, name string) {
 	body, err := h.get(e, u)
 	if err != nil {
 		e.Session.Log().Error(fmt.Sprintf("NSF query for %s failed: %s", name, err),
-			slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+			slog.Group("plugin", "name", h.name))
 		return
 	}
 	grants, err := parseNSF([]byte(body))
 	if err != nil {
 		e.Session.Log().Error(fmt.Sprintf("failed to parse NSF awards for %s: %s", name, err),
-			slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+			slog.Group("plugin", "name", h.name))
 		return
 	}
 

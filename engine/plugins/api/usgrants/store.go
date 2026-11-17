@@ -43,7 +43,7 @@ func (h *source) postJSON(e *et.Event, u, body string) (string, error) {
 }
 
 func (h *source) request(e *et.Event, r *amasshttp.Request) (string, error) {
-	_ = support.WaitLimit(e.Session.Ctx(), h.plugin.rlimit)
+	_ = support.WaitLimit(e.Session.Ctx(), h.rlimit)
 	e.Session.NetSem().Acquire()
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, r)
@@ -85,18 +85,18 @@ func (h *source) store(e *et.Event, orgent *dbt.Entity, g *grant) *dbt.Entity {
 	})
 	if err != nil || fundent == nil {
 		msg := fmt.Sprintf("failed to create the FundsTransfer for %s: %s", g.id, err)
-		e.Session.Log().Error(msg, slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", h.name))
 		return nil
 	}
 	_, _ = e.Session.DB().CreateEntityProperty(ctx, fundent, &general.SourceProperty{
 		Source: h.src.Name, Confidence: h.src.Confidence,
 	})
-	if err := h.plugin.createRelation(ctx, e.Session, fundent,
+	if err := h.createRelation(ctx, e.Session, fundent,
 		&general.SimpleRelation{Name: "recipient"}, orgacc, h.src); err != nil {
 		return nil
 	}
 	if agency := h.agencyOrg(e, g.agency); agency != nil {
-		_ = h.plugin.createRelation(ctx, e.Session, fundent,
+		_ = h.createRelation(ctx, e.Session, fundent,
 			&general.SimpleRelation{Name: "third_party"}, agency, h.src)
 	}
 
@@ -139,7 +139,7 @@ func (h *source) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *dbt.Entity
 	_, _ = e.Session.DB().CreateEntityProperty(ctx, accountent, &general.SourceProperty{
 		Source: h.src.Name, Confidence: h.src.Confidence,
 	})
-	_ = h.plugin.createRelation(ctx, e.Session, orgent,
+	_ = h.createRelation(ctx, e.Session, orgent,
 		&general.SimpleRelation{Name: "account"}, accountent, h.src)
 	return accountent
 }

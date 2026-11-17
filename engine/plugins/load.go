@@ -10,6 +10,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/edgar"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/propublica"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/ted"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
@@ -75,6 +76,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	lookalike.NewLookalikes,
 	mtasts.NewMTASTS,
 	osm.NewOpenStreetMap,
+	propublica.NewProPublica,
 	securitytxt.NewSecurityTxt,
 	sshp.NewSSHProbing,
 	bannerp.NewBannerProbing,
@@ -87,7 +89,9 @@ var pluginNewFuncs = []func() et.Plugin{
 	scrape.NewSiteDossier,
 	ted.NewTED,
 	usaspending.NewUSASpending,
-	usgrants.NewUSGrants,
+	usgrants.NewNSF,
+	usgrants.NewNIH,
+	usgrants.NewSBIR,
 	whois.NewWHOIS,
 	NewIPNetblock,
 	NewJARMFingerprints,

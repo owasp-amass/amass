@@ -69,13 +69,13 @@ func queryNIH(h *source, e *et.Event, orgent *dbt.Entity, name string) {
 	body, err := h.postJSON(e, "https://api.reporter.nih.gov/v2/projects/search", string(bodyJSON))
 	if err != nil {
 		e.Session.Log().Error(fmt.Sprintf("NIH query for %s failed: %s", name, err),
-			slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+			slog.Group("plugin", "name", h.name))
 		return
 	}
 	grants, err := parseNIH([]byte(body))
 	if err != nil {
 		e.Session.Log().Error(fmt.Sprintf("failed to parse NIH awards for %s: %s", name, err),
-			slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+			slog.Group("plugin", "name", h.name))
 		return
 	}
 
