@@ -96,6 +96,12 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 	expand := map[string]any{"type": "boolean",
 		"description": "Allow scope expansion: domains, netblocks and ASes the engine attributes to the targets' " +
 			"organization while it runs are collected too (default false: only the listed targets)"}
+	bruteForce := map[string]any{"type": "boolean",
+		"description": "Turn on DNS brute forcing: guess subdomain names from a wordlist (active mode only, " +
+			"default false). Off unless the user asks for it; it greatly increases the work and the queries sent."}
+	alterations := map[string]any{"type": "boolean",
+		"description": "Turn on name alterations: permute discovered names to find more (active mode only, " +
+			"default false). Off unless the user asks for it."}
 	obj := func(required []string, props map[string]any) map[string]any {
 		schema := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
 		if len(required) > 0 {
@@ -145,34 +151,37 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 	add(ToolPlanEnumeration, "Plan an Amass enumeration",
 		"Show what an enumeration would do, without starting it: the scope (one target, any more targets in also, "+
 			"and whether it may expand), the methods, their effects, and the plan_id that start_enumeration needs.",
-		obj([]string{"target"}, map[string]any{"target": target, "mode": mode, "also": also, "expand": expand}),
+		obj([]string{"target"}, map[string]any{"target": target, "mode": mode, "also": also, "expand": expand,
+			"brute_force": bruteForce, "alterations": alterations}),
 		readOnly(),
 		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
 			var a struct {
-				Target string
-				Mode   string
-				Also   []string
-				Expand bool
+				Target      string
+				Mode        string
+				Also        []string
+				Expand      bool
+				BruteForce  bool `json:"brute_force"`
+				Alterations bool
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return nil, err
 			}
 
-			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
+			plan := planFor(a.Target, a.Mode, a.Also, a.Expand, a.BruteForce, a.Alterations)
 			if plan.Status != collect.StatusApprovalRequired {
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 
 			return jsonResult(map[string]any{"plan": plan,
 				"next": "Show the user the scope and effects, then call start_enumeration with the same target, " +
-					"mode, also and expand, and this plan_id. The user is asked to approve it."}), nil
+					"mode, also, expand, brute_force and alterations, and this plan_id. The user is asked to approve it."}), nil
 		})
 
 	approveAction(ToolStartEnumeration, "Start an Amass enumeration",
 		"Start the enumeration a plan_enumeration call described. Collects data from the Internet about the "+
 			"target and stores it in the Asset Database; the user is asked to approve it first.",
 		obj([]string{"target", "plan_id"}, map[string]any{"target": target, "mode": mode, "also": also,
-			"expand": expand, "plan_id": map[string]any{
+			"expand": expand, "brute_force": bruteForce, "alterations": alterations, "plan_id": map[string]any{
 				"type":        "string",
 				"description": "The plan_id plan_enumeration returned",
 			}}),
@@ -180,11 +189,13 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 		func(ctx context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (string,
 			func(via string) (*mcp.CallToolResult, error), error) {
 			var a struct {
-				Target string
-				Mode   string
-				Also   []string
-				Expand bool
-				PlanID string `json:"plan_id"`
+				Target      string
+				Mode        string
+				Also        []string
+				Expand      bool
+				BruteForce  bool `json:"brute_force"`
+				Alterations bool
+				PlanID      string `json:"plan_id"`
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return "", nil, err
@@ -193,13 +204,13 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 				return "", nil, errors.New("this server cannot start enumerations: no engine is configured")
 			}
 
-			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
+			plan := planFor(a.Target, a.Mode, a.Also, a.Expand, a.BruteForce, a.Alterations)
 			if plan.Status != collect.StatusApprovalRequired {
 				return "", nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return "", nil, errors.New("plan_id does not match this target, mode, also and expand; call " +
-					"plan_enumeration again and show the user the new plan")
+				return "", nil, errors.New("plan_id does not match this target, mode, also, expand, brute_force " +
+					"and alterations; call plan_enumeration again and show the user the new plan")
 			}
 
 			msg := fmt.Sprintf("Start a %s?\n\n%s", plan.Summary(), plan.Effects)
@@ -275,7 +286,8 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 		"Re-run the enumeration a plan_enumeration call described on a schedule, so changes to the target are "+
 			"collected without asking each time. The user approves the watch once; it runs until stop_watch.",
 		obj([]string{"target", "plan_id", "every_hours"}, map[string]any{"target": target, "mode": mode,
-			"also": also, "expand": expand, "plan_id": map[string]any{
+			"also": also, "expand": expand, "brute_force": bruteForce, "alterations": alterations,
+			"plan_id": map[string]any{
 				"type":        "string",
 				"description": "The plan_id plan_enumeration returned",
 			},
@@ -285,12 +297,14 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 		func(_ context.Context, req *mcp.CallToolRequest, raw json.RawMessage) (string,
 			func(via string) (*mcp.CallToolResult, error), error) {
 			var a struct {
-				Target     string
-				Mode       string
-				Also       []string
-				Expand     bool
-				PlanID     string `json:"plan_id"`
-				EveryHours int    `json:"every_hours"`
+				Target      string
+				Mode        string
+				Also        []string
+				Expand      bool
+				BruteForce  bool `json:"brute_force"`
+				Alterations bool
+				PlanID      string `json:"plan_id"`
+				EveryHours  int    `json:"every_hours"`
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return "", nil, err
@@ -299,13 +313,13 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 				return "", nil, errors.New("this server cannot keep watches")
 			}
 
-			plan := planFor(a.Target, a.Mode, a.Also, a.Expand)
+			plan := planFor(a.Target, a.Mode, a.Also, a.Expand, a.BruteForce, a.Alterations)
 			if plan.Status != collect.StatusApprovalRequired {
 				return "", nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return "", nil, errors.New("plan_id does not match this target, mode, also and expand; call " +
-					"plan_enumeration again")
+				return "", nil, errors.New("plan_id does not match this target, mode, also, expand, brute_force " +
+					"and alterations; call plan_enumeration again")
 			}
 
 			every := time.Duration(a.EveryHours) * time.Hour
@@ -561,13 +575,13 @@ func approver(req *mcp.CallToolRequest, via string) string {
 var asNumber = regexp.MustCompile(`^(?i:as)?(\d{1,10})$`)
 
 // planFor reads a target as a user writes it.
-func planFor(target, mode string, also []string, expand bool) collect.Plan {
+func planFor(target, mode string, also []string, expand, bruteForce, alterations bool) collect.Plan {
 	m := collect.Mode(strings.ToLower(strings.TrimSpace(mode)))
 	if m == "" {
 		m = collect.Passive
 	}
 
-	opts := collect.Options{Expand: expand}
+	opts := collect.Options{Expand: expand, BruteForce: bruteForce, Alterations: alterations}
 	for _, a := range also {
 		opts.Also = append(opts.Also, selectorFor(a))
 	}

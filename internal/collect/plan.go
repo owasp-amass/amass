@@ -55,6 +55,8 @@ type Plan struct {
 	ScopeValue       string              `json:"scope_value,omitempty"`
 	Also             []ScopeEntry        `json:"also,omitempty"`
 	Expand           bool                `json:"expand,omitempty"`
+	BruteForce       bool                `json:"brute_force,omitempty"`
+	Alterations      bool                `json:"alterations,omitempty"`
 	Methods          []string            `json:"methods,omitempty"`
 	Effects          string              `json:"effects,omitempty"`
 	RequiresApproval bool                `json:"requires_approval"`
@@ -76,6 +78,13 @@ type Options struct {
 	// domains, netblocks and autonomous systems it attributes to the
 	// targets' organization (as amass enum does without -rigid).
 	Expand bool
+	// BruteForce turns on DNS brute forcing (as amass enum does with -brute).
+	// It is off unless requested: brute forcing is never implied by active
+	// mode, so an active run does not guess names unless asked.
+	BruteForce bool
+	// Alterations turns on name alterations (as amass enum does with -alts).
+	// Like brute forcing it is off unless requested.
+	Alterations bool
 }
 
 // MaxAlso is how many targets a plan may add beside its own.
@@ -135,6 +144,8 @@ func NewPlanWith(target graph.AssetSelector, mode Mode, opts Options) Plan {
 
 	plan.ScopeType, plan.ScopeValue = typ, value
 	plan.Expand = opts.Expand
+	plan.BruteForce = mode == Active && opts.BruteForce
+	plan.Alterations = mode == Active && opts.Alterations
 	plan.Mode = mode
 	plan.Status = StatusApprovalRequired
 	plan.ID = plan.expectedID()
@@ -150,11 +161,25 @@ func NewPlanWith(target graph.AssetSelector, mode Mode, opts Options) Plan {
 		plan.Reason = "Passive collection of " + what + " only; unrelated or newly discovered targets are not " +
 			"separately authorized."
 	} else {
-		plan.Methods = []string{"amass-engine-passive", "dns-brute-force", "name-alterations", "zone-transfer",
-			"certificate-and-service-probes"}
-		plan.Effects = "In addition to passive collection, sends DNS queries for guessed names, attempts zone " +
-			"transfers from the targets' name servers, and connects to the targets' hosts on the configured " +
-			"ports to read certificates and service banners. Run only against systems you are authorized to test."
+		// Brute forcing and name alterations are never implied by active mode;
+		// they are added only when requested, so an active run does not guess
+		// names unless asked.
+		plan.Methods = []string{"amass-engine-passive"}
+		if plan.BruteForce {
+			plan.Methods = append(plan.Methods, "dns-brute-force")
+		}
+		if plan.Alterations {
+			plan.Methods = append(plan.Methods, "name-alterations")
+		}
+		plan.Methods = append(plan.Methods, "zone-transfer", "certificate-and-service-probes")
+
+		plan.Effects = "In addition to passive collection, attempts zone transfers from the targets' name " +
+			"servers, and connects to the targets' hosts on the configured ports to read certificates and " +
+			"service banners."
+		if guessed := namesGuessed(plan.BruteForce, plan.Alterations); guessed != "" {
+			plan.Effects += " It also sends DNS queries for " + guessed + "."
+		}
+		plan.Effects += " Run only against systems you are authorized to test."
 		plan.Reason = "Active collection of " + what + " only; the scope is not expanded to newly discovered " +
 			"domains or networks."
 	}
@@ -172,6 +197,21 @@ func NewPlanWith(target graph.AssetSelector, mode Mode, opts Options) Plan {
 	}
 
 	return plan
+}
+
+// namesGuessed describes the name-guessing an active plan does, or "" when it
+// does none.
+func namesGuessed(brute, alts bool) string {
+	switch {
+	case brute && alts:
+		return "guessed and altered names"
+	case brute:
+		return "guessed names"
+	case alts:
+		return "altered names"
+	default:
+		return ""
+	}
 }
 
 // scopeOf validates one target for collection in mode and returns its scope

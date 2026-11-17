@@ -53,8 +53,10 @@ func configure(cfg *config.Config, plan Plan) ([]oam.Asset, error) {
 	cfg.Recursive = false
 	cfg.Passive = plan.Mode == Passive
 	cfg.Active = plan.Mode == Active
-	cfg.BruteForcing = plan.Mode == Active
-	cfg.Alterations = plan.Mode == Active
+	// Brute forcing and name alterations are opt-in, never implied by active
+	// mode: they run only when the plan requested them.
+	cfg.BruteForcing = plan.BruteForce
+	cfg.Alterations = plan.Alterations
 
 	entries := append([]ScopeEntry{{Type: plan.ScopeType, Value: plan.ScopeValue}}, plan.Also...)
 	assets := make([]oam.Asset, 0, len(entries))

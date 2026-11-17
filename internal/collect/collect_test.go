@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,9 +62,30 @@ func TestConfigureNarrowsScope(t *testing.T) {
 	if _, err := Configure(cfg, plan); err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Active || !cfg.BruteForcing || cfg.Passive || !cfg.Rigid || len(cfg.ProvidedNames) != 0 ||
-		len(cfg.Scope.Domains) != 1 || len(cfg.Scope.Ports) != 3 {
+	// Active mode alone must NOT turn on brute forcing or alterations.
+	if !cfg.Active || cfg.BruteForcing || cfg.Alterations || cfg.Passive || !cfg.Rigid ||
+		len(cfg.ProvidedNames) != 0 || len(cfg.Scope.Domains) != 1 || len(cfg.Scope.Ports) != 3 {
 		t.Errorf("active config = %+v scope %+v", cfg, cfg.Scope)
+	}
+
+	// Brute forcing and alterations turn on only when the plan requested them.
+	cfg = config.NewConfig()
+	brute := NewPlanWith(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}, Active,
+		Options{BruteForce: true, Alterations: true})
+	if _, err := Configure(cfg, brute); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.BruteForcing || !cfg.Alterations {
+		t.Errorf("requested brute/alts not applied: %+v", cfg)
+	}
+	if !slices.Contains(brute.Methods, "dns-brute-force") || !slices.Contains(brute.Methods, "name-alterations") {
+		t.Errorf("requested brute/alts not in methods: %+v", brute.Methods)
+	}
+	// A passive plan can never brute force, even if asked.
+	passiveBrute := NewPlanWith(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}, Passive,
+		Options{BruteForce: true})
+	if passiveBrute.BruteForce || slices.Contains(passiveBrute.Methods, "dns-brute-force") {
+		t.Errorf("passive plan must not brute force: %+v", passiveBrute)
 	}
 
 	cfg = config.NewConfig()

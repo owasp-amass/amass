@@ -492,11 +492,11 @@ func TestPlanForReadsTargets(t *testing.T) {
 	cases := map[string]string{"example.com": "domain", "8.8.8.8": "ip", "8.8.8.0/24": "cidr", "AS15169": "asn",
 		"15169": "asn"}
 	for target, want := range cases {
-		if p := planFor(target, "", nil, false); p.ScopeType != want || p.Mode != collect.Passive {
+		if p := planFor(target, "", nil, false, false, false); p.ScopeType != want || p.Mode != collect.Passive {
 			t.Errorf("%s = %+v", target, p)
 		}
 	}
-	if p := planFor("example.com", "loud", nil, false); p.Status != collect.StatusUnsupported {
+	if p := planFor("example.com", "loud", nil, false, false, false); p.Status != collect.StatusUnsupported {
 		t.Errorf("unknown mode planned: %+v", p)
 	}
 }
