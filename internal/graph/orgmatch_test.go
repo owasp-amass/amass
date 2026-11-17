@@ -2,9 +2,82 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package collect
+package graph
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+)
+
+// fakeOrgSearch is a minimal OrgSearchGraph: it resolves an exact name and
+// lists its organizations for the fuzzy pass.
+type fakeOrgSearch struct{ orgs []Asset }
+
+func (f fakeOrgSearch) FindAssets(_ context.Context, kind string, _ time.Time, limit int) ([]Asset, error) {
+	if kind != "Organization" {
+		return nil, nil
+	}
+	if limit > 0 && len(f.orgs) > limit {
+		return f.orgs[:limit], nil
+	}
+	return f.orgs, nil
+}
+
+func (f fakeOrgSearch) ResolveOrganizations(_ context.Context, q OrganizationQuery, _ int) (OrganizationResolution, error) {
+	var cands []OrganizationCandidate
+	for _, a := range f.orgs {
+		if strings.EqualFold(ContentString(a, "name"), q.Name) {
+			cands = append(cands, OrganizationCandidate{Asset: a})
+		}
+	}
+	st := "not_found"
+	switch {
+	case len(cands) == 1:
+		st = "matched"
+	case len(cands) > 1:
+		st = "ambiguous"
+	}
+	return OrganizationResolution{Query: q, Status: st, Candidates: cands}, nil
+}
+
+func orgAsset(id, name string) Asset {
+	return Asset{ID: id, Type: "Organization", Key: name, Content: map[string]any{"name": name}}
+}
+
+func TestResolveOrSuggest(t *testing.T) {
+	g := fakeOrgSearch{orgs: []Asset{
+		orgAsset("1", "SUNY Polytechnic Institute"),
+		orgAsset("2", "Acme Corporation"),
+		orgAsset("3", "Example Corp"),
+		orgAsset("4", "Example Corp"),
+	}}
+	ctx := context.Background()
+
+	// Exact name → a single match, no candidate list.
+	if r, err := ResolveOrSuggest(ctx, g, "Acme Corporation", 5); err != nil ||
+		r.Status != StatusMatched || r.Match == nil || r.Match.ID != "2" {
+		t.Errorf("exact: %+v err=%v", r, err)
+	}
+
+	// Partial name → no exact match → closest stored name as a suggestion.
+	r, err := ResolveOrSuggest(ctx, g, "SUNY Poly", 5)
+	if err != nil || r.Status != StatusSuggestions || len(r.Candidates) == 0 || r.Candidates[0].ID != "1" {
+		t.Errorf("partial: %+v err=%v", r, err)
+	}
+
+	// Several orgs with the same exact name → pick-one candidates.
+	r, err = ResolveOrSuggest(ctx, g, "Example Corp", 5)
+	if err != nil || r.Status != StatusSuggestions || len(r.Candidates) != 2 || r.Candidates[0].Why != "exact name" {
+		t.Errorf("ambiguous: %+v err=%v", r, err)
+	}
+
+	// Nothing close → not found.
+	if r, err := ResolveOrSuggest(ctx, g, "Umbrella Pharmaceuticals", 5); err != nil || r.Status != StatusNotFound {
+		t.Errorf("not found: %+v err=%v", r, err)
+	}
+}
 
 func TestRankOrganizations(t *testing.T) {
 	cands := []OrgCandidate{

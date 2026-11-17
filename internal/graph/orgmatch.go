@@ -2,20 +2,114 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package collect
+package graph
 
 import (
+	"context"
+	"errors"
 	"sort"
 	"strings"
+	"time"
 )
 
-// Organization-name disambiguation.
+// Organization-name disambiguation, shared by every tool and lens that takes an
+// organization by name (enumeration, the lenses, investigate, visualize).
 //
-// Starting an enumeration from an organization needs an EXACT organization:
-// the resolver never guesses by similarity, so a misspelled or partial name
-// resolves to nothing. This ranking turns such a name into a short list of
-// candidates for a person to choose from. It only proposes — the caller still
-// selects exactly one, so a wrong guess never seeds a run.
+// Resolving an organization needs an EXACT match: the resolver never guesses by
+// similarity, so a misspelled or partial name resolves to nothing. This turns
+// such a name into a short list of candidates for a person to choose from. It
+// only proposes — the caller still selects exactly one, so a wrong guess never
+// drives an action.
+
+// Organization resolution statuses returned by ResolveOrSuggest.
+const (
+	StatusMatched     = "matched"     // exactly one organization matched
+	StatusSuggestions = "suggestions" // no single match; candidates to choose from
+	StatusNotFound    = "not_found"   // nothing close enough to offer
+)
+
+const (
+	// orgSuggestPoolLimit bounds how many stored organizations the fuzzy
+	// suggestion pass ranks.
+	orgSuggestPoolLimit = 5000
+	// orgExactCandidates bounds the exact resolver's candidate list.
+	orgExactCandidates = 10
+)
+
+// OrgSearchGraph is a graph that can both resolve an exact organization and
+// list organizations for fuzzy suggestion.
+type OrgSearchGraph interface {
+	FindAssets(context.Context, string, time.Time, int) ([]Asset, error)
+	ResolveOrganizations(context.Context, OrganizationQuery, int) (OrganizationResolution, error)
+}
+
+// OrgResolution is the outcome of resolving an organization name: an exact
+// match, a short list of candidates to choose from, or nothing.
+type OrgResolution struct {
+	Status     string     `json:"status"`
+	Match      *Asset     `json:"match,omitempty"`
+	Candidates []OrgMatch `json:"candidates,omitempty"`
+}
+
+// ResolveOrSuggest resolves an organization by name. One exact match is
+// returned as Match; several same-name matches, or (failing that) the closest
+// stored names, are returned as Candidates for a person to choose from. It
+// never selects a candidate itself, so an inexact name never drives an action.
+func ResolveOrSuggest(ctx context.Context, g OrgSearchGraph, name string, limit int) (OrgResolution, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return OrgResolution{}, errors.New("organization name is required")
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+
+	res, err := g.ResolveOrganizations(ctx, OrganizationQuery{Name: name}, orgExactCandidates)
+	if err != nil {
+		return OrgResolution{}, err
+	}
+	switch res.Status {
+	case "matched":
+		m := res.Candidates[0].Asset
+		return OrgResolution{Status: StatusMatched, Match: &m}, nil
+	case "ambiguous", "truncated":
+		// Several organizations carry this exact name; let the user pick.
+		out := make([]OrgMatch, 0, limit)
+		for _, c := range res.Candidates {
+			out = append(out, OrgMatch{OrgCandidate: candidateFromAsset(c.Asset), Score: 1, Why: "exact name"})
+			if len(out) >= limit {
+				break
+			}
+		}
+		return OrgResolution{Status: StatusSuggestions, Candidates: out}, nil
+	}
+
+	// Nothing matched exactly: offer the closest stored names.
+	assets, err := g.FindAssets(ctx, "Organization", time.Time{}, orgSuggestPoolLimit)
+	if err != nil {
+		return OrgResolution{}, err
+	}
+	pool := make([]OrgCandidate, 0, len(assets))
+	for _, a := range assets {
+		pool = append(pool, candidateFromAsset(a))
+	}
+	matches := RankOrganizations(name, pool, limit)
+	if len(matches) == 0 {
+		return OrgResolution{Status: StatusNotFound}, nil
+	}
+	return OrgResolution{Status: StatusSuggestions, Candidates: matches}, nil
+}
+
+// candidateFromAsset reads an Organization asset into an OrgCandidate. Domains
+// is left zero; a caller that needs it fills it from the controlled footprint.
+func candidateFromAsset(a Asset) OrgCandidate {
+	return OrgCandidate{
+		ID:           a.ID,
+		Name:         ContentString(a, "name"),
+		LegalName:    ContentString(a, "legal_name"),
+		Jurisdiction: ContentString(a, "jurisdiction"),
+	}
+}
 
 // orgMatchFloor is the lowest score a candidate needs to be offered.
 const orgMatchFloor = 0.6
