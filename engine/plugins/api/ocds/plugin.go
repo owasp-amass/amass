@@ -63,7 +63,7 @@ func (o *ocds) Start(r et.Registry) error {
 		Plugin:       o,
 		Name:         o.handler.name,
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.FundsTransfer),

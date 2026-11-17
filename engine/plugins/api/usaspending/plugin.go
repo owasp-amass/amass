@@ -68,7 +68,7 @@ func (u *usaspending) Start(r et.Registry) error {
 		Plugin:       u,
 		Name:         u.awards.name,
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.FundsTransfer),

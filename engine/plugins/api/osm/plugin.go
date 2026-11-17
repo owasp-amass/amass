@@ -72,7 +72,7 @@ func (o *openstreetmap) Start(r et.Registry) error {
 		Plugin:       o,
 		Name:         o.phones.name,
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.ContactRecord),

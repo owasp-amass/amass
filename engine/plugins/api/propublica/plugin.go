@@ -68,7 +68,7 @@ func (p *propublica) Start(r et.Registry) error {
 		Plugin:       p,
 		Name:         p.filings.name,
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.Identifier),

@@ -10,39 +10,15 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/engine/registry"
-	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
-// handlerErrors keeps the errors from registering handlers.
-type handlerErrors struct {
-	et.Registry
-	errs []error
-}
-
-func (r *handlerErrors) RegisterHandler(h *et.Handler) error {
-	err := r.Registry.RegisterHandler(h)
-	if err != nil {
-		r.errs = append(r.errs, err)
-	}
-
-	return err
-}
-
-// Every plugin's handlers register together: two exclusive handlers at one
-// position for an asset type, or one handler name registered twice, stops
-// the engine at startup. Plugins that fail to start for other reasons, such
-// as no network in the test, are not this test's concern.
-func TestPluginHandlersRegisterTogether(t *testing.T) {
-	r := &handlerErrors{Registry: registry.NewRegistry(slog.New(slog.NewTextHandler(io.Discard, nil)))}
-
-	for _, f := range pluginNewFuncs {
-		if p := f(); p != nil {
-			if err := p.Start(r); err == nil {
-				defer p.Stop()
-			}
-		}
-	}
-	for _, err := range r.errs {
-		t.Errorf("a handler did not register: %v", err)
+// TestLoadAndStartPlugins ensures every registered plugin starts and registers
+// its handlers without conflict. Registering two exclusive handlers at the same
+// position for one EventType fails, which aborts startup and leaves the engine
+// unhealthy, so this guards against that regression.
+func TestLoadAndStartPlugins(t *testing.T) {
+	r := registry.NewRegistry(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := LoadAndStartPlugins(r); err != nil {
+		t.Fatalf("plugins failed to load and register cleanly: %v", err)
 	}
 }

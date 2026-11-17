@@ -70,7 +70,7 @@ func (t *ted) Start(r et.Registry) error {
 		Plugin:       t,
 		Name:         t.awards.name,
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.FundsTransfer),

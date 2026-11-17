@@ -80,7 +80,7 @@ func (ed *edgar) Start(r et.Registry) error {
 		Plugin:       ed,
 		Name:         ed.filings.name,
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.Identifier),

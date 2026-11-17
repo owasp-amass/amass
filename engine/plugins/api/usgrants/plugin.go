@@ -64,7 +64,7 @@ func (h *source) Start(r et.Registry) error {
 		Plugin:       h,
 		Name:         h.name + "-Handler",
 		Position:     42,
-		Exclusive:    true,
+		Exclusive:    false,
 		MaxInstances: support.MinHandlerInstances,
 		Transforms: []string{
 			string(oam.FundsTransfer),
