@@ -108,6 +108,18 @@ type ocdsRelease struct {
 			Name string `json:"name"`
 		} `json:"suppliers"`
 	} `json:"awards"`
+	// Some publishers (e.g. UK Find a Tender) leave award.value empty and
+	// record the amount on the contract or at the tender level instead.
+	Contracts []ocdsContract `json:"contracts"`
+	Tender    struct {
+		Value ocdsValue `json:"value"`
+	} `json:"tender"`
+}
+
+type ocdsContract struct {
+	AwardID    string    `json:"awardID"`
+	Value      ocdsValue `json:"value"`
+	DateSigned string    `json:"dateSigned"`
 }
 
 type ocdsPackage struct {
@@ -153,7 +165,22 @@ func awardsFromRelease(r ocdsRelease) []award {
 	}
 	var out []award
 	for _, a := range r.Awards {
+		amount, currency := a.Value.Amount, a.Value.Currency
 		date := a.Date
+		// Fall back to the award's contracts, then the tender value, when the
+		// award itself carries no amount.
+		if amount == 0 {
+			if sum, cur, signed := contractsTotal(r.Contracts, a.ID); sum > 0 {
+				amount, currency = sum, cur
+				if date == "" {
+					date = signed
+				}
+			} else if len(r.Awards) == 1 && r.Tender.Value.Amount > 0 {
+				// The tender value belongs to the whole process, so use it
+				// only when there is a single award to attribute it to.
+				amount, currency = r.Tender.Value.Amount, r.Tender.Value.Currency
+			}
+		}
 		if date == "" {
 			date = r.Date
 		}
@@ -163,11 +190,34 @@ func awardsFromRelease(r ocdsRelease) []award {
 			}
 			out = append(out, award{
 				ocid: r.OCID, id: a.ID, supplier: s.Name, buyer: buyer,
-				amount: a.Value.Amount, currency: a.Value.Currency, date: date,
+				amount: amount, currency: currency, date: date,
 			})
 		}
 	}
 	return out
+}
+
+// contractsTotal sums the value of the contracts belonging to one award,
+// when they share a currency, and returns the first contract's signing date.
+func contractsTotal(contracts []ocdsContract, awardID string) (float64, string, string) {
+	var sum float64
+	var currency, signed string
+	for _, c := range contracts {
+		if c.AwardID != awardID || c.Value.Amount <= 0 {
+			continue
+		}
+		switch {
+		case currency == "":
+			currency = c.Value.Currency
+		case currency != c.Value.Currency:
+			continue // mixed currencies; keep the first
+		}
+		sum += c.Value.Amount
+		if signed == "" {
+			signed = c.DateSigned
+		}
+	}
+	return sum, currency, signed
 }
 
 // releasesFromLine reads one line of a bulk OCDS export, which is either a
@@ -438,6 +488,13 @@ func bulkExt(pub publisher) string {
 }
 
 func (h *handler) store(e *et.Event, orgent *dbt.Entity, a *award, id string) {
+	// The Asset Database rejects a FundsTransfer with a non-positive amount,
+	// so skip an award we found no value for (award, contract or tender)
+	// rather than logging a storage error for each.
+	if a.amount <= 0 {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 

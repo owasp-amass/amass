@@ -148,6 +148,50 @@ func TestScanBulkNuevoLeonShape(t *testing.T) {
 	}
 }
 
+// TestUKValueFallback checks the UK Find a Tender shape, where award.value is
+// empty and the amount lives on the contract (linked by awardID) or, for a
+// single-award process, at the tender level; an award with no value anywhere
+// yields a zero amount (which store then skips).
+func TestUKValueFallback(t *testing.T) {
+	// A multi-award release: one award has a contract value, one has none.
+	multi := `{"releases":[{"ocid":"ocds-h6vhtk-1","date":"2024-01-01","tag":["compiled"],
+	  "buyer":{"name":"National Procurement Service (Welsh Government)"},
+	  "awards":[
+	    {"id":"A1","suppliers":[{"name":"Blake Morgan LLP"}]},
+	    {"id":"A2","suppliers":[{"name":"No Value Co"}]}],
+	  "contracts":[{"awardID":"A1","value":{"amount":60000000,"currency":"GBP"},"dateSigned":"2024-02-01"}],
+	  "tender":{"value":{"amount":138000,"currency":"GBP"}}}]}`
+	aws, err := parseOCDS([]byte(multi))
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]award{}
+	for _, a := range aws {
+		by[a.id] = a
+	}
+	// A1 takes its contract value (and the contract's signing date); the
+	// tender value is NOT applied because the release has more than one award.
+	if by["A1"].amount != 60000000 || by["A1"].currency != "GBP" || by["A1"].date != "2024-02-01" {
+		t.Errorf("A1 = %+v", by["A1"])
+	}
+	if by["A2"].amount != 0 {
+		t.Errorf("A2 should have no amount (store skips it): %+v", by["A2"])
+	}
+
+	// A single-award release with no contract falls back to the tender value.
+	single := `{"releases":[{"ocid":"ocds-h6vhtk-2","date":"2024-03-01","tag":["compiled"],
+	  "buyer":{"name":"Police & Crime Commissioner for Dorset"},
+	  "awards":[{"id":"B1","suppliers":[{"name":"Countrywide Grounds Maintenance Ltd"}]}],
+	  "tender":{"value":{"amount":138000,"currency":"GBP"}}}]}`
+	aws, err = parseOCDS([]byte(single))
+	if err != nil || len(aws) != 1 {
+		t.Fatalf("single-award parse: %v / %d", err, len(aws))
+	}
+	if aws[0].amount != 138000 || aws[0].currency != "GBP" {
+		t.Errorf("tender fallback = %+v", aws[0])
+	}
+}
+
 func TestReleasesFromLine(t *testing.T) {
 	// A bare compiled release on the line.
 	rels := releasesFromLine([]byte(`{"ocid":"ocds-1","awards":[{"id":"a","suppliers":[{"name":"Foo"}]}]}`))
