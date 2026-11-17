@@ -9,6 +9,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/edgar"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/ocds"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/propublica"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
@@ -75,6 +76,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	hp.NewHTTPProbing,
 	lookalike.NewLookalikes,
 	mtasts.NewMTASTS,
+	ocds.NewOCDS,
 	osm.NewOpenStreetMap,
 	propublica.NewProPublica,
 	securitytxt.NewSecurityTxt,
