@@ -13,9 +13,12 @@
 // publisher with a supplier-search API (query_url containing {supplier}) is
 // queried per organization; one that offers only a full export (bulk_url) is
 // ingested in bulk — downloaded once per day, streamed, and filtered to awards
-// whose supplier is the enumerated organization. A publisher is enabled only
-// after its endpoint and envelope are validated against a real sample. Keyless
-// and on by default; rate-limited; TTL cadence.
+// whose supplier is the enumerated organization. Bulk ingestion is on-demand:
+// a publisher's export is fetched only when an organization from that
+// publisher's own country is seen, so a run that touches no organizations from
+// a country never downloads it. A publisher is enabled only after its endpoint
+// and envelope are validated against a real sample. Keyless and on by default;
+// rate-limited; TTL cadence.
 package ocds
 
 import (

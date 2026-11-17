@@ -9,7 +9,37 @@ import (
 	"compress/gzip"
 	"strings"
 	"testing"
+
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
+
+func TestOrgCountry(t *testing.T) {
+	cases := map[string]string{"US-DE": "US", "MX": "MX", "gb": "GB", "": "", " BE ": "BE"}
+	for j, want := range cases {
+		if got := orgCountry(&oamorg.Organization{Jurisdiction: j}); got != want {
+			t.Errorf("orgCountry(%q) = %q, want %q", j, got, want)
+		}
+	}
+}
+
+func TestBulkApplies(t *testing.T) {
+	mx := publisher{Key: "mx", Country: "MX", BulkURL: "https://example/full.jsonl.gz"}
+	if !bulkApplies(mx, "MX") {
+		t.Error("an MX organization should trigger the MX bulk export")
+	}
+	if bulkApplies(mx, "mx") == false {
+		t.Error("country match should be case-insensitive")
+	}
+	if bulkApplies(mx, "US") {
+		t.Error("a US organization must not trigger the MX bulk export")
+	}
+	if bulkApplies(mx, "") {
+		t.Error("an unknown country must not trigger any bulk export")
+	}
+	if bulkApplies(publisher{Country: "MX"}, "MX") {
+		t.Error("a publisher with no bulk_url never applies")
+	}
+}
 
 // A release package with the buyer named directly and two suppliers on one award.
 const releasePackage = `{"releases":[

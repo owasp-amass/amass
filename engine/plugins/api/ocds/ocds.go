@@ -68,6 +68,26 @@ type bulkEntry struct {
 	fetched time.Time
 }
 
+// bulkApplies reports whether a publisher's bulk export should be fetched for
+// an organization from the given country (ISO alpha-2). Bulk ingestion is
+// on-demand: it runs only when an organization from the publisher's own country
+// is seen, so an enumeration that touches no organizations from a country never
+// downloads that country's export.
+func bulkApplies(pub publisher, country string) bool {
+	return pub.BulkURL != "" && country != "" && pub.Country != "" &&
+		strings.EqualFold(country, pub.Country)
+}
+
+// orgCountry is an organization's ISO alpha-2 country, taken from the country
+// part of its jurisdiction ("US-DE" -> "US", "MX" -> "MX"), or "" when unknown.
+func orgCountry(o *oamorg.Organization) string {
+	j := strings.ToUpper(strings.TrimSpace(o.Jurisdiction))
+	if i := strings.IndexByte(j, '-'); i > 0 {
+		return j[:i]
+	}
+	return j
+}
+
 var loadPublishers = sync.OnceValue(func() []publisher {
 	var c struct {
 		Publishers []publisher `json:"publishers"`
@@ -282,13 +302,17 @@ func (h *handler) check(e *et.Event) error {
 	if !ok {
 		return nil
 	}
+	country := orgCountry(o)
 
 	for _, pub := range loadPublishers() {
 		if !pub.Enabled {
 			continue
 		}
 		search := strings.Contains(pub.QueryURL, "{supplier}")
-		bulk := pub.BulkURL != ""
+		// Bulk ingestion is on-demand: a publisher's large export is fetched
+		// only when an organization from that publisher's country is seen, so a
+		// run that touches no organizations from a country never downloads it.
+		bulk := bulkApplies(pub, country)
 		if !search && !bulk {
 			continue
 		}
