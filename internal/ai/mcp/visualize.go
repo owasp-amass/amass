@@ -147,24 +147,35 @@ func resolveSubject(ctx context.Context, g graph.Graph, subject string) (graph.A
 		return res.Candidates[0].Asset, nil
 	}
 
-	lookup, ok := g.(graph.OrganizationLookup)
+	searcher, ok := g.(graph.OrgSearchGraph)
 	if !ok {
 		return graph.Asset{}, errors.New("the database cannot look up organizations")
 	}
 
-	orgs, err := lookup.LookupOrganizations(ctx, subject, 5)
+	// Shared resolve/suggest: one exact name is used directly; a misspelled or
+	// partial name, or several same-name organizations, come back as ranked
+	// candidates to choose from.
+	res, err := graph.ResolveOrSuggest(ctx, searcher, subject, 5)
 	if err != nil {
 		return graph.Asset{}, err
 	}
-	switch len(orgs) {
-	case 0:
-		return graph.Asset{}, fmt.Errorf("no organization named %q; try resolve_organization", subject)
-	case 1:
-		return orgs[0], nil
+	switch res.Status {
+	case graph.StatusMatched:
+		return *res.Match, nil
+	case graph.StatusSuggestions:
+		names := make([]string, 0, len(res.Candidates))
+		for _, c := range res.Candidates {
+			label := c.Name
+			if c.Jurisdiction != "" {
+				label += " [" + c.Jurisdiction + "]"
+			}
+			names = append(names, label)
+		}
+		return graph.Asset{}, fmt.Errorf("no exact match for organization %q; did you mean: %s", subject,
+			strings.Join(names, "; "))
 	}
 
-	return graph.Asset{}, fmt.Errorf("%d organizations are named %q; use resolve_organization to pick one",
-		len(orgs), subject)
+	return graph.Asset{}, fmt.Errorf("no organization matches %q", subject)
 }
 
 // footprint computes the drawing of a subject's controlled footprint.

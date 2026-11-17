@@ -91,22 +91,29 @@ func groupRoot(ctx context.Context, g groupGraph, domain, org string) (graph.Ass
 		}
 		root = res.Candidates[0].Asset
 	case org != "":
-		res, err := g.ResolveOrganizations(ctx, graph.OrganizationQuery{Name: org}, 10)
+		// Shared resolve/suggest: an exact name is used directly; a misspelled
+		// or partial name, or several same-name organizations, come back as
+		// ranked candidates to choose from rather than a bare "not found".
+		res, err := graph.ResolveOrSuggest(ctx, g, org, 5)
 		if err != nil {
 			return root, err
 		}
-		switch len(res.Candidates) {
-		case 0:
-			return root, fmt.Errorf("no stored organization is named %q", org)
-		case 1:
-			root = res.Candidates[0].Asset
-		default:
+		switch res.Status {
+		case graph.StatusMatched:
+			root = *res.Match
+		case graph.StatusSuggestions:
 			names := make([]string, 0, len(res.Candidates))
 			for _, c := range res.Candidates {
-				names = append(names, fmt.Sprintf("%s [%s]", graph.AssetLabel(c.Asset), c.Asset.ID))
+				label := c.Name
+				if c.Jurisdiction != "" {
+					label += " [" + c.Jurisdiction + "]"
+				}
+				names = append(names, label)
 			}
-			return root, fmt.Errorf("%q names %d organizations; be more specific: %s", org, len(names),
+			return root, fmt.Errorf("no exact match for organization %q; did you mean: %s", org,
 				strings.Join(names, "; "))
+		default:
+			return root, fmt.Errorf("no stored organization matches %q", org)
 		}
 	default:
 		return root, errors.New("-org or -domain required")
