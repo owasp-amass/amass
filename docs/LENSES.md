@@ -27,6 +27,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens accounts -d <domain>` or `-org <name>` | The platform accounts (code hosts, social media) it has, computed from its stored profile URLs, with the handle on each |
 | `amass lens funding -d <domain>` or `-org <name>` | The funding rounds its company has received — amount, date and stage — and the investors behind them |
 | `amass lens contacts -d <domain>` or `-org <name>` | Its contact details: phone numbers, email addresses, contact people and postal addresses |
+| `amass lens affiliation -d <domain>` or `-org <name>` | Other organizations tied to it by a shared phone, person, funder or address, scored by confidence |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
@@ -405,6 +406,29 @@ record contributes. Phone numbers come from several collectors (RDAP and WHOIS
 registration contacts, and the OpenStreetMap collector worldwide); emails are the
 `email` identifiers; addresses are the stored locations. These are stored
 records, not a live lookup.
+
+## Affiliation
+
+```bash
+amass lens affiliation -d colgate.edu
+amass lens affiliation -org "Colgate University"
+```
+
+Computes the organizations a domain or organization is *affiliated* with —
+distinct organizations tied to it, not the same organization (that is the
+duplicates lens) and not mere coincidence. It looks for shared attributes: a
+phone number used by both, a person who is a contact or member of both, a funder
+or investor both received money from, or a shared postal address. Each shared
+attribute is a signal with a weight and rationale (`affiliation_signals.json`,
+cited per principle 8), and a candidate's signals combine by noisy-OR into a
+confidence, so independent signals reinforce each other and no single weak one
+is decisive. A matching organization name is never a signal, because
+organizations in different jurisdictions often share a name.
+
+This is a computed view, not stated ownership: a shared attribute is evidence of
+a tie, not proof. Nothing is written — to record an affiliation, take the result
+through review, so a computed conclusion becomes a stored observation only after
+a human accepts it (principle 10).
 
 ## Dangling DNS
 
