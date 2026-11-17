@@ -13,6 +13,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/ted"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/usgrants"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
 	"github.com/owasp-amass/amass/v5/engine/plugins/breach"
@@ -86,6 +87,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	scrape.NewSiteDossier,
 	ted.NewTED,
 	usaspending.NewUSASpending,
+	usgrants.NewUSGrants,
 	whois.NewWHOIS,
 	NewIPNetblock,
 	NewJARMFingerprints,
