@@ -36,7 +36,7 @@
     {"type": "Person", "surface": "lens", "collected": true, "lenses": ["person-named", "family"],
       "note": "People tied to an organization or domain, and organizations recorded under a person's name."},
     {"type": "Phone", "surface": "generic", "collected": true, "lenses": [],
-      "note": "Contact phone and fax numbers, stored by the RDAP and WHOIS collectors under the registration ContactRecord (ContactRecord --phone--> Phone). Reachable through the generic answer kinds today; a dedicated contacts lens is the planned curated surfacing."},
+      "note": "Contact phone and fax numbers under a ContactRecord (ContactRecord --phone--> Phone), stored by the RDAP and WHOIS collectors (registration contacts) and by the OpenStreetMap collector (map features named like the organization, worldwide and keyless, opt-in). Reachable through the generic answer kinds today; a dedicated contacts lens is the planned curated surfacing."},
     {"type": "Product", "surface": "lens", "collected": true, "lenses": ["services", "vulnerable_software"],
       "note": "Software products on services, and their known vulnerabilities."},
     {"type": "ProductRelease", "surface": "lens", "collected": true, "lenses": ["vulnerable_software"],

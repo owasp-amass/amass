@@ -8,6 +8,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
@@ -69,6 +70,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	hp.NewHTTPProbing,
 	lookalike.NewLookalikes,
 	mtasts.NewMTASTS,
+	osm.NewOpenStreetMap,
 	securitytxt.NewSecurityTxt,
 	sshp.NewSSHProbing,
 	bannerp.NewBannerProbing,
