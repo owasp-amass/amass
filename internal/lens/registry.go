@@ -76,6 +76,7 @@ func SubjectLenses() []SubjectLens {
 		identifiersLens,
 		accountsLens,
 		fundingLens,
+		contactsLens,
 		compareLens,
 		reportLens,
 	}
