@@ -66,6 +66,43 @@ func TestParseNoticesBothWrappers(t *testing.T) {
 	}
 }
 
+// realNotices mirrors the actual TED response shapes: the notices wrapper, a
+// scalar total-value, a list total-value-cur, and buyer-name/winner-name as
+// language-keyed maps of lists. The award notice carries a winner but no
+// total-value.
+const realNotices = `{"notices":[
+  {"publication-number":"797069-2026","buyer-name":{"deu":["Stadt Husum"]},
+   "total-value-cur":["EUR"],"publication-date":"2026-11-17+01:00","total-value":900000},
+  {"publication-number":"700000-2026","buyer-name":{"deu":["Stadt Kiel"]},
+   "publication-date":"2026-11-10+01:00","winner-name":{"deu":["Planungsgruppe M+M AG"]}}
+],"totalNoticeCount":2}`
+
+func TestExtractRealShapes(t *testing.T) {
+	notices, err := parseNotices([]byte(realNotices))
+	if err != nil || len(notices) != 2 {
+		t.Fatalf("notices=%d err=%v", len(notices), err)
+	}
+
+	// The first notice has a value but no winner — not an award to anyone.
+	if winnerMatches("Stadt Husum", flexStrings(notices[0]["winner-name"])) {
+		t.Error("notice 0 has no winner and should not match")
+	}
+	if flexFloat(notices[0]["total-value"]) != 900000 {
+		t.Errorf("notice 0 value = %v", flexFloat(notices[0]["total-value"]))
+	}
+	if first(flexStrings(notices[0]["total-value-cur"])) != "EUR" {
+		t.Errorf("notice 0 currency = %q", first(flexStrings(notices[0]["total-value-cur"])))
+	}
+
+	// The second notice names a winner (multilingual map) but carries no value.
+	if !winnerMatches("Planungsgruppe M+M AG", flexStrings(notices[1]["winner-name"])) {
+		t.Error("notice 1 winner should match from the language-keyed map")
+	}
+	if first(flexStrings(notices[1]["buyer-name"])) != "Stadt Kiel" {
+		t.Errorf("notice 1 buyer = %q", first(flexStrings(notices[1]["buyer-name"])))
+	}
+}
+
 func TestWinnerMatches(t *testing.T) {
 	if !winnerMatches("Acme Oy", []string{"ACME OY"}) {
 		t.Error("should match case-insensitively")

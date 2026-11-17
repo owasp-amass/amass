@@ -80,7 +80,8 @@ func (h *awards) query(e *et.Event, orgent *dbt.Entity, name string) {
 	req := map[string]any{
 		"query": fmt.Sprintf(`winner-name=%q SORT BY publication-date DESC`, name),
 		"fields": []string{"publication-number", "winner-name", "buyer-name",
-			"total-value", "total-value-cur", "publication-date", "winner-decision-date"},
+			"total-value", "total-value-cur", "tender-value", "tender-value-cur",
+			"publication-date", "winner-decision-date"},
 		"page":           1,
 		"limit":          tedMaxResults,
 		"scope":          "ALL",
@@ -119,13 +120,20 @@ func (h *awards) query(e *et.Event, orgent *dbt.Entity, name string) {
 
 	seen := map[string]bool{}
 	for _, n := range notices {
+		// The winner match is the attribution; the amount may be absent on the
+		// summary notice, so a matched award is recorded either way.
 		if !winnerMatches(name, flexStrings(n["winner-name"])) {
 			continue
 		}
 		amount := flexFloat(n["total-value"])
-		if amount <= 0 {
-			continue
+		currency := first(flexStrings(n["total-value-cur"]))
+		if amount == 0 {
+			amount = flexFloat(n["tender-value"])
+			if currency == "" {
+				currency = first(flexStrings(n["tender-value-cur"]))
+			}
 		}
+
 		id := first(flexStrings(n["publication-number"]))
 		if id == "" {
 			id = fmt.Sprintf("%s:%.0f", first(flexStrings(n["publication-date"])), amount)
@@ -138,7 +146,7 @@ func (h *awards) query(e *et.Event, orgent *dbt.Entity, name string) {
 		h.store(e, orgent, &award{
 			id:       id,
 			amount:   amount,
-			currency: first(flexStrings(n["total-value-cur"])),
+			currency: currency,
 			date:     firstNonEmpty(first(flexStrings(n["winner-decision-date"])), first(flexStrings(n["publication-date"]))),
 			buyer:    first(flexStrings(n["buyer-name"])),
 		})
