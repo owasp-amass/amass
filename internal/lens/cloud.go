@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/semantics/cloudranges"
 )
 
 // LensCloud asks which public cloud and CDN providers host a domain or
@@ -76,6 +77,34 @@ func FindCloud(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, r
 	counted := map[string]bool{}
 	var order []string
 
+	// record adds one of the subject's names to a provider's share, counting
+	// the name once per provider however many of its addresses that provider
+	// holds.
+	record := func(provider string, name graph.Asset, cidr, region, service string) {
+		sh, ok := byProv[provider]
+		if !ok {
+			sh = &CloudProviderShare{Provider: provider}
+			byProv[provider] = sh
+			order = append(order, provider)
+		}
+		if cidr != "" {
+			graph.AddUnique(&sh.Networks, cidr)
+		}
+		if region != "" {
+			graph.AddUnique(&sh.Regions, region)
+		}
+		if service != "" {
+			graph.AddUnique(&sh.Services, service)
+		}
+		if key := provider + "\x00" + name.ID; !counted[key] {
+			counted[key] = true
+			sh.Names++
+			if len(sh.Examples) < cloudExamples {
+				graph.AddUnique(&sh.Examples, graph.FQDNName(name))
+			}
+		}
+	}
+
 	for _, id := range s.order {
 		if s.spent() {
 			break
@@ -90,55 +119,57 @@ func FindCloud(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, r
 		if err != nil {
 			return out, err
 		}
-		if len(res.Addresses) > 0 {
+		if len(res.Addresses) > 0 || res.Aliased() {
 			out.Resolving++
 		}
 
 		onCloud := false
+		// An address whose hosting party is a recognized cloud/CDN provider,
+		// attributed the same way the network lens attributes hosting (by the
+		// party that operates the address), then classified against the
+		// provider catalog. This catches cloud hosting recorded only through
+		// registration, with no provider edge written.
 		for _, addr := range res.Addresses {
 			block, err := d.blockOf(addr)
 			if err != nil {
 				return out, err
 			}
-			if block.ID == "" {
-				continue
+			target := addr
+			if block.ID != "" {
+				target = block
 			}
-			org, _, _, ok, err := d.cloudProvider([]graph.Asset{block})
+			label, _, own, _, err := d.party(target)
 			if err != nil {
 				return out, err
 			}
+			if own || label == "" {
+				continue
+			}
+			p, ok := cloudranges.ProviderByName(label)
 			if !ok {
 				continue
 			}
 
 			onCloud = true
-			prov := graph.AssetLabel(org)
-			sh, ok := byProv[prov]
-			if !ok {
-				sh = &CloudProviderShare{Provider: prov}
-				byProv[prov] = sh
-				order = append(order, prov)
+			region, service := "", ""
+			if block.ID != "" {
+				region, service = graph.CloudMeta(s.w.ctx, s.w.graph, block.ID)
 			}
-			if cidr := graph.ContentString(block, "cidr"); cidr != "" {
-				graph.AddUnique(&sh.Networks, cidr)
-			}
-			region, service := graph.CloudMeta(s.w.ctx, s.w.graph, block.ID)
-			if region != "" {
-				graph.AddUnique(&sh.Regions, region)
-			}
-			if service != "" {
-				graph.AddUnique(&sh.Services, service)
-			}
-			// Count each name once per provider, however many of its
-			// addresses that provider holds.
-			if key := prov + "\x00" + name.ID; !counted[key] {
-				counted[key] = true
-				sh.Names++
-				if len(sh.Examples) < cloudExamples {
-					graph.AddUnique(&sh.Examples, graph.FQDNName(name))
-				}
+			record(p.Organization, name, graph.ContentString(block, "cidr"), region, service)
+		}
+
+		// A name aliased (CNAME) to a provider-operated domain is fronted by
+		// that provider even when its final address was never resolved, which
+		// is the common shape of edge and CDN hosting (Azure Front Door,
+		// CloudFront, Fastly, GitHub Pages).
+		if res.Aliased() {
+			dom := graph.RegisteredDomain(graph.FQDNName(res.Target(name)))
+			if p, ok := cloudranges.ProviderByDomain(dom); ok {
+				onCloud = true
+				record(p.Organization, name, "", "", "")
 			}
 		}
+
 		if onCloud {
 			out.OnCloud++
 		}

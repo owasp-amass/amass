@@ -270,21 +270,33 @@ amass lens cloud -org "Colgate University"
 Shows which public cloud and CDN providers host the domain's or
 organization's names, grouped by provider, with the regions and services
 those names resolve into and example names for each. It reports how many of
-the controlled names fall in a recognized provider's range, out of how many
-resolve and how many there are in all, so a footprint concentrated in one
-provider — or one region — stands out.
+the controlled names are on a recognized provider, out of how many resolve
+and how many there are in all, so a footprint concentrated in one provider —
+or one region — stands out.
 
-The attribution comes from the ranges each provider publishes itself (AWS,
-Google Cloud, Azure, Oracle Cloud, Cloudflare, Fastly, DigitalOcean and
-GitHub; see `internal/semantics/cloud_providers.json`), which the collector
-records as a `provider` relation from the published prefix's netblock to the
-provider's organization, with the region and service as `cloud_region` and
-`cloud_service` properties. The ranges are fetched from the providers' feeds
-on a daily cache, not stored in the repository, so they stay current. This
-is hosting, not ownership: an address in a provider's range means the
-provider operates that network, never that it owns the names, and two
-parties sharing a provider are not related. These are stored attributions,
-not a live scan.
+The recognized providers are AWS, Google Cloud, Azure, Oracle Cloud,
+Cloudflare, Fastly, DigitalOcean and GitHub (see
+`internal/semantics/cloud_providers.json`). A name is attributed to one of
+them two ways, needing no collection beyond ordinary resolution:
+
+- **By hosting party.** A name's address is attributed to whoever operates it
+  exactly as the network lens does (through the provider's published prefix
+  when recorded, otherwise through the netblock's registration), and that
+  party is then matched against the catalog's provider `names`. This catches
+  cloud hosting recorded only through registration, with no `provider` edge
+  written.
+- **By alias.** A name CNAME'd to a provider-operated domain (the catalog's
+  `domains` — `azurefd.net`, `cloudfront.net`, `fastly.net`, `github.io` and
+  the like) is on that provider even when its final address was never
+  resolved. This is the common shape of edge and CDN hosting (Azure Front
+  Door, CloudFront, Fastly, GitHub Pages), which an address-only view misses.
+
+Regions and services come from the `cloud_region` and `cloud_service`
+properties the collector writes from the providers' published feeds, shown
+for the names that carry them. This is hosting, not ownership: an address in
+a provider's range, or a CNAME to its domain, means the provider operates
+that hosting, never that it owns the names, and two parties sharing a
+provider are not related. These are stored attributions, not a live scan.
 
 ## Web presence
 

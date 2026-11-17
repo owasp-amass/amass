@@ -34,6 +34,52 @@ func TestCatalogLoads(t *testing.T) {
 	assert.Equal(t, "Amazon Web Services", aws.Organization)
 }
 
+func TestProviderByName(t *testing.T) {
+	cases := []struct {
+		label, want string
+		ok          bool
+	}{
+		{"amazon.com", "Amazon Web Services", true},
+		{"amazon data services northern virginia", "Amazon Web Services", true},
+		{"microsoft corporation", "Microsoft Azure", true},
+		{"google", "Google Cloud", true},
+		{"cloudflare", "Cloudflare", true},
+		{"fastly", "Fastly", true},
+		{"digital ocean", "DigitalOcean", true},
+		{"rackspace hosting", "", false},
+		{"charter communications", "", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		p, ok := ProviderByName(c.label)
+		if ok != c.ok || (ok && p.Organization != c.want) {
+			t.Errorf("ProviderByName(%q) = (%q,%v), want (%q,%v)", c.label, p.Organization, ok, c.want, c.ok)
+		}
+	}
+}
+
+func TestProviderByDomain(t *testing.T) {
+	cases := []struct {
+		domain, want string
+		ok           bool
+	}{
+		{"azurefd.net", "Microsoft Azure", true},
+		{"ic-xyz.azurefd.net", "Microsoft Azure", true},
+		{"cloudfront.net", "Amazon Web Services", true},
+		{"fastly.net", "Fastly", true},
+		{"github.io", "GitHub", true},
+		{"onmicrosoft.com", "Microsoft Azure", true},
+		{"colgate.edu", "", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		p, ok := ProviderByDomain(c.domain)
+		if ok != c.ok || (ok && p.Organization != c.want) {
+			t.Errorf("ProviderByDomain(%q) = (%q,%v), want (%q,%v)", c.domain, p.Organization, ok, c.want, c.ok)
+		}
+	}
+}
+
 func TestParseAWS(t *testing.T) {
 	data := []byte(`{
 		"prefixes": [

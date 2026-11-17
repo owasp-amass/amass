@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 )
@@ -38,8 +39,16 @@ type Provider struct {
 	RegionLabel  string   `json:"region_label"`
 	ServiceLabel string   `json:"service_label"`
 	ASNHints     []string `json:"asn_hints"`
-	Feeds        []Feed   `json:"feeds"`
-	Source       string   `json:"source"`
+	// Names are alias spellings of the provider's stored hosting-organization
+	// label (for example "amazon" or "amazon data services" for AWS), used to
+	// recognize a host already attributed by registration as this provider.
+	Names []string `json:"names"`
+	// Domains are the provider-operated CNAME/alias domains a customer name
+	// points at when the provider fronts it (for example azurefd.net,
+	// cloudfront.net), used to recognize edge/CDN hosting from an alias alone.
+	Domains []string `json:"domains"`
+	Feeds   []Feed   `json:"feeds"`
+	Source  string   `json:"source"`
 }
 
 // Feed is one published range list of a provider.
@@ -97,6 +106,75 @@ func ProviderByKey(key string) (Provider, bool) {
 		}
 	}
 	return Provider{}, false
+}
+
+// ProviderByName returns the catalog provider whose name aliases match a
+// stored hosting-organization label, and false when none do. Matching is
+// case-insensitive and token-based: an alias matches when its words appear, in
+// order and adjacent, among the label's words, so "amazon" matches
+// "amazon.com" and "amazon data services" matches "amazon data services
+// northern virginia", while a short alias such as "aws" matches only a whole
+// "aws" word, never a fragment of a longer one.
+func ProviderByName(label string) (Provider, bool) {
+	have := tokens(label)
+	if len(have) == 0 {
+		return Provider{}, false
+	}
+	for _, p := range Providers() {
+		for _, alias := range p.Names {
+			if containsTokens(have, tokens(alias)) {
+				return p, true
+			}
+		}
+	}
+	return Provider{}, false
+}
+
+// ProviderByDomain returns the catalog provider that operates a CNAME/alias
+// domain (a provider-run hosting domain such as azurefd.net or cloudfront.net),
+// and false when none do. The domain matches a catalog domain exactly or as a
+// subdomain of it.
+func ProviderByDomain(domain string) (Provider, bool) {
+	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
+	if domain == "" {
+		return Provider{}, false
+	}
+	for _, p := range Providers() {
+		for _, d := range p.Domains {
+			d = strings.ToLower(d)
+			if domain == d || strings.HasSuffix(domain, "."+d) {
+				return p, true
+			}
+		}
+	}
+	return Provider{}, false
+}
+
+// tokens splits a label into lowercase alphanumeric words.
+func tokens(s string) []string {
+	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+// containsTokens reports whether want appears, in order and adjacent, in have.
+func containsTokens(have, want []string) bool {
+	if len(want) == 0 || len(want) > len(have) {
+		return false
+	}
+	for i := 0; i+len(want) <= len(have); i++ {
+		ok := true
+		for j := range want {
+			if have[i+j] != want[j] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseFeed reads a feed's already-fetched bytes into attributed prefixes,
