@@ -343,9 +343,15 @@ login pages) are skipped. The platforms and how their handles are read are
 data, in `account_platforms.json`, each citing the platform's own
 documentation. These accounts are derived from stored URLs with the URL as
 the evidence — a computed view, not written to the database, and not a live
-lookup against the platform. Recording that an account was exposed in a
-known breach is a separate, planned collector (see the attack-surface
-roadmap), not part of this lens.
+lookup against the platform.
+
+To persist an account, run the lens through review: `amass review accounts -d
+<domain> -journal <path>` records each computed account as a proposal, and
+`amass review approve -proposal <id> -journal <path>` writes it as an
+`Account` asset the organization controls (`Organization --account-->
+Account`), tagged `amass-ai` and reversible with `amass review retract`. So a
+computed conclusion becomes a stored observation only after a human accepts
+it (the compute → review → store path), never as a silent write.
 
 ## Dangling DNS
 

@@ -5,15 +5,21 @@
 package review
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/lens"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
+	oamacct "github.com/owasp-amass/open-asset-model/account"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
 // AccountProposal is a reviewed-before-written proposal to record a platform
@@ -138,4 +144,156 @@ func (j *Journal) SubmitAccounts(proposals []AccountProposal) ([]AccountProposal
 	}
 
 	return added, nil
+}
+
+// RecordAccount records a reviewer's decision on an account proposal, and the
+// stored edge it created when applied.
+func (j *Journal) RecordAccount(o AccountOutcome) error {
+	if o.ProposalID == "" || o.Reviewer == "" {
+		return errors.New("proposal ID and reviewer required")
+	}
+	if o.Status != ProposalApplied && o.Status != ProposalRejected && o.Status != ProposalRetracted {
+		return fmt.Errorf("invalid account outcome status %q", o.Status)
+	}
+	if o.At.IsZero() {
+		o.At = time.Now().UTC()
+	}
+	return j.append("account_outcome", o)
+}
+
+// accountRecords returns the account proposals in the journal and the latest
+// status of each (proposed, applied, rejected or retracted).
+func (j *Journal) accountRecords() (map[string]AccountProposal, map[string]string, error) {
+	proposals := map[string]AccountProposal{}
+	status := map[string]string{}
+	hist, err := j.History()
+	if errors.Is(err, os.ErrNotExist) {
+		return proposals, status, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, raw := range hist {
+		var head struct {
+			Kind string          `json:"kind"`
+			Data json.RawMessage `json:"data"`
+		}
+		if json.Unmarshal(raw, &head) != nil {
+			continue
+		}
+		switch head.Kind {
+		case "account_proposal":
+			var p AccountProposal
+			if json.Unmarshal(head.Data, &p) == nil && p.ID != "" {
+				proposals[p.ID] = p
+				status[p.ID] = ProposalPending
+			}
+		case "account_outcome":
+			var o AccountOutcome
+			if json.Unmarshal(head.Data, &o) == nil && o.ProposalID != "" {
+				status[o.ProposalID] = o.Status
+			}
+		}
+	}
+	return proposals, status, nil
+}
+
+// PendingAccount returns an account proposal that is recorded and still
+// awaiting a decision.
+func (j *Journal) PendingAccount(id string) (AccountProposal, error) {
+	proposals, status, err := j.accountRecords()
+	if err != nil {
+		return AccountProposal{}, err
+	}
+	p, ok := proposals[id]
+	if !ok {
+		return AccountProposal{}, fmt.Errorf("no account proposal %s", id)
+	}
+	if status[id] != ProposalPending {
+		return AccountProposal{}, fmt.Errorf("account proposal %s is already %s", id, status[id])
+	}
+	return p, nil
+}
+
+// AppliedAccount returns an applied account proposal and the edge it created.
+func (j *Journal) AppliedAccount(id string) (AccountProposal, string, error) {
+	proposals, status, err := j.accountRecords()
+	if err != nil {
+		return AccountProposal{}, "", err
+	}
+	p, ok := proposals[id]
+	if !ok || status[id] != ProposalApplied {
+		return AccountProposal{}, "", fmt.Errorf("account proposal %s is not applied", id)
+	}
+	// Find the edge id from the applying outcome.
+	hist, _ := j.History()
+	var edgeID string
+	for _, raw := range hist {
+		var head struct {
+			Kind string          `json:"kind"`
+			Data json.RawMessage `json:"data"`
+		}
+		if json.Unmarshal(raw, &head) != nil || head.Kind != "account_outcome" {
+			continue
+		}
+		var o AccountOutcome
+		if json.Unmarshal(head.Data, &o) == nil && o.ProposalID == id && o.Status == ProposalApplied {
+			edgeID = o.EdgeID
+		}
+	}
+	return p, edgeID, nil
+}
+
+// AccountApplier writes the assets and relationships an accepted account
+// proposal records.
+type AccountApplier interface {
+	FindEntityById(ctx context.Context, id string) (*dbt.Entity, error)
+	CreateAsset(ctx context.Context, a oam.Asset) (*dbt.Entity, error)
+	CreateEdge(ctx context.Context, e *dbt.Edge) (*dbt.Edge, error)
+	CreateEntityProperty(ctx context.Context, e *dbt.Entity, p oam.Property) (*dbt.EntityTag, error)
+	CreateEdgeProperty(ctx context.Context, e *dbt.Edge, p oam.Property) (*dbt.EdgeTag, error)
+}
+
+// AccountDeleter removes the edge an applied account proposal created.
+type AccountDeleter interface {
+	DeleteEdge(ctx context.Context, id string) error
+}
+
+// accountUniqueID is the stable key of a platform account, so the same
+// account is one asset however many times it is recorded.
+func accountUniqueID(p AccountProposal) string {
+	return strings.ToLower(p.Platform) + ":" + strings.ToLower(p.Handle)
+}
+
+// ApplyAccount records an accepted account proposal as an Account asset the
+// owning organization controls: Account plus an Organization -> account ->
+// Account relationship, both tagged amass-ai. It returns the relationship's
+// edge id.
+func ApplyAccount(ctx context.Context, w AccountApplier, p AccountProposal) (string, error) {
+	if p.OwnerID == "" || p.Handle == "" {
+		return "", errors.New("account proposal needs an owner and handle")
+	}
+	org, err := w.FindEntityById(ctx, p.OwnerID)
+	if err != nil || org == nil {
+		return "", fmt.Errorf("owner %s not found: %w", p.OwnerID, err)
+	}
+
+	acct, err := w.CreateAsset(ctx, &oamacct.Account{ID: accountUniqueID(p), Type: p.AccountType, Username: p.Handle})
+	if err != nil || acct == nil {
+		return "", fmt.Errorf("create account %s: %w", accountUniqueID(p), err)
+	}
+	_, _ = w.CreateEntityProperty(ctx, acct, &oamgen.SourceProperty{Source: InferenceSource, Confidence: p.Confidence})
+
+	edge, err := w.CreateEdge(ctx, &dbt.Edge{
+		Relation:   &oamgen.SimpleRelation{Name: "account"},
+		FromEntity: org,
+		ToEntity:   acct,
+	})
+	if err != nil || edge == nil {
+		return "", fmt.Errorf("link %s to account: %w", p.Owner, err)
+	}
+	_, _ = w.CreateEdgeProperty(ctx, edge, &oamgen.SourceProperty{Source: InferenceSource, Confidence: p.Confidence})
+
+	return edge.ID, nil
 }

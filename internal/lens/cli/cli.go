@@ -272,6 +272,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 			return approveIdentity(ctx, g, journalPath, proposalID, reviewer, out)
 		case isMergeProposal(proposalID):
 			return approveMerge(ctx, g, journalPath, proposalID, reviewer, out)
+		case isAccountProposal(proposalID):
+			return approveAccount(ctx, repo, journalPath, proposalID, reviewer, out)
 		}
 
 		return approveProposal(ctx, g, journalPath, proposalID, reviewer, out)
@@ -283,6 +285,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 			return retractIdentity(ctx, g, journalPath, proposalID, reviewer, out)
 		case isMergeProposal(proposalID):
 			return retractMerge(ctx, g, journalPath, proposalID, reviewer, out)
+		case isAccountProposal(proposalID):
+			return retractAccount(ctx, repo, journalPath, proposalID, reviewer, out)
 		}
 
 		return retractProposal(ctx, g, journalPath, proposalID, reviewer, out)
@@ -300,6 +304,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listGroup(ctx, g, domainName, orgName, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
+	case "accounts":
+		return listAccounts(ctx, g, domainName, orgName, journalPath, format, out, errout)
 	}
 
 	if l, ok := lens.SubjectLensNamed(operation); ok {
