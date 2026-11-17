@@ -23,6 +23,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, address space none of its names use, and other domains in its space |
 | `amass lens cloud -d <domain>` or `-org <name>` | The public cloud and CDN providers hosting its names, by provider, region and service, from the providers' own published IP ranges |
 | `amass lens web -d <domain>` or `-org <name>` | Its web presence: the URLs it controls, the host and address each reaches, off-domain URLs (social profiles, third-party pages), and the web applications recognized on its sites |
+| `amass lens identifiers -d <domain>` or `-org <name>` | The registered identifiers attached to what it controls — LEI, tax, company and registry numbers and handles — grouped by type |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
@@ -300,6 +301,22 @@ recognized on the sites from the stored URLs (for example a content
 management system with its version and add-ons), using the same
 `web_applications.json` catalog the services and report lenses use. These are
 stored URLs, not a live crawl.
+
+## Identifiers
+
+```bash
+amass lens identifiers -d colgate.edu
+amass lens identifiers -org "Colgate University"
+```
+
+Lists the registered identifiers attached to what the domain or organization
+controls — Legal Entity Identifiers (LEI), tax and employer numbers, company
+and registry numbers, OpenCorporates and registry handles and the like — each
+with the asset it hangs off (usually an organization) and its status, grouped
+by identifier type. These identifiers tie an organization to outside
+registries and are useful for confirming identity and corporate structure.
+The types are the Open Asset Model's `id_type` values. These are stored
+identifiers, not a live registry lookup.
 
 ## Dangling DNS
 
