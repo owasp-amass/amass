@@ -120,6 +120,34 @@ func TestScanBulkGzippedJSONL(t *testing.T) {
 	}
 }
 
+// TestScanBulkNuevoLeonShape checks a compiled release in the exact shape of
+// the live Nuevo León (Mexico) bulk export validated for enabling: buyer named
+// directly, the supplier also a tenderer party, an MX-RFC supplier id, MXN.
+func TestScanBulkNuevoLeonShape(t *testing.T) {
+	line := `{"ocid":"ocds-k3ufh7-291640","date":"2024-02-02T16:30:13Z","tag":["award"],` +
+		`"buyer":{"name":"DIRECCIÓN DE FORMACIÓN CÍVICA"},` +
+		`"parties":[{"name":"SECRETARÍA DE ADMINISTRACIÓN","roles":["procuringEntity"]},` +
+		`{"name":"DIRECCIÓN DE FORMACIÓN CÍVICA","roles":["buyer"]},` +
+		`{"name":"PROMOCIONES RAC, S.A. DE C.V.","roles":["tenderer","supplier"]}],` +
+		`"awards":[{"id":"aw-1","date":"2024-02-02T16:29:23Z","value":{"amount":57640.4,"currency":"MXN"},` +
+		`"suppliers":[{"name":"PROMOCIONES RAC, S.A. DE C.V.","id":"MX-RFC-PRA1205212M0"}]}]}`
+
+	var got []award
+	if _, err := scanBulk(strings.NewReader(line),
+		func(s string) bool { return supplierMatches("PROMOCIONES RAC, S.A. DE C.V.", s) },
+		func(a award) { got = append(got, a) }); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("awards = %d, want 1", len(got))
+	}
+	a := got[0]
+	if a.buyer != "DIRECCIÓN DE FORMACIÓN CÍVICA" || a.amount != 57640.4 || a.currency != "MXN" ||
+		a.ocid != "ocds-k3ufh7-291640" {
+		t.Errorf("award = %+v", a)
+	}
+}
+
 func TestReleasesFromLine(t *testing.T) {
 	// A bare compiled release on the line.
 	rels := releasesFromLine([]byte(`{"ocid":"ocds-1","awards":[{"id":"a","suppliers":[{"name":"Foo"}]}]}`))
