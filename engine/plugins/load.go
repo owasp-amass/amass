@@ -9,6 +9,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
 	"github.com/owasp-amass/amass/v5/engine/plugins/breach"
@@ -78,6 +79,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	scrape.NewIPVerse,
 	scrape.NewRapidDNS,
 	scrape.NewSiteDossier,
+	usaspending.NewUSASpending,
 	whois.NewWHOIS,
 	NewIPNetblock,
 	NewJARMFingerprints,
