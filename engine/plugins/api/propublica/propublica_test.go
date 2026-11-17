@@ -57,3 +57,34 @@ func TestNormalizeName(t *testing.T) {
 		t.Errorf("got %q", normalizeName("A.B"))
 	}
 }
+
+func TestFlexStr(t *testing.T) {
+	cases := map[string]string{
+		`"hello"`: "hello",
+		`1234`:    "1234",
+		`12.5`:    "12.5",
+		`null`:    "",
+		``:        "",
+	}
+	for raw, want := range cases {
+		if got := flexStr([]byte(raw)); got != want {
+			t.Errorf("flexStr(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestFlexNum(t *testing.T) {
+	cases := map[string]float64{
+		`1234`:      1234,
+		`"1234"`:    1234,
+		`" 12.5 "`:  12.5,
+		`"abc"`:     0,
+		`null`:      0,
+		`"1,000"`:   0, // commas are not stripped; not a valid float
+	}
+	for raw, want := range cases {
+		if got := flexNum([]byte(raw)); got != want {
+			t.Errorf("flexNum(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}

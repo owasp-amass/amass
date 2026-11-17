@@ -95,3 +95,24 @@ func TestParseFormDAmount(t *testing.T) {
 		t.Errorf("indefinite amount = %v, want 0", got)
 	}
 }
+
+func TestBusinessLocation(t *testing.T) {
+	// Full address maps field for field.
+	loc := businessLocation(&address{Street1: "1 Infinite Loop", Street2: "Suite 100",
+		City: "Cupertino", StateOrCountry: "CA", ZipCode: "95014"})
+	if loc == nil || loc.Address != "1 Infinite Loop Suite 100" || loc.City != "Cupertino" ||
+		loc.Province != "CA" || loc.PostalCode != "95014" {
+		t.Errorf("full address = %+v", loc)
+	}
+
+	// City but no street still yields a location (address empty).
+	if loc := businessLocation(&address{City: "Reno", StateOrCountry: "NV"}); loc == nil ||
+		loc.Address != "" || loc.City != "Reno" {
+		t.Errorf("city-only = %+v", loc)
+	}
+
+	// Nothing to locate → nil.
+	if loc := businessLocation(&address{StateOrCountry: "NY", ZipCode: "10001"}); loc != nil {
+		t.Errorf("no street or city should be nil, got %+v", loc)
+	}
+}

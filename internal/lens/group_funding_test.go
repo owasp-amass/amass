@@ -88,3 +88,27 @@ func TestFindGroupFunding(t *testing.T) {
 		t.Errorf("recipients = %d, want 2: %+v", len(r.Recipients), r.Recipients)
 	}
 }
+
+func TestGroupFundingTotalCurrency(t *testing.T) {
+	r := GroupFundingReport{Rounds: []GroupFundingRound{
+		{FundingRound: FundingRound{Round: "a", Amount: 100, Currency: "USD"}},
+		{FundingRound: FundingRound{Round: "b", Amount: 50, Currency: "USD"}},
+		{FundingRound: FundingRound{Round: "c", Amount: 0, Currency: ""}}, // no amount: ignored
+	}}
+	if sum, cur := r.groupTotal(); sum != 150 || cur != "USD" {
+		t.Errorf("single-currency total = %v %s, want 150 USD", sum, cur)
+	}
+
+	// A second currency makes the group total undefined.
+	r.Rounds = append(r.Rounds, GroupFundingRound{FundingRound: FundingRound{Round: "d", Amount: 10, Currency: "EUR"}})
+	if sum, cur := r.groupTotal(); sum != 0 || cur != "" {
+		t.Errorf("mixed-currency total = %v %s, want 0 (unset)", sum, cur)
+	}
+}
+
+func TestGroupFundingTextEmpty(t *testing.T) {
+	var r GroupFundingReport
+	if txt := r.Text(); !strings.Contains(txt, "No funding record is stored for the group") {
+		t.Errorf("empty group text = %q", txt)
+	}
+}
