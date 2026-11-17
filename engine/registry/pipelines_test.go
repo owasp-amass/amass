@@ -16,11 +16,46 @@ import (
 	"testing"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/plugintest"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
+
+// TestExcludeDisablesSource locks the central opt-out: a data source is skipped
+// for every collector when it is in an `all` transformation's exclude list,
+// matched by the plugin's name — so any collector can be opted out by name
+// without per-plugin code.
+func TestExcludeDisablesSource(t *testing.T) {
+	cfg := &config.Config{Transformations: map[string]*config.Transformation{
+		"organization->all": {From: "organization", To: "all", Exclude: []string{"USAspending", "NIH-RePORTER"}},
+		"organization->ted": {From: "organization", To: "ted"},
+	}}
+
+	tfs := transformationsByType(cfg, "Organization")
+	if len(tfs) != 2 {
+		t.Fatalf("transformationsByType = %d, want 2", len(tfs))
+	}
+
+	// An excluded source is disabled; others are not.
+	if !allExcludesPlugin(tfs, "USAspending") || !allExcludesPlugin(tfs, "nih-reporter") {
+		t.Error("excluded sources must be reported as excluded (case-insensitively)")
+	}
+	if allExcludesPlugin(tfs, "SEC-EDGAR") {
+		t.Error("a source not in the exclude list must not be excluded")
+	}
+
+	// An explicitly named source is allowed.
+	if !tosContainPlugin(tfs, "TED") {
+		t.Error("an explicitly listed source must be allowed")
+	}
+
+	// A type with no transformation yields none, so its handlers do not run.
+	if len(transformationsByType(cfg, "FQDN")) != 0 {
+		t.Error("unexpected transformations for a type with none configured")
+	}
+}
 
 type fakePlugin struct{ name string }
 
