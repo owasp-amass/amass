@@ -30,7 +30,7 @@ Sources record one company several times: a certificate, an RDAP lookup and GLEI
 
 `shared_registry_identifier`: strong identity signal, weight 0.50.
 
-**Finds:** Two organizations that carry the same Legal Entity Identifier, OpenCorporates ID, D-U-N-S number, tax number or other registry identifier, and that share at least one name.
+**Finds:** Two organizations that carry the same Legal Entity Identifier, OpenCorporates ID, D-U-N-S number, tax number, SEC Central Index Key or other registry identifier, and that share at least one name.
 
 **Why it counts:** A registry identifier is issued to exactly one legal entity, so two organizations holding the same one are the same entity recorded twice. The names must also agree because enrichment can attach an identifier to the wrong organization; a shared identifier between organizations with unrelated names points to that mistake, not to a duplicate.
 
@@ -43,7 +43,7 @@ Sources record one company several times: a certificate, an RDAP lookup and GLEI
 
 - Enrichment that matched a subsidiary to its parent's record gives both the parent's identifier.
 
-**Identifier types:** `lei`, `ocid`, `duns`, `ein`, `tin`, `gln`, `spglobal`
+**Identifier types:** `lei`, `ocid`, `duns`, `ein`, `tin`, `gln`, `spglobal`, `sec cik`
 
 <a id="shared_registration"></a>
 ## Same jurisdiction and registration number

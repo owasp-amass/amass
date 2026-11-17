@@ -118,6 +118,14 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 	g.Contact("28909", "cr-ua2", "loc-ua2")
 	g.Ident("38172", "org_name", "University at Albany ITS")
 
+	// Two SEC filers recorded under the same Central Index Key and name,
+	// as EDGAR and a certificate spell one company.
+	g.Org("4110", "acme holdings", "acme holdings", "US-DE", "")
+	g.Org("4111", "acme holdings", "acme holdings inc", "US-DE", "")
+	g.Ident("4110", "sec cik", "0000012345")
+	g.Ident("4111", "sec cik", "0000012345")
+	g.Ident("4111", "org_name", "Acme Holdings")
+
 	// Privacy placeholders are never organizations to merge.
 	g.Org("4585", "registration private", "", "", "")
 	g.Org("4586", "registration private", "", "", "")
@@ -150,6 +158,8 @@ func TestFindDuplicateOrganizations(t *testing.T) {
 			has: []string{"shared_location", "same_brand_name"}},
 		{name: "one ARIN handle", a: "2565", b: "12527", decision: GapReview,
 			has: []string{"shared_network_handle"}},
+		{name: "same SEC CIK and name", a: "4110", b: "4111", decision: GapPropose,
+			has: []string{"shared_registry_identifier", "same_brand_name"}, survivor: "4111"},
 	}
 	for _, c := range cases {
 		got := findPair(r, c.a, c.b)

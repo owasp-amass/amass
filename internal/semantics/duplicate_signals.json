@@ -10,10 +10,10 @@
       "weight": 0.5,
       "matcher": "shared_identifier",
       "params": {
-        "id_types": ["lei", "ocid", "duns", "ein", "tin", "gln", "spglobal"],
+        "id_types": ["lei", "ocid", "duns", "ein", "tin", "gln", "spglobal", "sec cik"],
         "names_must_agree": true
       },
-      "finds": "Two organizations that carry the same Legal Entity Identifier, OpenCorporates ID, D-U-N-S number, tax number or other registry identifier, and that share at least one name.",
+      "finds": "Two organizations that carry the same Legal Entity Identifier, OpenCorporates ID, D-U-N-S number, tax number, SEC Central Index Key or other registry identifier, and that share at least one name.",
       "rationale": "A registry identifier is issued to exactly one legal entity, so two organizations holding the same one are the same entity recorded twice. The names must also agree because enrichment can attach an identifier to the wrong organization; a shared identifier between organizations with unrelated names points to that mistake, not to a duplicate.",
       "guards": [
         "Counts only when the two organizations share a name after legal forms (Inc, LLC, Ltd and the like) are removed.",
