@@ -133,28 +133,43 @@ func (w *wikidata) query(e *et.Event, domain string) {
 }
 
 func (w *wikidata) store(e *et.Event, domain string, c company) {
-	orgent, err := org.CreateOrgAsset(e.Session, nil, nil, &oamorg.Organization{
-		Name:         c.bestName(),
-		LegalName:    c.LegalName,
-		Jurisdiction: c.Country,
-	}, w.source)
-	if err != nil || orgent == nil {
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
 
-	// Organization --website--> URL --domain--> apex FQDN (existing OAM chain).
-	if u := support.RawURLToOAM(c.Website); u != nil {
-		if urlent, err := e.Session.DB().CreateAsset(ctx, u); err == nil && urlent != nil {
-			w.sourceProp(ctx, e, urlent)
-			_ = w.createRelation(ctx, e.Session, orgent, &oamgen.SimpleRelation{Name: "website"}, urlent)
+	// Reuse an organization another identity source already created for this
+	// domain rather than making a duplicate; only create (and build the website
+	// chain) when none exists.
+	orgent := org.OrgForControlledDomain(e.Session, domain)
+	if orgent == nil {
+		var err error
+		orgent, err = org.CreateOrgAsset(e.Session, nil, nil, &oamorg.Organization{
+			Name:         c.bestName(),
+			LegalName:    c.LegalName,
+			Jurisdiction: c.Country,
+		}, w.source)
+		if err != nil || orgent == nil {
+			return
+		}
 
-			if fq, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: domain}); err == nil && fq != nil {
-				w.sourceProp(ctx, e, fq)
-				_ = w.createRelation(ctx, e.Session, urlent, &oamgen.SimpleRelation{Name: "domain"}, fq)
+		// Organization --website--> URL --domain--> apex FQDN (existing OAM chain).
+		if u := support.RawURLToOAM(c.Website); u != nil {
+			if urlent, err := e.Session.DB().CreateAsset(ctx, u); err == nil && urlent != nil {
+				w.sourceProp(ctx, e, urlent)
+				_ = w.createRelation(ctx, e.Session, orgent, &oamgen.SimpleRelation{Name: "website"}, urlent)
+
+				if fq, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: domain}); err == nil && fq != nil {
+					w.sourceProp(ctx, e, fq)
+					_ = w.createRelation(ctx, e.Session, urlent, &oamgen.SimpleRelation{Name: "domain"}, fq)
+				}
 			}
+		}
+	} else {
+		// Reusing another source's org: add Wikidata provenance, and fill the
+		// jurisdiction when it is still unset.
+		w.sourceProp(ctx, e, orgent)
+		if o := orgent.Asset.(*oamorg.Organization); c.Country != "" && o.Jurisdiction == "" {
+			o.Jurisdiction = c.Country
+			_, _ = e.Session.DB().CreateEntity(ctx, orgent)
 		}
 	}
 
