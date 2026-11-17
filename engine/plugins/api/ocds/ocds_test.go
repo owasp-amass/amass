@@ -9,18 +9,7 @@ import (
 	"compress/gzip"
 	"strings"
 	"testing"
-
-	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
-
-func TestOrgCountry(t *testing.T) {
-	cases := map[string]string{"US-DE": "US", "MX": "MX", "gb": "GB", "": "", " BE ": "BE"}
-	for j, want := range cases {
-		if got := orgCountry(&oamorg.Organization{Jurisdiction: j}); got != want {
-			t.Errorf("orgCountry(%q) = %q, want %q", j, got, want)
-		}
-	}
-}
 
 func TestBulkApplies(t *testing.T) {
 	mx := publisher{Key: "mx", Country: "MX", BulkURL: "https://example/full.jsonl.gz"}

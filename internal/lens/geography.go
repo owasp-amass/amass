@@ -34,6 +34,12 @@ var geographyLens = SubjectLens{
 // GeographyReport is the result of the geography lens.
 type GeographyReport struct {
 	lensBase
+	// Primary is the inferred country of an organization subject, most
+	// credible first, from the shared country-inference helper (its
+	// jurisdiction, then its registration address or registrant phone). It is
+	// empty for a non-organization subject. Unlike Own, which counts every
+	// stored address, this is a single ranked conclusion with a confidence.
+	Primary []graph.CountryEvidence `json:"primary,omitempty"`
 	// Own counts the subject's stored locations by country; Hosting counts
 	// the names hosted by parties registered in each country.
 	Own     []ChangeGroup `json:"own"`
@@ -161,6 +167,16 @@ func FindGeography(ctx context.Context, g graph.Graph, schema graph.SchemaCatalo
 		out.Truncated, out.Reason = true, network.Reason
 	}
 
+	// An organization subject gets a single ranked country conclusion from the
+	// shared inference helper, alongside the raw per-country address counts.
+	if root.Type == "Organization" {
+		primary, err := graph.OrgCountries(ctx, g, root.ID, 3)
+		if err != nil {
+			return out, err
+		}
+		out.Primary = primary
+	}
+
 	out.Own = tally.list("own")
 	return out, nil
 }
@@ -261,6 +277,18 @@ func (r GeographyReport) Text() string {
 	}
 
 	fmt.Fprintf(&b, "Geography of %s, from %d controlled asset(s) (%d reads).\n", subject, r.Footprint, r.Reads)
+	if len(r.Primary) > 0 {
+		p := r.Primary[0]
+		fmt.Fprintf(&b, "\nInferred country: %s (confidence %d, from %s).\n",
+			p.Country, p.Confidence, strings.Join(p.Signals, ", "))
+		if len(r.Primary) > 1 {
+			var rest []string
+			for _, c := range r.Primary[1:] {
+				rest = append(rest, fmt.Sprintf("%s (%d)", c.Country, c.Confidence))
+			}
+			fmt.Fprintf(&b, "Other country signals: %s.\n", strings.Join(rest, ", "))
+		}
+	}
 	if len(r.Own) > 0 {
 		b.WriteString("\nIts stored addresses, by country:\n")
 		for _, c := range r.Own {
@@ -284,6 +312,9 @@ func (r GeographyReport) Text() string {
 // Facts implements Report.
 func (r GeographyReport) Facts() []string {
 	var out []string
+	if len(r.Primary) > 0 {
+		out = append(out, "primarily in "+r.Primary[0].Country)
+	}
 	for _, c := range r.Own {
 		out = append(out, "located in "+c.Key)
 	}

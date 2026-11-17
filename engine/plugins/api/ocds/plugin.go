@@ -16,7 +16,9 @@
 // whose supplier is the enumerated organization. Bulk ingestion is on-demand:
 // a publisher's export is fetched only when an organization from that
 // publisher's own country is seen, so a run that touches no organizations from
-// a country never downloads it. A publisher is enabled only after its endpoint
+// a country never downloads it. An organization's country is the country part
+// of its jurisdiction, or, when jurisdiction is unset, the registrant country
+// from its RDAP contact evidence. A publisher is enabled only after its endpoint
 // and envelope are validated against a real sample. Keyless and on by default;
 // rate-limited; TTL cadence.
 package ocds

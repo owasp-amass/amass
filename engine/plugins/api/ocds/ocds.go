@@ -24,6 +24,8 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -78,14 +80,22 @@ func bulkApplies(pub publisher, country string) bool {
 		strings.EqualFold(country, pub.Country)
 }
 
-// orgCountry is an organization's ISO alpha-2 country, taken from the country
-// part of its jurisdiction ("US-DE" -> "US", "MX" -> "MX"), or "" when unknown.
-func orgCountry(o *oamorg.Organization) string {
-	j := strings.ToUpper(strings.TrimSpace(o.Jurisdiction))
-	if i := strings.IndexByte(j, '-'); i > 0 {
-		return j[:i]
+// orgCountry is the ISO alpha-2 country of the event's organization, inferred
+// from stored evidence by the shared graph helper: its jurisdiction, then the
+// country of a postal address or registrant phone on its RDAP contact record.
+// Jurisdiction is frequently unpopulated for foreign entities — a company
+// discovered from a regional registry (e.g. a LACNIC handle with a Mexican
+// address and a +52 phone) often has no jurisdiction even though its country is
+// unambiguous — so the evidence fallback lets on-demand bulk ingestion still
+// recognize such an organization's country. It returns "" when unknown, in
+// which case no country-gated bulk export is fetched.
+func (h *handler) orgCountry(e *et.Event) string {
+	g := oamrepo.Adapter{Repo: e.Session.DB(), Neo4jDatabase: oamrepo.Neo4jDatabaseName(e.Session.Config())}
+	ev, ok, err := graph.OrgCountry(e.Session.Ctx(), g, e.Entity.ID)
+	if err != nil || !ok {
+		return ""
 	}
-	return j
+	return ev.Country
 }
 
 var loadPublishers = sync.OnceValue(func() []publisher {
@@ -302,7 +312,7 @@ func (h *handler) check(e *et.Event) error {
 	if !ok {
 		return nil
 	}
-	country := orgCountry(o)
+	country := h.orgCountry(e)
 
 	for _, pub := range loadPublishers() {
 		if !pub.Enabled {

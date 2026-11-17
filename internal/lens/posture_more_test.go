@@ -213,6 +213,29 @@ func TestFindGeography(t *testing.T) {
 	}
 }
 
+func TestFindGeographyPrimaryCountry(t *testing.T) {
+	g := postureFixture()
+	// An organization subject gets a single inferred country from its
+	// jurisdiction, alongside the per-address counts.
+	g.Assets["acme"] = graph.Asset{ID: "acme", Type: "Organization", Key: "Acme:acme",
+		Content: map[string]any{"name": "Acme", "jurisdiction": "US-DE"}}
+
+	r, err := FindGeography(context.Background(), g, postureCatalog(), g.Assets["acme"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Primary) != 1 || r.Primary[0].Country != "US" || r.Primary[0].Signal != "jurisdiction" {
+		t.Fatalf("primary = %+v", r.Primary)
+	}
+	if !strings.Contains(r.Text(), "Inferred country: US") {
+		t.Errorf("text:\n%s", r.Text())
+	}
+	facts := strings.Join(r.Facts(), "; ")
+	if !strings.Contains(facts, "primarily in US") {
+		t.Errorf("facts = %q", facts)
+	}
+}
+
 func TestFindShared(t *testing.T) {
 	g := postureFixture()
 	// Hamilton's registration uses the same DNS provider.
