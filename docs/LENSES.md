@@ -25,6 +25,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens web -d <domain>` or `-org <name>` | Its web presence: the URLs it controls, the host and address each reaches, off-domain URLs (social profiles, third-party pages), and the web applications recognized on its sites |
 | `amass lens identifiers -d <domain>` or `-org <name>` | The registered identifiers attached to what it controls — LEI, tax, company and registry numbers and handles — grouped by type |
 | `amass lens accounts -d <domain>` or `-org <name>` | The platform accounts (code hosts, social media) it has, computed from its stored profile URLs, with the handle on each |
+| `amass lens funding -d <domain>` or `-org <name>` | The funding rounds its company has received — amount, date and stage — and the investors behind them |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
@@ -352,6 +353,28 @@ To persist an account, run the lens through review: `amass review accounts -d
 Account`), tagged `amass-ai` and reversible with `amass review retract`. So a
 computed conclusion becomes a stored observation only after a human accepts
 it (the compute → review → store path), never as a silent write.
+
+## Funding
+
+```bash
+amass lens funding -d colgate.edu
+amass lens funding -org "Colgate University"
+```
+
+Lists the funding rounds a domain's or organization's company has received,
+from the funding records stored during enumeration (`FundsTransfer` assets,
+collected by the aviato data source). Each round shows its amount, currency,
+date and stage, and the investors behind it. An investor is found without
+reading relationship labels: a round's recipient account is the one belonging
+to the subject, so every *other* account the round points at is a sender, and
+the organizations holding those sender accounts are the investors; an
+organization named directly on the round (a `third_party` to the transfer) is
+listed too. The report also totals the rounds when they share a currency.
+
+Investors, co-investors and the parties on a transfer are a strong signal of
+an organization's backers, partners and suppliers during enumeration — the
+relationships worth following into their own attack surface. These are stored
+records, not a live feed.
 
 ## Dangling DNS
 
