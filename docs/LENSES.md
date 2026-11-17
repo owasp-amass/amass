@@ -22,6 +22,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
 | `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, address space none of its names use, and other domains in its space |
 | `amass lens cloud -d <domain>` or `-org <name>` | The public cloud and CDN providers hosting its names, by provider, region and service, from the providers' own published IP ranges |
+| `amass lens web -d <domain>` or `-org <name>` | Its web presence: the URLs it controls, the host and address each reaches, off-domain URLs (social profiles, third-party pages), and the web applications recognized on its sites |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
@@ -281,6 +282,24 @@ is hosting, not ownership: an address in a provider's range means the
 provider operates that network, never that it owns the names, and two
 parties sharing a provider are not related. These are stored attributions,
 not a live scan.
+
+## Web presence
+
+```bash
+amass lens web -d colgate.edu
+amass lens web -org "Colgate University"
+```
+
+Lists the URLs the domain or organization controls — its websites and the
+endpoints stored for it — with the host and the addresses each reaches, and
+the service stored on it when there is one. URLs on one of the subject's own
+registered domains are shown as its own web surface; URLs on other domains
+(social-media profiles, third-party policy or hosting pages) are shown
+separately as an off-domain presence. It then lists the web applications
+recognized on the sites from the stored URLs (for example a content
+management system with its version and add-ons), using the same
+`web_applications.json` catalog the services and report lenses use. These are
+stored URLs, not a live crawl.
 
 ## Dangling DNS
 

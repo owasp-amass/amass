@@ -59,6 +59,7 @@ func SubjectLenses() []SubjectLens {
 		servicesLens,
 		networkLens,
 		cloudLens,
+		webLens,
 		danglingLens,
 		changesLens,
 		vulnerableLens,
