@@ -4,7 +4,12 @@
 
 package ocds
 
-import "testing"
+import (
+	"bytes"
+	"compress/gzip"
+	"strings"
+	"testing"
+)
 
 // A release package with the buyer named directly and two suppliers on one award.
 const releasePackage = `{"releases":[
@@ -69,11 +74,62 @@ func TestPublishersCatalogLoads(t *testing.T) {
 	if len(pubs) == 0 {
 		t.Fatal("catalog is empty")
 	}
-	// Seed publishers are disabled until a supplier-search endpoint is validated.
+	// Seed publishers are disabled until a supplier-search endpoint or a bulk
+	// export is validated; an enabled one must have one or the other.
 	for _, p := range pubs {
-		if p.Enabled && !containsSupplier(p.QueryURL) {
-			t.Errorf("publisher %s is enabled but its query_url cannot search by supplier", p.Key)
+		if p.Enabled && !containsSupplier(p.QueryURL) && p.BulkURL == "" {
+			t.Errorf("publisher %s is enabled but has neither a supplier query_url nor a bulk_url", p.Key)
 		}
+	}
+}
+
+func TestScanBulkGzippedJSONL(t *testing.T) {
+	// Two compiled releases, one per line; only the first names our supplier.
+	lines := []string{
+		`{"ocid":"ocds-mx-1","date":"2024-03-01","parties":[{"id":"b","name":"Secretaría de Educación","roles":["buyer"]}],` +
+			`"awards":[{"id":"a1","value":{"amount":750000,"currency":"MXN"},"suppliers":[{"id":"s","name":"Gamma SA de CV"}]}]}`,
+		`{"ocid":"ocds-mx-2","date":"2024-04-01","buyer":{"name":"Otra Dependencia"},` +
+			`"awards":[{"id":"a2","value":{"amount":10,"currency":"MXN"},"suppliers":[{"id":"x","name":"Unrelated Co"}]}]}`,
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write([]byte(strings.Join(lines, "\n") + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := gzip.NewReader(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []award
+	trunc, err := scanBulk(r,
+		func(s string) bool { return supplierMatches("Gamma SA de CV", s) },
+		func(a award) { got = append(got, a) })
+	if err != nil || trunc {
+		t.Fatalf("scanBulk err=%v truncated=%v", err, trunc)
+	}
+	if len(got) != 1 {
+		t.Fatalf("matched awards = %d, want 1 (only the matching supplier): %+v", len(got), got)
+	}
+	a := got[0]
+	if a.ocid != "ocds-mx-1" || a.buyer != "Secretaría de Educación" || a.amount != 750000 || a.currency != "MXN" {
+		t.Errorf("award = %+v", a)
+	}
+}
+
+func TestReleasesFromLine(t *testing.T) {
+	// A bare compiled release on the line.
+	rels := releasesFromLine([]byte(`{"ocid":"ocds-1","awards":[{"id":"a","suppliers":[{"name":"Foo"}]}]}`))
+	if len(rels) != 1 || rels[0].OCID != "ocds-1" {
+		t.Errorf("compiled release line = %+v", rels)
+	}
+	// A release package on the line.
+	rels = releasesFromLine([]byte(`{"releases":[{"ocid":"ocds-2","awards":[{"id":"a","suppliers":[{"name":"Bar"}]}]}]}`))
+	if len(rels) != 1 || rels[0].OCID != "ocds-2" {
+		t.Errorf("release package line = %+v", rels)
 	}
 }
 

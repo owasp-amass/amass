@@ -5,11 +5,18 @@
 package ocds
 
 import (
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,12 +34,38 @@ import (
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
+// Bulk-ingestion bounds.
+const (
+	// bulkTTL is how long a downloaded bulk export is reused before it is
+	// fetched again. Bulk OCDS exports change at most daily.
+	bulkTTL = 24 * time.Hour
+	// bulkMaxLines bounds how many release lines one scan reads.
+	bulkMaxLines = 5_000_000
+	// bulkMaxLineBytes bounds one release line; OCDS compiled releases can be
+	// large, but not unbounded.
+	bulkMaxLineBytes = 25 * 1024 * 1024
+	// bulkDownloadTimeout bounds a bulk download.
+	bulkDownloadTimeout = 15 * time.Minute
+)
+
 type publisher struct {
 	Key      string `json:"key"`
 	Country  string `json:"country"`
 	Name     string `json:"name"`
 	QueryURL string `json:"query_url"`
-	Enabled  bool   `json:"enabled"`
+	// BulkURL is the URL of a full OCDS export (newline-delimited compiled
+	// releases, optionally gzipped) for publishers with no supplier-search
+	// API; BulkFormat is "jsonl" or "jsonl.gz". When BulkURL is set the
+	// publisher is ingested in bulk mode.
+	BulkURL    string `json:"bulk_url"`
+	BulkFormat string `json:"bulk_format"`
+	Enabled    bool   `json:"enabled"`
+}
+
+// bulkEntry is one publisher's cached bulk export on disk.
+type bulkEntry struct {
+	path    string
+	fetched time.Time
 }
 
 var loadPublishers = sync.OnceValue(func() []publisher {
@@ -105,27 +138,81 @@ func parseOCDS(body []byte) ([]award, error) {
 
 	var out []award
 	for _, r := range releases {
-		buyer := r.Buyer.Name
-		if buyer == "" {
-			buyer = roleName(r.Parties, "buyer")
+		out = append(out, awardsFromRelease(r)...)
+	}
+	return out, nil
+}
+
+// awardsFromRelease returns one award per supplier named on each of a
+// release's awards, with the buyer resolved from the buyer field or the
+// parties' roles.
+func awardsFromRelease(r ocdsRelease) []award {
+	buyer := r.Buyer.Name
+	if buyer == "" {
+		buyer = roleName(r.Parties, "buyer")
+	}
+	var out []award
+	for _, a := range r.Awards {
+		date := a.Date
+		if date == "" {
+			date = r.Date
 		}
-		for _, a := range r.Awards {
-			date := a.Date
-			if date == "" {
-				date = r.Date
+		for _, s := range a.Suppliers {
+			if strings.TrimSpace(s.Name) == "" {
+				continue
 			}
-			for _, s := range a.Suppliers {
-				if strings.TrimSpace(s.Name) == "" {
-					continue
+			out = append(out, award{
+				ocid: r.OCID, id: a.ID, supplier: s.Name, buyer: buyer,
+				amount: a.Value.Amount, currency: a.Value.Currency, date: date,
+			})
+		}
+	}
+	return out
+}
+
+// releasesFromLine reads one line of a bulk OCDS export, which is either a
+// compiled release object or a release/record package.
+func releasesFromLine(line []byte) []ocdsRelease {
+	var r ocdsRelease
+	if json.Unmarshal(line, &r) == nil && (r.OCID != "" || len(r.Awards) > 0) {
+		return []ocdsRelease{r}
+	}
+	var p ocdsPackage
+	if json.Unmarshal(line, &p) == nil {
+		rs := p.Releases
+		for _, rec := range p.Records {
+			rs = append(rs, rec.CompiledRelease)
+		}
+		return rs
+	}
+	return nil
+}
+
+// scanBulk reads newline-delimited OCDS releases from r and emits each award
+// whose supplier matches. It streams, so a large export is not held in memory.
+// It returns whether the line limit cut the scan short.
+func scanBulk(r io.Reader, match func(supplier string) bool, emit func(award)) (bool, error) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 256*1024), bulkMaxLineBytes)
+	lines := 0
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		lines++
+		if lines > bulkMaxLines {
+			return true, nil
+		}
+		for _, rel := range releasesFromLine(line) {
+			for _, a := range awardsFromRelease(rel) {
+				if match(a.supplier) {
+					emit(a)
 				}
-				out = append(out, award{
-					ocid: r.OCID, id: a.ID, supplier: s.Name, buyer: buyer,
-					amount: a.Value.Amount, currency: a.Value.Currency, date: date,
-				})
 			}
 		}
 	}
-	return out, nil
+	return false, sc.Err()
 }
 
 // roleName returns the name of the first party holding a role.
@@ -147,7 +234,12 @@ func (h *handler) check(e *et.Event) error {
 	}
 
 	for _, pub := range loadPublishers() {
-		if !pub.Enabled || !strings.Contains(pub.QueryURL, "{supplier}") {
+		if !pub.Enabled {
+			continue
+		}
+		search := strings.Contains(pub.QueryURL, "{supplier}")
+		bulk := pub.BulkURL != ""
+		if !search && !bulk {
 			continue
 		}
 
@@ -160,7 +252,13 @@ func (h *handler) check(e *et.Event) error {
 		if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 			continue
 		}
-		h.query(e, e.Entity, o.Name, pub)
+		// A supplier-search endpoint is cheaper than a full bulk scan, so
+		// prefer it when the publisher offers both.
+		if search {
+			h.query(e, e.Entity, o.Name, pub)
+		} else {
+			h.queryBulk(e, e.Entity, o.Name, pub)
+		}
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 	return nil
@@ -203,6 +301,140 @@ func (h *handler) query(e *et.Event, orgent *dbt.Entity, name string, pub publis
 		seen[id] = true
 		h.store(e, orgent, a, id)
 	}
+}
+
+// queryBulk ingests a publisher's full OCDS export: it ensures the export is
+// cached, then streams it, storing each award whose supplier is the subject.
+func (h *handler) queryBulk(e *et.Event, orgent *dbt.Entity, name string, pub publisher) {
+	path, err := h.plugin.ensureBulk(e, pub)
+	if err != nil || path == "" {
+		if err != nil {
+			e.Session.Log().Error(fmt.Sprintf("OCDS %s bulk fetch failed: %s", pub.Key, err),
+				slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+		}
+		return
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	var r io.Reader = f
+	if bulkGzipped(pub) {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return
+		}
+		defer func() { _ = gz.Close() }()
+		r = gz
+	}
+
+	seen := map[string]bool{}
+	truncated, err := scanBulk(r,
+		func(supplier string) bool { return supplierMatches(name, supplier) },
+		func(a award) {
+			if e.Session.Ctx().Err() != nil {
+				return
+			}
+			id := "ocds:" + a.ocid + ":" + a.id
+			if seen[id] {
+				return
+			}
+			seen[id] = true
+			h.store(e, orgent, &a, id)
+		})
+	if err != nil {
+		e.Session.Log().Error(fmt.Sprintf("OCDS %s bulk scan failed: %s", pub.Key, err),
+			slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+	}
+	if truncated {
+		e.Session.Log().Warn(fmt.Sprintf("OCDS %s bulk scan stopped at %d lines", pub.Key, bulkMaxLines),
+			slog.Group("plugin", "name", h.plugin.name, "handler", h.name))
+	}
+}
+
+// ensureBulk returns a local path to the publisher's bulk export, downloading
+// it when it is missing or older than bulkTTL. The file is shared across the
+// organizations of a run.
+func (o *ocds) ensureBulk(e *et.Event, pub publisher) (string, error) {
+	o.bulkMu.Lock()
+	defer o.bulkMu.Unlock()
+
+	if ent := o.bulk[pub.Key]; ent != nil && time.Since(ent.fetched) < bulkTTL {
+		if _, err := os.Stat(ent.path); err == nil {
+			return ent.path, nil
+		}
+	}
+
+	dir := filepath.Join(os.TempDir(), "amass-ocds")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	dst := filepath.Join(dir, "ocds-"+pub.Key+bulkExt(pub))
+	if err := o.download(e, pub.BulkURL, dst); err != nil {
+		return "", err
+	}
+
+	if o.bulk == nil {
+		o.bulk = map[string]*bulkEntry{}
+	}
+	o.bulk[pub.Key] = &bulkEntry{path: dst, fetched: time.Now()}
+	return dst, nil
+}
+
+// download streams a URL to dst through the session's HTTP client, writing to a
+// temporary file first so a partial download never replaces a good one.
+func (o *ocds) download(e *et.Event, u, dst string) error {
+	_ = support.WaitLimit(e.Session.Ctx(), o.rlimit)
+	e.Session.NetSem().Acquire()
+	defer e.Session.NetSem().Release()
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), bulkDownloadTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := e.Session.Clients().General.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %s", resp.Status)
+	}
+
+	tmp := dst + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
+// bulkGzipped reports whether a publisher's bulk export is gzip-compressed.
+func bulkGzipped(pub publisher) bool {
+	return strings.Contains(pub.BulkFormat, "gz") || strings.HasSuffix(pub.BulkURL, ".gz")
+}
+
+// bulkExt is the on-disk extension for a publisher's bulk export.
+func bulkExt(pub publisher) string {
+	if bulkGzipped(pub) {
+		return ".jsonl.gz"
+	}
+	return ".jsonl"
 }
 
 func (h *handler) store(e *et.Event, orgent *dbt.Entity, a *award, id string) {

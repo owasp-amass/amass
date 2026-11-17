@@ -9,18 +9,20 @@
 // the funding party. This internationalizes funding beyond the US and EU.
 //
 // OCDS standardizes the data, so one parser reads every publisher; what differs
-// is each publisher's query API, which is data in publishers.json. A publisher
-// is queried only when it is enabled and its query_url supports searching by
-// supplier — many publishers offer only bulk or date paging, and some economies
-// publish no open procurement data, so coverage grows as supplier-searchable
-// endpoints are confirmed against real samples. Keyless and on by default;
-// rate-limited; TTL cadence.
+// is each publisher's access method, which is data in publishers.json. A
+// publisher with a supplier-search API (query_url containing {supplier}) is
+// queried per organization; one that offers only a full export (bulk_url) is
+// ingested in bulk — downloaded once per day, streamed, and filtered to awards
+// whose supplier is the enumerated organization. A publisher is enabled only
+// after its endpoint and envelope are validated against a real sample. Keyless
+// and on by default; rate-limited; TTL cadence.
 package ocds
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
@@ -37,6 +39,10 @@ type ocds struct {
 	source  *et.Source
 	log     *slog.Logger
 	handler *handler
+	// bulkMu guards bulk, the per-publisher cache of downloaded bulk OCDS
+	// exports, so a large file is fetched once per TTL and reused.
+	bulkMu sync.Mutex
+	bulk   map[string]*bulkEntry
 }
 
 type handler struct {
