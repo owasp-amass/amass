@@ -369,6 +369,20 @@ func humanAsset(a graph.Asset) string {
 	return fmt.Sprintf("%s (asset %s)", display, a.ID)
 }
 
+// orgSuggestionText renders fuzzy organization suggestions ("did you mean")
+// for a name that did not resolve exactly.
+func orgSuggestionText(cands []graph.OrgMatch) string {
+	parts := make([]string, 0, len(cands))
+	for _, c := range cands {
+		label := c.Name
+		if c.Jurisdiction != "" {
+			label += " [" + c.Jurisdiction + "]"
+		}
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, "; ")
+}
+
 func resolutionAnswer(status string, candidates []graph.OrganizationCandidate) string {
 	switch status {
 	case "not_found":

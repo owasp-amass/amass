@@ -654,8 +654,20 @@ func (a Agent) executeQuery(ctx context.Context, q Query, opts AdaptiveOptions, 
 		out.Resolution = &resolution
 		if resolution.Status != "matched" || len(resolution.Candidates) != 1 {
 			out.Incomplete = true
-			out.Answer = resolutionAnswer(resolution.Status, resolution.Candidates) + " Searched for " +
+			answer := resolutionAnswer(resolution.Status, resolution.Candidates) + " Searched for " +
 				formatPlanSubject(goal.Subject) + "."
+			// A misspelled or partial name resolves to nothing; offer the
+			// closest stored organizations so the user can pick the one meant.
+			if resolution.Status == "not_found" && goal.Subject.Name != "" {
+				if sg, ok := a.Runner.Graph.(graph.OrgSearchGraph); ok {
+					if s, serr := graph.ResolveOrSuggest(ctx, sg, goal.Subject.Name, 5); serr == nil &&
+						s.Status == graph.StatusSuggestions && len(s.Candidates) > 0 {
+						answer += " Did you mean: " + orgSuggestionText(s.Candidates) +
+							"? Re-run with the exact name."
+					}
+				}
+			}
+			out.Answer = answer
 			out.recordTrace(resolveStarted, InvestigationTraceEvent{Stage: "resolve_asset", Incomplete: true,
 				Detail: resolution.Status + " " + formatPlanSubject(goal.Subject)})
 			return out, nil
