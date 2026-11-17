@@ -9,8 +9,9 @@
 // ContactRecord, with the OpenStreetMap feature URL as the evidence.
 //
 // This is a global source, unlike the US-specific funders, so it helps targets
-// anywhere. It is keyless but opt-in (enabled only when listed in the
-// data-source configuration), because Overpass is a shared community service.
+// anywhere. It is keyless and runs by default, no setup required; it is politely
+// rate-limited and follows the TTL cadence because Overpass is a shared
+// community service.
 // Because a map feature's name matching an organization does not prove it
 // belongs to that organization, matching is conservative (normalized-name
 // equality) and the stored confidence is modest; the numbers are observations

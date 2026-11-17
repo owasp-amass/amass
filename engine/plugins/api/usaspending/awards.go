@@ -84,13 +84,6 @@ func (h *awards) check(e *et.Event) error {
 		return errors.New("failed to extract the Organization asset")
 	}
 
-	// Keyless but opt-in: run only when the user lists this source in the
-	// data-source configuration. A non-US organization is simply never enabled
-	// for it, and the plugin does no work.
-	if ds := e.Session.Config().GetDataSourceConfig(h.plugin.name); ds == nil {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(),
 		string(oam.Organization), string(oam.FundsTransfer), h.plugin.name)
 	if err != nil {

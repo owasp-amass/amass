@@ -7,11 +7,12 @@
 // USAspending.gov API, and stores each as a FundsTransfer the funding lens
 // surfaces, with the awarding agency as the funding party.
 //
-// The source is keyless but opt-in: it runs only when the user lists it in the
-// data-source configuration, so a run against a non-US organization — which
-// USAspending cannot match — does no work. A target with no federal awards
-// simply yields nothing. This is one regional funder source among many; others
-// write the same FundsTransfer shape (see claude/government-funding-sources-spec.md).
+// The source is keyless and runs by default, no setup required. A run against a
+// non-US organization — which USAspending cannot match — simply stores nothing,
+// as does a US organization with no federal awards; requests are rate-limited
+// and follow the TTL cadence. This is one regional funder source among many;
+// others write the same FundsTransfer shape (see
+// claude/government-funding-sources-spec.md).
 package usaspending
 
 import (

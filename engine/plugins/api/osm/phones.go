@@ -69,12 +69,6 @@ func (h *phones) check(e *et.Event) error {
 		return errors.New("failed to extract the Organization asset")
 	}
 
-	// Keyless but opt-in: Overpass is a shared service, so run only when the
-	// user lists this source in the data-source configuration.
-	if ds := e.Session.Config().GetDataSourceConfig(h.plugin.name); ds == nil {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(),
 		string(oam.Organization), string(oam.Phone), h.plugin.name)
 	if err != nil {
