@@ -11,6 +11,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
+	"github.com/owasp-amass/amass/v5/engine/plugins/breach"
 	"github.com/owasp-amass/amass/v5/engine/plugins/brute"
 	"github.com/owasp-amass/amass/v5/engine/plugins/cloud"
 	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
@@ -52,6 +53,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	attribution.NewAttribution,
 	aviato.NewAviato,
 	bgptools.NewBGPTools,
+	breach.NewBreachExposure,
 	brute.NewFQDNAlterations,
 	cloud.NewCloudRanges,
 	dns.NewDNS,

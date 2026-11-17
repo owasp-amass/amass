@@ -319,6 +319,14 @@ registries and are useful for confirming identity and corporate structure.
 The types are the Open Asset Model's `id_type` values. These are stored
 identifiers, not a live registry lookup.
 
+For an email identifier, the lens also reports the known data **breaches** it
+appears in — the breach names, with a count of exposed identifiers — when the
+breach-exposure collector has recorded them. That collector queries defensive
+breach-notification sources (XposedOrNot by default, free and keyless; Have I
+Been Pwned with a key), is opt-in per source through the data-source
+configuration, and records **metadata only** — which breach, when, and the
+categories of data exposed — never a leaked secret.
+
 ## Accounts
 
 ```bash

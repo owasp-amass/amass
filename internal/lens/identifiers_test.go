@@ -63,6 +63,44 @@ func TestFindIdentifiers(t *testing.T) {
 	}
 }
 
+func TestFindIdentifiersBreach(t *testing.T) {
+	g := graphtest.VendorFixture()
+	g.Assets["id-email"] = graph.Asset{ID: "id-email", Type: "Identifier", Key: "id-email",
+		Content: map[string]any{"id_type": "email", "id": "cio@colgate.edu"}}
+	g.Links = append(g.Links, graph.Relation{ID: "colgate-id-id-email", FromID: "colgate", ToID: "id-email",
+		Label: "id", Type: "SimpleRelation"})
+
+	adobe, _ := graph.EncodeBreach(graph.BreachInfo{Breach: "Adobe", Date: "2013",
+		DataClasses: []string{"Email addresses", "Passwords"}, Source: "XposedOrNot", Verified: true})
+	linkedin, _ := graph.EncodeBreach(graph.BreachInfo{Breach: "LinkedIn", Date: "2016", Source: "XposedOrNot"})
+	g.EvidenceByID = map[string][]graph.Evidence{
+		"id-email": {graphtest.SimpleProp("breach", adobe), graphtest.SimpleProp("breach", linkedin)},
+	}
+
+	r, err := FindIdentifiers(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+		g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if r.Exposed != 1 {
+		t.Fatalf("exposed = %d (%+v)", r.Exposed, r.Identifiers)
+	}
+	var email IdentifierEntry
+	for _, e := range r.Identifiers {
+		if e.Value == "cio@colgate.edu" {
+			email = e
+		}
+	}
+	if len(email.Breaches) != 2 {
+		t.Errorf("email breaches = %+v", email)
+	}
+	if !strings.Contains(r.Text(), "breached: Adobe, LinkedIn") ||
+		!strings.Contains(r.Text(), "appear in a known data breach") {
+		t.Errorf("report lacks breach exposure:\n%s", r.Text())
+	}
+}
+
 func TestFindIdentifiersEmpty(t *testing.T) {
 	g := graphtest.VendorFixture()
 	r, err := FindIdentifiers(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},

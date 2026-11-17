@@ -21,7 +21,7 @@
     {"type": "FundsTransfer", "surface": "out_of_scope", "collected": false, "lenses": [],
       "note": "Financial transfers; outside the external attack surface Amass reports on. No lens planned."},
     {"type": "Identifier", "surface": "lens", "collected": true, "lenses": ["identifiers", "org-group"],
-      "note": "LEI, tax, company and registry numbers and handles; reported by the identifiers lens, grouped by type, and used for corporate-group registration in org-group."},
+      "note": "LEI, tax, company and registry numbers and handles; reported by the identifiers lens, grouped by type, and used for corporate-group registration in org-group. Email identifiers also carry breach-exposure metadata recorded by the breach-exposure collector (XposedOrNot/HIBP, metadata only), surfaced by the identifiers lens."},
     {"type": "IPAddress", "surface": "lens", "collected": true, "lenses": ["network", "cloud", "services", "geography"],
       "note": "Addresses, their hosting, cloud provider, services and geography."},
     {"type": "IPNetRecord", "surface": "lens", "collected": true, "lenses": ["network", "geography"],

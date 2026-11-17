@@ -46,6 +46,9 @@ type IdentifierEntry struct {
 	Holder     string `json:"holder,omitempty"`
 	HolderType string `json:"holder_type,omitempty"`
 	Status     string `json:"status,omitempty"`
+	// Breaches are the names of the known breaches this identifier appears in,
+	// for an email identifier a breach source recorded. Metadata only.
+	Breaches []string `json:"breaches,omitempty"`
 }
 
 // IdentifiersReport is the result of the identifiers lens.
@@ -54,6 +57,8 @@ type IdentifiersReport struct {
 	Identifiers []IdentifierEntry `json:"identifiers"`
 	// ByType counts the identifiers of each id_type, most common first.
 	ByType []ChangeGroup `json:"by_type,omitempty"`
+	// Exposed counts the identifiers appearing in at least one known breach.
+	Exposed int `json:"exposed,omitempty"`
 }
 
 // FindIdentifiers lists the registered identifiers attached to what a domain
@@ -89,6 +94,16 @@ func FindIdentifiers(ctx context.Context, g graph.Graph, schema graph.SchemaCata
 				continue
 			}
 			seen[st.other.ID] = true
+
+			// An email identifier may carry recorded breach exposure.
+			if breaches, err := graph.BreachExposures(s.w.ctx, s.w.graph, st.other.ID); err == nil {
+				for _, b := range breaches {
+					graph.AddUnique(&entry.Breaches, b.Breach)
+				}
+				if len(entry.Breaches) > 0 {
+					out.Exposed++
+				}
+			}
 			out.Identifiers = append(out.Identifiers, entry)
 
 			g, ok := byType[entry.Type]
@@ -154,6 +169,9 @@ func (r IdentifiersReport) Text() string {
 
 	fmt.Fprintf(&b, "Registered identifiers of %s: %d identifier(s) in %d type(s) (%d reads).\n",
 		subject, len(r.Identifiers), len(r.ByType), r.Reads)
+	if r.Exposed > 0 {
+		fmt.Fprintf(&b, "%d identifier(s) appear in a known data breach.\n", r.Exposed)
+	}
 
 	if len(r.Identifiers) == 0 {
 		b.WriteString("\nNo registered identifier is stored.\n")
@@ -168,6 +186,9 @@ func (r IdentifiersReport) Text() string {
 		}
 		if e.Status != "" {
 			fmt.Fprintf(&b, " [%s]", e.Status)
+		}
+		if len(e.Breaches) > 0 {
+			fmt.Fprintf(&b, " — breached: %s", strings.Join(e.Breaches, ", "))
 		}
 		b.WriteString("\n")
 	}
