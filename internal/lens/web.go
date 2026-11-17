@@ -73,32 +73,9 @@ func FindWeb(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, roo
 		return out, err
 	}
 
-	urls := map[string]graph.Asset{}
-	for _, id := range s.order {
-		if s.spent() {
-			break
-		}
-		a := s.owned[id]
-		if a.Type == "URL" {
-			urls[a.ID] = a
-			continue
-		}
-		// Catch URLs linked from an owned asset by an edge the footprint walk
-		// does not follow (a service's security.txt pages, for example).
-		steps, err := s.w.steps(a)
-		if err != nil {
-			return out, err
-		}
-		for _, st := range steps {
-			if st.forward && st.other.Type == "URL" {
-				urls[st.other.ID] = st.other
-			}
-		}
-	}
-
-	ordered := make([]graph.Asset, 0, len(urls))
-	for _, u := range urls {
-		ordered = append(ordered, u)
+	ordered, err := s.ownedURLs()
+	if err != nil {
+		return out, err
 	}
 	for _, u := range ordered {
 		ep, err := s.webEndpoint(u)
@@ -132,6 +109,40 @@ func FindWeb(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, roo
 	}
 	out.lensBase = s.base()
 	return out, nil
+}
+
+// ownedURLs returns the URL assets the subject controls: those in the
+// footprint, and those linked forward from an owned asset by an edge the
+// footprint walk does not follow (a service's security.txt pages, for
+// example). The order is stable so reports do not shuffle between runs.
+func (s *scope) ownedURLs() ([]graph.Asset, error) {
+	urls := map[string]graph.Asset{}
+	for _, id := range s.order {
+		if s.spent() {
+			break
+		}
+		a := s.owned[id]
+		if a.Type == "URL" {
+			urls[a.ID] = a
+			continue
+		}
+		steps, err := s.w.steps(a)
+		if err != nil {
+			return nil, err
+		}
+		for _, st := range steps {
+			if st.forward && st.other.Type == "URL" {
+				urls[st.other.ID] = st.other
+			}
+		}
+	}
+
+	ordered := make([]graph.Asset, 0, len(urls))
+	for _, u := range urls {
+		ordered = append(ordered, u)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].ID < ordered[j].ID })
+	return ordered, nil
 }
 
 // webEndpoint builds an endpoint from a stored URL: its host and scheme, and

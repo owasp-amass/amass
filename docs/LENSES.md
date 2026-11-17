@@ -24,6 +24,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens cloud -d <domain>` or `-org <name>` | The public cloud and CDN providers hosting its names, by provider, region and service, from the providers' own published IP ranges |
 | `amass lens web -d <domain>` or `-org <name>` | Its web presence: the URLs it controls, the host and address each reaches, off-domain URLs (social profiles, third-party pages), and the web applications recognized on its sites |
 | `amass lens identifiers -d <domain>` or `-org <name>` | The registered identifiers attached to what it controls — LEI, tax, company and registry numbers and handles — grouped by type |
+| `amass lens accounts -d <domain>` or `-org <name>` | The platform accounts (code hosts, social media) it has, computed from its stored profile URLs, with the handle on each |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
@@ -317,6 +318,26 @@ by identifier type. These identifiers tie an organization to outside
 registries and are useful for confirming identity and corporate structure.
 The types are the Open Asset Model's `id_type` values. These are stored
 identifiers, not a live registry lookup.
+
+## Accounts
+
+```bash
+amass lens accounts -d colgate.edu
+amass lens accounts -org "Colgate University"
+```
+
+Lists the platform accounts the domain or organization has — code hosts
+(GitHub, GitLab, Docker Hub), social media (X, LinkedIn, Facebook,
+Instagram, YouTube) and the like — computed from the profile URLs already
+stored for it. For each known platform a URL names, the handle is read from
+the URL path; site pages that are not accounts (a platform's own feature or
+login pages) are skipped. The platforms and how their handles are read are
+data, in `account_platforms.json`, each citing the platform's own
+documentation. These accounts are derived from stored URLs with the URL as
+the evidence — a computed view, not written to the database, and not a live
+lookup against the platform. Recording that an account was exposed in a
+known breach is a separate, planned collector (see the attack-surface
+roadmap), not part of this lens.
 
 ## Dangling DNS
 
