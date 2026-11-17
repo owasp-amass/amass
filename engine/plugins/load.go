@@ -11,6 +11,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/ted"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
@@ -83,6 +84,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	scrape.NewIPVerse,
 	scrape.NewRapidDNS,
 	scrape.NewSiteDossier,
+	ted.NewTED,
 	usaspending.NewUSASpending,
 	whois.NewWHOIS,
 	NewIPNetblock,
