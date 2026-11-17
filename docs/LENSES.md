@@ -26,6 +26,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens identifiers -d <domain>` or `-org <name>` | The registered identifiers attached to what it controls — LEI, tax, company and registry numbers and handles — grouped by type |
 | `amass lens accounts -d <domain>` or `-org <name>` | The platform accounts (code hosts, social media) it has, computed from its stored profile URLs, with the handle on each |
 | `amass lens funding -d <domain>` or `-org <name>` | The funding rounds its company has received — amount, date and stage — and the investors behind them |
+| `amass lens group-funding -org <name>` or `-d <domain>` | Funding across a whole corporate group — each parent, subsidiary and unit — merged, with which one received each round |
 | `amass lens contacts -d <domain>` or `-org <name>` | Its contact details: phone numbers, email addresses, contact people and postal addresses |
 | `amass lens affiliation -d <domain>` or `-org <name>` | Other organizations tied to it by a shared phone, person, funder or address, scored by confidence |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |

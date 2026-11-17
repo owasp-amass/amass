@@ -273,8 +273,6 @@ func (r FundingReport) Text() string {
 	return b.String()
 }
 
-// contentFloat reads a numeric content field, tolerating the float and
-// json.Number forms a stored asset may carry.
 // contentFloat reads a numeric field from an asset's content. It marshals the
 // content to JSON first, as graph.ContentString does, so it works whether the
 // content is a typed asset struct (for example *financial.FundsTransfer, whose
