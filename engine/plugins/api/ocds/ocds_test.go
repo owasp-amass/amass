@@ -192,6 +192,36 @@ func TestUKValueFallback(t *testing.T) {
 	}
 }
 
+// TestScanBulkRwandaAndDR covers the two shapes validated for enabling:
+// Rwanda carries the amount on award.value (RWF); the Dominican Republic
+// leaves award.value empty and puts it on contracts[].value by awardID (DOP),
+// with no buyer party.
+func TestScanBulkRwandaAndDR(t *testing.T) {
+	rw := `{"ocid":"ocds-ozzobm-1","date":"2024-06-01","buyer":{"name":"RWANDA FORENSIC INSTITUTE (RFI)"},` +
+		`"awards":[{"id":"aw-rw","date":"2024-06-02","value":{"amount":24780000,"currency":"RWF"},` +
+		`"suppliers":[{"name":"ROCK ASSOCIATES COMPANY LIMITED"}]}]}`
+	do := `{"ocid":"ocds-6550wx-1","date":"2020-05-01",` +
+		`"awards":[{"id":"DO1.AWD.883627","suppliers":[{"name":"Antonio Manuel Saviñon Santos"}]}],` +
+		`"contracts":[{"awardID":"DO1.AWD.883627","value":{"amount":22892,"currency":"DOP"},"dateSigned":"2020-05-10"}]}`
+
+	got := map[string]award{}
+	match := func(s string) bool {
+		return s == "ROCK ASSOCIATES COMPANY LIMITED" || s == "Antonio Manuel Saviñon Santos"
+	}
+	if _, err := scanBulk(strings.NewReader(rw+"\n"+do+"\n"), match, func(a award) { got[a.supplier] = a }); err != nil {
+		t.Fatal(err)
+	}
+
+	rwa := got["ROCK ASSOCIATES COMPANY LIMITED"]
+	if rwa.amount != 24780000 || rwa.currency != "RWF" || rwa.buyer != "RWANDA FORENSIC INSTITUTE (RFI)" {
+		t.Errorf("rwanda = %+v", rwa)
+	}
+	doa := got["Antonio Manuel Saviñon Santos"]
+	if doa.amount != 22892 || doa.currency != "DOP" || doa.date != "2020-05-10" {
+		t.Errorf("dominican republic = %+v", doa)
+	}
+}
+
 func TestReleasesFromLine(t *testing.T) {
 	// A bare compiled release on the line.
 	rels := releasesFromLine([]byte(`{"ocid":"ocds-1","awards":[{"id":"a","suppliers":[{"name":"Foo"}]}]}`))
