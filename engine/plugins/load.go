@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/ted"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usgrants"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/wikidata"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
 	"github.com/owasp-amass/amass/v5/engine/plugins/breach"
@@ -83,6 +84,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	sshp.NewSSHProbing,
 	bannerp.NewBannerProbing,
 	rdap.NewRDAP,
+	wikidata.NewWikidata,
 	scrape.NewBing,
 	scrape.NewDNSHistory,
 	scrape.NewDuckDuckGo,
