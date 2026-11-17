@@ -7,6 +7,7 @@ package plugins
 import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/edgar"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
@@ -59,6 +60,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	brute.NewFQDNAlterations,
 	cloud.NewCloudRanges,
 	dns.NewDNS,
+	edgar.NewEDGAR,
 	dnssd.NewDNSPlugin,
 	enrich.NewBannerURLs,
 	enrich.NewContacts,
