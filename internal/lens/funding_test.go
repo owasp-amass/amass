@@ -11,7 +11,27 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	oamfin "github.com/owasp-amass/open-asset-model/financial"
 )
+
+// TestContentFloatReadsTypedAsset guards the funding lens against the amount
+// disappearing when an asset's content is a typed struct (as the engine stores
+// it) rather than a map: the field must still be read. A regression for NIH
+// FundsTransfers showing no dollar amount.
+func TestContentFloatReadsTypedAsset(t *testing.T) {
+	typed := graph.Asset{ID: "1", Type: "FundsTransfer", Key: "nih:X",
+		Content: &oamfin.FundsTransfer{ID: "nih:X", Amount: 296920, Currency: "USD",
+			ReferenceNumber: "nih:X", ExchangeDate: "2023-08-01T00:00:00"}}
+	if got := contentFloat(typed, "amount"); got != 296920 {
+		t.Errorf("typed content amount = %v, want 296920", got)
+	}
+
+	asMap := graph.Asset{ID: "2", Type: "FundsTransfer", Key: "m",
+		Content: map[string]any{"amount": 5000.0}}
+	if got := contentFloat(asMap, "amount"); got != 5000 {
+		t.Errorf("map content amount = %v, want 5000", got)
+	}
+}
 
 func TestFindFunding(t *testing.T) {
 	g := graphtest.VendorFixture()

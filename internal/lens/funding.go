@@ -275,20 +275,25 @@ func (r FundingReport) Text() string {
 
 // contentFloat reads a numeric content field, tolerating the float and
 // json.Number forms a stored asset may carry.
+// contentFloat reads a numeric field from an asset's content. It marshals the
+// content to JSON first, as graph.ContentString does, so it works whether the
+// content is a typed asset struct (for example *financial.FundsTransfer, whose
+// Amount field is otherwise invisible to a map type assertion) or a map.
 func contentFloat(a graph.Asset, key string) float64 {
-	m, ok := a.Content.(map[string]any)
+	data, err := json.Marshal(a.Content)
+	if err != nil {
+		return 0
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil {
+		return 0
+	}
+	raw, ok := fields[key]
 	if !ok {
 		return 0
 	}
-	switch v := m[key].(type) {
-	case float64:
-		return v
-	case int:
-		return float64(v)
-	case int64:
-		return float64(v)
-	case json.Number:
-		f, _ := v.Float64()
+	var f float64
+	if json.Unmarshal(raw, &f) == nil {
 		return f
 	}
 	return 0
