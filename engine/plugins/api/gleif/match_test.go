@@ -4,7 +4,11 @@
 
 package gleif
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/owasp-amass/open-asset-model/contact"
+)
 
 func leiRecord(name, jurisdiction, country, postal string) *LEIRecord {
 	var r LEIRecord
@@ -139,6 +143,19 @@ func TestChooseLEIRecord(t *testing.T) {
 		if rec != nil && (conf <= 0 || conf > maxMatchScore) {
 			t.Errorf("%s: confidence %d out of range", c.name, conf)
 		}
+	}
+}
+
+func TestPhoneCountry(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"MX", "MX"}, {"mx", "MX"}, {" us ", "US"}, {"", ""}, {"USA", ""}, {"5", ""},
+	} {
+		if got := phoneCountry(&contact.Phone{CountryAbbrev: c.in}); got != c.want {
+			t.Errorf("phoneCountry(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	if phoneCountry(nil) != "" {
+		t.Error("phoneCountry(nil) should be empty")
 	}
 }
 

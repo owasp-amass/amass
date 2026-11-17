@@ -187,8 +187,27 @@ func (ev *locEvidence) add(loc *contact.Location) {
 	}
 }
 
-// orgLocEvidence collects the postal codes and countries of the
-// organization's locations and of its contact records' locations.
+// phoneCountry is the ISO alpha-2 country of a registrant phone, or "". A
+// phone gives a country but no postal code, so it can only corroborate a
+// name-matched record's country, never stand in for a postal match.
+func phoneCountry(ph *contact.Phone) string {
+	if ph == nil {
+		return ""
+	}
+	c := strings.ToUpper(strings.TrimSpace(ph.CountryAbbrev))
+	if len(c) == 2 && c[0] >= 'A' && c[0] <= 'Z' && c[1] >= 'A' && c[1] <= 'Z' {
+		return c
+	}
+	return ""
+}
+
+// orgLocEvidence collects the postal codes and countries of the organization's
+// locations and of its contact records' locations, and the country of a
+// registrant phone on the organization or its contact records. The phone
+// country matters because a foreign entity discovered from a regional registry
+// often has a registrant phone (e.g. +52) but no stored postal address, so
+// without it a correct, name-matched LEI record would be rejected for lack of
+// any country agreement.
 func orgLocEvidence(e *et.Event, orgent *dbt.Entity) locEvidence {
 	ev := locEvidence{postal: map[string]bool{}, countries: map[string]bool{}}
 
@@ -209,13 +228,30 @@ func orgLocEvidence(e *et.Event, orgent *dbt.Entity) locEvidence {
 			}
 		}
 	}
+	addPhones := func(from *dbt.Entity) {
+		edges, err := db.OutgoingEdges(ctx, from, time.Time{}, "phone")
+		if err != nil {
+			return
+		}
+		for _, edge := range edges {
+			if a, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
+				if ph, ok := a.Asset.(*contact.Phone); ok {
+					if c := phoneCountry(ph); c != "" {
+						ev.countries[c] = true
+					}
+				}
+			}
+		}
+	}
 
 	addLocations(orgent, "legal_address", "hq_address", "location")
+	addPhones(orgent)
 	if edges, err := db.IncomingEdges(ctx, orgent, time.Time{}, "organization"); err == nil {
 		for _, edge := range edges {
 			if a, err := db.FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*contact.ContactRecord); ok {
 					addLocations(a, "location")
+					addPhones(a)
 				}
 			}
 		}
