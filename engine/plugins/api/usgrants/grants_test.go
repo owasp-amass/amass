@@ -48,6 +48,52 @@ func TestParseNIH(t *testing.T) {
 	}
 }
 
+// TestParseNIHAmountFallbacks checks every project gets a dollar amount with
+// the real RePORTER field shapes, exercising each fallback: award_amount,
+// then direct_cost_amt+indirect_cost_amt, then the agency_ic_fundings array.
+// The first three records' values are from a live SUNY Polytechnic Institute
+// response; the last two force the fallbacks.
+func TestParseNIHAmountFallbacks(t *testing.T) {
+	body := []byte(`{"meta":{"total":5},"results":[
+	 {"project_num":"3R15CA274603-01S1","award_amount":296920,"direct_cost_amt":200000,"indirect_cost_amt":96920,
+	  "agency_ic_fundings":[{"total_cost":296920.0}],"organization":{"org_name":"SUNY POLYTECHNIC INSTITUTE"},
+	  "agency_ic_admin":{"name":"National Cancer Institute"},"fiscal_year":2023,"project_start_date":"2023-08-01T00:00:00"},
+	 {"project_num":"1R15CA274603-01","award_amount":459347,"direct_cost_amt":333739,"indirect_cost_amt":125608,
+	  "agency_ic_fundings":[{"total_cost":459347.0}],"organization":{"org_name":"SUNY POLYTECHNIC INSTITUTE"},
+	  "agency_ic_admin":{"name":"National Cancer Institute"},"fiscal_year":2022,"project_start_date":"2022-08-24T00:00:00"},
+	 {"project_num":"3R01GM125870-04S1","award_amount":319793,"direct_cost_amt":208334,"indirect_cost_amt":111459,
+	  "agency_ic_fundings":[{"total_cost":319793.0}],"organization":{"org_name":"SUNY POLYTECHNIC INSTITUTE"},
+	  "agency_ic_admin":{"name":"National Institute of General Medical Sciences"},"fiscal_year":2018,"project_start_date":"2018-01-01T00:00:00"},
+	 {"project_num":"FALLBACK-DIRECT-INDIRECT","award_amount":0,"direct_cost_amt":333739,"indirect_cost_amt":125608,
+	  "organization":{"org_name":"SUNY POLYTECHNIC INSTITUTE"},
+	  "agency_ic_admin":{"name":"National Cancer Institute"},"fiscal_year":2022,"project_start_date":"2022-08-24T00:00:00"},
+	 {"project_num":"FALLBACK-IC-SUM","award_amount":0,"direct_cost_amt":0,"indirect_cost_amt":0,
+	  "agency_ic_fundings":[{"total_cost":200000.0},{"total_cost":119793.0}],"organization":{"org_name":"SUNY POLYTECHNIC INSTITUTE"},
+	  "agency_ic_admin":{"name":"National Institute of General Medical Sciences"},"fiscal_year":2018,"project_start_date":"2018-01-01T00:00:00"}
+	]}`)
+	g, err := parseNIH(body)
+	if err != nil || len(g) != 5 {
+		t.Fatalf("grants=%v err=%v", g, err)
+	}
+
+	want := map[string]float64{
+		"nih:3R15CA274603-01S1":        296920,
+		"nih:1R15CA274603-01":          459347,
+		"nih:3R01GM125870-04S1":        319793,
+		"nih:FALLBACK-DIRECT-INDIRECT": 459347, // award_amount 0 -> direct+indirect
+		"nih:FALLBACK-IC-SUM":          319793, // all else 0 -> sum agency_ic_fundings
+	}
+	got := map[string]float64{}
+	for _, x := range g {
+		got[x.id] = x.amount
+	}
+	for id, amt := range want {
+		if got[id] != amt {
+			t.Errorf("%s amount = %v, want %v", id, got[id], amt)
+		}
+	}
+}
+
 func TestParseSBIR(t *testing.T) {
 	// Amount as a number in one, a string in the other — both must parse.
 	body := []byte(`[

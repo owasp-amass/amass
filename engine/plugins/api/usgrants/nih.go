@@ -20,6 +20,11 @@ type nihResponse struct {
 	Results []struct {
 		ProjectNum   string  `json:"project_num"`
 		AwardAmount  float64 `json:"award_amount"`
+		DirectCost   float64 `json:"direct_cost_amt"`
+		IndirectCost float64 `json:"indirect_cost_amt"`
+		AgencyFunds  []struct {
+			TotalCost float64 `json:"total_cost"`
+		} `json:"agency_ic_fundings"`
 		Organization struct {
 			OrgName string `json:"org_name"`
 		} `json:"organization"`
@@ -42,9 +47,21 @@ func parseNIH(body []byte) ([]grant, error) {
 		if date == "" && p.FiscalYear > 0 {
 			date = strconv.Itoa(p.FiscalYear)
 		}
+		// Prefer award_amount; when a record omits it, fall back to the
+		// direct+indirect split and then the per-institute funding totals,
+		// so a grant with real funding is not stored as amountless.
+		amount := p.AwardAmount
+		if amount == 0 {
+			amount = p.DirectCost + p.IndirectCost
+		}
+		if amount == 0 {
+			for _, f := range p.AgencyFunds {
+				amount += f.TotalCost
+			}
+		}
 		out = append(out, grant{
 			id:        "nih:" + p.ProjectNum,
-			amount:    p.AwardAmount,
+			amount:    amount,
 			date:      date,
 			agency:    firstNonEmpty(p.AgencyIcAdmin.Name, "National Institutes of Health"),
 			recipient: p.Organization.OrgName,
@@ -54,12 +71,14 @@ func parseNIH(body []byte) ([]grant, error) {
 }
 
 func queryNIH(h *source, e *et.Event, orgent *dbt.Entity, name string) {
+	// Request the full record rather than an include_fields projection: the
+	// fallback cost fields (direct_cost_amt, indirect_cost_amt,
+	// agency_ic_fundings) are always present in the full record, so there is
+	// no projection token to get wrong.
 	req := map[string]any{
 		"criteria": map[string]any{"org_names": []string{name}},
-		"include_fields": []string{"ProjectNum", "AwardAmount", "Organization",
-			"AgencyIcAdmin", "FiscalYear", "ProjectStartDate"},
-		"limit":  50,
-		"offset": 0,
+		"limit":    50,
+		"offset":   0,
 	}
 	bodyJSON, err := json.Marshal(req)
 	if err != nil {

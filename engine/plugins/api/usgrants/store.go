@@ -67,6 +67,12 @@ func (h *source) store(e *et.Event, orgent *dbt.Entity, g *grant) *dbt.Entity {
 	if g.id == "" {
 		return nil
 	}
+	// The Asset Database rejects a FundsTransfer with a non-positive amount,
+	// so skip a grant we could find no amount for rather than logging a
+	// storage error for every one.
+	if g.amount <= 0 {
+		return nil
+	}
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	defer cancel()
