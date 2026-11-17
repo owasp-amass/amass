@@ -222,6 +222,30 @@ func TestScanBulkRwandaAndDR(t *testing.T) {
 	}
 }
 
+// TestScanBulkHondurasAndParaguay covers the last two enabled shapes: Honduras
+// leaves award.value empty with the amount on contracts[].value by awardID
+// (HNL); Paraguay carries it on award.value (PYG).
+func TestScanBulkHondurasAndParaguay(t *testing.T) {
+	hn := `{"ocid":"ocds-lcuori-1","date":"2021-03-01","buyer":{"name":"Región Departamental de Salud de Atlántida No.1"},` +
+		`"awards":[{"id":"aw-hn","suppliers":[{"name":"DIPROMEQ"}]}],` +
+		`"contracts":[{"awardID":"aw-hn","value":{"amount":49996.2,"currency":"HNL"},"dateSigned":"2021-03-15"}]}`
+	py := `{"ocid":"ocds-03ad3f-1","date":"2024-02-01","buyer":{"name":"Municipalidad de Fulgencio Yegros"},` +
+		`"awards":[{"id":"aw-py","date":"2024-02-10","value":{"amount":71000000,"currency":"PYG"},` +
+		`"suppliers":[{"name":"EDUARDO AGUSTIN DUARTE ROJAS"}]}]}`
+
+	got := map[string]award{}
+	match := func(s string) bool { return s == "DIPROMEQ" || s == "EDUARDO AGUSTIN DUARTE ROJAS" }
+	if _, err := scanBulk(strings.NewReader(hn+"\n"+py+"\n"), match, func(a award) { got[a.supplier] = a }); err != nil {
+		t.Fatal(err)
+	}
+	if h := got["DIPROMEQ"]; h.amount != 49996.2 || h.currency != "HNL" || h.date != "2021-03-15" {
+		t.Errorf("honduras = %+v", h)
+	}
+	if p := got["EDUARDO AGUSTIN DUARTE ROJAS"]; p.amount != 71000000 || p.currency != "PYG" {
+		t.Errorf("paraguay = %+v", p)
+	}
+}
+
 func TestReleasesFromLine(t *testing.T) {
 	// A bare compiled release on the line.
 	rels := releasesFromLine([]byte(`{"ocid":"ocds-1","awards":[{"id":"a","suppliers":[{"name":"Foo"}]}]}`))
