@@ -27,6 +27,15 @@ func ProposalsText(journalPath string) (string, error) {
 	return out.String(), err
 }
 
+// PendingProposalsText lists only the proposals awaiting a decision, so the
+// assistant can surface newly-proposed items for immediate review without
+// wading through already-decided ones.
+func PendingProposalsText(journalPath string) (string, error) {
+	var out bytes.Buffer
+	err := pendingProposals(journalPath, &out)
+	return out.String(), err
+}
+
 // Decide approves, rejects or retracts a proposal of any kind as amass
 // review does, and returns what it reports. Approving and retracting write
 // to the Asset Database through g; rejecting only appends to the journal.

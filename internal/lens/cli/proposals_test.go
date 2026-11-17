@@ -114,6 +114,30 @@ func TestRetractRemovesAppliedEdgeAndBlocksRewrites(t *testing.T) {
 	}
 }
 
+func TestPendingProposalsListsOnlyAwaitingDecision(t *testing.T) {
+	path, p := journalWithProposal(t)
+
+	var out bytes.Buffer
+	if err := pendingProposals(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "awaiting review") || !strings.Contains(out.String(), p.Owner) {
+		t.Errorf("pending listing omits the proposed item: %q", out.String())
+	}
+
+	// Once decided, the proposal must drop out of the pending view.
+	if err := rejectProposal(path, p.ID, "jeff", &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := pendingProposals(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "No proposals are awaiting review") {
+		t.Errorf("a decided proposal still shows as pending: %q", out.String())
+	}
+}
+
 func TestSignalsExplainEachRule(t *testing.T) {
 	var out bytes.Buffer
 	if err := listSignals("json", false, &out); err != nil {

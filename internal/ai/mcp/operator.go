@@ -371,14 +371,31 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 
 	add(ToolListProposals, "Amass review proposals",
 		"List the proposals awaiting review: ownership relationships, organization merges, identity corrections "+
-			"and organizations recorded under a person's name, each with its ID, evidence and status.",
-		obj(nil, map[string]any{}), readOnly(),
-		func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error) {
+			"and organizations recorded under a person's name, each with its ID, evidence and status. Set "+
+			"\"pending\" to list only the proposals still awaiting a decision, so newly-proposed items can be "+
+			"surfaced for the user to decide on immediately.",
+		obj(nil, map[string]any{
+			"pending": map[string]any{"type": "boolean",
+				"description": "List only proposals that are still awaiting a decision."},
+		}), readOnly(),
+		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
 			if op.Journal == "" {
 				return nil, errors.New("no review journal is configured")
 			}
 
+			var a struct {
+				Pending bool `json:"pending"`
+			}
+			if len(raw) > 0 {
+				if err := json.Unmarshal(raw, &a); err != nil {
+					return nil, err
+				}
+			}
+
 			text, err := lenscli.ProposalsText(op.Journal)
+			if a.Pending {
+				text, err = lenscli.PendingProposalsText(op.Journal)
+			}
 			if err != nil {
 				return nil, err
 			}

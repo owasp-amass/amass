@@ -64,6 +64,101 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 	return err
 }
 
+// pendingProposals prints only the journal's proposals that are still awaiting
+// a decision, so new ones can be surfaced for immediate review. The output has
+// the same shape as listProposals, limited to Status == ProposalPending.
+func pendingProposals(journalPath string, out io.Writer) error {
+	if journalPath == "" {
+		return errors.New("-journal required")
+	}
+
+	j := &review.Journal{Path: journalPath}
+
+	entries, err := j.OwnershipEntries()
+	if err != nil {
+		return err
+	}
+	merges, err := j.DuplicateEntries()
+	if err != nil {
+		return err
+	}
+	identities, err := j.IdentityEntries()
+	if err != nil {
+		return err
+	}
+	people, err := j.PersonNamedEntries()
+	if err != nil {
+		return err
+	}
+
+	entries = filterPendingOwnership(entries)
+	merges = filterPendingDuplicate(merges)
+	identities = filterPendingIdentity(identities)
+	people = filterPendingPersonNamed(people)
+
+	total := len(entries) + len(merges) + len(identities) + len(people)
+	if total == 0 {
+		_, err = fmt.Fprintln(out, "No proposals are awaiting review.")
+		return err
+	}
+
+	_, err = fmt.Fprintf(out, "%d proposal(s) awaiting review:\n\n", total)
+	if err == nil && len(entries) > 0 {
+		_, err = fmt.Fprint(out, "Ownership relationships:\n\n"+review.FormatOwnershipEntries(entries))
+	}
+	if err == nil && len(merges) > 0 {
+		_, err = fmt.Fprint(out, "\nMerge proposals:\n\n"+review.FormatDuplicateEntries(merges))
+	}
+	if err == nil && len(identities) > 0 {
+		_, err = fmt.Fprint(out, "\nIdentity corrections:\n\n"+review.FormatIdentityEntries(identities))
+	}
+	if err == nil && len(people) > 0 {
+		_, err = fmt.Fprint(out, "\nOrganizations recorded under a person's name:\n\n"+
+			review.FormatPersonNamedEntries(people))
+	}
+	return err
+}
+
+func filterPendingOwnership(in []review.OwnershipEntry) []review.OwnershipEntry {
+	out := in[:0:0]
+	for _, e := range in {
+		if e.Status == review.ProposalPending {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func filterPendingDuplicate(in []review.DuplicateEntry) []review.DuplicateEntry {
+	out := in[:0:0]
+	for _, e := range in {
+		if e.Status == review.ProposalPending {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func filterPendingIdentity(in []review.IdentityEntry) []review.IdentityEntry {
+	out := in[:0:0]
+	for _, e := range in {
+		if e.Status == review.ProposalPending {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func filterPendingPersonNamed(in []review.PersonNamedEntry) []review.PersonNamedEntry {
+	out := in[:0:0]
+	for _, e := range in {
+		if e.Status == review.ProposalPending {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // pendingProposal finds a proposal that has not been reviewed.
 func pendingProposal(j *review.Journal, id, reviewer string) (review.OwnershipProposal, error) {
 	if id == "" || reviewer == "" {
