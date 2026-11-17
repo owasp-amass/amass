@@ -98,6 +98,9 @@ type AccountEntry struct {
 	Type     string `json:"type"`
 	Handle   string `json:"handle"`
 	URL      string `json:"url"`
+	// URLID is the stored URL asset the account was derived from — the
+	// evidence a review proposal cites.
+	URLID string `json:"url_id,omitempty"`
 }
 
 // AccountsReport is the result of the accounts lens.
@@ -106,6 +109,10 @@ type AccountsReport struct {
 	Accounts []AccountEntry `json:"accounts"`
 	// ByPlatform counts the accounts on each platform, most first.
 	ByPlatform []ChangeGroup `json:"by_platform,omitempty"`
+	// Owner and OwnerID name the organization the accounts are proposed to
+	// belong to (the subject's owning organization, or the subject itself).
+	Owner   string `json:"owner,omitempty"`
+	OwnerID string `json:"owner_id,omitempty"`
 }
 
 // FindAccounts lists the platform accounts a domain or organization has,
@@ -124,6 +131,11 @@ func FindAccounts(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		return out, err
 	}
 
+	out.Owner, out.OwnerID = graph.AssetLabel(s.root), s.root.ID
+	if len(s.owners) > 0 {
+		out.Owner, out.OwnerID = graph.AssetLabel(s.owners[0]), s.owners[0].ID
+	}
+
 	rules := loadAccountRules()
 	byPlatform := map[string]*ChangeGroup{}
 	var order []string
@@ -139,6 +151,7 @@ func FindAccounts(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 			continue
 		}
 		seen[key] = true
+		entry.URLID = u.ID
 		out.Accounts = append(out.Accounts, entry)
 
 		g, ok := byPlatform[platform]
