@@ -21,6 +21,7 @@ evidence does and nothing is left behind to clean up.
 | `amass lens org-group -org <name>` or `-d <domain>` | An organization's corporate group: its ultimate parent and every subsidiary and unit |
 | `amass lens services -d <domain>` or `-org <name>` | The services stored for what the domain or organization controls: ports, software, certificates, products, and what stands out |
 | `amass lens network -d <domain>` or `-org <name>` | The netblocks and autonomous systems registered to it, where its names are hosted, address space none of its names use, and other domains in its space |
+| `amass lens cloud -d <domain>` or `-org <name>` | The public cloud and CDN providers hosting its names, by provider, region and service, from the providers' own published IP ranges |
 | `amass lens dangling -d <domain>` or `-org <name>` | DNS records that may point at something it no longer holds: possible subdomain takeovers, lapsed domains, stale addresses |
 | `amass lens changes -d <domain>` or `-org <name>` `[-since 2026-11-01\|7d]` | What appeared since a time, and what later enumerations stopped seeing |
 | `amass lens certificates -d <domain>` or `-org <name>` | Its certificates: expired, expiring, weak, self-issued or overlong ones, wildcards, and the authorities it relies on |
@@ -254,6 +255,32 @@ netblock's contents include every stored address inside its range, not only
 those linked to it; up to 1,000 addresses are read for each netblock, and the
 report says when there are more. The third-party lenses use the same
 containment to name the party hosting an address.
+
+## Cloud and CDN hosting
+
+```bash
+amass lens cloud -d colgate.edu
+amass lens cloud -org "Colgate University"
+```
+
+Shows which public cloud and CDN providers host the domain's or
+organization's names, grouped by provider, with the regions and services
+those names resolve into and example names for each. It reports how many of
+the controlled names fall in a recognized provider's range, out of how many
+resolve and how many there are in all, so a footprint concentrated in one
+provider — or one region — stands out.
+
+The attribution comes from the ranges each provider publishes itself (AWS,
+Google Cloud, Azure, Oracle Cloud, Cloudflare, Fastly, DigitalOcean and
+GitHub; see `internal/semantics/cloud_providers.json`), which the collector
+records as a `provider` relation from the published prefix's netblock to the
+provider's organization, with the region and service as `cloud_region` and
+`cloud_service` properties. The ranges are fetched from the providers' feeds
+on a daily cache, not stored in the repository, so they stay current. This
+is hosting, not ownership: an address in a provider's range means the
+provider operates that network, never that it owns the names, and two
+parties sharing a provider are not related. These are stored attributions,
+not a live scan.
 
 ## Dangling DNS
 

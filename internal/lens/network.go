@@ -65,6 +65,11 @@ type HostingShare struct {
 	Names    int      `json:"names"`
 	Networks []string `json:"networks,omitempty"`
 	Examples []string `json:"examples,omitempty"`
+	// Regions and Services are the cloud regions and services the provider's
+	// range feed published for the networks hosting these names, when the
+	// party is a cloud or CDN provider.
+	Regions  []string `json:"regions,omitempty"`
+	Services []string `json:"services,omitempty"`
 }
 
 // NetworkReport is the result of the network infrastructure lens.
@@ -210,6 +215,8 @@ func FindNetworkInfrastructure(ctx context.Context, g graph.Graph, schema graph.
 	})
 	for _, h := range n.hosting {
 		sort.Strings(h.Networks)
+		sort.Strings(h.Regions)
+		sort.Strings(h.Services)
 		out.Hosting = append(out.Hosting, *h)
 	}
 	sort.Slice(out.Hosting, func(i, j int) bool {
@@ -309,7 +316,7 @@ func (n *networkScan) resolve(name graph.Asset, out *NetworkReport) error {
 		} else if party == "" {
 			party = vendorNameOf(graph.RegisteredDomain(graph.FQDNName(target)))
 		}
-		n.share(party, id, own, "", name)
+		n.share(party, id, own, "", "", "", name)
 	default:
 		out.Unresolved++
 	}
@@ -327,7 +334,7 @@ func (n *networkScan) resolve(name graph.Asset, out *NetworkReport) error {
 				n.blockNames[net.ID] = map[string]bool{}
 			}
 			n.blockNames[net.ID][name.ID] = true
-			n.share("own", "", true, net.CIDR, name)
+			n.share("own", "", true, net.CIDR, "", "", name)
 			continue
 		}
 
@@ -335,7 +342,11 @@ func (n *networkScan) resolve(name graph.Asset, out *NetworkReport) error {
 		if err != nil {
 			return err
 		}
-		n.share(party, id, own, graph.ContentString(block, "cidr"), name)
+		region, service := "", ""
+		if !own && block.ID != "" {
+			region, service = graph.CloudMeta(n.w.ctx, n.w.graph, block.ID)
+		}
+		n.share(party, id, own, graph.ContentString(block, "cidr"), region, service, name)
 	}
 	return nil
 }
@@ -387,7 +398,7 @@ func (n *networkScan) party(block, ip graph.Asset) (string, string, bool, error)
 
 // share counts name as hosted by party, once however many of its
 // addresses the party holds.
-func (n *networkScan) share(party, id string, own bool, cidr string, name graph.Asset) {
+func (n *networkScan) share(party, id string, own bool, cidr, region, service string, name graph.Asset) {
 	h, ok := n.hosting[party]
 	if !ok {
 		h = &HostingShare{Party: party, PartyID: id, Own: own}
@@ -395,6 +406,12 @@ func (n *networkScan) share(party, id string, own bool, cidr string, name graph.
 	}
 	if cidr != "" {
 		graph.AddUnique(&h.Networks, cidr)
+	}
+	if region != "" {
+		graph.AddUnique(&h.Regions, region)
+	}
+	if service != "" {
+		graph.AddUnique(&h.Services, service)
 	}
 	if n.hosted == nil {
 		n.hosted = map[string]bool{}
@@ -650,6 +667,12 @@ func FormatNetworkReport(r NetworkReport) string {
 				party = "its own networks"
 			}
 			fmt.Fprintf(&b, "  %s: %d (%.0f%%)", party, h.Names, 100*float64(h.Names)/float64(total))
+			if len(h.Regions) > 0 {
+				fmt.Fprintf(&b, " [%s]", strings.Join(h.Regions, ", "))
+			}
+			if len(h.Services) > 0 {
+				fmt.Fprintf(&b, " (%s)", strings.Join(h.Services, ", "))
+			}
 			if len(h.Examples) > 0 {
 				fmt.Fprintf(&b, ", e.g. %s", strings.Join(h.Examples, ", "))
 			}

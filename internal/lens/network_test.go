@@ -165,8 +165,12 @@ func TestNetworkHostingNamesCloudProvider(t *testing.T) {
 		Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 1}}})
 	link("nb-cloud", "contains", "ip-cloud")
 	// The provider the range feed published; no AS announces the block and no
-	// registrant is stored, so only the provider edge can name it.
+	// registrant is stored, so only the provider edge can name it. The feed's
+	// region and service are stored as properties on the block.
 	link("nb-cloud", "provider", "org-aws")
+	g.EvidenceByID = map[string][]graph.Evidence{
+		"nb-cloud": {graphtest.SimpleProp("cloud_region", "us-east-1"), graphtest.SimpleProp("cloud_service", "S3")},
+	}
 
 	r, err := FindNetworkInfrastructure(context.Background(), g,
 		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"], LensLimits{})
@@ -185,6 +189,13 @@ func TestNetworkHostingNamesCloudProvider(t *testing.T) {
 	}
 	if aws.Own || aws.Names != 1 || strings.Join(aws.Examples, ",") != "host.colgate.edu" {
 		t.Errorf("cloud provider hosting = %+v", aws)
+	}
+	if strings.Join(aws.Regions, ",") != "us-east-1" || strings.Join(aws.Services, ",") != "S3" {
+		t.Errorf("cloud region/service = %+v", aws)
+	}
+
+	if text := FormatNetworkReport(r); !strings.Contains(text, "[us-east-1]") || !strings.Contains(text, "(S3)") {
+		t.Errorf("report lacks cloud region/service:\n%s", text)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/amass/v5/internal/semantics/cloudranges"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -39,10 +40,11 @@ import (
 // day keeps every provider current without repeated downloads.
 const feedTTL = 24 * time.Hour
 
-// Property names recorded on a provider's netblock for the matched prefix.
+// Property names recorded on a provider's netblock for the matched prefix;
+// the lenses read them back through the same constants.
 const (
-	propCloudRegion  = "cloud_region"
-	propCloudService = "cloud_service"
+	propCloudRegion  = graph.CloudRegionProperty
+	propCloudService = graph.CloudServiceProperty
 )
 
 // fetcher fetches a feed's bytes. It is a field so tests can supply feeds
