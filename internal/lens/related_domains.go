@@ -68,10 +68,15 @@ var (
 
 // HorizontalDomain is a registered (apex) domain a horizontal signal ties to
 // the subject organization, with the evidence and confidence behind it.
+// Confidence is the noisy-OR combination of the matched signals' catalog
+// weights (HorizontalScore), so a domain found by several signals ranks above
+// one found by a single signal. SignalIDs are the catalog ids of those signals,
+// for the scorer and the classifier; Signals are the human-readable reasons.
 type HorizontalDomain struct {
 	Domain     string              `json:"domain"`
 	Confidence int                 `json:"confidence"`
 	Signals    []string            `json:"signals"`
+	SignalIDs  []string            `json:"signal_ids,omitempty"`
 	Witness    []graph.WitnessEdge `json:"witness,omitempty"`
 }
 
@@ -111,7 +116,7 @@ func FindRelatedDomains(ctx context.Context, g graph.Graph, orgID string) (Relat
 	}
 
 	acc := map[string]*HorizontalDomain{}
-	add := func(apex string, confidence int, signal string, witness ...graph.WitnessEdge) bool {
+	add := func(apex, signalID, signal string, witness ...graph.WitnessEdge) bool {
 		apex = strings.ToLower(strings.TrimSpace(apex))
 		if apex == "" {
 			return true
@@ -125,8 +130,8 @@ func FindRelatedDomains(ctx context.Context, g graph.Graph, orgID string) (Relat
 			d = &HorizontalDomain{Domain: apex}
 			acc[apex] = d
 		}
-		if confidence > d.Confidence {
-			d.Confidence = confidence
+		if !slices.Contains(d.SignalIDs, signalID) {
+			d.SignalIDs = append(d.SignalIDs, signalID)
 		}
 		if !slices.Contains(d.Signals, signal) {
 			d.Signals = append(d.Signals, signal)
@@ -172,7 +177,7 @@ contacts:
 			ownDRs = append(ownDRs, de.FromID)
 			w := graph.WitnessEdge{EdgeID: de.ID, Label: "registrant_contact", RelationType: de.Type,
 				FromID: de.FromID, FromType: "DomainRecord", ToID: de.ToID, ToType: "ContactRecord"}
-			if !add(graph.ContentString(dr, "domain"), relatedRegistrantConfidence, registrantSig, w, orgWitness(ce)) {
+			if !add(graph.ContentString(dr, "domain"), SigRegistrantOrg, registrantSig, w, orgWitness(ce)) {
 				break contacts
 			}
 		}
@@ -196,7 +201,7 @@ contacts:
 				fq := apexes[apex]
 				sanW := graph.WitnessEdge{EdgeID: fq.ID, Label: fq.Label, RelationType: fq.Type,
 					FromID: fq.FromID, FromType: "TLSCertificate", ToID: fq.ToID, ToType: "FQDN", To: apex}
-				if !add(apex, relatedCertConfidence, certSig, certW, orgWitness(ce), sanW) {
+				if !add(apex, SigCertSubjectOrg, certSig, certW, orgWitness(ce), sanW) {
 					break contacts
 				}
 			}
@@ -245,7 +250,7 @@ nsPivot:
 			for _, s := range sibs {
 				sibW := graph.WitnessEdge{EdgeID: s.edge.ID, Label: "name_server", RelationType: s.edge.Type,
 					FromID: s.edge.FromID, FromType: "DomainRecord", ToID: s.edge.ToID, ToType: "FQDN"}
-				if !add(s.apex, relatedNSConfidence, "shared name server", nsW, sibW) {
+				if !add(s.apex, SigSharedNameServer, "shared name server", nsW, sibW) {
 					break nsPivot
 				}
 			}
@@ -271,7 +276,7 @@ nsPivot:
 					FromID: we.FromID, FromType: "Organization", ToID: we.ToID, ToType: "URL"}
 				domW := graph.WitnessEdge{EdgeID: de.ID, Label: "domain", RelationType: de.Type,
 					FromID: de.FromID, FromType: "URL", ToID: de.ToID, ToType: "FQDN", To: apex}
-				if !add(apex, relatedWebsiteConfidence, "official website", webW, domW) {
+				if !add(apex, SigOfficialWebsite, "official website", webW, domW) {
 					break websiteLoop
 				}
 			}
@@ -280,10 +285,32 @@ nsPivot:
 
 	report.Domains = make([]HorizontalDomain, 0, len(acc))
 	for _, d := range acc {
+		// One confidence definition: the noisy-OR of the matched signals'
+		// catalog weights, so corroborating signals rank a domain higher.
+		d.Confidence, _ = HorizontalScore(d.SignalIDs)
 		report.Domains = append(report.Domains, *d)
 	}
 	sort.Slice(report.Domains, func(i, j int) bool { return report.Domains[i].Domain < report.Domains[j].Domain })
 	return report, nil
+}
+
+// HorizontalExpansion partitions a related-domains report into the candidates a
+// strong signal justifies adding to scope during enumeration (expand) and those
+// that are corroboration only and need review (needsReview). It is the decision
+// the runtime scope-expansion pass consumes: a candidate expands only when its
+// signals include a strong one (HorizontalScore), never on a lone weak signal
+// such as a shared name server. The classifier adjudicates the needs-review
+// set in a later increment.
+func HorizontalExpansion(r RelatedDomainsReport) (expand, needsReview []HorizontalDomain) {
+	for _, d := range r.Domains {
+		if _, strong := HorizontalScore(d.SignalIDs); strong {
+			expand = append(expand, d)
+		} else {
+			needsReview = append(needsReview, d)
+		}
+	}
+
+	return expand, needsReview
 }
 
 // certApexes returns the apex (registered) domains a certificate covers — the

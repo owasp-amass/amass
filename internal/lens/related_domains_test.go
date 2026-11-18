@@ -108,9 +108,48 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	if d := got["acme-labs.org"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
 		t.Errorf("acme-labs.org should come from the name-server signal: %+v", d)
 	}
-	// acme.com is found by all three signals.
-	if d := got["acme.com"]; len(d.Signals) != 3 {
+	// acme.com is found by all three signals, and corroboration ranks it above
+	// any single signal (noisy-OR of the catalog weights).
+	if d := got["acme.com"]; len(d.Signals) != 3 || len(d.SignalIDs) != 3 {
 		t.Errorf("acme.com should have registrant, cert and name-server signals: %+v", d)
+	}
+	if d := got["acme.com"]; d.Confidence <= relatedCertConfidence {
+		t.Errorf("acme.com confidence %d should exceed any single signal", d.Confidence)
+	}
+}
+
+func TestHorizontalExpansionPartition(t *testing.T) {
+	g := relatedDomainsGraph()
+
+	r, err := FindRelatedDomains(context.Background(), g, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expand, review := HorizontalExpansion(r)
+	in := func(ds []HorizontalDomain, name string) bool {
+		for _, d := range ds {
+			if d.Domain == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Every domain with a strong signal (registrant, cert or official website)
+	// is in the expand set.
+	for _, name := range []string{"acme.com", "acme.net", "acme.io", "acme.org"} {
+		if !in(expand, name) {
+			t.Errorf("%s has a strong signal and should be in the expand set", name)
+		}
+	}
+	// acme-labs.org is tied only by a shared name server (supporting), so it
+	// needs review rather than auto-expanding.
+	if !in(review, "acme-labs.org") {
+		t.Errorf("acme-labs.org (name server only) should need review, got expand=%v review=%v", expand, review)
+	}
+	if in(expand, "acme-labs.org") {
+		t.Error("a lone shared-name-server match must not auto-expand scope")
 	}
 }
 
