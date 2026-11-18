@@ -105,6 +105,39 @@ func HorizontalConfidence(id string) int {
 	return int(math.Round(s.Weight * 100))
 }
 
+// HorizontalScore combines the catalog weights of the given signal ids into one
+// 0-100 confidence with a noisy-OR, so independent signals corroborate — two
+// signals score higher than either alone — without ever exceeding 100, and
+// reports whether the set includes a strong signal. The caller excludes
+// provider- and proxy-owned shared values before scoring. A set with no strong
+// signal is corroboration only: the runtime scope-expansion decision treats it
+// as needing review rather than an automatic widen, so a lone weak signal (a
+// shared name server by itself) never grows scope on its own (principle 8 and
+// the horizontal-domain-correlation decided design).
+func HorizontalScore(ids []string) (confidence int, strong bool) {
+	seen := map[string]bool{}
+	missed := 1.0
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		s, ok := LookupHorizontalSignal(id)
+		if !ok {
+			continue
+		}
+		seen[id] = true
+		if s.Strength == StrengthStrong {
+			strong = true
+		}
+		missed *= 1 - s.Weight
+	}
+	if len(seen) == 0 {
+		return 0, false
+	}
+
+	return int(math.Round((1 - missed) * 100)), strong
+}
+
 // HorizontalSignalsMarkdown renders the horizontal catalog as the user
 // documentation in docs/ai/HORIZONTALS.md.
 func HorizontalSignalsMarkdown() string {

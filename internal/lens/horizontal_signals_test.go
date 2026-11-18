@@ -52,6 +52,33 @@ func TestHorizontalConfidencesFromCatalog(t *testing.T) {
 	}
 }
 
+func TestHorizontalScore(t *testing.T) {
+	// A single signal scores at its own confidence (weight x 100).
+	if c, strong := HorizontalScore([]string{SigRegistrantOrg}); c != 70 || !strong {
+		t.Errorf("single registrant = (%d, %v), want (70, true)", c, strong)
+	}
+	if c, strong := HorizontalScore([]string{SigOfficialWebsite}); c != 80 || !strong {
+		t.Errorf("single website = (%d, %v), want (80, true)", c, strong)
+	}
+	// A lone supporting signal is not strong, so it must not auto-expand.
+	if c, strong := HorizontalScore([]string{SigSharedNameServer}); c != 65 || strong {
+		t.Errorf("single name server = (%d, %v), want (65, false)", c, strong)
+	}
+	// Independent signals corroborate: the pair scores higher than either alone,
+	// and never exceeds 100.
+	c, strong := HorizontalScore([]string{SigRegistrantOrg, SigCertSubjectOrg})
+	if !strong || c <= 75 || c > 100 {
+		t.Errorf("registrant+cert = (%d, %v), want strong and >75, <=100", c, strong)
+	}
+	// Repeated and unknown ids are ignored.
+	if c, _ := HorizontalScore([]string{SigRegistrantOrg, SigRegistrantOrg, "nope"}); c != 70 {
+		t.Errorf("deduped score = %d, want 70", c)
+	}
+	if c, strong := HorizontalScore(nil); c != 0 || strong {
+		t.Errorf("empty = (%d, %v), want (0, false)", c, strong)
+	}
+}
+
 // TestHorizontalSignalsDocIsCurrent keeps docs/ai/HORIZONTALS.md generated from
 // the catalog. Regenerate it with AMASS_UPDATE_HORIZONTALS_DOC=1 go test -run
 // TestHorizontalSignalsDocIsCurrent ./internal/lens/.
