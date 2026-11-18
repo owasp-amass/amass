@@ -36,9 +36,10 @@ import (
 
 const Description = "Ask questions with a language model, MCP tools, and model-assisted review"
 
-// operations are the amass ai subcommands. The lenses and the review of
-// their proposals are amass lens and amass review (package internal/lens/cli);
-// amass ai still runs them by their old names, with a note.
+// operations are the amass ai subcommands. The lenses, the database-hygiene
+// scans and the review of their proposals are amass lens, amass db and amass
+// review (package internal/lens/cli); amass ai still runs them by their old
+// names, with a note.
 var operations = []string{"ask", "plan", "eval", "mcp", "infer", "scan", "search", "collect-plan", "collect",
 	"train-attribution", "attribution-status", "review", "config"}
 
@@ -49,8 +50,8 @@ func CLIWorkflow(_ string, args []string) {
 	}
 }
 
-// Run runs amass ai. Operations that moved to amass lens or amass review
-// still run, with a note naming the new command.
+// Run runs amass ai. Operations that moved to amass lens, amass db or amass
+// review still run, with a note naming the new command.
 func Run(in io.Reader, out, errout io.Writer, args []string) error {
 	moved := lenscli.Operations()
 	for _, at := range []int{0, len(args) - 1} {

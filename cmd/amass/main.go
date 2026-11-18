@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	usageMsg string = "[ai|assoc|engine|enum|lens|review|viz|vuln-update] [options]"
+	usageMsg string = "[ai|assoc|db|engine|enum|lens|review|viz|vuln-update] [options]"
 )
 
 type Args struct {
@@ -60,6 +60,7 @@ type subDesc struct {
 var subcommands = []subDesc{
 	{"ai", aicli.Description},
 	{"assoc", assoc.Description},
+	{"db", lenscli.DBDescription},
 	{"engine", ae.Description},
 	{"enum", enum.Description},
 	{"lens", lenscli.LensDescription},
@@ -162,6 +163,8 @@ func main() {
 		}
 
 		enum.CLIWorkflow(cmdName, os.Args[2:])
+	case "db":
+		lenscli.DBWorkflow(cmdName, os.Args[2:])
 	case "lens":
 		lenscli.LensWorkflow(cmdName, os.Args[2:])
 	case "review":

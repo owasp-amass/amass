@@ -2,9 +2,10 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package cli implements amass lens and amass review: the read-only views
-// of the Asset Database computed in Go, and the review of the proposals they
-// record. Neither uses a language model.
+// Package cli implements amass lens, amass db and amass review: the
+// read-only views of the Asset Database computed in Go, the database-hygiene
+// scans that record correction proposals, and the review of those proposals.
+// None of them uses a language model.
 package cli
 
 import (
@@ -25,24 +26,32 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
-// LensDescription and ReviewDescription describe the amass lens and amass
-// review commands.
+// LensDescription, DBDescription and ReviewDescription describe the amass
+// lens, amass db and amass review commands.
 const (
-	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, dangling DNS, recent changes, duplicates, identities and person-named organizations"
+	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, dangling DNS, and recent changes"
+	DBDescription     = "Database hygiene: scan the whole Asset Database for records to correct — duplicate organizations, contradicted legal identities, and organizations that are really people — and record each fix as a review proposal"
 	ReviewDescription = "Review and apply inferred changes: ownership, merges of duplicates, identity corrections"
 )
 
 // lensOps are the amass lens views, by name, and the operation that runs
-// each. Lenses read the Asset Database; family, duplicates, identity and
-// person-named also record their findings in the review journal.
+// each. Lenses read the Asset Database; family also records its findings in
+// the review journal.
 var lensOps = map[string]string{
 	"family":        "family",
 	"org-group":     "org-group",
 	"group-vendors": "group-vendors",
-	"duplicates":    "duplicates",
-	"identity":      "identity-conflicts",
-	"person-named":  "person-named",
 	"vendors":       "vendors",
+}
+
+// dbOps are the amass db commands, by name, and the operation that runs each.
+// Unlike lenses, these scan the whole Asset Database for records to correct
+// and record their findings in the review journal, so they are not read-only
+// views and are not lenses.
+var dbOps = map[string]string{
+	"duplicates":   "duplicates",
+	"identity":     "identity-conflicts",
+	"person-named": "person-named",
 }
 
 // The registered subject lenses are amass lens commands too.
@@ -64,11 +73,14 @@ var reviewOps = map[string]string{
 }
 
 // Operations maps each operation this package runs, by the name amass ai
-// used for it, to the command that runs it now ("amass lens identity").
+// used for it, to the command that runs it now ("amass db identity").
 func Operations() map[string]string {
 	out := map[string]string{}
 	for name, op := range lensOps {
 		out[op] = "amass lens " + name
+	}
+	for name, op := range dbOps {
+		out[op] = "amass db " + name
 	}
 	for name, op := range reviewOps {
 		out[op] = "amass review " + name
@@ -81,6 +93,14 @@ func Operations() map[string]string {
 func LensWorkflow(_ string, args []string) {
 	if err := RunLens(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
 		fmt.Fprintln(os.Stderr, "amass lens:", err)
+		os.Exit(1)
+	}
+}
+
+// DBWorkflow runs amass db.
+func DBWorkflow(_ string, args []string) {
+	if err := RunDB(os.Stdin, os.Stdout, os.Stderr, args); err != nil {
+		fmt.Fprintln(os.Stderr, "amass db:", err)
 		os.Exit(1)
 	}
 }
@@ -98,6 +118,11 @@ func RunLens(in io.Reader, out, errout io.Writer, args []string) error {
 	return runGroup("lens", lensOps, in, out, errout, args)
 }
 
+// RunDB runs one database-hygiene command: amass db <name> [flags].
+func RunDB(in io.Reader, out, errout io.Writer, args []string) error {
+	return runGroup("db", dbOps, in, out, errout, args)
+}
+
 // RunReview runs one review command: amass review <name> [flags].
 func RunReview(in io.Reader, out, errout io.Writer, args []string) error {
 	return runGroup("review", reviewOps, in, out, errout, args)
@@ -109,6 +134,11 @@ func RunOperation(op string, in io.Reader, out, errout io.Writer, args []string)
 	group := "lens"
 	if _, ok := Operations()[op]; !ok {
 		return fmt.Errorf("unknown operation %q", op)
+	}
+	for _, o := range dbOps {
+		if o == op {
+			group = "db"
+		}
 	}
 	for _, o := range reviewOps {
 		if o == op {
