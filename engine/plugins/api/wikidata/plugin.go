@@ -46,6 +46,7 @@ type wikidata struct {
 	rlimit  *rate.Limiter
 	source  *et.Source
 	handler *handler
+	website *websiteHandler
 }
 
 type handler struct {
@@ -84,6 +85,21 @@ func (w *wikidata) Start(r et.Registry) error {
 		},
 		EventType: oam.DomainRecord,
 		Callback:  w.handler.check,
+	}); err != nil {
+		return err
+	}
+
+	// Forward direction: an in-scope Organization -> its official-website domains.
+	w.website = &websiteHandler{name: w.name + "-Website-Handler", plugin: w}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       w,
+		Name:         w.website.name,
+		Position:     50,
+		Exclusive:    false,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.URL), string(oam.FQDN)},
+		EventType:    oam.Organization,
+		Callback:     w.website.check,
 	}); err != nil {
 		return err
 	}
