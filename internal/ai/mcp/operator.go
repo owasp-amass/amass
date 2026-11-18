@@ -102,6 +102,13 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 	alterations := map[string]any{"type": "boolean",
 		"description": "Turn on name alterations: permute discovered names to find more (active mode only, " +
 			"default false). Off unless the user asks for it."}
+	phone := map[string]any{"type": "string",
+		"description": "Pivot from a phone number instead of a target: resolve the organizations tied to it and " +
+			"enumerate their registered domains. Give one of target, phone or address."}
+	address := map[string]any{"type": "string",
+		"description": "Pivot from a street address instead of a target: resolve the organizations at it and " +
+			"enumerate their registered domains. A shared or registered-agent address is held for review, not " +
+			"enumerated. Give one of target, phone or address."}
 	obj := func(required []string, props map[string]any) map[string]any {
 		schema := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
 		if len(required) > 0 {
@@ -150,11 +157,13 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 
 	add(ToolPlanEnumeration, "Plan an Amass enumeration",
 		"Show what an enumeration would do, without starting it: the scope (one target, any more targets in also, "+
-			"and whether it may expand), the methods, their effects, and the plan_id that start_enumeration needs.",
-		obj([]string{"target"}, map[string]any{"target": target, "mode": mode, "also": also, "expand": expand,
-			"brute_force": bruteForce, "alterations": alterations}),
+			"and whether it may expand), the methods, their effects, and the plan_id that start_enumeration needs. "+
+			"Instead of a target you may give a phone or address to pivot from: the plan then lists the "+
+			"organizations the seed resolved to and enumerates their registered domains.",
+		obj(nil, map[string]any{"target": target, "mode": mode, "also": also, "expand": expand,
+			"brute_force": bruteForce, "alterations": alterations, "phone": phone, "address": address}),
 		readOnly(),
-		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
 			var a struct {
 				Target      string
 				Mode        string
@@ -162,26 +171,48 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 				Expand      bool
 				BruteForce  bool `json:"brute_force"`
 				Alterations bool
+				Phone       string
+				Address     string
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return nil, err
 			}
+			if err := oneSeed(a.Target, a.Phone, a.Address); err != nil {
+				return nil, err
+			}
 
-			plan := planFor(a.Target, a.Mode, a.Also, a.Expand, a.BruteForce, a.Alterations)
+			plan, err := enumerationPlan(ctx, runner, a.Target, a.Phone, a.Address, a.Mode, a.Also, a.Expand,
+				a.BruteForce, a.Alterations)
+			if err != nil {
+				return nil, err
+			}
 			if plan.Status != collect.StatusApprovalRequired {
+				// A pivot that resolved organizations but cannot be enumerated
+				// (a shared address, or no domains yet) still shows them, so the
+				// user can pick a target; a direct target that is unsupported is
+				// an error as before.
+				if plan.Pivot != nil {
+					return jsonResult(map[string]any{"plan": plan, "next": plan.Reason}), nil
+				}
 				return nil, errors.New("cannot enumerate this target: " + plan.Reason)
 			}
 
-			return jsonResult(map[string]any{"plan": plan,
-				"next": "Show the user the scope and effects, then call start_enumeration with the same target, " +
-					"mode, also, expand, brute_force and alterations, and this plan_id. The user is asked to approve it."}), nil
+			next := "Show the user the scope and effects, then call start_enumeration with the same target, " +
+				"mode, also, expand, brute_force and alterations, and this plan_id. The user is asked to approve it."
+			if plan.Pivot != nil {
+				next = "Show the user the phone/address, the organizations it resolved to and the domains to be " +
+					"enumerated, then call start_enumeration with the same phone or address, mode, expand, " +
+					"brute_force and alterations, and this plan_id. The user is asked to approve it."
+			}
+			return jsonResult(map[string]any{"plan": plan, "next": next}), nil
 		})
 
 	approveAction(ToolStartEnumeration, "Start an Amass enumeration",
 		"Start the enumeration a plan_enumeration call described. Collects data from the Internet about the "+
 			"target and stores it in the Asset Database; the user is asked to approve it first.",
-		obj([]string{"target", "plan_id"}, map[string]any{"target": target, "mode": mode, "also": also,
-			"expand": expand, "brute_force": bruteForce, "alterations": alterations, "plan_id": map[string]any{
+		obj([]string{"plan_id"}, map[string]any{"target": target, "mode": mode, "also": also,
+			"expand": expand, "brute_force": bruteForce, "alterations": alterations, "phone": phone,
+			"address": address, "plan_id": map[string]any{
 				"type":        "string",
 				"description": "The plan_id plan_enumeration returned",
 			}}),
@@ -195,25 +226,38 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 				Expand      bool
 				BruteForce  bool `json:"brute_force"`
 				Alterations bool
+				Phone       string
+				Address     string
 				PlanID      string `json:"plan_id"`
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
+				return "", nil, err
+			}
+			if err := oneSeed(a.Target, a.Phone, a.Address); err != nil {
 				return "", nil, err
 			}
 			if op.Collect == nil {
 				return "", nil, errors.New("this server cannot start enumerations: no engine is configured")
 			}
 
-			plan := planFor(a.Target, a.Mode, a.Also, a.Expand, a.BruteForce, a.Alterations)
+			plan, err := enumerationPlan(ctx, runner, a.Target, a.Phone, a.Address, a.Mode, a.Also, a.Expand,
+				a.BruteForce, a.Alterations)
+			if err != nil {
+				return "", nil, err
+			}
 			if plan.Status != collect.StatusApprovalRequired {
-				return "", nil, errors.New("cannot enumerate this target: " + plan.Reason)
+				return "", nil, errors.New("cannot enumerate this: " + plan.Reason)
 			}
 			if a.PlanID != plan.ID {
-				return "", nil, errors.New("plan_id does not match this target, mode, also, expand, brute_force " +
-					"and alterations; call plan_enumeration again and show the user the new plan")
+				return "", nil, errors.New("plan_id does not match this request; call plan_enumeration again and " +
+					"show the user the new plan (a pivot's resolved domains can change as data is collected)")
 			}
 
 			msg := fmt.Sprintf("Start a %s?\n\n%s", plan.Summary(), plan.Effects)
+			if plan.Pivot != nil {
+				msg = fmt.Sprintf("Start a %s?\n\n%s\n\n%s", plan.Summary(), pivotApprovalText(plan.Pivot),
+					plan.Effects)
+			}
 			return msg, func(via string) (*mcp.CallToolResult, error) {
 				sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 				defer cancel()
@@ -613,6 +657,141 @@ func planFor(target, mode string, also []string, expand, bruteForce, alterations
 	}
 
 	return collect.NewPlanWith(selectorFor(target), m, opts)
+}
+
+// oneSeed requires exactly one of target, phone or address: a request pivots
+// from a phone or an address, or names a direct target, never more than one.
+func oneSeed(target, phone, address string) error {
+	n := 0
+	for _, v := range []string{target, phone, address} {
+		if strings.TrimSpace(v) != "" {
+			n++
+		}
+	}
+	if n == 0 {
+		return errors.New("give a target, a phone or an address")
+	}
+	if n > 1 {
+		return errors.New("give only one of target, phone or address")
+	}
+	return nil
+}
+
+// enumerationPlan builds the plan for a plan_enumeration or start_enumeration
+// request: a direct target plan, or, when a phone or address is given, the
+// pivot plan that resolves the seed to organizations and enumerates their
+// registered domains.
+func enumerationPlan(ctx context.Context, runner ai.ToolRunner, target, phone, address, mode string,
+	also []string, expand, bruteForce, alterations bool) (collect.Plan, error) {
+	m := collect.Mode(strings.ToLower(strings.TrimSpace(mode)))
+	if m == "" {
+		m = collect.Passive
+	}
+
+	opts := collect.Options{Expand: expand, BruteForce: bruteForce, Alterations: alterations}
+	for _, a := range also {
+		opts.Also = append(opts.Also, selectorFor(a))
+	}
+
+	if sel, ok := pivotSelector(phone, address); ok {
+		return pivotPlan(ctx, runner, sel, m, opts)
+	}
+	return collect.NewPlanWith(selectorFor(target), m, opts), nil
+}
+
+// pivotSelector returns the OAM selector for a phone or address seed, and
+// whether the request is a pivot at all.
+func pivotSelector(phone, address string) (graph.AssetSelector, bool) {
+	switch {
+	case strings.TrimSpace(phone) != "":
+		return graph.AssetSelector{Type: "Phone", Field: "e164", Value: strings.TrimSpace(phone)}, true
+	case strings.TrimSpace(address) != "":
+		return graph.AssetSelector{Type: "Location", Field: "address", Value: strings.TrimSpace(address)}, true
+	}
+	return graph.AssetSelector{}, false
+}
+
+// pivotPlan resolves a phone or address seed to the organizations tied to it
+// and the domains they control, and returns a plan that enumerates those
+// domains, with the resolution attached so the user approves a concrete scope.
+// It never enumerates the phone or address itself. A shared address, or a seed
+// that resolves to no domains, yields a non-approvable plan that still lists
+// what was found so the user can choose a target.
+func pivotPlan(ctx context.Context, runner ai.ToolRunner, seed graph.AssetSelector, mode collect.Mode,
+	opts collect.Options) (collect.Plan, error) {
+	if runner.Graph == nil || runner.Catalog == nil {
+		return collect.Plan{}, errors.New("this server has no database to resolve a phone or address from")
+	}
+	resolver, ok := runner.Graph.(graph.AssetResolver)
+	if !ok {
+		return collect.Plan{}, errors.New("this database cannot resolve a phone or address")
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	res, err := resolver.ResolveAsset(rctx, seed, 1)
+	if err != nil || len(res.Candidates) == 0 {
+		return collect.Plan{Status: collect.StatusUnsupported, RequiresApproval: true,
+			Reason: fmt.Sprintf("%s %q is not in the database yet; enumerate a known domain for it, or collect "+
+				"organizations from this %s first, then plan again", seed.Type, seed.Value,
+				strings.ToLower(seed.Type))}, nil
+	}
+
+	resolution, err := lens.ResolveSeedPivot(rctx, runner.Graph, runner.Catalog, res.Candidates[0].Asset,
+		lens.LensLimits{})
+	if err != nil {
+		return collect.Plan{}, err
+	}
+
+	pivot := &collect.PivotSeed{SeedType: resolution.SeedType, SeedValue: resolution.SeedValue,
+		SharedAddress: resolution.SharedAddress}
+	for _, o := range resolution.Organizations {
+		pivot.Organizations = append(pivot.Organizations,
+			collect.PivotSeedOrg{Name: o.Name, Domains: o.Domains, Principal: o.Principal})
+	}
+
+	switch {
+	case resolution.SharedAddress:
+		return collect.Plan{Status: collect.StatusUnsupported, RequiresApproval: true, Pivot: pivot,
+			Reason: fmt.Sprintf("the address resolves to %d organizations: it is a shared or registered-agent "+
+				"address, so it is not enumerated automatically. Name a specific organization's domain to "+
+				"enumerate.", len(resolution.Organizations))}, nil
+	case len(resolution.Domains) == 0:
+		return collect.Plan{Status: collect.StatusUnsupported, RequiresApproval: true, Pivot: pivot,
+			Reason: fmt.Sprintf("resolved %d organization(s) from this %s but no registered domains yet; "+
+				"enumerate one of their known domains first", len(resolution.Organizations),
+				strings.ToLower(seed.Type))}, nil
+	}
+
+	// Enumerate the resolved domains: the first as the target, the rest in also,
+	// alongside any targets the caller added.
+	o := opts
+	for _, d := range resolution.Domains[1:] {
+		o.Also = append(o.Also, selectorFor(d))
+	}
+	plan := collect.NewPlanWith(selectorFor(resolution.Domains[0]), mode, o)
+	plan.Pivot = pivot
+	return plan, nil
+}
+
+// pivotApprovalText describes, for the approval prompt, the seed a pivot plan
+// resolved from and the organizations and domains it will enumerate.
+func pivotApprovalText(p *collect.PivotSeed) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Resolved from %s %s:\n", strings.ToLower(p.SeedType), p.SeedValue)
+	for _, o := range p.Organizations {
+		name := o.Name
+		if o.Principal {
+			name += " (principal address)"
+		}
+		if len(o.Domains) > 0 {
+			fmt.Fprintf(&b, "  - %s: %s\n", name, strings.Join(o.Domains, ", "))
+		} else {
+			fmt.Fprintf(&b, "  - %s\n", name)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // selectorFor reads a target as a domain, an IP address, a CIDR range or an

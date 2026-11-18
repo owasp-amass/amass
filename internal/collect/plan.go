@@ -61,6 +61,10 @@ type Plan struct {
 	Effects          string              `json:"effects,omitempty"`
 	RequiresApproval bool                `json:"requires_approval"`
 	Reason           string              `json:"reason,omitempty"`
+	// Pivot records the phone or address this plan resolved from, when it was
+	// reached by a seed pivot rather than named directly. Nil for a direct
+	// target plan.
+	Pivot *PivotSeed `json:"pivot,omitempty"`
 }
 
 // ScopeEntry is a target a plan puts in scope beside its own: a domain, an
@@ -68,6 +72,30 @@ type Plan struct {
 type ScopeEntry struct {
 	Type  string `json:"type"`
 	Value string `json:"value"`
+}
+
+// PivotSeed records that a plan was reached by resolving a phone number or a
+// street address to the organizations tied to it and the domains they control.
+// It travels on the plan so the approver sees exactly what the seed resolved to
+// before any enumeration runs: the pivot never enumerates a phone or address
+// directly, only the registered domains it resolved to.
+type PivotSeed struct {
+	SeedType      string         `json:"seed_type"`
+	SeedValue     string         `json:"seed_value"`
+	Organizations []PivotSeedOrg `json:"organizations,omitempty"`
+	// SharedAddress marks a registered-agent or shared-building address: its
+	// organizations are listed for review and the plan is not approvable, so a
+	// shared address is never enumerated without the user naming the orgs.
+	SharedAddress bool `json:"shared_address,omitempty"`
+}
+
+// PivotSeedOrg is one organization a seed resolved to, with the domains that
+// would be enumerated and whether the tie is the organization's principal
+// address.
+type PivotSeedOrg struct {
+	Name      string   `json:"name"`
+	Domains   []string `json:"domains,omitempty"`
+	Principal bool     `json:"principal,omitempty"`
 }
 
 // Options widen a plan beyond its one target.

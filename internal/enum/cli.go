@@ -49,6 +49,8 @@ type Args struct {
 	Excluded          *stringset.Set
 	Included          *stringset.Set
 	Interface         string
+	Phone             string
+	Address           string
 	MaxDepth          int
 	MinForRecursive   int
 	Names             *stringset.Set
@@ -105,6 +107,10 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 	fs.Var(args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	fs.Var(args.Included, "include", "Data source names separated by commas to be included")
 	fs.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
+	fs.StringVar(&args.Phone, "phone", "", "Pivot from a phone number: enumerate the registered domains of the "+
+		"organizations tied to it")
+	fs.StringVar(&args.Address, "address", "", "Pivot from a street address: enumerate the registered domains of "+
+		"the organizations at it (a shared or registered-agent address is reported, not enumerated)")
 	fs.IntVar(&args.MaxDepth, "max-depth", 0, "Maximum number of subdomain labels for brute forcing")
 	fs.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
 	fs.Var(&args.Ports, "p", "Ports separated by commas (default: the FTP, SSH and mail ports and common web and management API ports)")
@@ -163,6 +169,14 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	if err := tools.CreateDefaultConfigFiles(dir); err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the default config files: %v\n", err)
 		os.Exit(1)
+	}
+
+	// A phone or address seed resolves to the registered domains of the
+	// organizations tied to it, which are added to the scope before the run.
+	// Resolution reads the database only; a shared address or a seed that
+	// resolves to nothing stops here rather than enumerating.
+	if !pivotSeedDomains(cfg, args, color.Error) {
+		return
 	}
 
 	// Create the client that will provide a connection to the engine
