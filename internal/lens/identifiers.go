@@ -209,6 +209,9 @@ func (r IdentifiersReport) Facts() []string {
 	out := make([]string, 0, len(r.Identifiers))
 	for _, e := range r.Identifiers {
 		out = append(out, strings.ToUpper(e.Type)+" "+e.Value)
+		if len(e.Breaches) > 0 {
+			out = append(out, "in_breach "+e.Value+" ("+strings.Join(e.Breaches, ", ")+")")
+		}
 	}
 	return out
 }

@@ -28,6 +28,10 @@
       "title": "Vulnerability disclosure"
     },
     {
+      "lens": "identifiers",
+      "title": "Registered identifiers & breach exposure"
+    },
+    {
       "lens": "headers",
       "title": "Web security headers"
     },
@@ -259,6 +263,12 @@
       "kind": "unusual_ports",
       "title": "Services on unusual ports",
       "priority": 3
+    },
+    {
+      "lens": "identifiers",
+      "kind": "in_breach",
+      "title": "Identifiers exposed in a known data breach",
+      "priority": 1
     }
   ]
 }
