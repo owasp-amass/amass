@@ -34,12 +34,13 @@ import (
 )
 
 type openstreetmap struct {
-	name   string
-	api    string
-	rlimit *rate.Limiter
-	source *et.Source
-	log    *slog.Logger
-	phones *phones
+	name    string
+	api     string
+	rlimit  *rate.Limiter
+	source  *et.Source
+	log     *slog.Logger
+	phones  *phones
+	reverse *reverse
 }
 
 type phones struct {
@@ -80,6 +81,34 @@ func (o *openstreetmap) Start(r et.Registry) error {
 		},
 		EventType: oam.Organization,
 		Callback:  o.phones.check,
+	}); err != nil {
+		return err
+	}
+
+	// The reverse direction: from a phone or an address to the organizations
+	// tied to it, so an enumeration can pivot from a Phone or Location seed.
+	o.reverse = &reverse{name: o.name + "-Reverse-Handler", plugin: o}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       o,
+		Name:         o.reverse.name + "-Phone",
+		Position:     42,
+		Exclusive:    false,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.ContactRecord), string(oam.Organization)},
+		EventType:    oam.Phone,
+		Callback:     o.reverse.checkPhone,
+	}); err != nil {
+		return err
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       o,
+		Name:         o.reverse.name + "-Location",
+		Position:     42,
+		Exclusive:    false,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.ContactRecord), string(oam.Organization)},
+		EventType:    oam.Location,
+		Callback:     o.reverse.checkAddress,
 	}); err != nil {
 		return err
 	}
