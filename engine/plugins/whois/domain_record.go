@@ -230,9 +230,7 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 
 	if found {
 		if p := support.FullNameToPerson(wc.Name); p != nil && m.IsMatch(string(oam.Person)) {
-			if a, err := e.Session.DB().CreateAsset(ctx, p); err == nil && a != nil {
-				r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "person"}, cr, a)
-			}
+			_, _ = support.CreatePersonAsset(e.Session, cr, &general.SimpleRelation{Name: "person"}, p, r.plugin.source)
 		}
 	}
 

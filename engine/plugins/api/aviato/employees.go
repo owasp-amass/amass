@@ -214,39 +214,21 @@ func (ae *employees) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entit
 func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []employeeResult) []*dbt.Entity {
 	var employents []*dbt.Entity
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-	defer cancel()
-
 	for _, emp := range employlist {
 		p := support.FullNameToPerson(emp.Person.FullName)
 		if p == nil {
 			continue
 		}
 
-		personent, err := e.Session.DB().CreateAsset(ctx, p)
+		personent, err := support.CreatePersonAsset(e.Session, orgent,
+			&oamgen.SimpleRelation{Name: "member"}, p, ae.plugin.source)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 			continue
 		}
 
-		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &oamgen.SourceProperty{
-			Source:     ae.name,
-			Confidence: ae.plugin.source.Confidence,
-		})
-		if err != nil {
-			msg := fmt.Sprintf("failed to create the Person asset source property for %s: %s", p.FullName, err)
-			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-			continue
-		}
-
-		if err := ae.plugin.createRelation(ctx, e.Session, orgent,
-			oamgen.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
-			employents = append(employents, personent)
-		} else {
-			msg := fmt.Sprintf("failed to create the member relation for %s: %s", p.FullName, err)
-			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-		}
+		employents = append(employents, personent)
 	}
 
 	return employents

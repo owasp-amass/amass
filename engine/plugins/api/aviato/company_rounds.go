@@ -524,19 +524,9 @@ func (cr *companyRounds) createPersonInvestors(e *et.Event, round *companyFundin
 			continue
 		}
 
-		personent, err = e.Session.DB().CreateAsset(ctx, p)
+		personent, err = support.CreatePersonAsset(e.Session, nil, nil, p, cr.plugin.source)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
-			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
-			continue
-		}
-
-		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &oamgen.SourceProperty{
-			Source:     cr.plugin.source.Name,
-			Confidence: cr.plugin.source.Confidence,
-		})
-		if err != nil {
-			msg := fmt.Sprintf("failed to create the Person asset source property for %s: %s", p.FullName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}

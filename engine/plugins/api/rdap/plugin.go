@@ -188,9 +188,9 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		plugin: rd,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       rd,
-		Name:         rd.domain.name,
-		Position:     14,
+		Plugin:   rd,
+		Name:     rd.domain.name,
+		Position: 14,
 		// Shares the stage with the WHOIS FQDN handler: RDAP and WHOIS are
 		// peer registration sources that both enrich the apex DomainRecord,
 		// so neither is exclusive at this position.
@@ -218,9 +218,9 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       rd,
-		Name:         rd.domrec.name,
-		Position:     2,
+		Plugin:   rd,
+		Name:     rd.domrec.name,
+		Position: 2,
 		// Peer of the WHOIS DomainRecord handler at this stage; both enrich
 		// the record from their own source, so neither is exclusive.
 		Exclusive:    false,
@@ -365,8 +365,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	// the organization must come last due to a potential chicken-and-egg problem
 	if kind := strings.Join(prop.Values(), " "); m.IsMatch(string(oam.Person)) && name != "" && kind == "individual" {
 		if p := support.FullNameToPerson(name); p != nil {
-			if a, err := e.Session.DB().CreateAsset(ctx, p); err == nil && a != nil {
-				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
+			if a, err := support.CreatePersonAsset(e.Session, cr, &general.SimpleRelation{Name: "person"}, p, src); err == nil && a != nil {
 				_ = e.Dispatcher.DispatchEvent(&et.Event{
 					Name:    fmt.Sprintf("%s:%s", p.FullName, p.ID),
 					Entity:  a,
