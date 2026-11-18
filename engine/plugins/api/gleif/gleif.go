@@ -50,6 +50,50 @@ func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyComple
 	return &result, nil
 }
 
+// GLEIFSearchByAddress finds LEI records whose legal address is in the given
+// city, country and/or postal code, so an address can be resolved to the
+// organizations registered there. GLEIF filters only to the city/country/postal
+// level, not a street line, so the caller confirms the street itself; this
+// bounds the result to one page. At least one filter is required so the search
+// is never the whole register.
+func GLEIFSearchByAddress(ctx context.Context, city, country, postal string) ([]*LEIRecord, error) {
+	v := url.Values{}
+	if city != "" {
+		v.Set("filter[entity.legalAddress.city]", city)
+	}
+	if country != "" {
+		v.Set("filter[entity.legalAddress.country]", country)
+	}
+	if postal != "" {
+		v.Set("filter[entity.legalAddress.postalCode]", postal)
+	}
+	if len(v) == 0 {
+		return nil, errors.New("GLEIFSearchByAddress: a city, country or postal code is required")
+	}
+	v.Set("page[size]", "50")
+	u := "https://api.gleif.org/api/v1/lei-records?" + v.Encode()
+
+	_ = support.WaitLimit(ctx, gleifLimit)
+	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+		return nil, fmt.Errorf("GLEIFSearchByAddress: failed to query the register: %v", err)
+	}
+
+	var result MultipleResponse
+	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+		return nil, fmt.Errorf("GLEIFSearchByAddress: %v", err)
+	}
+
+	out := make([]*LEIRecord, 0, len(result.Data))
+	for i := range result.Data {
+		out = append(out, &result.Data[i])
+	}
+	return out, nil
+}
+
 // GLEIFGetLEIRecord retrieves the LEI record for the given identifier.
 func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id

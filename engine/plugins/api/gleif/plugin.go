@@ -21,6 +21,7 @@ type gleif struct {
 	log     *slog.Logger
 	fuzzy   *fuzzyCompletions
 	related *relatedOrgs
+	address *addresses
 	source  *et.Source
 }
 
@@ -71,6 +72,25 @@ func (g *gleif) Start(r et.Registry) error {
 		Transforms:   []string{string(oam.Organization)},
 		EventType:    oam.Identifier,
 		Callback:     g.related.check,
+	}); err != nil {
+		return err
+	}
+
+	// The reverse direction: from a street address to the organizations
+	// registered there, so an enumeration can pivot from a Location seed.
+	g.address = &addresses{
+		name:   g.name + "-Address-Handler",
+		plugin: g,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       g,
+		Name:         g.address.name,
+		Position:     48,
+		Exclusive:    true,
+		MaxInstances: support.MinHandlerInstances,
+		Transforms:   []string{string(oam.Organization), string(oam.ContactRecord), string(oam.Identifier)},
+		EventType:    oam.Location,
+		Callback:     g.address.check,
 	}); err != nil {
 		return err
 	}
