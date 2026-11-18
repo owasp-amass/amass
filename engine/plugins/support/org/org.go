@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/biter777/countries"
@@ -22,12 +21,7 @@ import (
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
-var createOrgLock sync.Mutex
-
 func CreateOrgAsset(sess et.Session, obj *dbt.Entity, rel oam.Relation, o *oamorg.Organization, src *et.Source) (*dbt.Entity, error) {
-	createOrgLock.Lock()
-	defer createOrgLock.Unlock()
-
 	if o == nil || o.Name == "" {
 		return nil, errors.New("missing the organization name")
 	} else if src == nil {
@@ -41,6 +35,20 @@ func CreateOrgAsset(sess et.Session, obj *dbt.Entity, rel oam.Relation, o *oamor
 		o.LegalName = ""
 	}
 
+	// Serialize creation of organizations that share a normalized name on a
+	// canonical key, so concurrent collectors — within this process, and
+	// across sessions where the backend supports it — converge on one record
+	// through the reuse lookups below instead of each minting a new one.
+	var orgent *dbt.Entity
+	var oerr error
+	_ = sess.DB().WithCanonicalLock(sess.Ctx(), "organization:"+genNormName(o), func() error {
+		orgent, oerr = createOrgAssetLocked(sess, obj, rel, o, src)
+		return oerr
+	})
+	return orgent, oerr
+}
+
+func createOrgAssetLocked(sess et.Session, obj *dbt.Entity, rel oam.Relation, o *oamorg.Organization, src *et.Source) (*dbt.Entity, error) {
 	orgent, err := FindOrgByNameClaim(sess, o.Name, src)
 	if err != nil && o.LegalName != "" {
 		orgent, _ = FindOrgByLegalNameClaim(sess, o.LegalName, src)
