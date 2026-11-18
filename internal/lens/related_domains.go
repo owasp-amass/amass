@@ -53,15 +53,17 @@ const (
 	// (principle 8).
 	certMaxApexes = 25
 	nsMaxApexes   = 25
-	// The signal confidences: real evidence, but a human confirms before scope
-	// grows.
-	relatedRegistrantConfidence = 70
-	relatedCertConfidence       = 75
-	relatedNSConfidence         = 65
-	// relatedWebsiteConfidence is for a domain the organization publishes as
-	// its own website (e.g. Wikidata's official website) -- a strong, curated
-	// claim.
-	relatedWebsiteConfidence = 80
+)
+
+// The per-signal confidences come from the horizontal signal catalog
+// (internal/semantics/horizontal_signals.json), so the lens, the runtime
+// scope-expansion decision and the classifier share one source of truth
+// (principle 8). Each is the signal's catalog weight times 100.
+var (
+	relatedRegistrantConfidence = HorizontalConfidence(SigRegistrantOrg)
+	relatedCertConfidence       = HorizontalConfidence(SigCertSubjectOrg)
+	relatedNSConfidence         = HorizontalConfidence(SigSharedNameServer)
+	relatedWebsiteConfidence    = HorizontalConfidence(SigOfficialWebsite)
 )
 
 // HorizontalDomain is a registered (apex) domain a horizontal signal ties to

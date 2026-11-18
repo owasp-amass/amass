@@ -450,3 +450,21 @@ func listDuplicateSignals(format string, explicit bool, out io.Writer) error {
 
 	return fmt.Errorf("duplicate-signals format %q: use text, json or markdown", format)
 }
+
+// listHorizontalSignals prints the horizontal domain-correlation signal
+// catalog: each signal with what it finds, why it counts, its guards and when
+// it can mislead. Text is the default; markdown is docs/ai/HORIZONTALS.md.
+func listHorizontalSignals(format string, explicit bool, out io.Writer) error {
+	switch {
+	case !explicit || format == "text":
+		_, err := fmt.Fprint(out, lens.HorizontalSignalsText())
+		return err
+	case format == "markdown":
+		_, err := fmt.Fprint(out, lens.HorizontalSignalsMarkdown())
+		return err
+	case format == "json":
+		return writeJSON(out, lens.HorizontalSignals())
+	}
+
+	return fmt.Errorf("horizontal-signals format %q: use text, json or markdown", format)
+}

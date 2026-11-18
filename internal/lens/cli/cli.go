@@ -67,12 +67,13 @@ func init() {
 // reviewOps are the amass review commands. Only approve and retract change
 // the Asset Database, and only for a proposal a reviewer names.
 var reviewOps = map[string]string{
-	"proposals":         "proposals",
-	"approve":           "approve",
-	"reject":            "reject",
-	"retract":           "retract",
-	"signals":           "signals",
-	"duplicate-signals": "duplicate-signals",
+	"proposals":          "proposals",
+	"approve":            "approve",
+	"reject":             "reject",
+	"retract":            "retract",
+	"signals":            "signals",
+	"duplicate-signals":  "duplicate-signals",
+	"horizontal-signals": "horizontal-signals",
 }
 
 // Operations maps each operation this package runs, by the name amass ai
@@ -270,6 +271,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listSignals(format, true, out)
 	case "duplicate-signals":
 		return listDuplicateSignals(format, true, out)
+	case "horizontal-signals":
+		return listHorizontalSignals(format, true, out)
 	case "proposals":
 		return listProposals(journalPath, format, true, out)
 	case "reject":

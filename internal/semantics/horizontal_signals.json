@@ -1,0 +1,79 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Horizontal domain-correlation signals: the evidence that ties another registered (apex) domain to a target organization, so an enumeration's scope can be made more complete. docs/ai/HORIZONTALS.md and `amass review horizontal-signals` are generated from this file; edit the rationale here. Each signal's weight times 100 is the confidence the related-domains lens records for a domain the signal supports; a domain found by several signals keeps the strongest. A WHOIS privacy proxy or placeholder organization, and a certificate or name server shared by more apex domains than the lens's cap (provider/CDN infrastructure), are excluded, not scored. A name match alone is never sufficient. The scored runtime scope-expansion decision and the classifier read the same catalog, so the lens, the engine and the model share one source of truth.",
+  "signals": [
+    {
+      "id": "shared-registrant-org",
+      "title": "Shared registrant organization",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.7,
+      "matcher": "shared_registrant_org",
+      "finds": "Another registered domain whose WHOIS/RDAP registrant contact names the same organization as the target's.",
+      "rationale": "The registrant organization on a domain record is the party that registered the domain, recorded by the registry. When two domains name the same organization as registrant, the same party registered both, which is direct evidence they belong to the same footprint.",
+      "guards": [
+        "A WHOIS privacy or registrar proxy (for example Domains By Proxy, LLC) is never an anchor: thousands of unrelated domains share one, so the match is suppressed (internal/registrant).",
+        "A placeholder or redaction organization value is excluded the same way.",
+        "A matching organization name alone, with no shared registrant record, is never sufficient: unrelated companies share names across jurisdictions."
+      ],
+      "counter_indications": [
+        "Resellers, registrars and agencies sometimes register domains for clients under their own organization.",
+        "A parent holding company can be the registrant of record for legally separate subsidiaries."
+      ]
+    },
+    {
+      "id": "cert-subject-org",
+      "title": "Shared certificate subject organization",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.75,
+      "matcher": "certificate_subject_org",
+      "finds": "The apex domains covered by a TLS certificate (its common name and DNS subject-alternative names) whose subject contact names the organization.",
+      "rationale": "An organization-validated certificate carries a subject organization the certificate authority verified against the requesting entity. The apex domains such a certificate covers were presented together by that organization, so they tie to its footprint.",
+      "guards": [
+        "A certificate covering more distinct apex domains than the lens cap is treated as shared or CDN infrastructure (many tenants on one certificate), not shared ownership, and is skipped.",
+        "A privacy-proxy or placeholder subject organization is excluded."
+      ],
+      "counter_indications": [
+        "A hosting or SaaS provider can name itself as the subject organization on certificates it issues for customer domains.",
+        "A domain-validated certificate carries no verified organization and does not produce this signal."
+      ]
+    },
+    {
+      "id": "shared-name-server",
+      "title": "Shared name server",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.65,
+      "matcher": "shared_name_server",
+      "finds": "Another registered domain served by the same authoritative name server as one of the organization's own domains.",
+      "rationale": "A private or vanity name server operated by one organization serves only that organization's domains, so sharing it is evidence of common control. It is supporting rather than strong because a small hosting provider's shared name server can serve unrelated customers.",
+      "guards": [
+        "A name server serving more distinct apex domains than the lens cap is treated as shared or provider infrastructure and is skipped.",
+        "Only name servers reached from the organization's own domain records are used as anchors."
+      ],
+      "counter_indications": [
+        "Managed DNS and small hosting providers run name servers shared by many unrelated customers.",
+        "A registrar's default name servers are shared across its whole customer base."
+      ]
+    },
+    {
+      "id": "official-website",
+      "title": "Official website",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.8,
+      "matcher": "official_website",
+      "finds": "A domain the organization publishes as its own website (Organization --website--> URL --domain--> FQDN), for example recorded by the Wikidata official-website collector.",
+      "rationale": "An official website recorded for an organization is a curated, third-party-asserted claim that the organization owns that domain, so it is the strongest of the current horizontal signals.",
+      "guards": [
+        "Only a website edge on the subject organization itself is used.",
+        "The apex (registered domain) of the website host is taken, not the full host name."
+      ],
+      "counter_indications": [
+        "A curated source can record a campaign or microsite domain hosted by a third party as an official website.",
+        "An out-of-date record can name a domain the organization no longer controls."
+      ]
+    }
+  ]
+}
