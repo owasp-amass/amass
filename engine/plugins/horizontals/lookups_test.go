@@ -69,6 +69,35 @@ func TestContactRecordOrganizationsAndLocations(t *testing.T) {
 	}
 }
 
+func TestPrivacyProxyOrgSuppressed(t *testing.T) {
+	sess := plugintest.NewSession(t)
+	sess.TTL(1440)
+	h := NewHorizontals().(*horizPlugin)
+
+	dr := sess.Asset(t, &oamreg.DomainRecord{Domain: "example.com", Name: "example.com", ID: "D1"})
+	cr := sess.Asset(t, &contact.ContactRecord{DiscoveredAt: "https://rdap.example/domain/example.com"})
+	real := sess.Asset(t, &oamorg.Organization{ID: "org-1", Name: "Example Inc"})
+	proxy := sess.Asset(t, &oamorg.Organization{ID: "org-2", Name: "Domains By Proxy, LLC"})
+
+	sess.Edge(t, dr, link("registrant_contact"), cr)
+	sess.Edge(t, cr, link("organization"), real)
+	sess.Edge(t, cr, link("organization"), proxy)
+
+	// A privacy-proxy registrant is shared by thousands of unrelated domains, so
+	// it must never be returned as a horizontal correlation anchor.
+	orgs, _ := h.lookupContactRecordOrgsAndLocations(sess, cr)
+	if labels(orgs) != "org-1" {
+		t.Errorf("privacy-proxy organization must be suppressed; organizations = %q", labels(orgs))
+	}
+
+	if !h.isPrivacyProxyOrg(proxy) {
+		t.Error("the proxy organization should be detected as a privacy proxy")
+	}
+	if h.isPrivacyProxyOrg(real) {
+		t.Error("a real organization must not be flagged as a privacy proxy")
+	}
+}
+
 func TestPTRRecordLookups(t *testing.T) {
 	sess := plugintest.NewSession(t)
 	sess.TTL(1440)

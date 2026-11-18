@@ -37,6 +37,13 @@ func (h *horOrg) check(e *et.Event) error {
 		return nil
 	}
 
+	// A privacy-proxy / registrar-proxy organization is the registrant of
+	// record for thousands of unrelated domains; never expand scope from it
+	// (principle 8, horizontal-domain-correlation-spec.md).
+	if h.plugin.isPrivacyProxyOrg(e.Entity) {
+		return nil
+	}
+
 	if h.plugin.isEntityInScope(e.Session, e.Entity) {
 		h.processInScope(e)
 	} else {

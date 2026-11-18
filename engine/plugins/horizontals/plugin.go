@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amassdb "github.com/owasp-amass/amass/v5/internal/db"
+	"github.com/owasp-amass/amass/v5/internal/registrant"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
@@ -311,6 +312,16 @@ func (h *horizPlugin) getContactRecordOrganizations(sess et.Session, cr *dbt.Ent
 		}
 
 		if _, valid := to.Asset.(*oamorg.Organization); valid {
+			// A WHOIS privacy / registrar proxy (e.g. "Domains By Proxy, LLC")
+			// is the registrant of record for thousands of unrelated domains;
+			// using it as a correlation anchor would pull every one of them into
+			// scope. Never let it anchor horizontal expansion (principle 8,
+			// horizontal-domain-correlation-spec.md).
+			if h.isPrivacyProxyOrg(to) {
+				sess.Log().Debug("ignoring privacy-proxy registrant organization for horizontal correlation",
+					slog.String("organization", to.Asset.Key()))
+				continue
+			}
 			results = append(results, to)
 		}
 	}
@@ -319,6 +330,21 @@ func (h *horizPlugin) getContactRecordOrganizations(sess et.Session, cr *dbt.Ent
 		return nil, errors.New("failed to extract the organization")
 	}
 	return results, nil
+}
+
+// isPrivacyProxyOrg reports whether an Organization entity is a WHOIS privacy /
+// registrar proxy or a redaction placeholder. Such an organization is shared by
+// many unrelated registrants, so it must never anchor horizontal scope
+// expansion nor be added to scope itself.
+func (h *horizPlugin) isPrivacyProxyOrg(ent *dbt.Entity) bool {
+	if ent == nil {
+		return false
+	}
+	o, ok := ent.Asset.(*oamorg.Organization)
+	if !ok {
+		return false
+	}
+	return registrant.IsPrivacyProxyName(o.Name)
 }
 
 func (h *horizPlugin) getContactRecordLocations(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, error) {
