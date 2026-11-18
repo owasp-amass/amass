@@ -15,6 +15,20 @@ import (
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
+// OrgsSharingName returns the organizations recorded under one of the given
+// names (an organization's common or legal name), found through the name
+// identifiers the graph de-duplicates on. A shared name is a weak signal on
+// its own — companies in different jurisdictions reuse names — so these
+// candidates are scored, never merged on the name alone. Read-only.
+func OrgsSharingName(sess et.Session, names []string) []*dbt.Entity {
+	orgents, err := orgsWithSameNames(sess, names)
+	if err != nil {
+		return nil
+	}
+
+	return orgents
+}
+
 // OrgsSharingIdentifier returns the other organizations that hold one of the
 // same registered identifiers as orgent (the same LEI, company number, SEC
 // CIK, and so on). Identifiers are de-duplicated in the graph by value and
