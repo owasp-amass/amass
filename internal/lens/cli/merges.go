@@ -14,10 +14,10 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/review"
 )
 
-// isMergeProposal reports whether id names a merge proposal rather than an
-// ownership proposal.
+// isMergeProposal reports whether id names a merge proposal — an organization
+// merge or a person merge — rather than an ownership proposal.
 func isMergeProposal(id string) bool {
-	return strings.HasPrefix(id, review.DuplicatePrefix)
+	return strings.HasPrefix(id, review.DuplicatePrefix) || review.IsPersonMerge(id)
 }
 
 // pendingMerge finds a merge proposal that has not been reviewed.
@@ -59,8 +59,9 @@ func rejectMerge(journalPath, id, reviewer string, out io.Writer) error {
 }
 
 // approveMerge merges a pending proposal's duplicate into its survivor and
-// records everything the merge changed in the journal.
-func approveMerge(ctx context.Context, m review.OrganizationMerger, journalPath, id, reviewer string,
+// records everything the merge changed in the journal. The proposal ID says
+// whether it is an organization merge or a person merge.
+func approveMerge(ctx context.Context, m review.Merger, journalPath, id, reviewer string,
 	out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
@@ -72,7 +73,12 @@ func approveMerge(ctx context.Context, m review.OrganizationMerger, journalPath,
 		return err
 	}
 
-	rec, err := review.ApplyMerge(ctx, m, j, p, reviewer)
+	var rec review.MergeRecord
+	if review.IsPersonMerge(id) {
+		rec, err = review.ApplyPersonMerge(ctx, m, j, p, reviewer)
+	} else {
+		rec, err = review.ApplyMerge(ctx, m, j, p, reviewer)
+	}
 	if err != nil {
 		return err
 	}

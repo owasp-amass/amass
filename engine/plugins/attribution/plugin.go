@@ -44,8 +44,8 @@ const (
 
 // signalTypes are the asset types whose arrival can create or complete an
 // ownership signal.
-var signalTypes = []oam.AssetType{oam.Organization, oam.ContactRecord, oam.DomainRecord, oam.IPNetRecord,
-	oam.AutnumRecord, oam.FQDN, oam.IPAddress, oam.TLSCertificate}
+var signalTypes = []oam.AssetType{oam.Organization, oam.Person, oam.ContactRecord, oam.DomainRecord,
+	oam.IPNetRecord, oam.AutnumRecord, oam.FQDN, oam.IPAddress, oam.TLSCertificate}
 
 type plugin struct {
 	name    string
@@ -129,7 +129,8 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 
 	mode, path, err := sess.Config().AIAttribution(p.lookup)
 	t := &tracker{p: p, sess: sess, mode: mode, orgs: map[string]*dbt.Entity{},
-		allOrgs: map[string]*dbt.Entity{}, dupProcessed: map[string]struct{}{}}
+		allOrgs: map[string]*dbt.Entity{}, dupProcessed: map[string]struct{}{},
+		allPersons: map[string]*dbt.Entity{}, personProcessed: map[string]struct{}{}}
 	switch {
 	case err != nil:
 		sess.Log().Error(fmt.Sprintf("AI attribution is off: %v", err))
@@ -184,10 +185,14 @@ type tracker struct {
 	// touched since the last one and proposals accumulate mid-run without
 	// re-scanning what was already raised.
 	dupProcessed map[string]struct{}
-	gen          uint64
-	pending      bool
-	first        time.Time
-	last         time.Time
+	// allPersons are every person this session touched; they seed the
+	// person-duplicate search. personProcessed is its incremental cursor.
+	allPersons      map[string]*dbt.Entity
+	personProcessed map[string]struct{}
+	gen             uint64
+	pending         bool
+	first           time.Time
+	last            time.Time
 }
 
 func (t *tracker) enabled() *tracker {
@@ -211,7 +216,8 @@ func (t *tracker) touch(ent *dbt.Entity) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if ent.Asset.AssetType() == oam.Organization {
+	switch ent.Asset.AssetType() {
+	case oam.Organization:
 		// Seed the duplicate search from every organization the session
 		// touches, in scope or not: the enumeration caused the write, so its
 		// duplicates are ours to raise. Scope still gates ownership
@@ -220,6 +226,9 @@ func (t *tracker) touch(ent *dbt.Entity) {
 		if _, conf := t.sess.Scope().IsAssetInScope(ent.Asset, 0); conf > 0 {
 			t.orgs[ent.ID] = ent
 		}
+	case oam.Person:
+		// Seed the person-duplicate search from every person the run touched.
+		t.allPersons[ent.ID] = ent
 	}
 	if len(t.orgs) == 0 {
 		return
@@ -339,6 +348,7 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 	// only at drain. Record-only: nothing is merged until the drain pass, so
 	// this never deletes an organization another handler is still writing to.
 	t.incrementalProposals(ctx, adapter)
+	t.incrementalPersonProposals(ctx, adapter)
 }
 
 // widenScope adds the assets an attribution brought under an in-scope

@@ -19,6 +19,7 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
+	oampeople "github.com/owasp-amass/open-asset-model/people"
 	"github.com/owasp-amass/open-asset-model/platform"
 )
 
@@ -36,12 +37,32 @@ const skippedBetween = "links the two merged organizations"
 // fails part way is rolled back.
 func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID string,
 	confidence int) (review.MergeRecord, error) {
+	return a.mergeEntities(ctx, survivorID, duplicateID, confidence, oam.Organization, "organization",
+		a.fillEmptyFields)
+}
+
+// MergePersons merges two Person records the same way organizations are merged,
+// filling the survivor's empty person fields from the duplicate. It is only
+// ever applied from a reviewed proposal, never automatically.
+func (a Adapter) MergePersons(ctx context.Context, survivorID, duplicateID string,
+	confidence int) (review.MergeRecord, error) {
+	return a.mergeEntities(ctx, survivorID, duplicateID, confidence, oam.Person, "person",
+		a.fillEmptyPersonFields)
+}
+
+// mergeEntities moves the duplicate entity's tags and edges onto the survivor,
+// deletes the duplicate and fills the survivor's empty fields with fill, so two
+// records of the same real-world thing become one. It is the shared core of the
+// organization and person merges.
+func (a Adapter) mergeEntities(ctx context.Context, survivorID, duplicateID string, confidence int,
+	atype oam.AssetType, kind string,
+	fill func(context.Context, *dbt.Entity, *dbt.Entity, *review.MergeRecord) error) (review.MergeRecord, error) {
 	rec := review.MergeRecord{SurvivorID: survivorID, DuplicateID: duplicateID}
 	if a.Repo == nil {
 		return rec, errors.New("missing OAM repository")
 	}
 	if survivorID == duplicateID {
-		return rec, errors.New("an organization cannot be merged into itself")
+		return rec, fmt.Errorf("a %s cannot be merged into itself", kind)
 	}
 	if confidence < 0 || confidence > 100 {
 		return rec, fmt.Errorf("confidence %d is outside 0..100", confidence)
@@ -50,11 +71,11 @@ func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mergeTimeout)
 	defer cancel()
 
-	surv, err := a.entityOfType(wctx, survivorID, string(oam.Organization))
+	surv, err := a.entityOfType(wctx, survivorID, string(atype))
 	if err != nil {
 		return rec, err
 	}
-	dup, err := a.entityOfType(wctx, duplicateID, string(oam.Organization))
+	dup, err := a.entityOfType(wctx, duplicateID, string(atype))
 	if err != nil {
 		return rec, err
 	}
@@ -83,12 +104,12 @@ func (a Adapter) MergeOrganizations(ctx context.Context, survivorID, duplicateID
 	}
 
 	if err := a.Repo.DeleteEntity(wctx, dup.ID); err != nil {
-		return rec, a.rollback(wctx, rec, fmt.Errorf("delete organization %s: %w", dup.ID, err))
+		return rec, a.rollback(wctx, rec, fmt.Errorf("delete %s %s: %w", kind, dup.ID, err))
 	}
 
 	// Filling comes last: the Asset Database cannot clear a field, so a
 	// rollback could not undo it.
-	if err := a.fillEmptyFields(wctx, surv, dup, &rec); err != nil {
+	if err := fill(wctx, surv, dup, &rec); err != nil {
 		rec.FillError = err.Error()
 	}
 
@@ -136,6 +157,53 @@ func (a Adapter) fillEmptyFields(ctx context.Context, surv, dup *dbt.Entity, rec
 	var err error
 	if r, ok := a.Repo.(assetReplacer); ok {
 		_, err = r.ReplaceAsset(ctx, &merged)
+	} else {
+		_, err = a.Repo.CreateAsset(ctx, &merged)
+	}
+	if err != nil {
+		rec.FilledFields = nil
+		return err
+	}
+
+	return nil
+}
+
+// fillEmptyPersonFields gives the survivor the duplicate's person fields that
+// the survivor lacks — the variant rendering the duplicate carried, such as a
+// middle name or birth date. It never overwrites a value.
+func (a Adapter) fillEmptyPersonFields(ctx context.Context, surv, dup *dbt.Entity, rec *review.MergeRecord) error {
+	sp, ok := surv.Asset.(*oampeople.Person)
+	if !ok {
+		return errors.New("survivor is not a person")
+	}
+	dp, ok := dup.Asset.(*oampeople.Person)
+	if !ok {
+		return errors.New("duplicate is not a person")
+	}
+
+	merged := *sp
+	fill := func(field string, have *string, from string) {
+		if *have == "" && from != "" {
+			*have = from
+			rec.FilledFields = append(rec.FilledFields, field)
+		}
+	}
+	fill("middle_name", &merged.MiddleName, dp.MiddleName)
+	fill("birth_date", &merged.BirthDate, dp.BirthDate)
+	fill("gender", &merged.Gender, dp.Gender)
+	if len(rec.FilledFields) == 0 {
+		return nil
+	}
+
+	// Prefer ReplaceAsset where the repository supports it for this type, and
+	// otherwise store the asset again, which updates the content in the SQL
+	// repositories. ReplaceAsset does not support every asset type, so a
+	// rejection falls back to storing it again rather than failing the fill.
+	var err error
+	if r, ok := a.Repo.(assetReplacer); ok {
+		if _, err = r.ReplaceAsset(ctx, &merged); err != nil {
+			_, err = a.Repo.CreateAsset(ctx, &merged)
+		}
 	} else {
 		_, err = a.Repo.CreateAsset(ctx, &merged)
 	}

@@ -49,9 +49,10 @@ var lensOps = map[string]string{
 // and record their findings in the review journal, so they are not read-only
 // views and are not lenses.
 var dbOps = map[string]string{
-	"duplicates":   "duplicates",
-	"identity":     "identity-conflicts",
-	"person-named": "person-named",
+	"duplicates":        "duplicates",
+	"person-duplicates": "person-duplicates",
+	"identity":          "identity-conflicts",
+	"person-named":      "person-named",
 }
 
 // The registered subject lenses are amass lens commands too.
@@ -322,6 +323,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return retractProposal(ctx, g, journalPath, proposalID, reviewer, out)
 	case "duplicates":
 		return listDuplicates(ctx, g, journalPath, format, true, out, errout)
+	case "person-duplicates":
+		return listPersonDuplicates(ctx, g, journalPath, format, true, out, errout)
 	case "identity-conflicts":
 		return listIdentityConflicts(ctx, g, journalPath, format, true, out, errout)
 	case "person-named":

@@ -188,6 +188,7 @@ func (t *tracker) mergeDuplicates(write bool) {
 
 	t.recordIdentityConflicts(ctx, adapter)
 	t.recordFamilies(ctx, adapter)
+	t.recordPersonDuplicates(ctx, adapter)
 
 	state, err := t.journal.DuplicateState()
 	if err != nil {
@@ -326,6 +327,69 @@ func (t *tracker) incrementalProposals(ctx context.Context, adapter oamrepo.Adap
 		t.sess.Log().Info(fmt.Sprintf("AI identity check raised %d correction(s) for review in %s",
 			len(added), t.journal.Path))
 	}
+}
+
+// personDuplicates raises review-gated person-merge proposals for the given
+// seed persons, comparing each against the persons it shares an organization or
+// identifier with. Record-only: a person merge is never applied automatically.
+func (t *tracker) personDuplicates(ctx context.Context, adapter oamrepo.Adapter, seedIDs []string) {
+	if t.journal == nil || len(seedIDs) == 0 {
+		return
+	}
+
+	candSet := map[string]struct{}{}
+	for _, id := range seedIDs {
+		for _, c := range lens.PersonCandidates(ctx, adapter, id) {
+			candSet[c] = struct{}{}
+		}
+	}
+	candIDs := make([]string, 0, len(candSet))
+	for id := range candSet {
+		candIDs = append(candIDs, id)
+	}
+
+	report, err := lens.ComparePersons(ctx, adapter, seedIDs, candIDs)
+	if err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI person-duplicate search: %v", err))
+		return
+	}
+	if added, err := t.journal.SubmitDuplicates(review.PersonDuplicateProposals(report)); err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI person-duplicate search could not record proposals: %v", err))
+	} else if len(added) > 0 {
+		t.sess.Log().Info(fmt.Sprintf("AI person-duplicate search raised %d merge proposal(s) for review in %s",
+			len(added), t.journal.Path))
+	}
+}
+
+// incrementalPersonProposals raises person-merge proposals for the persons
+// touched since the last pass, so they accumulate mid-run.
+func (t *tracker) incrementalPersonProposals(ctx context.Context, adapter oamrepo.Adapter) {
+	t.mu.Lock()
+	var seedIDs []string
+	for id := range t.allPersons {
+		if _, done := t.personProcessed[id]; done {
+			continue
+		}
+		t.personProcessed[id] = struct{}{}
+		seedIDs = append(seedIDs, id)
+	}
+	t.mu.Unlock()
+
+	t.personDuplicates(ctx, adapter, seedIDs)
+}
+
+// recordPersonDuplicates raises person-merge proposals for every person the run
+// touched, at drain, so a run that touched persons but no in-scope organization
+// (and so ran no incremental pass) still has them compared.
+func (t *tracker) recordPersonDuplicates(ctx context.Context, adapter oamrepo.Adapter) {
+	t.mu.Lock()
+	ids := make([]string, 0, len(t.allPersons))
+	for id := range t.allPersons {
+		ids = append(ids, id)
+	}
+	t.mu.Unlock()
+
+	t.personDuplicates(ctx, adapter, ids)
 }
 
 // recordIdentityConflicts records the organizations whose legal identity
