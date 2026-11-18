@@ -2,7 +2,15 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package whois
+// Package registrant analyzes the registrant fields of a WHOIS/RDAP record.
+// It has one home so both the collection engine (the WHOIS plugin) and the
+// read-only lenses can tell a real registrant from a privacy-proxy service or a
+// redaction placeholder — a distinction correlation must make, because many
+// unrelated domains share the same privacy-proxy "organization" (for example
+// "Domains By Proxy, LLC") and clustering on it would merge strangers
+// (ai-design-principles.md, principles 8, 11 & 12). It imports only the
+// standard library, so it never pulls the engine into a lens.
+package registrant
 
 import (
 	"regexp"
@@ -22,6 +30,14 @@ type PrivacyDetection struct {
 	Score         int            // higher = more confident placeholder/redaction/privacy proxy
 	Matches       []PrivacyMatch // which indicators triggered
 	Normalized    string         // normalized value inspected
+}
+
+// IsPrivacyProxyName reports whether a registrant name or organization looks
+// like a privacy-proxy service or a redaction placeholder rather than a real
+// owner. It is the convenience a correlator uses to refuse clustering on such a
+// value.
+func IsPrivacyProxyName(value string) bool {
+	return DetectRegistrantPlaceholder(value).IsPlaceholder
 }
 
 // DetectRegistrantPlaceholder analyzes a WHOIS registrant field value and detects

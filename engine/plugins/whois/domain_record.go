@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/registrant"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -331,7 +332,7 @@ func (r *domrec) hasPlaceholders(contact *whoisparser.Contact) bool {
 	}
 
 	for _, field := range fields {
-		if d := DetectRegistrantPlaceholder(field); d.IsPlaceholder {
+		if d := registrant.DetectRegistrantPlaceholder(field); d.IsPlaceholder {
 			return true
 		}
 	}
