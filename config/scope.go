@@ -163,6 +163,9 @@ func (s *Scope) isScopeEmpty(scopeSwitch bool) bool {
 	if len(s.Organizations) > 0 {
 		return false
 	}
+	if len(s.Phones) > 0 || len(s.Locations) > 0 {
+		return false
+	}
 	if len(s.Names) > 0 || s.NamesFile != "" {
 		return false
 	}
@@ -292,6 +295,32 @@ func (c *Config) AddDomains(domains ...string) {
 	for _, d := range domains {
 		c.AddDomain(d)
 	}
+}
+
+// AddPhone records a phone number as a seed the enumeration pivots from: the
+// engine resolves the organizations tied to the number and their domains.
+func (c *Config) AddPhone(phone string) {
+	c.Lock()
+	defer c.Unlock()
+
+	p := strings.TrimSpace(phone)
+	if p == "" || slices.Contains(c.Scope.Phones, p) {
+		return
+	}
+	c.Scope.Phones = append(c.Scope.Phones, p)
+}
+
+// AddLocation records a street address as a seed the enumeration pivots from:
+// the engine resolves the organizations at the address and their domains.
+func (c *Config) AddLocation(address string) {
+	c.Lock()
+	defer c.Unlock()
+
+	a := strings.TrimSpace(address)
+	if a == "" || slices.Contains(c.Scope.Locations, a) {
+		return
+	}
+	c.Scope.Locations = append(c.Scope.Locations, a)
 }
 
 // AddDomain appends the domain name provided in the parameter to the list in the configuration.

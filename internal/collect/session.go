@@ -13,6 +13,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcontact "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
@@ -109,6 +110,12 @@ func addScope(cfg *config.Config, e ScopeEntry) (oam.Asset, error) {
 
 		cfg.Scope.ASNs = append(cfg.Scope.ASNs, num)
 		return oamnet.AutonomousSystem{Number: num}, nil
+	case "phone":
+		cfg.Scope.Phones = append(cfg.Scope.Phones, e.Value)
+		return oamcontact.Phone{E164: e.Value, Raw: e.Value}, nil
+	case "location":
+		cfg.Scope.Locations = append(cfg.Scope.Locations, e.Value)
+		return oamcontact.Location{Address: e.Value}, nil
 	}
 
 	return nil, errors.New("unsupported collection scope type")

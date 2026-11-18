@@ -10,6 +10,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcontact "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
@@ -82,6 +83,18 @@ func convertScopeToAssets(scope *config.Scope) []oam.Asset {
 	// Convert Organizations (corporations) to assets.
 	for _, org := range scope.Organizations {
 		assets = append(assets, oamorg.Organization{ID: org, Name: org})
+	}
+
+	// Convert Phones to assets: seeds the reverse lookup resolves to the
+	// organizations tied to the number.
+	for _, phone := range scope.Phones {
+		assets = append(assets, oamcontact.Phone{E164: phone, Raw: phone})
+	}
+
+	// Convert Locations to assets: seeds the reverse lookup resolves to the
+	// organizations at the address.
+	for _, address := range scope.Locations {
+		assets = append(assets, oamcontact.Location{Address: address})
 	}
 
 	return assets

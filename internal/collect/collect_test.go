@@ -20,6 +20,7 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcontact "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
@@ -51,6 +52,44 @@ func TestPlansBindScopeAndMode(t *testing.T) {
 		if NewPlan(s, Passive).Status != StatusUnsupported {
 			t.Errorf("unsafe plan for %+v", s)
 		}
+	}
+}
+
+func TestPhoneAndLocationSeedsArePassiveOnly(t *testing.T) {
+	phone := graph.AssetSelector{Type: "Phone", Field: "e164", Value: "+1 315 228 1000"}
+	addr := graph.AssetSelector{Type: "Location", Field: "address", Value: "1 Campus Road, Hamilton NY"}
+
+	// Passive resolves the organizations tied to the seed; the plan is
+	// approvable and keeps the phone/location scope type.
+	if p := NewPlan(phone, Passive); p.Status != StatusApprovalRequired || p.ScopeType != "phone" ||
+		p.Mode != Passive {
+		t.Errorf("phone passive plan = %+v", p)
+	}
+	if p := NewPlan(addr, Passive); p.Status != StatusApprovalRequired || p.ScopeType != "location" {
+		t.Errorf("address passive plan = %+v", p)
+	}
+
+	// Active is refused: a phone or address probes no hosts.
+	if NewPlan(phone, Active).Status != StatusUnsupported || NewPlan(addr, Active).Status != StatusUnsupported {
+		t.Error("a phone or address was accepted as an active target")
+	}
+
+	// A number without enough digits is not a phone.
+	if NewPlan(graph.AssetSelector{Type: "Phone", Field: "e164", Value: "12"}, Passive).Status != StatusUnsupported {
+		t.Error("a too-short number was accepted as a phone seed")
+	}
+
+	// Configure seeds the Phone asset and records it in the scope.
+	cfg := config.NewConfig()
+	asset, err := Configure(cfg, NewPlan(phone, Passive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := asset.(oamcontact.Phone); !ok {
+		t.Errorf("seed asset = %T, want a Phone", asset)
+	}
+	if !cfg.Passive || cfg.Active || len(cfg.Scope.Phones) != 1 {
+		t.Errorf("phone config = passive %v active %v phones %v", cfg.Passive, cfg.Active, cfg.Scope.Phones)
 	}
 }
 

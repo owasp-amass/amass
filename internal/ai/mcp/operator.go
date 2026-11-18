@@ -732,10 +732,22 @@ func pivotPlan(ctx context.Context, runner ai.ToolRunner, seed graph.AssetSelect
 
 	res, err := resolver.ResolveAsset(rctx, seed, 1)
 	if err != nil || len(res.Candidates) == 0 {
-		return collect.Plan{Status: collect.StatusUnsupported, RequiresApproval: true,
-			Reason: fmt.Sprintf("%s %q is not in the database yet; enumerate a known domain for it, or collect "+
-				"organizations from this %s first, then plan again", seed.Type, seed.Value,
-				strings.ToLower(seed.Type))}, nil
+		// Cold: the seed is not in the database yet. Seed a passive resolution
+		// pass from the phone or address itself — its reverse collector
+		// resolves the organizations tied to it and their domains — so planning
+		// again afterward enumerates the domains found. The pass is passive
+		// whatever mode was asked: active enumeration waits for the re-plan,
+		// where the resolved domains are shown first.
+		rplan := collect.NewPlanWith(seed, collect.Passive, collect.Options{Expand: opts.Expand})
+		if rplan.Status != collect.StatusApprovalRequired {
+			return rplan, nil
+		}
+		rplan.Pivot = &collect.PivotSeed{SeedType: seed.Type, SeedValue: strings.TrimSpace(seed.Value)}
+		rplan.Effects = fmt.Sprintf("Resolves the organizations tied to this %s and collects their registered "+
+			"domains from data sources. No hosts are probed. When it finishes, plan again from the same %s to "+
+			"review the organizations and domains found and enumerate them.", strings.ToLower(seed.Type),
+			strings.ToLower(seed.Type))
+		return rplan, nil
 	}
 
 	resolution, err := lens.ResolveSeedPivot(rctx, runner.Graph, runner.Catalog, res.Candidates[0].Asset,

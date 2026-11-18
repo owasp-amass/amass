@@ -56,9 +56,24 @@ func pivotSeedDomains(cfg *config.Config, args *Args, out io.Writer) bool {
 
 	res, err := g.ResolveAsset(ctx, seed, 1)
 	if err != nil || len(res.Candidates) == 0 {
-		_, _ = afmt.Y.Fprintf(out, "%s %q is not in the database yet; enumerate a known domain for it, or "+
-			"collect organizations from this %s first\n", seed.Type, seed.Value, strings.ToLower(seed.Type))
-		return false
+		// Cold: the seed is not in the database yet. Seed a passive resolution
+		// pass from the phone or address itself; its reverse collector resolves
+		// the organizations tied to it and their domains. Re-run from the same
+		// seed afterward to enumerate the domains found.
+		kind := "phone"
+		if phone == "" {
+			kind = "address"
+		}
+		if phone != "" {
+			cfg.AddPhone(phone)
+		} else {
+			cfg.AddLocation(address)
+		}
+		cfg.Active, cfg.Passive = false, true
+		_, _ = afmt.Y.Fprintf(out, "%s %q is not in the database yet; running a passive resolution pass to find "+
+			"the organizations tied to it and their domains. Re-run with -%s afterward to enumerate them.\n",
+			seed.Type, seed.Value, kind)
+		return true
 	}
 
 	resolution, err := lens.ResolveSeedPivot(ctx, g, oamrepo.Catalog{}, res.Candidates[0].Asset, lens.LensLimits{})

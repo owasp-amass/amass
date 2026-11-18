@@ -291,9 +291,43 @@ func scopeOf(target graph.AssetSelector, mode Mode) (string, string, string) {
 		}
 
 		return "asn", fmt.Sprint(asn), ""
+	case target.Type == "Phone" && target.Field == "e164":
+		// A phone seed resolves the organizations tied to the number and their
+		// domains; it probes no hosts, so it is collected passively only.
+		if mode == Active {
+			return "", "", "a phone number resolves organizations and is collected passively; it cannot be an " +
+				"active target. Enumerate the resolved domains actively instead."
+		}
+		if countDigits(value) < 7 {
+			return "", "", "invalid phone number"
+		}
+
+		return "phone", value, ""
+	case target.Type == "Location" && target.Field == "address":
+		// Likewise an address resolves the organizations at it; passive only.
+		if mode == Active {
+			return "", "", "an address resolves organizations and is collected passively; it cannot be an " +
+				"active target. Enumerate the resolved domains actively instead."
+		}
+		if value == "" {
+			return "", "", "invalid address"
+		}
+
+		return "location", value, ""
 	}
 
 	return "", "", "this OAM selector has no approved direct enumeration adapter"
+}
+
+// countDigits returns how many decimal digits s contains.
+func countDigits(s string) int {
+	n := 0
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			n++
+		}
+	}
+	return n
 }
 
 // PlanID is the confirmation ID of a scope and mode. The passive form is
