@@ -4,7 +4,12 @@
 
 package lens
 
-import "github.com/owasp-amass/amass/v5/internal/graph"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/graph"
+)
 
 // A correlator is a Goal-2 detector that concludes two assets stand in some OAM
 // relationship — an organizational unit of a parent, the owner of a related
@@ -50,4 +55,27 @@ type RelationReport struct {
 	Candidates []RelationCandidate `json:"candidates"`
 	// Truncated names the limit that cut the search short, if any.
 	Truncated string `json:"truncated,omitempty"`
+}
+
+// FormatRelationReport renders a correlator's proposed relationships as text,
+// the same shape for every kind so a new correlator needs no formatter of its
+// own. It describes candidates only; nothing is written until a reviewer
+// accepts a proposal (amass review approve).
+func FormatRelationReport(r RelationReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s correlation", r.Kind)
+	if r.Truncated != "" {
+		fmt.Fprintf(&b, " (truncated: %s)", r.Truncated)
+	}
+	b.WriteString("\n")
+	if len(r.Candidates) == 0 {
+		b.WriteString("No candidate relationships found.\n")
+		return b.String()
+	}
+	for _, c := range r.Candidates {
+		fmt.Fprintf(&b, "  %s --%s--> %s (confidence %d): %s\n", c.From, c.Label, c.To, c.Confidence,
+			strings.Join(c.Signals, ", "))
+	}
+
+	return b.String()
 }

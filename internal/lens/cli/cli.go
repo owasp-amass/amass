@@ -29,19 +29,20 @@ import (
 // LensDescription, DBDescription and ReviewDescription describe the amass
 // lens, amass db and amass review commands.
 const (
-	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), exposed services, network infrastructure, dangling DNS, and recent changes"
-	DBDescription     = "Database hygiene: scan the whole Asset Database for records to correct — duplicate organizations, contradicted legal identities, and organizations that are really people — and record each fix as a review proposal"
-	ReviewDescription = "Review and apply inferred changes: ownership, merges of duplicates, identity corrections"
+	LensDescription   = "Read-only views of the Asset Database: organization families, corporate groups (org-group), vendors, vendors across a group (group-vendors), domains related to an organization (related-domains), exposed services, network infrastructure, dangling DNS, and recent changes"
+	DBDescription     = "Database hygiene: scan the whole Asset Database for records to correct — duplicate organizations, contradicted legal identities, organizations that are really people, and organizations that are units of a parent (org-units) — and record each fix as a review proposal"
+	ReviewDescription = "Review and apply inferred changes: ownership, merges of duplicates, identity corrections, and inferred relationships (org-units and other correlations)"
 )
 
 // lensOps are the amass lens views, by name, and the operation that runs
 // each. Lenses read the Asset Database; family also records its findings in
 // the review journal.
 var lensOps = map[string]string{
-	"family":        "family",
-	"org-group":     "org-group",
-	"group-vendors": "group-vendors",
-	"vendors":       "vendors",
+	"family":          "family",
+	"org-group":       "org-group",
+	"group-vendors":   "group-vendors",
+	"vendors":         "vendors",
+	"related-domains": "related-domains",
 }
 
 // dbOps are the amass db commands, by name, and the operation that runs each.
@@ -53,6 +54,7 @@ var dbOps = map[string]string{
 	"person-duplicates": "person-duplicates",
 	"identity":          "identity-conflicts",
 	"person-named":      "person-named",
+	"org-units":         "org-units",
 }
 
 // The registered subject lenses are amass lens commands too.
@@ -305,6 +307,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 			return approveMerge(ctx, g, journalPath, proposalID, reviewer, out)
 		case isAccountProposal(proposalID):
 			return approveAccount(ctx, repo, journalPath, proposalID, reviewer, out)
+		case isRelationProposal(proposalID):
+			return approveRelation(ctx, repo, journalPath, proposalID, reviewer, out)
 		}
 
 		return approveProposal(ctx, g, journalPath, proposalID, reviewer, out)
@@ -318,6 +322,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 			return retractMerge(ctx, g, journalPath, proposalID, reviewer, out)
 		case isAccountProposal(proposalID):
 			return retractAccount(ctx, repo, journalPath, proposalID, reviewer, out)
+		case isRelationProposal(proposalID):
+			return retractRelation(ctx, repo, journalPath, proposalID, reviewer, out)
 		}
 
 		return retractProposal(ctx, g, journalPath, proposalID, reviewer, out)
@@ -329,6 +335,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listIdentityConflicts(ctx, g, journalPath, format, true, out, errout)
 	case "person-named":
 		return listPersonNamed(ctx, g, journalPath, format, true, out, errout)
+	case "org-units":
+		return listOrgUnits(ctx, g, journalPath, format, true, out, errout)
 	case "vendors":
 		return listVendors(ctx, g, domainName, limits, format, true, out)
 	case "family":
@@ -337,6 +345,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listGroup(ctx, g, domainName, orgName, format, true, out)
 	case "group-vendors":
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
+	case "related-domains":
+		return listRelatedDomains(ctx, g, domainName, orgName, format, out)
 	case "accounts":
 		return listAccounts(ctx, g, domainName, orgName, journalPath, format, out, errout)
 	}

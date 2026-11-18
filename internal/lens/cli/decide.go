@@ -53,6 +53,10 @@ func Decide(ctx context.Context, g oamrepo.Adapter, journalPath, decision, id, r
 			err = approveIdentity(ctx, g, journalPath, id, reviewer, &out)
 		case isMergeProposal(id):
 			err = approveMerge(ctx, g, journalPath, id, reviewer, &out)
+		case isAccountProposal(id):
+			err = approveAccount(ctx, g.Repo, journalPath, id, reviewer, &out)
+		case isRelationProposal(id):
+			err = approveRelation(ctx, g.Repo, journalPath, id, reviewer, &out)
 		default:
 			err = approveProposal(ctx, g, journalPath, id, reviewer, &out)
 		}
@@ -64,6 +68,10 @@ func Decide(ctx context.Context, g oamrepo.Adapter, journalPath, decision, id, r
 			err = retractIdentity(ctx, g, journalPath, id, reviewer, &out)
 		case isMergeProposal(id):
 			err = retractMerge(ctx, g, journalPath, id, reviewer, &out)
+		case isAccountProposal(id):
+			err = retractAccount(ctx, g.Repo, journalPath, id, reviewer, &out)
+		case isRelationProposal(id):
+			err = retractRelation(ctx, g.Repo, journalPath, id, reviewer, &out)
 		default:
 			err = retractProposal(ctx, g, journalPath, id, reviewer, &out)
 		}

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -273,6 +274,66 @@ func (j *Journal) AppliedRelation(id string) (RelationProposal, string, error) {
 	}
 
 	return p, edgeID, nil
+}
+
+// RelationEntry is a relation proposal paired with its latest status, for
+// listing proposals in the CLI and over MCP.
+type RelationEntry struct {
+	Proposal RelationProposal `json:"proposal"`
+	Status   string           `json:"status"`
+}
+
+// RelationEntries returns the journal's relation proposals and their latest
+// status, pending first and then by descending confidence, so review surfaces
+// the strongest undecided proposals first. An empty kind returns every
+// correlator's proposals.
+func (j *Journal) RelationEntries(kind string) ([]RelationEntry, error) {
+	proposals, status, err := j.relationRecords(kind)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]RelationEntry, 0, len(proposals))
+	for id, p := range proposals {
+		out = append(out, RelationEntry{Proposal: p, Status: status[id]})
+	}
+
+	sort.Slice(out, func(a, b int) bool {
+		pa, pb := out[a].Status == ProposalPending, out[b].Status == ProposalPending
+		if pa != pb {
+			return pa
+		}
+		if out[a].Proposal.Confidence != out[b].Proposal.Confidence {
+			return out[a].Proposal.Confidence > out[b].Proposal.Confidence
+		}
+
+		return out[a].Proposal.ID < out[b].Proposal.ID
+	})
+
+	return out, nil
+}
+
+// FormatRelationEntries renders relation proposals for review, the same shape
+// for every correlator kind.
+func FormatRelationEntries(entries []RelationEntry) string {
+	if len(entries) == 0 {
+		return "No relationship proposals in the journal."
+	}
+
+	var b strings.Builder
+	for _, e := range entries {
+		p := e.Proposal
+		fmt.Fprintf(&b, "%s [%s, %s] %s --%s--> %s (confidence %d)\n", p.ID, e.Status, p.Kind, p.From, p.Label,
+			p.To, p.Confidence)
+		if len(p.Signals) > 0 {
+			fmt.Fprintf(&b, "  signals: %s\n", strings.Join(p.Signals, "; "))
+		}
+		for _, ev := range p.EvidenceIDs {
+			fmt.Fprintf(&b, "    %s\n", ev)
+		}
+	}
+
+	return b.String()
 }
 
 // RelationApplier writes the edge an accepted relation proposal creates.

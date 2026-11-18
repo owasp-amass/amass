@@ -41,6 +41,11 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 	if err != nil {
 		return err
 	}
+
+	relations, err := j.RelationEntries("")
+	if err != nil {
+		return err
+	}
 	// Text unless JSON is asked for: -format defaults to json for search.
 	if explicit && format == "json" {
 		return writeJSON(out, struct {
@@ -48,7 +53,8 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 			Merges      []review.DuplicateEntry   `json:"merges"`
 			Identities  []review.IdentityEntry    `json:"identities"`
 			PersonNamed []review.PersonNamedEntry `json:"person_named"`
-		}{entries, merges, identities, people})
+			Relations   []review.RelationEntry    `json:"relations"`
+		}{entries, merges, identities, people, relations})
 	}
 
 	_, err = fmt.Fprintln(out, review.FormatOwnershipEntries(entries))
@@ -61,6 +67,9 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 	if err == nil && len(people) > 0 {
 		_, err = fmt.Fprint(out, "\nOrganizations recorded under a person's name:\n\n"+
 			review.FormatPersonNamedEntries(people))
+	}
+	if err == nil && len(relations) > 0 {
+		_, err = fmt.Fprint(out, "\nRelationship proposals:\n\n"+review.FormatRelationEntries(relations))
 	}
 	return err
 }
@@ -91,13 +100,18 @@ func pendingProposals(journalPath string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	relations, err := j.RelationEntries("")
+	if err != nil {
+		return err
+	}
 
 	entries = filterPendingOwnership(entries)
 	merges = filterPendingDuplicate(merges)
 	identities = filterPendingIdentity(identities)
 	people = filterPendingPersonNamed(people)
+	relations = filterPendingRelation(relations)
 
-	total := len(entries) + len(merges) + len(identities) + len(people)
+	total := len(entries) + len(merges) + len(identities) + len(people) + len(relations)
 	if total == 0 {
 		_, err = fmt.Fprintln(out, "No proposals are awaiting review.")
 		return err
@@ -117,6 +131,9 @@ func pendingProposals(journalPath string, out io.Writer) error {
 		_, err = fmt.Fprint(out, "\nOrganizations recorded under a person's name:\n\n"+
 			review.FormatPersonNamedEntries(people))
 	}
+	if err == nil && len(relations) > 0 {
+		_, err = fmt.Fprint(out, "\nRelationship proposals:\n\n"+review.FormatRelationEntries(relations))
+	}
 	return err
 }
 
@@ -130,6 +147,7 @@ type PendingSummary struct {
 	Merges      int `json:"merges"`
 	Identities  int `json:"identities"`
 	PersonNamed int `json:"person_named"`
+	Relations   int `json:"relations"`
 	Total       int `json:"total"`
 }
 
@@ -159,12 +177,17 @@ func PendingProposalsSummary(journalPath string) (PendingSummary, error) {
 	if err != nil {
 		return s, err
 	}
+	relations, err := j.RelationEntries("")
+	if err != nil {
+		return s, err
+	}
 
 	s.Ownership = len(filterPendingOwnership(entries))
 	s.Merges = len(filterPendingDuplicate(merges))
 	s.Identities = len(filterPendingIdentity(identities))
 	s.PersonNamed = len(filterPendingPersonNamed(people))
-	s.Total = s.Ownership + s.Merges + s.Identities + s.PersonNamed
+	s.Relations = len(filterPendingRelation(relations))
+	s.Total = s.Ownership + s.Merges + s.Identities + s.PersonNamed + s.Relations
 	return s, nil
 }
 
@@ -192,6 +215,10 @@ func (s PendingSummary) Line() string {
 	if s.Ownership > 0 {
 		parts = append(parts, fmt.Sprintf("%d ownership %s", s.Ownership,
 			plural(s.Ownership, "relationship", "relationships")))
+	}
+	if s.Relations > 0 {
+		parts = append(parts, fmt.Sprintf("%d inferred %s", s.Relations,
+			plural(s.Relations, "relationship", "relationships")))
 	}
 
 	return fmt.Sprintf("%d proposal(s) awaiting review: %s — review with 'amass review proposals'",
@@ -237,6 +264,16 @@ func filterPendingIdentity(in []review.IdentityEntry) []review.IdentityEntry {
 }
 
 func filterPendingPersonNamed(in []review.PersonNamedEntry) []review.PersonNamedEntry {
+	out := in[:0:0]
+	for _, e := range in {
+		if e.Status == review.ProposalPending {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func filterPendingRelation(in []review.RelationEntry) []review.RelationEntry {
 	out := in[:0:0]
 	for _, e := range in {
 		if e.Status == review.ProposalPending {
