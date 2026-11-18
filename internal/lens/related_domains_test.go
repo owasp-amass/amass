@@ -54,6 +54,13 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 	link("cert1", "fq_www_acme_com", "common_name")
 	link("cert1", "fq_acme_io", "san_dns_name")
 
+	// Name-server signal: acme.com's own name server also serves acme-labs.org,
+	// a domain not otherwise tied to the org.
+	fqdn("ns_acme", "ns1.acme-dns.com")
+	link("dr1", "ns_acme", "name_server")
+	domainRec("dr4", "acme-labs.org")
+	link("dr4", "ns_acme", "name_server")
+
 	// A privacy-proxy "organization" shared by an unrelated domain: never
 	// correlated on.
 	org("proxy", "Domains By Proxy, LLC")
@@ -76,7 +83,7 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	for _, d := range r.Domains {
 		got[d.Domain] = d
 	}
-	for _, want := range []string{"acme.com", "acme.net", "acme.io"} {
+	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org"} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("missing related domain %q; got %+v", want, r.Domains)
 		}
@@ -85,9 +92,13 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	if d := got["acme.io"]; len(d.Witness) == 0 || d.Confidence != relatedCertConfidence {
 		t.Errorf("acme.io should carry the cert signal: %+v", d)
 	}
-	// acme.com is found by both registrant and certificate: two signals.
-	if d := got["acme.com"]; len(d.Signals) != 2 {
-		t.Errorf("acme.com should have both registrant and cert signals: %+v", d)
+	// acme-labs.org comes only from the shared-name-server signal.
+	if d := got["acme-labs.org"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme-labs.org should come from the name-server signal: %+v", d)
+	}
+	// acme.com is found by all three signals.
+	if d := got["acme.com"]; len(d.Signals) != 3 {
+		t.Errorf("acme.com should have registrant, cert and name-server signals: %+v", d)
 	}
 }
 

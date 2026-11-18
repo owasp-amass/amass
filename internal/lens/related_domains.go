@@ -29,12 +29,14 @@ import (
 //     registrant contact names the same organization;
 //   - shared certificate subject organization: a TLS certificate whose subject
 //     contact names the organization, and the apex domains it covers (its
-//     common name and DNS SANs), skipping a shared/CDN certificate that covers
-//     many unrelated apexes.
+//     common name and DNS SANs), skipping a shared/CDN certificate;
+//   - shared name server: another domain served by the same name server as one
+//     of the organization's own domains, skipping a shared/provider name server.
 //
 // A WHOIS privacy proxy or a placeholder organization is shared by many
-// unrelated domains, so such a subject is never correlated on. Further signals
-// (shared name servers, MX, dedicated IP) extend the same accumulation.
+// unrelated domains, so such a subject is never correlated on. A certificate or
+// name server shared by more than a cap of distinct apexes is provider/CDN
+// infrastructure, not shared ownership, and is skipped.
 
 const (
 	// relatedMaxContacts bounds the contact records read for one organization.
@@ -43,14 +45,17 @@ const (
 	relatedMaxCerts = 500
 	// relatedMaxDomains bounds the domains one search returns.
 	relatedMaxDomains = 2000
-	// certMaxApexes skips a certificate that covers more distinct apex domains
-	// than this: a shared or CDN certificate spanning many tenants is not
-	// evidence that those tenants share an owner (principle 8).
+	// certMaxApexes / nsMaxApexes skip a certificate or name server covering
+	// more distinct apex domains than this: shared or CDN/provider
+	// infrastructure spanning many tenants is not evidence of shared ownership
+	// (principle 8).
 	certMaxApexes = 25
-	// relatedRegistrantConfidence and relatedCertConfidence weight the two
-	// signals: real evidence, but a human confirms before scope grows.
+	nsMaxApexes   = 25
+	// The signal confidences: real evidence, but a human confirms before scope
+	// grows.
 	relatedRegistrantConfidence = 70
 	relatedCertConfidence       = 75
+	relatedNSConfidence         = 65
 )
 
 // HorizontalDomain is a registered (apex) domain a horizontal signal ties to
@@ -69,6 +74,12 @@ type RelatedDomainsReport struct {
 	Org       string             `json:"org"`
 	Domains   []HorizontalDomain `json:"domains"`
 	Truncated string             `json:"truncated,omitempty"`
+}
+
+// nsSibling is a domain record sharing a name server with the subject's own.
+type nsSibling struct {
+	apex string
+	edge graph.Relation
 }
 
 // FindRelatedDomains finds the registered domains the horizontal signals tie to
@@ -129,6 +140,10 @@ func FindRelatedDomains(ctx context.Context, g graph.Graph, orgID string) (Relat
 			FromID: ce.FromID, FromType: "ContactRecord", ToID: ce.ToID, ToType: "Organization", To: name}
 	}
 
+	// ownDRs are the DomainRecords registered to this organization, the anchors
+	// for the shared-name-server pivot.
+	var ownDRs []string
+
 contacts:
 	for i, ce := range contacts {
 		if i >= relatedMaxContacts {
@@ -146,6 +161,7 @@ contacts:
 			if err != nil {
 				continue
 			}
+			ownDRs = append(ownDRs, de.FromID)
 			w := graph.WitnessEdge{EdgeID: de.ID, Label: "registrant_contact", RelationType: de.Type,
 				FromID: de.FromID, FromType: "DomainRecord", ToID: de.ToID, ToType: "ContactRecord"}
 			if !add(graph.ContentString(dr, "domain"), relatedRegistrantConfidence, registrantSig, w, orgWitness(ce)) {
@@ -174,6 +190,55 @@ contacts:
 					FromID: fq.FromID, FromType: "TLSCertificate", ToID: fq.ToID, ToType: "FQDN", To: apex}
 				if !add(apex, relatedCertConfidence, certSig, certW, orgWitness(ce), sanW) {
 					break contacts
+				}
+			}
+		}
+	}
+
+	// Shared name server: domains served by the same non-provider name server
+	// as one of the organization's own domains.
+	seenNS := map[string]bool{}
+nsPivot:
+	for _, drID := range ownDRs {
+		nsEdges, err := g.Edges(ctx, drID, "out", "name_server", time.Time{})
+		if err != nil {
+			continue
+		}
+		for _, nse := range nsEdges {
+			if seenNS[nse.ToID] {
+				continue
+			}
+			seenNS[nse.ToID] = true
+
+			others, err := g.Edges(ctx, nse.ToID, "in", "name_server", time.Time{})
+			if err != nil {
+				continue
+			}
+			apexSet := map[string]bool{}
+			var sibs []nsSibling
+			for _, oe := range others {
+				odr, err := g.GetAsset(ctx, oe.FromID)
+				if err != nil {
+					continue
+				}
+				apex := strings.ToLower(strings.TrimSpace(graph.ContentString(odr, "domain")))
+				if apex == "" {
+					continue
+				}
+				apexSet[apex] = true
+				sibs = append(sibs, nsSibling{apex: apex, edge: oe})
+			}
+			if len(apexSet) > nsMaxApexes {
+				continue // a shared or provider name server
+			}
+
+			nsW := graph.WitnessEdge{EdgeID: nse.ID, Label: "name_server", RelationType: nse.Type,
+				FromID: nse.FromID, FromType: "DomainRecord", ToID: nse.ToID, ToType: "FQDN"}
+			for _, s := range sibs {
+				sibW := graph.WitnessEdge{EdgeID: s.edge.ID, Label: "name_server", RelationType: s.edge.Type,
+					FromID: s.edge.FromID, FromType: "DomainRecord", ToID: s.edge.ToID, ToType: "FQDN"}
+				if !add(s.apex, relatedNSConfidence, "shared name server", nsW, sibW) {
+					break nsPivot
 				}
 			}
 		}
