@@ -704,7 +704,8 @@ func enumerationPlan(ctx context.Context, runner ai.ToolRunner, target, phone, a
 func pivotSelector(phone, address string) (graph.AssetSelector, bool) {
 	switch {
 	case strings.TrimSpace(phone) != "":
-		return graph.AssetSelector{Type: "Phone", Field: "e164", Value: strings.TrimSpace(phone)}, true
+		// Normalize to E.164 so the warm lookup matches the stored Phone.
+		return graph.AssetSelector{Type: "Phone", Field: "e164", Value: collect.NormalizePhone(phone)}, true
 	case strings.TrimSpace(address) != "":
 		return graph.AssetSelector{Type: "Location", Field: "address", Value: strings.TrimSpace(address)}, true
 	}

@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nyaruka/phonenumbers"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
@@ -298,11 +299,14 @@ func scopeOf(target graph.AssetSelector, mode Mode) (string, string, string) {
 			return "", "", "a phone number resolves organizations and is collected passively; it cannot be an " +
 				"active target. Enumerate the resolved domains actively instead."
 		}
-		if countDigits(value) < 7 {
+		// Normalize to E.164 so the seed matches the stored Phone, whose key is
+		// its E.164 form, and so the reverse lookup's digit match is reliable.
+		e164 := NormalizePhone(value)
+		if countDigits(e164) < 7 {
 			return "", "", "invalid phone number"
 		}
 
-		return "phone", value, ""
+		return "phone", e164, ""
 	case target.Type == "Location" && target.Field == "address":
 		// Likewise an address resolves the organizations at it; passive only.
 		if mode == Active {
@@ -317,6 +321,20 @@ func scopeOf(target graph.AssetSelector, mode Mode) (string, string, string) {
 	}
 
 	return "", "", "this OAM selector has no approved direct enumeration adapter"
+}
+
+// NormalizePhone returns raw as an E.164 number when it parses as a valid
+// number, so a phone seed a user types in any format ("+1 315-228-1000",
+// "+13152281000") matches the stored Phone, whose key is its E.164 form. A
+// number that cannot be parsed to E.164 — for example a bare national number
+// with no country code — is returned trimmed and unchanged, so an exact stored
+// value can still match.
+func NormalizePhone(raw string) string {
+	s := strings.TrimSpace(raw)
+	if num, err := phonenumbers.Parse(s, ""); err == nil && phonenumbers.IsValidNumber(num) {
+		return phonenumbers.Format(num, phonenumbers.E164)
+	}
+	return s
 }
 
 // countDigits returns how many decimal digits s contains.

@@ -55,6 +55,27 @@ func TestPlansBindScopeAndMode(t *testing.T) {
 	}
 }
 
+func TestNormalizePhoneToE164(t *testing.T) {
+	// A formatted number with a country code normalizes to E.164.
+	for _, in := range []string{"+1 315-228-1000", "+1 (315) 228-1000", "+13152281000"} {
+		if got := NormalizePhone(in); got != "+13152281000" {
+			t.Errorf("NormalizePhone(%q) = %q, want +13152281000", in, got)
+		}
+	}
+	// A number that cannot be parsed to E.164 is returned trimmed, unchanged,
+	// so an exact stored value can still match.
+	if got := NormalizePhone("  3152281000  "); got != "3152281000" {
+		t.Errorf("NormalizePhone of a bare national number = %q, want 3152281000", got)
+	}
+}
+
+func TestPhoneSeedScopeValueIsNormalized(t *testing.T) {
+	p := NewPlan(graph.AssetSelector{Type: "Phone", Field: "e164", Value: "+1 315-228-1000"}, Passive)
+	if p.Status != StatusApprovalRequired || p.ScopeValue != "+13152281000" {
+		t.Errorf("phone plan scope value = %q (status %s), want normalized E.164", p.ScopeValue, p.Status)
+	}
+}
+
 func TestPhoneAndLocationSeedsArePassiveOnly(t *testing.T) {
 	phone := graph.AssetSelector{Type: "Phone", Field: "e164", Value: "+1 315 228 1000"}
 	addr := graph.AssetSelector{Type: "Location", Field: "address", Value: "1 Campus Road, Hamilton NY"}

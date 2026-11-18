@@ -12,6 +12,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
+	"github.com/owasp-amass/amass/v5/internal/collect"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
 	"github.com/owasp-amass/amass/v5/internal/lens"
@@ -36,6 +37,11 @@ func pivotSeedDomains(cfg *config.Config, args *Args, out io.Writer) bool {
 	if phone != "" && address != "" {
 		_, _ = afmt.R.Fprintln(out, "Give only one of -phone or -address")
 		return false
+	}
+	// Normalize the phone to E.164 so it matches the stored Phone and seeds
+	// the reverse lookup in a reliable form.
+	if phone != "" {
+		phone = collect.NormalizePhone(phone)
 	}
 
 	seed := graph.AssetSelector{Type: "Location", Field: "address", Value: address}

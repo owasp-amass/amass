@@ -73,6 +73,14 @@ func (h *reverse) checkAddress(e *et.Event) error {
 	if !ok {
 		return errors.New("failed to extract the Location asset")
 	}
+	// A seeded freeform address (e.g. from a phone/address pivot) may carry only
+	// the Address string with no parsed components. Parse it so the reverse
+	// query can key on the street and house number.
+	if strings.TrimSpace(loc.StreetName) == "" && strings.TrimSpace(loc.Address) != "" {
+		if parsed := support.StreetAddressToLocation(loc.Address); parsed != nil && parsed.StreetName != "" {
+			loc = parsed
+		}
+	}
 	if strings.TrimSpace(loc.StreetName) == "" {
 		return nil
 	}
