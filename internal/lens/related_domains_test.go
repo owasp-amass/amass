@@ -61,6 +61,14 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 	domainRec("dr4", "acme-labs.org")
 	link("dr4", "ns_acme", "name_server")
 
+	// Official-website signal: the org publishes acme.org as its website
+	// (Organization --website--> URL --domain--> FQDN).
+	g.Assets["url_acme_org"] = graph.Asset{ID: "url_acme_org", Type: "URL", Key: "https://acme.org",
+		Content: map[string]any{"url": "https://acme.org"}}
+	link("acme", "url_acme_org", "website")
+	fqdn("fq_acme_org", "acme.org")
+	link("url_acme_org", "fq_acme_org", "domain")
+
 	// A privacy-proxy "organization" shared by an unrelated domain: never
 	// correlated on.
 	org("proxy", "Domains By Proxy, LLC")
@@ -83,10 +91,14 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	for _, d := range r.Domains {
 		got[d.Domain] = d
 	}
-	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org"} {
+	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org", "acme.org"} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("missing related domain %q; got %+v", want, r.Domains)
 		}
+	}
+	// acme.org comes only from the official-website signal.
+	if d := got["acme.org"]; d.Confidence != relatedWebsiteConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme.org should come from the official-website signal: %+v", d)
 	}
 	// acme.io comes only from the certificate signal.
 	if d := got["acme.io"]; len(d.Witness) == 0 || d.Confidence != relatedCertConfidence {

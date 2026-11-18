@@ -32,6 +32,8 @@ import (
 //     common name and DNS SANs), skipping a shared/CDN certificate;
 //   - shared name server: another domain served by the same name server as one
 //     of the organization's own domains, skipping a shared/provider name server.
+//   - official website: a domain the organization publishes as its own website
+//     (e.g. recorded by the Wikidata official-website collector).
 //
 // A WHOIS privacy proxy or a placeholder organization is shared by many
 // unrelated domains, so such a subject is never correlated on. A certificate or
@@ -56,6 +58,10 @@ const (
 	relatedRegistrantConfidence = 70
 	relatedCertConfidence       = 75
 	relatedNSConfidence         = 65
+	// relatedWebsiteConfidence is for a domain the organization publishes as
+	// its own website (e.g. Wikidata's official website) -- a strong, curated
+	// claim.
+	relatedWebsiteConfidence = 80
 )
 
 // HorizontalDomain is a registered (apex) domain a horizontal signal ties to
@@ -239,6 +245,32 @@ nsPivot:
 					FromID: s.edge.FromID, FromType: "DomainRecord", ToID: s.edge.ToID, ToType: "FQDN"}
 				if !add(s.apex, relatedNSConfidence, "shared name server", nsW, sibW) {
 					break nsPivot
+				}
+			}
+		}
+	}
+
+	// Official website: domains the organization publishes as its own site
+	// (Organization --website--> URL --domain--> FQDN).
+	if websites, err := g.Edges(ctx, orgID, "out", "website", time.Time{}); err == nil {
+	websiteLoop:
+		for _, we := range websites {
+			doms, err := g.Edges(ctx, we.ToID, "out", "domain", time.Time{})
+			if err != nil {
+				continue
+			}
+			for _, de := range doms {
+				fq, err := g.GetAsset(ctx, de.ToID)
+				if err != nil {
+					continue
+				}
+				apex := graph.RegisteredDomain(graph.FQDNName(fq))
+				webW := graph.WitnessEdge{EdgeID: we.ID, Label: "website", RelationType: we.Type,
+					FromID: we.FromID, FromType: "Organization", ToID: we.ToID, ToType: "URL"}
+				domW := graph.WitnessEdge{EdgeID: de.ID, Label: "domain", RelationType: de.Type,
+					FromID: de.FromID, FromType: "URL", ToID: de.ToID, ToType: "FQDN", To: apex}
+				if !add(apex, relatedWebsiteConfidence, "official website", webW, domW) {
+					break websiteLoop
 				}
 			}
 		}
