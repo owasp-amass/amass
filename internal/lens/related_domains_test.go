@@ -24,53 +24,70 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 	domainRec := func(id, domain string) {
 		g.Assets[id] = graph.Asset{ID: id, Type: "DomainRecord", Key: domain, Content: map[string]any{"domain": domain}}
 	}
-	// ContactRecord --organization--> Organization
-	names := func(cr, o string) {
-		g.Links = append(g.Links, graph.Relation{ID: "o" + cr + o, FromID: cr, ToID: o,
-			Label: "organization", Type: "SimpleRelation"})
+	fqdn := func(id, name string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
 	}
-	// DomainRecord --registrant_contact--> ContactRecord
-	registered := func(dr, cr string) {
-		g.Links = append(g.Links, graph.Relation{ID: "r" + dr + cr, FromID: dr, ToID: cr,
-			Label: "registrant_contact", Type: "SimpleRelation"})
+	cert := func(id string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "TLSCertificate", Key: id, Content: map[string]any{}}
+	}
+	link := func(from, to, label string) {
+		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
 	}
 
-	// A real organization with two apex domains registered through one contact.
+	// A real organization. Registrant signal: two apex domains registered
+	// through one contact.
 	org("acme", "Acme Corporation")
 	contact("cr1")
-	names("cr1", "acme")
+	link("cr1", "acme", "organization")
 	domainRec("dr1", "acme.com")
 	domainRec("dr2", "acme.net")
-	registered("dr1", "cr1")
-	registered("dr2", "cr1")
+	link("dr1", "cr1", "registrant_contact")
+	link("dr2", "cr1", "registrant_contact")
 
-	// A privacy-proxy "organization" shared by an unrelated domain: must not be
+	// Certificate signal: a cert whose subject contact names the org, covering
+	// acme.com (also found via registrant) and a new apex acme.io.
+	cert("cert1")
+	link("cert1", "cr1", "subject_contact")
+	fqdn("fq_www_acme_com", "www.acme.com")
+	fqdn("fq_acme_io", "acme.io")
+	link("cert1", "fq_www_acme_com", "common_name")
+	link("cert1", "fq_acme_io", "san_dns_name")
+
+	// A privacy-proxy "organization" shared by an unrelated domain: never
 	// correlated on.
 	org("proxy", "Domains By Proxy, LLC")
 	contact("cr2")
-	names("cr2", "proxy")
+	link("cr2", "proxy", "organization")
 	domainRec("dr3", "stranger.com")
-	registered("dr3", "cr2")
+	link("dr3", "cr2", "registrant_contact")
 
 	return g
 }
 
-func TestFindRelatedDomainsSharedRegistrant(t *testing.T) {
+func TestFindRelatedDomainsSignals(t *testing.T) {
 	g := relatedDomainsGraph()
 
 	r, err := FindRelatedDomains(context.Background(), g, "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Domains) != 2 {
-		t.Fatalf("domains = %+v, want acme.com and acme.net", r.Domains)
+	got := map[string]HorizontalDomain{}
+	for _, d := range r.Domains {
+		got[d.Domain] = d
 	}
-	if r.Domains[0].Domain != "acme.com" || r.Domains[1].Domain != "acme.net" {
-		t.Errorf("domains not sorted/complete: %+v", r.Domains)
+	for _, want := range []string{"acme.com", "acme.net", "acme.io"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("missing related domain %q; got %+v", want, r.Domains)
+		}
 	}
-	d := r.Domains[0]
-	if d.Confidence != relatedRegistrantConfidence || len(d.Signals) == 0 || len(d.Witness) != 2 {
-		t.Errorf("confidence/signals/witness not attached: %+v", d)
+	// acme.io comes only from the certificate signal.
+	if d := got["acme.io"]; len(d.Witness) == 0 || d.Confidence != relatedCertConfidence {
+		t.Errorf("acme.io should carry the cert signal: %+v", d)
+	}
+	// acme.com is found by both registrant and certificate: two signals.
+	if d := got["acme.com"]; len(d.Signals) != 2 {
+		t.Errorf("acme.com should have both registrant and cert signals: %+v", d)
 	}
 }
 
