@@ -115,32 +115,48 @@ func FindDuplicateOrganizations(ctx context.Context, g graph.Graph) (DuplicateRe
 	s.report.Organizations = len(s.profiles)
 
 	for _, pair := range s.pairs() {
-		a, b := s.profiles[pair[0]], s.profiles[pair[1]]
-		signals := pairSignals(a, b)
-		if len(signals) == 0 {
-			continue
+		if c, ok := s.candidate(s.profiles[pair[0]], s.profiles[pair[1]]); ok {
+			s.report.Candidates = append(s.report.Candidates, c)
 		}
-
-		score, decision := scoreSignals(signals, true, DuplicateSignal)
-		if !hasPositive(signals) {
-			continue
-		}
-		if decision == GapReview && hasStrength(signals, StrengthNegative) && !hasStrength(signals, StrengthStrong) {
-			// Supporting evidence such as a shared name does not outweigh
-			// evidence that the two are different companies.
-			decision = GapWeak
-		}
-		if decision == GapWeak && hasKind(signals, "name") && !hasStrength(signals, StrengthNegative) {
-			// A shared name with nothing against it is for a person to
-			// decide: never merged automatically, but not left unseen.
-			decision = GapReview
-		}
-
-		survivor, dup := chooseSurvivor(a, b)
-		s.report.Candidates = append(s.report.Candidates, DuplicateCandidate{Survivor: survivor.asset,
-			Duplicate: dup.asset, Signals: signals, Score: score, Decision: decision})
 	}
 
+	s.finalize()
+	return s.report, nil
+}
+
+// candidate scores one pair of organization profiles and returns the
+// duplicate candidate it warrants, or ok=false when the pair shares no
+// positive signal. The same scoring serves the whole-database sweep and the
+// per-organization comparison.
+func (s *dupSearch) candidate(a, b *orgProfile) (DuplicateCandidate, bool) {
+	signals := pairSignals(a, b)
+	if len(signals) == 0 {
+		return DuplicateCandidate{}, false
+	}
+
+	score, decision := scoreSignals(signals, true, DuplicateSignal)
+	if !hasPositive(signals) {
+		return DuplicateCandidate{}, false
+	}
+	if decision == GapReview && hasStrength(signals, StrengthNegative) && !hasStrength(signals, StrengthStrong) {
+		// Supporting evidence such as a shared name does not outweigh
+		// evidence that the two are different companies.
+		decision = GapWeak
+	}
+	if decision == GapWeak && hasKind(signals, "name") && !hasStrength(signals, StrengthNegative) {
+		// A shared name with nothing against it is for a person to
+		// decide: never merged automatically, but not left unseen.
+		decision = GapReview
+	}
+
+	survivor, dup := chooseSurvivor(a, b)
+	return DuplicateCandidate{Survivor: survivor.asset, Duplicate: dup.asset,
+		Signals: signals, Score: score, Decision: decision}, true
+}
+
+// finalize groups the collected candidates into one survivor per cluster and
+// sorts them, strongest first.
+func (s *dupSearch) finalize() {
 	s.report.Candidates = s.groupCandidates(s.report.Candidates)
 	sort.SliceStable(s.report.Candidates, func(i, j int) bool {
 		ci, cj := s.report.Candidates[i], s.report.Candidates[j]
@@ -153,7 +169,66 @@ func FindDuplicateOrganizations(ctx context.Context, g graph.Graph) (DuplicateRe
 
 		return ci.Survivor.ID+ci.Duplicate.ID < cj.Survivor.ID+cj.Duplicate.ID
 	})
+}
 
+// CompareOrganization scores the organization orgID against a bounded set of
+// candidate organizations — the others that share an identifier, phone or
+// address with it — and returns the duplicate candidates they warrant, with
+// the same signals and scoring as the whole-database sweep. The caller
+// supplies the candidates, so the comparison is bounded and needs no full
+// scan. Read-only.
+func CompareOrganization(ctx context.Context, g graph.Graph, orgID string, candidateIDs []string) (DuplicateReport, error) {
+	s := &dupSearch{ctx: ctx, graph: g, profiles: map[string]*orgProfile{}}
+
+	subject, err := g.GetAsset(ctx, orgID)
+	if err != nil {
+		return s.report, err
+	}
+
+	sp, err := s.profile(subject)
+	if err != nil {
+		return s.report, err
+	}
+	s.profiles[orgID] = sp
+
+	for _, id := range candidateIDs {
+		if id == orgID {
+			continue
+		}
+		if _, done := s.profiles[id]; done {
+			continue
+		}
+
+		a, err := g.GetAsset(ctx, id)
+		if err != nil {
+			continue
+		}
+		if graph.IsPlaceholder(a) || semantics.IsPlaceholderOrganization(graph.ContentString(a, "name")) {
+			continue
+		}
+
+		p, err := s.profile(a)
+		if errors.Is(err, errDupReadLimit) {
+			s.truncate(err.Error())
+			break
+		} else if err != nil {
+			continue
+		}
+		s.profiles[id] = p
+	}
+
+	s.report.Organizations = len(s.profiles)
+	for _, id := range candidateIDs {
+		cand, ok := s.profiles[id]
+		if !ok || id == orgID {
+			continue
+		}
+		if c, ok := s.candidate(sp, cand); ok {
+			s.report.Candidates = append(s.report.Candidates, c)
+		}
+	}
+
+	s.finalize()
 	return s.report, nil
 }
 
