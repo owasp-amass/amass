@@ -128,7 +128,8 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 	}
 
 	mode, path, err := sess.Config().AIAttribution(p.lookup)
-	t := &tracker{p: p, sess: sess, mode: mode, orgs: map[string]*dbt.Entity{}}
+	t := &tracker{p: p, sess: sess, mode: mode, orgs: map[string]*dbt.Entity{},
+		allOrgs: map[string]*dbt.Entity{}}
 	switch {
 	case err != nil:
 		sess.Log().Error(fmt.Sprintf("AI attribution is off: %v", err))
@@ -170,8 +171,14 @@ type tracker struct {
 	// model is the ownership model trained from review decisions, if any.
 	model *classify.LinearModel
 
-	mu      sync.Mutex
-	orgs    map[string]*dbt.Entity
+	mu sync.Mutex
+	// orgs are the in-scope organizations this session touched; they seed the
+	// ownership-attribution pass.
+	orgs map[string]*dbt.Entity
+	// allOrgs are every organization this session touched, in scope or not;
+	// they seed the duplicate search, since the enumeration created or
+	// re-touched them and so their duplicates are ours to raise.
+	allOrgs map[string]*dbt.Entity
 	gen     uint64
 	pending bool
 	first   time.Time
@@ -200,6 +207,11 @@ func (t *tracker) touch(ent *dbt.Entity) {
 	defer t.mu.Unlock()
 
 	if ent.Asset.AssetType() == oam.Organization {
+		// Seed the duplicate search from every organization the session
+		// touches, in scope or not: the enumeration caused the write, so its
+		// duplicates are ours to raise. Scope still gates ownership
+		// attribution below, which is about the target's own organizations.
+		t.allOrgs[ent.ID] = ent
 		if _, conf := t.sess.Scope().IsAssetInScope(ent.Asset, 0); conf > 0 {
 			t.orgs[ent.ID] = ent
 		}

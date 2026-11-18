@@ -206,9 +206,10 @@ func (t *tracker) mergeDuplicates(write bool) {
 	}
 }
 
-// duplicateReport compares the organizations this enumeration touched against
-// one another and against the others that share a name, identifier, phone or
-// address with one of them, and returns the duplicate candidates. It drives
+// duplicateReport compares the organizations this enumeration touched — in
+// scope or not, since the run created or re-touched them — against one another
+// and against the others that share a name, identifier, phone or address with
+// one of them, and returns the duplicate candidates. It drives
 // the comparison from the touched organizations and bounded reverse lookups
 // rather than a whole-database scan, so its cost tracks the enumeration's own
 // size: a session that brings in a handful of organizations reads a handful of
@@ -219,8 +220,8 @@ func (t *tracker) mergeDuplicates(write bool) {
 // bucket and keeping the candidate set bounded.
 func (t *tracker) duplicateReport(ctx context.Context, adapter oamrepo.Adapter) (lens.DuplicateReport, error) {
 	t.mu.Lock()
-	touched := make([]*dbt.Entity, 0, len(t.orgs))
-	for _, o := range t.orgs {
+	touched := make([]*dbt.Entity, 0, len(t.allOrgs))
+	for _, o := range t.allOrgs {
 		touched = append(touched, o)
 	}
 	t.mu.Unlock()
