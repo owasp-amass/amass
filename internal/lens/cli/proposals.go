@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/owasp-amass/amass/v5/internal/lens"
 	"github.com/owasp-amass/amass/v5/internal/review"
@@ -117,6 +118,92 @@ func pendingProposals(journalPath string, out io.Writer) error {
 			review.FormatPersonNamedEntries(people))
 	}
 	return err
+}
+
+// PendingSummary counts the proposals in a journal that are still awaiting a
+// decision, grouped by kind. It lets a finished enumeration, or any client
+// polling a run, tell the user how many proposals are waiting and of what kind
+// without their having to run `amass review proposals` — closing the gap where
+// proposals surfaced only to someone who knew to look.
+type PendingSummary struct {
+	Ownership   int `json:"ownership"`
+	Merges      int `json:"merges"`
+	Identities  int `json:"identities"`
+	PersonNamed int `json:"person_named"`
+	Total       int `json:"total"`
+}
+
+// PendingProposalsSummary counts, by kind, the journal's proposals that are
+// still awaiting a decision. It reads the same journal `amass review` reads, so
+// its counts match what a review session would show.
+func PendingProposalsSummary(journalPath string) (PendingSummary, error) {
+	var s PendingSummary
+	if journalPath == "" {
+		return s, errors.New("-journal required")
+	}
+
+	j := &review.Journal{Path: journalPath}
+	entries, err := j.OwnershipEntries()
+	if err != nil {
+		return s, err
+	}
+	merges, err := j.DuplicateEntries()
+	if err != nil {
+		return s, err
+	}
+	identities, err := j.IdentityEntries()
+	if err != nil {
+		return s, err
+	}
+	people, err := j.PersonNamedEntries()
+	if err != nil {
+		return s, err
+	}
+
+	s.Ownership = len(filterPendingOwnership(entries))
+	s.Merges = len(filterPendingDuplicate(merges))
+	s.Identities = len(filterPendingIdentity(identities))
+	s.PersonNamed = len(filterPendingPersonNamed(people))
+	s.Total = s.Ownership + s.Merges + s.Identities + s.PersonNamed
+	return s, nil
+}
+
+// Line renders the summary as a single sentence that names the counts by kind
+// and points at the review command, or "" when nothing is pending (so a caller
+// can print it only when there is something to say).
+func (s PendingSummary) Line() string {
+	if s.Total == 0 {
+		return ""
+	}
+
+	var parts []string
+	if s.Merges > 0 {
+		parts = append(parts, fmt.Sprintf("%d possible duplicate %s", s.Merges,
+			plural(s.Merges, "organization", "organizations")))
+	}
+	if s.Identities > 0 {
+		parts = append(parts, fmt.Sprintf("%d identity %s", s.Identities,
+			plural(s.Identities, "correction", "corrections")))
+	}
+	if s.PersonNamed > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s recorded under a person's name", s.PersonNamed,
+			plural(s.PersonNamed, "organization", "organizations")))
+	}
+	if s.Ownership > 0 {
+		parts = append(parts, fmt.Sprintf("%d ownership %s", s.Ownership,
+			plural(s.Ownership, "relationship", "relationships")))
+	}
+
+	return fmt.Sprintf("%d proposal(s) awaiting review: %s — review with 'amass review proposals'",
+		s.Total, strings.Join(parts, ", "))
+}
+
+// plural picks the singular or plural noun for n.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func filterPendingOwnership(in []review.OwnershipEntry) []review.OwnershipEntry {

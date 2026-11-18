@@ -138,6 +138,42 @@ func TestPendingProposalsListsOnlyAwaitingDecision(t *testing.T) {
 	}
 }
 
+func TestPendingProposalsSummaryCountsByKind(t *testing.T) {
+	path, p := journalWithProposal(t)
+
+	s, err := PendingProposalsSummary(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Ownership != 1 || s.Total != 1 {
+		t.Errorf("summary = %+v, want one pending ownership proposal", s)
+	}
+
+	line := s.Line()
+	for _, want := range []string{"1 proposal(s) awaiting review", "1 ownership relationship",
+		"amass review proposals"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("summary line %q omits %q", line, want)
+		}
+	}
+
+	// A decided proposal leaves nothing pending, so the summary is empty and
+	// its line says nothing for a caller to print.
+	if err := rejectProposal(path, p.ID, "jeff", &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	s, err = PendingProposalsSummary(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Total != 0 {
+		t.Errorf("summary = %+v, want nothing pending after a decision", s)
+	}
+	if s.Line() != "" {
+		t.Errorf("empty summary still produced a line: %q", s.Line())
+	}
+}
+
 func TestSignalsExplainEachRule(t *testing.T) {
 	var out bytes.Buffer
 	if err := listSignals("json", false, &out); err != nil {

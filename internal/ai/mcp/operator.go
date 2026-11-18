@@ -256,6 +256,15 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			if run.Finished() && runner.Graph != nil {
 				out["found"] = foundSince(ctx, runner, run)
 			}
+			// Surface the proposals the run left waiting, so the assistant can
+			// present them for review without the user knowing to ask. The
+			// attribution pass holds the session open until it has recorded
+			// them, so a finished run's journal already reflects it.
+			if run.Finished() && op.Journal != "" {
+				if s, err := lenscli.PendingProposalsSummary(op.Journal); err == nil && s.Total > 0 {
+					out["pending_proposals"] = s
+				}
+			}
 
 			return jsonResult(out), nil
 		})

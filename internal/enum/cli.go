@@ -22,6 +22,7 @@ import (
 	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
+	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
 	"github.com/owasp-amass/amass/v5/internal/tools"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -336,6 +337,30 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		progress.Finish()
 		fmt.Printf("\nSession Scope\n")
 		printScope(c, token)
+		printPendingProposals(cfg)
+	}
+}
+
+// printPendingProposals tells the user, at the end of an enumeration, how many
+// review proposals the run left waiting and of what kind, so the proposals
+// surface on their own instead of only to someone who runs `amass review`. It
+// reads the same journal the engine writes and `amass review` reads; the
+// attribution pass holds the session open until it has recorded its proposals,
+// so by the time the run is reported finished the journal already reflects it.
+// It stays quiet when attribution is off, nothing is pending, or the journal
+// is not reachable from here, so it never adds noise or an error to a run.
+func printPendingProposals(cfg *config.Config) {
+	mode, journal, err := cfg.AIAttribution(os.LookupEnv)
+	if err != nil || mode == config.AttributionOff || journal == "" {
+		return
+	}
+
+	summary, err := lenscli.PendingProposalsSummary(journal)
+	if err != nil {
+		return
+	}
+	if line := summary.Line(); line != "" {
+		_, _ = afmt.G.Fprintf(color.Error, "\n%s\n", line)
 	}
 }
 
