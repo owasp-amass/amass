@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
+	orgsupport "github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
 	"github.com/owasp-amass/amass/v5/internal/lens"
 	"github.com/owasp-amass/amass/v5/internal/review"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 const (
@@ -143,7 +146,7 @@ func (t *tracker) mergeDuplicates(write bool) {
 		t.recheck(ctx, adapter)
 	}
 
-	report, err := lens.FindDuplicateOrganizations(ctx, adapter)
+	report, err := t.duplicateReport(ctx, adapter)
 	if err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI duplicate search: %v", err))
 		return
@@ -201,6 +204,68 @@ func (t *tracker) mergeDuplicates(write bool) {
 		t.sess.Log().Info(fmt.Sprintf("AI duplicate search compared %d organizations: %d merged, %d merge "+
 			"proposal(s) waiting for review in %s", report.Organizations, merged, pending, t.journal.Path))
 	}
+}
+
+// duplicateReport compares the organizations this enumeration touched against
+// one another and against the others that share a name, identifier, phone or
+// address with one of them, and returns the duplicate candidates. It drives
+// the comparison from the touched organizations and bounded reverse lookups
+// rather than a whole-database scan, so its cost tracks the enumeration's own
+// size: a session that brings in a handful of organizations reads a handful of
+// buckets, whatever the size of the database. The whole-database sweep remains
+// available on demand as the `amass db duplicates` operation. A signal shared
+// by more than lens.GapMaxShared organizations is too common to be meaningful,
+// so that bucket is skipped, matching the sweep's handling of an over-full
+// bucket and keeping the candidate set bounded.
+func (t *tracker) duplicateReport(ctx context.Context, adapter oamrepo.Adapter) (lens.DuplicateReport, error) {
+	t.mu.Lock()
+	touched := make([]*dbt.Entity, 0, len(t.orgs))
+	for _, o := range t.orgs {
+		touched = append(touched, o)
+	}
+	t.mu.Unlock()
+
+	seedIDs := make([]string, 0, len(touched))
+	candSet := make(map[string]struct{})
+	for _, o := range touched {
+		if o == nil || o.Asset == nil {
+			continue
+		}
+		seedIDs = append(seedIDs, o.ID)
+
+		var names []string
+		if org, ok := o.Asset.(*oamorg.Organization); ok {
+			for _, n := range []string{org.Name, org.LegalName} {
+				if n != "" {
+					names = append(names, n)
+				}
+			}
+		}
+
+		lookups := [][]*dbt.Entity{
+			orgsupport.OrgsSharingName(t.sess, names),
+			orgsupport.OrgsSharingIdentifier(t.sess, o),
+			orgsupport.OrgsSharingPhone(t.sess, o),
+			orgsupport.OrgsSharingAddress(t.sess, o),
+		}
+		for _, cands := range lookups {
+			if len(cands) > lens.GapMaxShared {
+				continue
+			}
+			for _, c := range cands {
+				if c != nil && c.ID != o.ID {
+					candSet[c.ID] = struct{}{}
+				}
+			}
+		}
+	}
+
+	candidateIDs := make([]string, 0, len(candSet))
+	for id := range candSet {
+		candidateIDs = append(candidateIDs, id)
+	}
+
+	return lens.CompareOrganizations(ctx, adapter, seedIDs, candidateIDs)
 }
 
 // recordIdentityConflicts records the organizations whose legal identity

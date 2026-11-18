@@ -158,24 +158,96 @@ func orgsOnPhone(ctx context.Context, sess et.Session, ph *dbt.Entity, seen *str
 			continue
 		}
 
-		orgs, err := sess.DB().OutgoingEdges(ctx, cr, time.Time{}, "organization")
+		out = append(out, orgsOnContactRecord(ctx, sess, cr, seen)...)
+	}
+
+	return out
+}
+
+// OrgsSharingAddress returns the other organizations that share a street
+// address with orgent, reached through its locations and contact records
+// (Organization → legal_address/hq_address/location → Location and back, and
+// via a ContactRecord at the same location). A shared address is a supporting
+// signal — shared buildings and registered-agent addresses are reused by many
+// companies — so these candidates are scored, never merged on the address
+// alone. The walk is read-only; orgent is never returned.
+func OrgsSharingAddress(sess et.Session, orgent *dbt.Entity) []*dbt.Entity {
+	if orgent == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
+	defer cancel()
+
+	var locs []*dbt.Entity
+	if edges, err := sess.DB().OutgoingEdges(ctx, orgent, time.Time{}, "legal_address", "hq_address",
+		"location"); err == nil {
+		for _, edge := range edges {
+			if a, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*oamcon.Location); ok {
+					locs = append(locs, a)
+				}
+			}
+		}
+	}
+
+	// expand to the stored locations that match these ones
+	locs = append(locs, matchingLocations(sess, locs)...)
+
+	seen := stringset.New()
+	defer seen.Close()
+	seen.Insert(orgent.ID)
+
+	var out []*dbt.Entity
+	for _, loc := range locs {
+		edges, err := sess.DB().IncomingEdges(ctx, loc, time.Time{}, "legal_address", "hq_address", "location")
 		if err != nil {
 			continue
 		}
 
-		for _, oe := range orgs {
-			if seen.Has(oe.ToEntity.ID) {
-				continue
-			}
-
-			a, err := sess.DB().FindEntityById(ctx, oe.ToEntity.ID)
+		for _, edge := range edges {
+			a, err := sess.DB().FindEntityById(ctx, edge.FromEntity.ID)
 			if err != nil || a == nil {
 				continue
 			}
-			if _, ok := a.Asset.(*oamorg.Organization); ok {
-				seen.Insert(a.ID)
-				out = append(out, a)
+
+			switch a.Asset.(type) {
+			case *oamorg.Organization:
+				if !seen.Has(a.ID) {
+					seen.Insert(a.ID)
+					out = append(out, a)
+				}
+			case *oamcon.ContactRecord:
+				out = append(out, orgsOnContactRecord(ctx, sess, a, seen)...)
 			}
+		}
+	}
+
+	return out
+}
+
+// orgsOnContactRecord returns the organizations a contact record names through
+// its "organization" edges, skipping any already in seen. Read-only.
+func orgsOnContactRecord(ctx context.Context, sess et.Session, cr *dbt.Entity, seen *stringset.Set) []*dbt.Entity {
+	var out []*dbt.Entity
+
+	edges, err := sess.DB().OutgoingEdges(ctx, cr, time.Time{}, "organization")
+	if err != nil {
+		return nil
+	}
+
+	for _, edge := range edges {
+		if seen.Has(edge.ToEntity.ID) {
+			continue
+		}
+
+		a, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID)
+		if err != nil || a == nil {
+			continue
+		}
+		if _, ok := a.Asset.(*oamorg.Organization); ok {
+			seen.Insert(a.ID)
+			out = append(out, a)
 		}
 	}
 

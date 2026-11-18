@@ -178,58 +178,110 @@ func (s *dupSearch) finalize() {
 // supplies the candidates, so the comparison is bounded and needs no full
 // scan. Read-only.
 func CompareOrganization(ctx context.Context, g graph.Graph, orgID string, candidateIDs []string) (DuplicateReport, error) {
+	return CompareOrganizations(ctx, g, []string{orgID}, candidateIDs)
+}
+
+// CompareOrganizations scores a set of seed organizations against one another
+// and against a bounded set of candidate organizations — the others that
+// share a name, identifier, phone or address with a seed — and returns the
+// duplicate candidates they warrant, with the same signals and scoring as the
+// whole-database sweep. The caller supplies the seeds (typically the
+// organizations an enumeration touched) and their gathered candidates, so the
+// comparison is bounded and needs no full scan: it is the incremental
+// counterpart to FindDuplicateOrganizations. Read-only.
+func CompareOrganizations(ctx context.Context, g graph.Graph, seedIDs, candidateIDs []string) (DuplicateReport, error) {
 	s := &dupSearch{ctx: ctx, graph: g, profiles: map[string]*orgProfile{}}
 
-	subject, err := g.GetAsset(ctx, orgID)
-	if err != nil {
-		return s.report, err
+	seed := make(map[string]bool, len(seedIDs))
+	var seeds []string
+	for _, id := range seedIDs {
+		if seed[id] {
+			continue
+		}
+		seed[id] = true
+		seeds = append(seeds, id)
 	}
 
-	sp, err := s.profile(subject)
-	if err != nil {
-		return s.report, err
-	}
-	s.profiles[orgID] = sp
-
-	for _, id := range candidateIDs {
-		if id == orgID {
-			continue
-		}
-		if _, done := s.profiles[id]; done {
-			continue
-		}
-
-		a, err := g.GetAsset(ctx, id)
-		if err != nil {
-			continue
-		}
-		if graph.IsPlaceholder(a) || semantics.IsPlaceholderOrganization(graph.ContentString(a, "name")) {
-			continue
-		}
-
-		p, err := s.profile(a)
-		if errors.Is(err, errDupReadLimit) {
-			s.truncate(err.Error())
+	// profile the seeds
+	for _, id := range seeds {
+		if s.report.Truncated {
 			break
-		} else if err != nil {
+		}
+		if p, ok := s.profileID(id); ok {
+			s.profiles[id] = p
+		}
+	}
+
+	// profile the non-seed candidates, keeping only those actually profiled
+	candSeen := make(map[string]bool, len(candidateIDs))
+	var cands []string
+	for _, id := range candidateIDs {
+		if seed[id] || candSeen[id] {
 			continue
 		}
-		s.profiles[id] = p
+		candSeen[id] = true
+		if s.report.Truncated {
+			continue
+		}
+		if p, ok := s.profileID(id); ok {
+			s.profiles[id] = p
+			cands = append(cands, id)
+		}
 	}
 
 	s.report.Organizations = len(s.profiles)
-	for _, id := range candidateIDs {
-		cand, ok := s.profiles[id]
-		if !ok || id == orgID {
+
+	for i, sid := range seeds {
+		sp, ok := s.profiles[sid]
+		if !ok {
 			continue
 		}
-		if c, ok := s.candidate(sp, cand); ok {
-			s.report.Candidates = append(s.report.Candidates, c)
+
+		// each seed against the later seeds, so a pair of touched
+		// organizations is scored once
+		for _, oid := range seeds[i+1:] {
+			op, ok := s.profiles[oid]
+			if !ok {
+				continue
+			}
+			if c, ok := s.candidate(sp, op); ok {
+				s.report.Candidates = append(s.report.Candidates, c)
+			}
+		}
+
+		// each seed against every non-seed candidate
+		for _, cid := range cands {
+			if c, ok := s.candidate(sp, s.profiles[cid]); ok {
+				s.report.Candidates = append(s.report.Candidates, c)
+			}
 		}
 	}
 
 	s.finalize()
 	return s.report, nil
+}
+
+// profileID profiles the stored organization id, skipping placeholders. It
+// returns ok=false when the asset cannot be read or is a placeholder, and
+// marks the report truncated when the read budget is reached.
+func (s *dupSearch) profileID(id string) (*orgProfile, bool) {
+	a, err := s.graph.GetAsset(s.ctx, id)
+	if err != nil {
+		return nil, false
+	}
+	if graph.IsPlaceholder(a) || semantics.IsPlaceholderOrganization(graph.ContentString(a, "name")) {
+		return nil, false
+	}
+
+	p, err := s.profile(a)
+	if errors.Is(err, errDupReadLimit) {
+		s.truncate(err.Error())
+		return nil, false
+	} else if err != nil {
+		return nil, false
+	}
+
+	return p, true
 }
 
 // groupCandidates collapses organizations stored several times into one
