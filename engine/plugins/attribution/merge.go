@@ -226,6 +226,16 @@ func (t *tracker) duplicateReport(ctx context.Context, adapter oamrepo.Adapter) 
 	}
 	t.mu.Unlock()
 
+	return t.duplicateReportFor(ctx, adapter, touched)
+}
+
+// duplicateReportFor compares the given organizations against one another and
+// against the others that share a name, identifier, phone or address with one
+// of them, and returns the duplicate candidates. It is the bounded core the
+// at-drain pass (over every touched organization) and the incremental pass
+// (over the organizations touched since the last pass) both drive.
+func (t *tracker) duplicateReportFor(ctx context.Context, adapter oamrepo.Adapter,
+	touched []*dbt.Entity) (lens.DuplicateReport, error) {
 	seedIDs := make([]string, 0, len(touched))
 	candSet := make(map[string]struct{})
 	for _, o := range touched {
@@ -267,6 +277,55 @@ func (t *tracker) duplicateReport(ctx context.Context, adapter oamrepo.Adapter) 
 	}
 
 	return lens.CompareOrganizations(ctx, adapter, seedIDs, candidateIDs)
+}
+
+// incrementalProposals raises duplicate and identity proposals for the
+// organizations touched since the last pass, so they accumulate for review
+// while the enumeration runs rather than only at drain. It records proposals
+// only — nothing is merged until the drain pass — so it never deletes an
+// organization another handler is still writing to. Each organization is
+// compared once (tracked in dupProcessed), so the per-pass cost is bounded by
+// what changed, not the run's total, and the de-dupe in the journal makes a
+// proposal the drain pass also finds harmless.
+func (t *tracker) incrementalProposals(ctx context.Context, adapter oamrepo.Adapter) {
+	if t.journal == nil {
+		return
+	}
+
+	t.mu.Lock()
+	var delta []*dbt.Entity
+	ids := make([]string, 0)
+	for id, o := range t.allOrgs {
+		if _, done := t.dupProcessed[id]; done {
+			continue
+		}
+		t.dupProcessed[id] = struct{}{}
+		delta = append(delta, o)
+		ids = append(ids, id)
+	}
+	t.mu.Unlock()
+
+	if len(delta) == 0 {
+		return
+	}
+
+	if report, err := t.duplicateReportFor(ctx, adapter, delta); err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI incremental duplicate search: %v", err))
+	} else if added, err := t.journal.SubmitDuplicates(review.DuplicateProposals(report)); err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI incremental duplicate search could not record proposals: %v", err))
+	} else if len(added) > 0 {
+		t.sess.Log().Info(fmt.Sprintf("AI duplicate search raised %d merge proposal(s) for review in %s",
+			len(added), t.journal.Path))
+	}
+
+	if report, err := lens.CheckIdentityConflicts(ctx, adapter, ids); err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI incremental identity check: %v", err))
+	} else if added, err := t.journal.SubmitIdentityConflicts(report.Conflicts); err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI incremental identity check could not record proposals: %v", err))
+	} else if len(added) > 0 {
+		t.sess.Log().Info(fmt.Sprintf("AI identity check raised %d correction(s) for review in %s",
+			len(added), t.journal.Path))
+	}
 }
 
 // recordIdentityConflicts records the organizations whose legal identity

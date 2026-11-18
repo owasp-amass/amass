@@ -129,7 +129,7 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 
 	mode, path, err := sess.Config().AIAttribution(p.lookup)
 	t := &tracker{p: p, sess: sess, mode: mode, orgs: map[string]*dbt.Entity{},
-		allOrgs: map[string]*dbt.Entity{}}
+		allOrgs: map[string]*dbt.Entity{}, dupProcessed: map[string]struct{}{}}
 	switch {
 	case err != nil:
 		sess.Log().Error(fmt.Sprintf("AI attribution is off: %v", err))
@@ -179,10 +179,15 @@ type tracker struct {
 	// they seed the duplicate search, since the enumeration created or
 	// re-touched them and so their duplicates are ours to raise.
 	allOrgs map[string]*dbt.Entity
-	gen     uint64
-	pending bool
-	first   time.Time
-	last    time.Time
+	// dupProcessed are the organizations the incremental duplicate/identity
+	// pass has already compared, so each debounced pass does only the orgs
+	// touched since the last one and proposals accumulate mid-run without
+	// re-scanning what was already raised.
+	dupProcessed map[string]struct{}
+	gen          uint64
+	pending      bool
+	first        time.Time
+	last         time.Time
 }
 
 func (t *tracker) enabled() *tracker {
@@ -328,6 +333,12 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 				len(res.Queued), graph.AssetLabel(org), t.journal.Path))
 		}
 	}
+
+	// Raise duplicate and identity proposals for the organizations touched
+	// since the last pass, so they accumulate for review mid-run instead of
+	// only at drain. Record-only: nothing is merged until the drain pass, so
+	// this never deletes an organization another handler is still writing to.
+	t.incrementalProposals(ctx, adapter)
 }
 
 // widenScope adds the assets an attribution brought under an in-scope

@@ -26,6 +26,16 @@ import (
 
 // seedDuplicates stores GlobalSign twice with the same LEI and registration,
 // and Ithaka Harbors twice with only the name in common.
+// touchOrgs registers organizations with the tracker as the engine does when
+// it writes them during a run, so the bounded duplicate and identity drain —
+// which compares the organizations the run touched, not the whole database —
+// has them to compare.
+func touchOrgs(tr *tracker, ents map[string]*dbt.Entity) {
+	for _, e := range ents {
+		tr.touch(e)
+	}
+}
+
 func seedDuplicates(t *testing.T, db repository.Repository) map[string]*dbt.Entity {
 	t.Helper()
 
@@ -87,9 +97,11 @@ func runMergeWatcher(t *testing.T, mode string) (repository.Repository, map[stri
 	sess.stats.Lock()
 	sess.stats.WorkItemsTotal, sess.stats.WorkItemsCompleted = 10, 3
 	sess.stats.Unlock()
-	if p.tracker(sess) == nil {
+	tr := p.tracker(sess)
+	if tr == nil {
 		t.Fatal("attribution is off")
 	}
+	touchOrgs(tr, ents)
 	if n := sess.stats.Background(); n != 1 {
 		t.Fatalf("background work = %d, want the merge watcher counted", n)
 	}
@@ -171,6 +183,58 @@ func TestDuplicatesAreOnlyRecordedInJournalMode(t *testing.T) {
 	}
 }
 
+// The incremental pass raises proposals for the organizations touched so far
+// while the run is still going, records them only (never merges), and does not
+// re-raise them on a later pass.
+func TestIncrementalProposalsRecordWithoutMerging(t *testing.T) {
+	db, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "incr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	ents := seedDuplicates(t, db)
+	journal := filepath.Join(t.TempDir(), "review.jsonl")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sess := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), db: db,
+		scope: &fakeScope{org: "none"}, backlog: &fakeBacklog{}, stats: &et.SessionStats{}}
+
+	tr := &tracker{
+		p: NewAttribution().(*plugin), sess: sess, mode: config.AttributionJournal,
+		journal: &review.Journal{Path: journal}, orgs: map[string]*dbt.Entity{},
+		allOrgs: map[string]*dbt.Entity{}, dupProcessed: map[string]struct{}{},
+	}
+	touchOrgs(tr, ents)
+
+	adapter := oamrepo.Adapter{Repo: db}
+	tr.incrementalProposals(context.Background(), adapter)
+
+	// Both duplicate pairs are recorded for review, and nothing was merged.
+	entries, err := (&review.Journal{Path: journal}).DuplicateEntries()
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("incremental pass recorded %+v, %v; want 2 proposals", entries, err)
+	}
+	for _, e := range entries {
+		if e.Status != review.ProposalPending {
+			t.Errorf("incremental pass applied %s %s; it must only record", e.Proposal.ID, e.Status)
+		}
+	}
+	for uid, e := range ents {
+		if _, err := db.FindEntityById(context.Background(), e.ID); err != nil {
+			t.Errorf("incremental pass merged %s away; it must only record", uid)
+		}
+	}
+
+	// A second pass re-examines nothing it already compared, so no duplicate
+	// proposals pile up.
+	tr.incrementalProposals(context.Background(), adapter)
+	again, _ := (&review.Journal{Path: journal}).DuplicateEntries()
+	if len(again) != 2 {
+		t.Errorf("a second pass re-raised proposals: %d entries, want 2", len(again))
+	}
+}
+
 // An undone merge restores the duplicate under a new entity ID; the next
 // enumeration must still recognize the pair and not merge it again.
 func TestUndoneMergeIsNotRepeated(t *testing.T) {
@@ -211,8 +275,17 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 	defer cancel()
 	sess := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), db: db,
 		scope: &fakeScope{org: "none"}, backlog: &fakeBacklog{}, stats: &et.SessionStats{}}
-	if p.tracker(sess) == nil {
+	tr := p.tracker(sess)
+	if tr == nil {
 		t.Fatal("attribution is off")
+	}
+	// Register the surviving and restored organizations as a run would, so the
+	// drain reconsiders the pair and must honor the recorded retraction.
+	survivor := applied.Proposal.SurvivorID
+	for _, id := range []string{survivor, res.RestoredID} {
+		if ent, err := db.FindEntityById(context.Background(), id); err == nil && ent != nil {
+			tr.touch(ent)
+		}
 	}
 
 	deadline := time.Now().Add(20 * time.Second)
@@ -220,7 +293,6 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	survivor := applied.Proposal.SurvivorID
 	for _, id := range []string{survivor, res.RestoredID} {
 		if _, err := db.FindEntityById(context.Background(), id); err != nil {
 			t.Errorf("an undone merge was applied again: %s is gone", id)
@@ -261,9 +333,11 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 	}
 
 	done := session(1, 0)
-	if p.tracker(done) == nil {
+	dtr := p.tracker(done)
+	if dtr == nil {
 		t.Fatal("attribution is off")
 	}
+	touchOrgs(dtr, ents)
 
 	time.Sleep(200 * time.Millisecond)
 	for _, uid := range []string{"globalsign:1", "globalsign:2"} {
@@ -332,9 +406,11 @@ func TestBusyOtherSessionsDoNotHoldADrainedSession(t *testing.T) {
 			}
 
 			done := session(1, 0)
-			if p.tracker(done) == nil {
+			dtr := p.tracker(done)
+			if dtr == nil {
 				t.Fatal("attribution is off")
 			}
+			touchOrgs(dtr, ents)
 
 			deadline := time.Now().Add(20 * time.Second)
 			for done.stats.Background() != 0 && time.Now().Before(deadline) {
