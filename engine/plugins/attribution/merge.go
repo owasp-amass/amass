@@ -273,7 +273,17 @@ func (t *tracker) duplicateReport(ctx context.Context, adapter oamrepo.Adapter) 
 // contradicts their own evidence. A correction is never applied
 // automatically: companies do rename and relocate.
 func (t *tracker) recordIdentityConflicts(ctx context.Context, adapter oamrepo.Adapter) {
-	report, err := lens.FindIdentityConflicts(ctx, adapter)
+	// Check only the organizations this enumeration touched, so the cost tracks
+	// the run rather than the whole database. The whole-database sweep stays
+	// available on demand as `amass db identity`.
+	t.mu.Lock()
+	ids := make([]string, 0, len(t.allOrgs))
+	for id := range t.allOrgs {
+		ids = append(ids, id)
+	}
+	t.mu.Unlock()
+
+	report, err := lens.CheckIdentityConflicts(ctx, adapter, ids)
 	if err != nil {
 		t.sess.Log().Error(fmt.Sprintf("AI identity check: %v", err))
 		return

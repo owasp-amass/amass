@@ -226,6 +226,51 @@ func FindIdentityConflicts(ctx context.Context, g graph.Graph) (IdentityReport, 
 	return s.report, nil
 }
 
+// CheckIdentityConflicts checks a bounded set of organizations (by entity ID)
+// for a legal identity that contradicts their own evidence, using the same
+// per-organization check as the whole-database FindIdentityConflicts. The
+// caller supplies the organizations — typically the ones an enumeration
+// touched — so the cost tracks the run rather than the database. Read-only.
+func CheckIdentityConflicts(ctx context.Context, g graph.Graph, orgIDs []string) (IdentityReport, error) {
+	s := &identitySearch{ctx: ctx, graph: g}
+
+	seen := make(map[string]bool, len(orgIDs))
+	for _, id := range orgIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		o, err := g.GetAsset(ctx, id)
+		if err != nil {
+			continue
+		}
+
+		legal := graph.ContentString(o, "legal_name")
+		juris := strings.ToUpper(strings.TrimSpace(graph.ContentString(o, "jurisdiction")))
+		if legal == "" && juris == "" {
+			continue
+		}
+
+		s.report.Organizations++
+		c, err := s.check(o, legal, juris)
+		if errors.Is(err, errDupReadLimit) {
+			s.report.Truncated, s.report.Reason = true, err.Error()
+			break
+		} else if err != nil {
+			return s.report, err
+		}
+		if c != nil {
+			s.report.Conflicts = append(s.report.Conflicts, *c)
+		}
+	}
+
+	sort.Slice(s.report.Conflicts, func(i, j int) bool {
+		return s.report.Conflicts[i].Organization < s.report.Conflicts[j].Organization
+	})
+	return s.report, nil
+}
+
 // check compares one organization's legal identity with its evidence.
 func (s *identitySearch) check(o graph.Asset, legal, juris string) (*IdentityConflict, error) {
 	checks := LoadIdentityChecks()
