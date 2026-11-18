@@ -17,6 +17,12 @@ import (
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
+// maxSameNameOrgs bounds how many organizations sharing a normalized name a
+// claim lookup will examine for a compatible jurisdiction. Same-name clusters
+// are small in practice; the cap keeps the lookup bounded when a common name
+// is shared by many records.
+const maxSameNameOrgs = 50
+
 func CreateOrgNameClaim(sess et.Session, orgent *dbt.Entity, name string, src *et.Source) (*dbt.Entity, error) {
 	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
@@ -158,15 +164,18 @@ func FindOrgByNormNameAndJurisdictionClaim(sess et.Session, norm, jurisdiction s
 	ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
 	defer cancel()
 
-	orgents, err := sess.DB().FindEntitiesByContent(ctx, oam.Organization, time.Time{}, 1, dbt.ContentFilters{
+	// Examine every stored organization sharing this normalized name, not just
+	// the first: the one carrying a compatible jurisdiction may not be the
+	// first row returned, and missing it creates a duplicate the evidence
+	// already ruled out.
+	orgents, err := sess.DB().FindEntitiesByContent(ctx, oam.Organization, time.Time{}, maxSameNameOrgs, dbt.ContentFilters{
 		"name": norm,
 	})
 	if err != nil || len(orgents) == 0 {
 		return nil, fmt.Errorf("failed to obtain organizations with norm name %s", norm)
 	}
 
-	seconds := 10 * len(orgents)
-	octx, ocancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
+	octx, ocancel := context.WithTimeout(sess.Ctx(), time.Minute)
 	defer ocancel()
 
 	for _, orgent := range orgents {
