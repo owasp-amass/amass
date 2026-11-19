@@ -1,0 +1,42 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Infrastructure (netblock and autonomous-system) correlation signals: the evidence that ties a netblock or an AS to a target organization, so an enumeration's scope can be made more complete. docs/ai/INFRASTRUCTURE.md and `amass review infrastructure-signals` are generated from this file; edit the rationale here. Each signal's weight times 100 is the confidence the related-infrastructure lens records for an asset the signal supports; an asset found by several signals keeps the strongest (noisy-OR). A registrant organization that is a privacy proxy or placeholder is excluded, not scored, and a name match alone is never sufficient. The scored runtime scope-expansion decision and the classifier read the same catalog, so the lens, the engine and the model share one source of truth.",
+  "signals": [
+    {
+      "id": "ipnet-registrant-org",
+      "title": "Shared netblock registrant organization",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.75,
+      "matcher": "ipnet_registrant_org",
+      "finds": "A netblock whose RIR/WHOIS registration (IPNetRecord) names the same organization as its registrant as the target's.",
+      "rationale": "A Regional Internet Registry assigns an IP allocation to a specific organization and records it as the registrant of the inetnum/NetRange. When a netblock's registration names the target organization, the registry attributes that address space to it, which is direct evidence it belongs to the organization's footprint.",
+      "guards": [
+        "A privacy or proxy registrant organization is never an anchor: it is shared by many unrelated allocations.",
+        "A matching organization name alone, with no shared registration record, is never sufficient."
+      ],
+      "counter_indications": [
+        "A hosting or transit provider is the RIR registrant for address space it sub-allocates to many customers.",
+        "Legacy allocations can name a predecessor organization after an acquisition."
+      ]
+    },
+    {
+      "id": "asn-registrant-org",
+      "title": "Shared AS registrant organization",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.75,
+      "matcher": "asn_registrant_org",
+      "finds": "An autonomous system whose RIR/WHOIS registration (AutnumRecord) names the same organization as its registrant as the target's.",
+      "rationale": "An autonomous system number is registered to one operator, recorded as the registrant of the aut-num. When an AS registration names the target organization, the registry attributes that AS to it, direct evidence the AS is part of its network.",
+      "guards": [
+        "A privacy or proxy registrant organization is never an anchor.",
+        "A matching organization name alone is never sufficient."
+      ],
+      "counter_indications": [
+        "A parent or network operator can hold the AS registration for legally separate subsidiaries.",
+        "Upstream providers sometimes register AS numbers on behalf of customers."
+      ]
+    }
+  ]
+}

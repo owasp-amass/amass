@@ -468,3 +468,20 @@ func listHorizontalSignals(format string, explicit bool, out io.Writer) error {
 
 	return fmt.Errorf("horizontal-signals format %q: use text, json or markdown", format)
 }
+
+// listInfrastructureSignals prints the infrastructure (netblock/AS) correlation
+// signal catalog. Text is the default; markdown is docs/ai/INFRASTRUCTURE.md.
+func listInfrastructureSignals(format string, explicit bool, out io.Writer) error {
+	switch {
+	case !explicit || format == "text":
+		_, err := fmt.Fprint(out, lens.InfrastructureSignalsText())
+		return err
+	case format == "markdown":
+		_, err := fmt.Fprint(out, lens.InfrastructureSignalsMarkdown())
+		return err
+	case format == "json":
+		return writeJSON(out, lens.InfrastructureSignals())
+	}
+
+	return fmt.Errorf("infrastructure-signals format %q: use text, json or markdown", format)
+}

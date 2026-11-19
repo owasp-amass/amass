@@ -82,6 +82,36 @@ func listRelatedDomains(ctx context.Context, g oamrepo.Adapter, domain, org, for
 	return fmt.Errorf("related-domains format %q: use text or json", format)
 }
 
+// listRelatedInfrastructure runs the infrastructure-correlation lens for one
+// organization and prints the netblocks and autonomous systems the signals tie
+// to it, read-only.
+func listRelatedInfrastructure(ctx context.Context, g oamrepo.Adapter, domain, org, format string,
+	out io.Writer) error {
+	if strings.TrimSpace(org) == "" {
+		return errors.New("related-infrastructure needs -org <name> (the organization to find infrastructure for)")
+	}
+
+	root, err := groupRoot(ctx, g, domain, org)
+	if err != nil {
+		return err
+	}
+
+	r, err := lens.FindRelatedInfrastructure(ctx, g, root.ID)
+	if err != nil {
+		return err
+	}
+
+	switch format {
+	case "text":
+		_, err := fmt.Fprint(out, lens.FormatRelatedInfrastructureReport(r))
+		return err
+	case "json":
+		return writeJSON(out, r)
+	}
+
+	return fmt.Errorf("related-infrastructure format %q: use text or json", format)
+}
+
 // listOrgUnits scans the Asset Database for organizations that are units of a
 // parent organization and records each as a review-gated relation proposal;
 // nothing in the database changes until a reviewer approves it. It mirrors the

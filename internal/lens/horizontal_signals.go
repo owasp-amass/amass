@@ -115,13 +115,21 @@ func HorizontalConfidence(id string) int {
 // shared name server by itself) never grows scope on its own (principle 8 and
 // the horizontal-domain-correlation decided design).
 func HorizontalScore(ids []string) (confidence int, strong bool) {
+	return signalScore(ids, LookupHorizontalSignal)
+}
+
+// signalScore is the shared noisy-OR scorer used by the horizontal and
+// infrastructure catalogs: it combines the weights of the distinct, known
+// signals in ids and reports whether any is strong. The caller supplies the
+// catalog lookup.
+func signalScore(ids []string, lookup func(string) (OwnershipSignal, bool)) (confidence int, strong bool) {
 	seen := map[string]bool{}
 	missed := 1.0
 	for _, id := range ids {
 		if seen[id] {
 			continue
 		}
-		s, ok := LookupHorizontalSignal(id)
+		s, ok := lookup(id)
 		if !ok {
 			continue
 		}

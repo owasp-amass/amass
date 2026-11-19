@@ -38,11 +38,12 @@ const (
 // each. Lenses read the Asset Database; family also records its findings in
 // the review journal.
 var lensOps = map[string]string{
-	"family":          "family",
-	"org-group":       "org-group",
-	"group-vendors":   "group-vendors",
-	"vendors":         "vendors",
-	"related-domains": "related-domains",
+	"family":                 "family",
+	"org-group":              "org-group",
+	"group-vendors":          "group-vendors",
+	"vendors":                "vendors",
+	"related-domains":        "related-domains",
+	"related-infrastructure": "related-infrastructure",
 }
 
 // dbOps are the amass db commands, by name, and the operation that runs each.
@@ -67,13 +68,14 @@ func init() {
 // reviewOps are the amass review commands. Only approve and retract change
 // the Asset Database, and only for a proposal a reviewer names.
 var reviewOps = map[string]string{
-	"proposals":          "proposals",
-	"approve":            "approve",
-	"reject":             "reject",
-	"retract":            "retract",
-	"signals":            "signals",
-	"duplicate-signals":  "duplicate-signals",
-	"horizontal-signals": "horizontal-signals",
+	"proposals":              "proposals",
+	"approve":                "approve",
+	"reject":                 "reject",
+	"retract":                "retract",
+	"signals":                "signals",
+	"duplicate-signals":      "duplicate-signals",
+	"horizontal-signals":     "horizontal-signals",
+	"infrastructure-signals": "infrastructure-signals",
 }
 
 // Operations maps each operation this package runs, by the name amass ai
@@ -273,6 +275,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listDuplicateSignals(format, true, out)
 	case "horizontal-signals":
 		return listHorizontalSignals(format, true, out)
+	case "infrastructure-signals":
+		return listInfrastructureSignals(format, true, out)
 	case "proposals":
 		return listProposals(journalPath, format, true, out)
 	case "reject":
@@ -350,6 +354,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listGroupVendors(ctx, g, domainName, orgName, limits, format, true, out)
 	case "related-domains":
 		return listRelatedDomains(ctx, g, domainName, orgName, format, out)
+	case "related-infrastructure":
+		return listRelatedInfrastructure(ctx, g, domainName, orgName, format, out)
 	case "accounts":
 		return listAccounts(ctx, g, domainName, orgName, journalPath, format, out, errout)
 	}
