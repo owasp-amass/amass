@@ -464,4 +464,21 @@ func (t *tracker) recheck(ctx context.Context, adapter oamrepo.Adapter) {
 		t.sess.Log().Info(fmt.Sprintf("AI attribution retracted %s %s as owned by %s: its evidence is gone "+
 			"(proposal %s)", p.AssetType, p.Asset, p.Owner, p.ID))
 	}
+
+	// Reconsider horizontal scope expansions on the same cadence: an apex the
+	// scored correlation added to scope is retracted when the evidence that put
+	// it there is gone (the next pass re-adds it if the evidence returns).
+	sres, err := review.RecheckScopeExpansions(ctx, adapter, t.journal)
+	if err != nil {
+		t.sess.Log().Error(fmt.Sprintf("AI horizontal scope re-check: %v", err))
+		return
+	}
+	for _, e := range sres.Retracted {
+		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation retracted %s from scope: its evidence is gone "+
+			"(org %s)", e.Domain, e.Org))
+	}
+	for _, e := range sres.Flagged {
+		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation reopened %s for review: its evidence is gone "+
+			"(org %s)", e.Domain, e.Org))
+	}
 }

@@ -81,7 +81,10 @@ func (h *horizPlugin) expandRelatedDomains(e *et.Event, orgEnt *dbt.Entity) {
 					sess.Log().Info("horizontal correlation widened scope (model)",
 						"domain", d.Domain, "org", report.Org, "probability", prob,
 						slog.Group("plugin", "name", h.name))
-					h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalApplied, scorer.ModelName())
+					// An amass-ai-prefixed reviewer marks this an automatic
+					// decision, so the reevaluation sweep can reconsider it.
+					h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalApplied,
+						fmt.Sprintf("amass-ai (model %s)", scorer.ModelName()))
 				}
 				continue
 			}
