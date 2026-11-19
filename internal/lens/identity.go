@@ -410,7 +410,8 @@ func jurisdictionCountry(j string) string {
 //   - a country/region or division suffix on the brand (a subsidiary), e.g.
 //     "cisco systems france" or "cogent communications group" for "cisco systems"
 //     and "cogent communications";
-//   - an acronym, e.g. "femsa" for "fomento economico mexicano s a b de c v".
+//   - an acronym, e.g. "femsa" for "fomento economico mexicano s a b de c v";
+//   - an institution-type rename, e.g. "utica college" for "utica university".
 //
 // It is deliberately permissive: a false agreement only suppresses a removal
 // proposal (leaving the data for a human to judge), whereas a false disagreement
@@ -449,8 +450,49 @@ func legalNameAgreement(legal string, independent []string) (agrees, viaSubsidia
 		if acronymMatches(lacr, n) || acronymMatches(nameAcronym(n), legal) {
 			agrees = true
 		}
+		// A kind-of-institution rename (Utica College -> Utica University): same
+		// brand but for an institution-type word, sharing another token.
+		if institutionTypeVariant(lb, nb) {
+			agrees = true
+		}
 	}
 	return agrees, false
+}
+
+// institutionTypeWords are the kind-of-institution words an organization swaps on
+// a rename (Utica College -> Utica University) without becoming a different
+// entity.
+var institutionTypeWords = map[string]bool{
+	"college": true, "university": true, "institute": true,
+	"polytechnic": true, "school": true, "academy": true,
+}
+
+// institutionTypeVariant reports whether two brand names are the same but for
+// institution-type words — e.g. "utica college" and "utica university" — while
+// still sharing at least one other token. A rename of this kind does not make a
+// different organization, so a GLEIF legal name that is such a variant of a known
+// name is not evidence of a wrong identity. Like the rest of legalNameAgreement
+// it only suppresses a removal proposal, so it errs toward keeping data.
+func institutionTypeVariant(a, b string) bool {
+	keep := func(brand string) []string {
+		var out []string
+		for _, w := range strings.Fields(brand) {
+			if !institutionTypeWords[w] {
+				out = append(out, w)
+			}
+		}
+		return out
+	}
+
+	ra, rb := keep(a), keep(b)
+	// The non-type remainder must be non-empty (a shared strong token) and equal,
+	// and at least one institution-type word must have been dropped, so this fires
+	// on a genuine type swap and not on an exact match handled above.
+	if len(ra) == 0 || len(ra) != len(rb) || strings.Join(ra, " ") != strings.Join(rb, " ") {
+		return false
+	}
+
+	return len(strings.Fields(a)) > len(ra) || len(strings.Fields(b)) > len(rb)
 }
 
 // brandIsSubsidiaryOf reports whether brand sub is brand parent followed only by

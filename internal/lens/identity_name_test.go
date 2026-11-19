@@ -23,6 +23,11 @@ func TestLegalNameAgrees(t *testing.T) {
 		{"division group", "cogent communications group, llc", []string{"cogent communications"}, true},
 		// Exact brand match (legal form stripped).
 		{"exact brand", "microsoft corporation", []string{"microsoft"}, true},
+		// Institution-type rename: Utica College became Utica University, so the
+		// GLEIF legal name is not a wrong identity.
+		{"institution college/university", "utica college", []string{"utica university"}, true},
+		{"institution university/college", "utica university", []string{"utica college"}, true},
+		{"institution institute/university", "suny polytechnic institute", []string{"suny polytechnic university"}, true},
 		// Empty legal name has nothing to disagree with.
 		{"empty legal", "", []string{"amazon"}, true},
 
@@ -31,6 +36,8 @@ func TestLegalNameAgrees(t *testing.T) {
 		{"unrelated mol corporation", "mol corporation", []string{"microsoft"}, false},
 		// A suffix that is not purely region/division tokens is not a subsidiary.
 		{"non-region suffix", "acme france bakery", []string{"acme"}, false},
+		// A type swap with no shared token is still a mismatch, not a rename.
+		{"different brand same type word", "utica college", []string{"hamilton college"}, false},
 	}
 
 	for _, c := range cases {
@@ -56,6 +63,7 @@ func TestLegalNameAgreementViaSubsidiary(t *testing.T) {
 		{"region suffix is subsidiary", "cisco systems france", []string{"cisco systems"}, true, true},
 		{"division suffix is subsidiary", "cogent communications group, llc", []string{"cogent communications"}, true, true},
 		{"acronym is not subsidiary", "fomento economico mexicano s a b de c v", []string{"femsa"}, true, false},
+		{"institution rename is not subsidiary", "utica college", []string{"utica university"}, true, false},
 		{"disagree", "mol corporation", []string{"microsoft"}, false, false},
 	}
 
