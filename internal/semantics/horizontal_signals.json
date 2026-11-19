@@ -58,6 +58,24 @@
       ]
     },
     {
+      "id": "shared-mx",
+      "title": "Shared mail exchanger",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.6,
+      "matcher": "shared_mx",
+      "finds": "Another registered domain whose mail is handled by the same mail exchanger (MX host) as one of the organization's own domains.",
+      "rationale": "A mail exchanger an organization runs for its own mail serves only that organization's domains, so two apex domains pointing their MX at the same host are evidence of common control. It is supporting rather than strong because a mail provider's exchanger is shared by many unrelated customers; in OAM an MX record is the same shape as a name-server record (an apex FQDN pointing to a server FQDN), so this mirrors the shared-name-server signal.",
+      "guards": [
+        "A mail exchanger serving more distinct apex domains than the lens cap is treated as a shared mail provider (Google Workspace, Microsoft 365, Proofpoint and the like) and is skipped, not scored.",
+        "Only mail exchangers reached from the organization's own domains are used as anchors."
+      ],
+      "counter_indications": [
+        "Managed mail providers and SaaS email gateways are the MX for many unrelated customers.",
+        "A parent company can run one mail system for legally separate subsidiaries."
+      ]
+    },
+    {
       "id": "official-website",
       "title": "Official website",
       "kind": "identity",

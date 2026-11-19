@@ -25,6 +25,7 @@ const (
 	SigRegistrantOrg    = "shared-registrant-org"
 	SigCertSubjectOrg   = "cert-subject-org"
 	SigSharedNameServer = "shared-name-server"
+	SigSharedMX         = "shared-mx"
 	SigOfficialWebsite  = "official-website"
 )
 
@@ -33,11 +34,12 @@ const (
 	matchHorRegistrantOrg = "shared_registrant_org"
 	matchHorCertOrg       = "certificate_subject_org"
 	matchHorNameServer    = "shared_name_server"
+	matchHorMX            = "shared_mx"
 	matchHorWebsite       = "official_website"
 )
 
 var horizontalMatchers = map[string]bool{matchHorRegistrantOrg: true, matchHorCertOrg: true,
-	matchHorNameServer: true, matchHorWebsite: true}
+	matchHorNameServer: true, matchHorMX: true, matchHorWebsite: true}
 
 var loadHorizontalCatalog = sync.OnceValues(func() (signalCatalog, error) {
 	var c signalCatalog

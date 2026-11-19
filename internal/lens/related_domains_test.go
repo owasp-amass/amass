@@ -77,6 +77,26 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 	domainRec("dr3", "stranger.com")
 	link("dr3", "cr2", "registrant_contact")
 
+	// DNS-record signals: acme.net's apex FQDN (registration --> dr2) shares its
+	// resolved mail exchanger with acme-mail.org and its DNS name server with
+	// acme-dns.net, neither otherwise tied to the org. An NS record and an MX
+	// record are the same shape in OAM, found by the one shared-DNS-host pivot.
+	dnsLink := func(from, to string, rrType int) {
+		g.Links = append(g.Links, graph.Relation{ID: "dnsrec" + from + to, FromID: from, ToID: to,
+			Label: "dns_record", Type: "BasicDNSRelation",
+			Content: map[string]any{"header": map[string]any{"rr_type": rrType}}})
+	}
+	fqdn("fq_acme_net", "acme.net")
+	link("fq_acme_net", "dr2", "registration")
+	fqdn("mx_host", "mail.acme-mx.example")
+	dnsLink("fq_acme_net", "mx_host", rrTypeMX)
+	fqdn("fq_acme_mail", "acme-mail.org")
+	dnsLink("fq_acme_mail", "mx_host", rrTypeMX)
+	fqdn("dns_ns_host", "dns1.acme-ns.example")
+	dnsLink("fq_acme_net", "dns_ns_host", RRTypeNS)
+	fqdn("fq_acme_dns", "acme-dns.net")
+	dnsLink("fq_acme_dns", "dns_ns_host", RRTypeNS)
+
 	return g
 }
 
@@ -91,7 +111,8 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	for _, d := range r.Domains {
 		got[d.Domain] = d
 	}
-	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org", "acme.org"} {
+	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org", "acme.org",
+		"acme-mail.org", "acme-dns.net"} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("missing related domain %q; got %+v", want, r.Domains)
 		}
@@ -107,6 +128,14 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	// acme-labs.org comes only from the shared-name-server signal.
 	if d := got["acme-labs.org"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
 		t.Errorf("acme-labs.org should come from the name-server signal: %+v", d)
+	}
+	// acme-mail.org comes only from the shared mail-exchanger (MX) signal.
+	if d := got["acme-mail.org"]; d.Confidence != relatedMXConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme-mail.org should come from the shared-MX signal: %+v", d)
+	}
+	// acme-dns.net comes only from the shared-name-server signal, via its DNS record.
+	if d := got["acme-dns.net"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme-dns.net should come from the DNS name-server signal: %+v", d)
 	}
 	// acme.com is found by all three signals, and corroboration ranks it above
 	// any single signal (noisy-OR of the catalog weights).

@@ -31,7 +31,11 @@ import (
 //     contact names the organization, and the apex domains it covers (its
 //     common name and DNS SANs), skipping a shared/CDN certificate;
 //   - shared name server: another domain served by the same name server as one
-//     of the organization's own domains, skipping a shared/provider name server.
+//     of the organization's own domains (from the registration record and from
+//     resolved DNS), skipping a shared/provider name server.
+//   - shared mail exchanger: another domain whose mail is handled by the same
+//     MX host as one of the organization's own domains — the same shape as a
+//     name server in OAM — skipping a shared mail provider.
 //   - official website: a domain the organization publishes as its own website
 //     (e.g. recorded by the Wikidata official-website collector).
 //
@@ -53,6 +57,10 @@ const (
 	// (principle 8).
 	certMaxApexes = 25
 	nsMaxApexes   = 25
+	// mxMaxApexes skips a mail exchanger serving more distinct apex domains than
+	// this: a shared mail provider (Google Workspace, Microsoft 365, …), not
+	// evidence of shared ownership.
+	mxMaxApexes = 25
 )
 
 // The per-signal confidences come from the horizontal signal catalog
@@ -63,6 +71,7 @@ var (
 	relatedRegistrantConfidence = HorizontalConfidence(SigRegistrantOrg)
 	relatedCertConfidence       = HorizontalConfidence(SigCertSubjectOrg)
 	relatedNSConfidence         = HorizontalConfidence(SigSharedNameServer)
+	relatedMXConfidence         = HorizontalConfidence(SigSharedMX)
 	relatedWebsiteConfidence    = HorizontalConfidence(SigOfficialWebsite)
 )
 
@@ -257,6 +266,29 @@ nsPivot:
 		}
 	}
 
+	// Shared DNS host records resolved via DNS: an apex FQDN's dns_record NS and
+	// MX edges, extracted the same way (a name server and a mail exchanger are
+	// both an apex pointing to a server FQDN, differing only by RR type). The NS
+	// pivot complements the registration name_server pivot above — DNS records
+	// exist for any resolved domain, so a sibling whose registration was never
+	// fetched is still found — and the MX pivot adds the mail-exchanger signal.
+	var ownApexes []string
+	seenApex := map[string]bool{}
+	for _, drID := range ownDRs {
+		regs, err := g.Edges(ctx, drID, "in", "registration", time.Time{})
+		if err != nil {
+			continue
+		}
+		for _, re := range regs {
+			if !seenApex[re.FromID] {
+				seenApex[re.FromID] = true
+				ownApexes = append(ownApexes, re.FromID)
+			}
+		}
+	}
+	sharedDNSHostPivot(ctx, g, ownApexes, RRTypeNS, SigSharedNameServer, "shared name server", nsMaxApexes, add)
+	sharedDNSHostPivot(ctx, g, ownApexes, rrTypeMX, SigSharedMX, "shared mail exchanger", mxMaxApexes, add)
+
 	// Official website: domains the organization publishes as its own site
 	// (Organization --website--> URL --domain--> FQDN).
 	if websites, err := g.Edges(ctx, orgID, "out", "website", time.Time{}); err == nil {
@@ -292,6 +324,69 @@ nsPivot:
 	}
 	sort.Slice(report.Domains, func(i, j int) bool { return report.Domains[i].Domain < report.Domains[j].Domain })
 	return report, nil
+}
+
+// sharedDNSHostPivot adds related domains that share a DNS host record of the
+// given RR type — a name server (NS) or a mail exchanger (MX) — with one of the
+// organization's own apex domains. In OAM both are the same shape (an apex FQDN
+// pointing to a server FQDN via a dns_record edge), so both are found the same
+// way, differing only by RR type. A host shared by more than maxApexes distinct
+// apexes is provider infrastructure (managed DNS or a mail provider) and is
+// skipped, not scored. add returning false (the domain cap) stops the pivot.
+func sharedDNSHostPivot(ctx context.Context, g graph.Graph, ownApexes []string, rrType int,
+	signalID, signalLabel string, maxApexes int, add func(string, string, string, ...graph.WitnessEdge) bool) {
+	seenHost := map[string]bool{}
+	for _, apexID := range ownApexes {
+		hosts, err := g.Edges(ctx, apexID, "out", "dns_record", time.Time{})
+		if err != nil {
+			continue
+		}
+		for _, he := range hosts {
+			if relationRRType(he) != rrType || seenHost[he.ToID] {
+				continue
+			}
+			seenHost[he.ToID] = true
+
+			others, err := g.Edges(ctx, he.ToID, "in", "dns_record", time.Time{})
+			if err != nil {
+				continue
+			}
+			apexSet := map[string]bool{}
+			type dnsSibling struct {
+				apex string
+				edge graph.Relation
+			}
+			var sibs []dnsSibling
+			for _, oe := range others {
+				if relationRRType(oe) != rrType {
+					continue
+				}
+				of, err := g.GetAsset(ctx, oe.FromID)
+				if err != nil {
+					continue
+				}
+				apex := graph.RegisteredDomain(graph.FQDNName(of))
+				if apex == "" {
+					continue
+				}
+				apexSet[apex] = true
+				sibs = append(sibs, dnsSibling{apex: apex, edge: oe})
+			}
+			if len(apexSet) > maxApexes {
+				continue // a shared or provider host
+			}
+
+			hostW := graph.WitnessEdge{EdgeID: he.ID, Label: "dns_record", RelationType: he.Type,
+				FromID: he.FromID, FromType: "FQDN", ToID: he.ToID, ToType: "FQDN"}
+			for _, s := range sibs {
+				sibW := graph.WitnessEdge{EdgeID: s.edge.ID, Label: "dns_record", RelationType: s.edge.Type,
+					FromID: s.edge.FromID, FromType: "FQDN", ToID: s.edge.ToID, ToType: "FQDN"}
+				if !add(s.apex, signalID, signalLabel, hostW, sibW) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // HorizontalExpansion partitions a related-domains report into the candidates a

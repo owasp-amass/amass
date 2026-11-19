@@ -15,6 +15,7 @@ Horizontal correlation associates more registered (apex) domains with a target o
 | [Shared registrant organization](#shared-registrant-org) | strong | identity | 0.70 |
 | [Shared certificate subject organization](#cert-subject-org) | strong | identity | 0.75 |
 | [Shared name server](#shared-name-server) | supporting | infrastructure | 0.65 |
+| [Shared mail exchanger](#shared-mx) | supporting | infrastructure | 0.60 |
 | [Official website](#official-website) | strong | identity | 0.80 |
 
 <a id="shared-registrant-org"></a>
@@ -74,6 +75,25 @@ Horizontal correlation associates more registered (apex) domains with a target o
 
 - Managed DNS and small hosting providers run name servers shared by many unrelated customers.
 - A registrar's default name servers are shared across its whole customer base.
+
+<a id="shared-mx"></a>
+## Shared mail exchanger
+
+`shared-mx`: supporting infrastructure signal, weight 0.60 (confidence 60).
+
+**Finds:** Another registered domain whose mail is handled by the same mail exchanger (MX host) as one of the organization's own domains.
+
+**Why it counts:** A mail exchanger an organization runs for its own mail serves only that organization's domains, so two apex domains pointing their MX at the same host are evidence of common control. It is supporting rather than strong because a mail provider's exchanger is shared by many unrelated customers; in OAM an MX record is the same shape as a name-server record (an apex FQDN pointing to a server FQDN), so this mirrors the shared-name-server signal.
+
+**Guards:**
+
+- A mail exchanger serving more distinct apex domains than the lens cap is treated as a shared mail provider (Google Workspace, Microsoft 365, Proofpoint and the like) and is skipped, not scored.
+- Only mail exchangers reached from the organization's own domains are used as anchors.
+
+**Can still mislead when:**
+
+- Managed mail providers and SaaS email gateways are the MX for many unrelated customers.
+- A parent company can run one mail system for legally separate subsidiaries.
 
 <a id="official-website"></a>
 ## Official website
