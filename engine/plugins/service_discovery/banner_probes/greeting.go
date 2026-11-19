@@ -27,8 +27,10 @@ import (
 var protocolsJSON []byte
 
 const (
-	dialTimeout = 5 * time.Second
-	readTimeout = 5 * time.Second
+	// defaultDialTimeout is used when the caller passes a non-positive dial
+	// timeout (for example in tests); production threads the configured value.
+	defaultDialTimeout = 2 * time.Second
+	readTimeout        = 5 * time.Second
 	// maxGreeting bounds what is read and stored from a greeting.
 	maxGreeting = 512
 )
@@ -143,8 +145,12 @@ var errNoGreeting = errors.New("no greeting")
 // sends. With useTLS it completes a TLS handshake first and also returns the
 // certificates the server presented; they are recorded, not verified. It
 // writes nothing to the connection beyond the handshake.
-func readGreeting(ctx context.Context, dial dialFunc, addr string, useTLS bool) (string, []*x509.Certificate, error) {
-	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+func readGreeting(ctx context.Context, dial dialFunc, addr string, useTLS bool, dialTO time.Duration) (string, []*x509.Certificate, error) {
+	if dialTO <= 0 {
+		dialTO = defaultDialTimeout
+	}
+
+	dctx, cancel := context.WithTimeout(ctx, dialTO)
 	defer cancel()
 
 	conn, err := dial(dctx, "tcp", addr)

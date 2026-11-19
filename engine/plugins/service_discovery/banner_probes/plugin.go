@@ -117,14 +117,15 @@ func (bp *bannerProbing) check(e *et.Event) error {
 // probe reads the greeting on ip's port and records the service it
 // announces, with the certificate it presented on a TLS port.
 func (bp *bannerProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddress, port int) []*support.Finding {
-	dial := amassnet.NewDialContext(dialTimeout)
+	to := support.ProbeDialTimeout(e.Session.Config())
+	dial := amassnet.NewDialContext(to)
 	addr := net.JoinHostPort(ip.Address.String(), strconv.Itoa(port))
 	line, certs, err := readGreeting(e.Session.Ctx(), func(ctx context.Context, network, address string) (net.Conn, error) {
 		e.Session.NetSem().Acquire()
 		defer e.Session.NetSem().Release()
 
 		return dial(ctx, network, address)
-	}, addr, bp.cat.tlsPort(port))
+	}, addr, bp.cat.tlsPort(port), to)
 	if err != nil {
 		return nil
 	}

@@ -126,14 +126,15 @@ func (sp *sshProbing) check(e *et.Event) error {
 // probe records the SSH service on ip's port with its banner and host keys,
 // and returns what happened for the session summary.
 func (sp *sshProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddress, port int) (*support.Finding, outcome) {
-	dial := amassnet.NewDialContext(dialTimeout)
+	to := support.ProbeDialTimeout(e.Session.Config())
+	dial := amassnet.NewDialContext(to)
 	addr := net.JoinHostPort(ip.Address.String(), strconv.Itoa(port))
 	banner, keys, err := hostKeys(e.Session.Ctx(), func(ctx context.Context, network, address string) (net.Conn, error) {
 		e.Session.NetSem().Acquire()
 		defer e.Session.NetSem().Release()
 
 		return dial(ctx, network, address)
-	}, addr)
+	}, addr, to)
 	if err != nil || len(keys) == 0 {
 		return nil, probeOutcome(banner, err)
 	}

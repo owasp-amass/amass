@@ -102,7 +102,7 @@ func TestReadGreeting(t *testing.T) {
 		}
 	})
 
-	line, _, err := readGreeting(context.Background(), d.DialContext, addr, false)
+	line, _, err := readGreeting(context.Background(), d.DialContext, addr, false, 0)
 	if err != nil || line != "220 mx.example.com ESMTP Exim 4.97 Sat, 14 Nov 2026 00:00:00 +0000" {
 		t.Errorf("greeting %q, %v", line, err)
 	}
@@ -116,7 +116,7 @@ func TestReadGreetingFromSilentServer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*readTimeout)
 	defer cancel()
-	if _, _, err := readGreeting(ctx, d.DialContext, addr, false); !errors.Is(err, errNoGreeting) {
+	if _, _, err := readGreeting(ctx, d.DialContext, addr, false, 0); !errors.Is(err, errNoGreeting) {
 		t.Errorf("silent server: %v, want errNoGreeting", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestReadGreetingOverTLS(t *testing.T) {
 		}
 	})
 
-	line, certs, err := readGreeting(context.Background(), d.DialContext, addr, true)
+	line, certs, err := readGreeting(context.Background(), d.DialContext, addr, true, 0)
 	if err != nil || line != "* OK [CAPABILITY IMAP4rev1] Dovecot ready." {
 		t.Fatalf("greeting %q, %v", line, err)
 	}

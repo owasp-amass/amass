@@ -92,7 +92,7 @@ func plainDial(ctx context.Context, network, address string) (net.Conn, error) {
 
 func TestHostKeysWithoutAuthenticating(t *testing.T) {
 	addr, want, attempts := sshServer(t)
-	banner, keys, err := hostKeys(context.Background(), plainDial, addr)
+	banner, keys, err := hostKeys(context.Background(), plainDial, addr, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,13 +112,13 @@ func TestHostKeysWithoutAuthenticating(t *testing.T) {
 
 func TestHostKeysReportsUnreachableServers(t *testing.T) {
 	refuse := func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("refused") }
-	if _, keys, err := hostKeys(context.Background(), refuse, "127.0.0.1:22"); err == nil || len(keys) != 0 {
+	if _, keys, err := hostKeys(context.Background(), refuse, "127.0.0.1:22", 0); err == nil || len(keys) != 0 {
 		t.Errorf("keys %v, err %v from a refused connection", keys, err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := hostKeys(ctx, plainDial, "127.0.0.1:22"); !errors.Is(err, context.Canceled) {
+	if _, _, err := hostKeys(ctx, plainDial, "127.0.0.1:22", 0); !errors.Is(err, context.Canceled) {
 		t.Errorf("a canceled session probed anyway: %v", err)
 	}
 }

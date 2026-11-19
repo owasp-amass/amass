@@ -21,9 +21,11 @@ import (
 var hostKeyAlgorithms = []string{ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoRSASHA512}
 
 const (
-	dialTimeout      = 5 * time.Second
-	handshakeTimeout = 10 * time.Second
-	maxBanner        = 255
+	// defaultDialTimeout is used when the caller passes a non-positive dial
+	// timeout (for example in tests); production threads the configured value.
+	defaultDialTimeout = 2 * time.Second
+	handshakeTimeout   = 10 * time.Second
+	maxBanner          = 255
 )
 
 // errKeyCaptured ends the handshake once the host key is known. The client
@@ -36,7 +38,11 @@ type dialFunc func(ctx context.Context, network, address string) (net.Conn, erro
 // and returns its version banner and the distinct host keys it presented,
 // each as "<key type> SHA256:<base64 fingerprint>". It stops after the first
 // attempt when nothing answers on the port.
-func hostKeys(ctx context.Context, dial dialFunc, addr string) (string, []string, error) {
+func hostKeys(ctx context.Context, dial dialFunc, addr string, dialTO time.Duration) (string, []string, error) {
+	if dialTO <= 0 {
+		dialTO = defaultDialTimeout
+	}
+
 	var banner string
 	var keys []string
 	var lastErr error
@@ -45,7 +51,7 @@ func hostKeys(ctx context.Context, dial dialFunc, addr string) (string, []string
 			return banner, keys, err
 		}
 
-		b, key, err := hostKey(ctx, dial, addr, algo)
+		b, key, err := hostKey(ctx, dial, addr, algo, dialTO)
 		if b != "" && banner == "" {
 			banner = b
 		}
@@ -83,8 +89,8 @@ func contains(list []string, s string) bool {
 
 // hostKey runs one key exchange offering only algo and returns the banner
 // and the presented host key.
-func hostKey(ctx context.Context, dial dialFunc, addr, algo string) (string, string, error) {
-	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+func hostKey(ctx context.Context, dial dialFunc, addr, algo string, dialTO time.Duration) (string, string, error) {
+	dctx, cancel := context.WithTimeout(ctx, dialTO)
 	defer cancel()
 
 	conn, err := dial(dctx, "tcp", addr)

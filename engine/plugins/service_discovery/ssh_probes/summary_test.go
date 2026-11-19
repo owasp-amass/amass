@@ -55,7 +55,7 @@ func TestHostKeysMarksDialFailure(t *testing.T) {
 		return d.DialContext(ctx, network, address)
 	}
 
-	banner, keys, err := hostKeys(context.Background(), dial, addr)
+	banner, keys, err := hostKeys(context.Background(), dial, addr, 0)
 	if len(keys) != 0 {
 		t.Fatalf("got keys %v from a closed port", keys)
 	}
@@ -87,7 +87,7 @@ func TestHostKeysMarksNonSSH(t *testing.T) {
 	}()
 
 	var d net.Dialer
-	banner, keys, err := hostKeys(context.Background(), d.DialContext, l.Addr().String())
+	banner, keys, err := hostKeys(context.Background(), d.DialContext, l.Addr().String(), 0)
 	if len(keys) != 0 {
 		t.Fatalf("got keys %v from a non-SSH service", keys)
 	}
