@@ -13,7 +13,7 @@ import (
 )
 
 func TestRecheckScopeExpansions(t *testing.T) {
-	j := &Journal{Path: filepath.Join(t.TempDir(), "ai-review.jsonl")}
+	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 
 	witness := func(domain string) []graph.WitnessEdge {
 		return []graph.WitnessEdge{{FromID: "dr-" + domain, Label: "registrant_contact", ToID: "cr-1", To: domain}}

@@ -76,7 +76,7 @@ func TestFamilyDepartmentProposal(t *testing.T) {
 	link(crITS, email, "id")
 
 	graph := oamrepo.Adapter{Repo: repo}
-	journal := filepath.Join(t.TempDir(), "ai-review.jsonl")
+	journal := filepath.Join(t.TempDir(), "review.jsonl")
 	var out, errout bytes.Buffer
 	if err := listFamily(ctx, graph, "albany.edu", journal, "", false, &out, &errout); err != nil {
 		t.Fatal(err)

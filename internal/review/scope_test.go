@@ -32,7 +32,7 @@ func TestScopeExpansionID(t *testing.T) {
 }
 
 func TestRecordAndReadScopeExpansions(t *testing.T) {
-	j := &Journal{Path: filepath.Join(t.TempDir(), "ai-review.jsonl")}
+	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 
 	if err := j.RecordScopeExpansion(ScopeExpansion{OrgID: "org-1", Org: "Acme", Asset: "acme.com",
 		Confidence: 93, SignalIDs: []string{"shared-registrant-org", "cert-subject-org"},
@@ -76,7 +76,7 @@ func TestRecordAndReadScopeExpansions(t *testing.T) {
 }
 
 func TestRecordScopeExpansionValidates(t *testing.T) {
-	j := &Journal{Path: filepath.Join(t.TempDir(), "ai-review.jsonl")}
+	j := &Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
 	if err := j.RecordScopeExpansion(ScopeExpansion{OrgID: "org-1", Status: ProposalApplied}); err == nil {
 		t.Error("a missing asset should be rejected")
 	}

@@ -29,7 +29,7 @@ func (c *Config) AIAttribution(lookup func(string) (string, bool)) (string, stri
 
 	journal := s.Journal
 	if journal == "" {
-		journal = filepath.Join(OutputDirectory(c.Dir), "ai-review.jsonl")
+		journal = filepath.Join(OutputDirectory(c.Dir), "review.jsonl")
 	}
 
 	return mode, journal, nil

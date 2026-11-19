@@ -62,7 +62,7 @@ func TestIdentityReviewFlow(t *testing.T) {
 	edge(cr, loc, "location", "TLSCert-Expansion")
 
 	graph := oamrepo.Adapter{Repo: repo}
-	journal := filepath.Join(t.TempDir(), "ai-review.jsonl")
+	journal := filepath.Join(t.TempDir(), "review.jsonl")
 	var out, errout bytes.Buffer
 	if err := listIdentityConflicts(ctx, graph, journal, "", false, &out, &errout); err != nil {
 		t.Fatal(err)

@@ -90,7 +90,7 @@ func (s *relStore) DeleteEdge(_ context.Context, id string) error {
 // applied and the CLI wrappers report both.
 func TestApproveRetractRelationCLI(t *testing.T) {
 	ctx := context.Background()
-	journalPath := filepath.Join(t.TempDir(), "ai-review.jsonl")
+	journalPath := filepath.Join(t.TempDir(), "review.jsonl")
 	j := &review.Journal{Path: journalPath}
 
 	id := review.RelationProposalID("org_unit", "org-parent", "org_unit", "org-child")

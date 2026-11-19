@@ -57,7 +57,7 @@ func TestMergeReviewFlow(t *testing.T) {
 	}
 
 	graph := oamrepo.Adapter{Repo: repo}
-	journal := filepath.Join(t.TempDir(), "ai-review.jsonl")
+	journal := filepath.Join(t.TempDir(), "review.jsonl")
 	var out, errout bytes.Buffer
 	if err := listDuplicates(ctx, graph, journal, "", false, &out, &errout); err != nil {
 		t.Fatal(err)

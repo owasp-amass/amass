@@ -117,7 +117,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.StringVar(&collectionApproval, "approve-collection", "",
 		"Confirmation: the exact plan ID returned by collect-plan for the reviewed scope (not a secret)")
 	fs.StringVar(&journalPath, "journal", "",
-		"Review journal path (default: the attribution journal, ai-review.jsonl in the output directory)")
+		"Review journal path (default: the attribution journal, review.jsonl in the output directory)")
 	fs.StringVar(&proposalID, "proposal", "", "Ownership proposal ID to ask model advice on (review)")
 	fs.StringVar(&modelOutput, "model-output", "",
 		"Where train-attribution writes the ownership model (default: attribution-model.json beside the journal)")

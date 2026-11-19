@@ -14,7 +14,7 @@ func TestAIAttributionDefaultsAndOverrides(t *testing.T) {
 	none := func(string) (string, bool) { return "", false }
 
 	mode, journal, err := c.AIAttribution(none)
-	if err != nil || mode != AttributionAuto || journal != filepath.Join(c.Dir, "ai-review.jsonl") {
+	if err != nil || mode != AttributionAuto || journal != filepath.Join(c.Dir, "review.jsonl") {
 		t.Errorf("defaults = %q, %q, %v", mode, journal, err)
 	}
 

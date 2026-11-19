@@ -42,7 +42,7 @@ type AISettings struct {
 	// (the default) writes strong proposals and journals the rest, "journal"
 	// only journals them, and "off" turns it off. It needs no model.
 	Attribution string `yaml:"attribution,omitempty" json:"attribution,omitempty"`
-	// Journal is the review journal path; empty uses ai-review.jsonl in the
+	// Journal is the review journal path; empty uses review.jsonl in the
 	// Amass output directory.
 	Journal string `yaml:"journal,omitempty" json:"journal,omitempty"`
 }

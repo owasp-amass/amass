@@ -207,7 +207,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
 	fs.StringVar(&configPath, "config", "", "Amass configuration file")
 	fs.StringVar(&journalPath, "journal", "",
-		"Review journal path (default: the attribution journal, ai-review.jsonl in the output directory)")
+		"Review journal path (default: the attribution journal, review.jsonl in the output directory)")
 	fs.StringVar(&outputFormat, "format", "text", "Output format: text or json (signals: text, json or markdown)")
 	fs.StringVar(&domainName, "domain", "", "Enumerated domain the lens starts from")
 	fs.StringVar(&domainName, "d", "", "Enumerated domain the lens starts from (same as -domain)")
