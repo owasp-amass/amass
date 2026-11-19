@@ -60,9 +60,13 @@ func (c *crtshOrg) Start(r et.Registry) error {
 	c.log = r.Log().WithGroup("plugin").With("name", c.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       c,
-		Name:         c.name + "-Handler",
-		Position:     48,
+		Plugin: c,
+		Name:   c.name + "-Handler",
+		// GLEIF's fuzzy handler holds Organization position 48 exclusively;
+		// this independent enrichment runs in its own stage so the two do not
+		// gate each other on the same event (and so registration order can
+		// never make either fail to register).
+		Position:     49,
 		MaxInstances: support.MidHandlerInstances,
 		Transforms:   []string{string(oam.TLSCertificate), string(oam.FQDN), string(oam.ContactRecord)},
 		EventType:    oam.Organization,
