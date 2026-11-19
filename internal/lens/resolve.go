@@ -7,8 +7,10 @@ package lens
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -28,6 +30,19 @@ type dnsRules struct {
 	MaxAliasDepth     int      `json:"max_alias_depth"`
 	// RecordTypeNames maps a stored record's numeric RR type to its label.
 	RecordTypeNames map[int]string `json:"record_type_names"`
+	// NameServerProviders recognize managed-DNS providers whose name servers
+	// serve many unrelated customers, so the shared-name-server signal does not
+	// read one as shared ownership.
+	NameServerProviders []hostProvider `json:"name_server_providers"`
+}
+
+// hostProvider recognizes an infrastructure provider by its host names: a name
+// server (dns.json name_server_providers) or, in email.json, a mail exchanger.
+type hostProvider struct {
+	Provider string `json:"provider"`
+	Pattern  string `json:"pattern"`
+	Source   string `json:"source"`
+	re       *regexp.Regexp
 }
 
 // recordTypeName is the label for a stored record's numeric RR type, or
@@ -116,9 +131,36 @@ var loadDNSRules = sync.OnceValue(func() dnsRules {
 	if r.DNSPurpose == "" || len(r.AddressTypes) == 0 || len(r.AliasRRTypes) == 0 || r.MaxAliasDepth < 1 {
 		panic("dns.json: dns_purpose, address_types, alias_rr_types and max_alias_depth are required")
 	}
+	for i, p := range r.NameServerProviders {
+		if p.Provider == "" || p.Pattern == "" || !strings.HasPrefix(p.Source, "https://") {
+			panic("dns.json: name server provider " + p.Provider + ": provider, pattern and a documentation source " +
+				"are required")
+		}
+
+		re, err := regexp.Compile("(?i)" + p.Pattern)
+		if err != nil {
+			panic("dns.json: name server provider " + p.Provider + ": " + err.Error())
+		}
+
+		r.NameServerProviders[i].re = re
+	}
 
 	return r
 })
+
+// isNameServerProvider reports whether host is an authoritative name server of a
+// known managed-DNS provider (dns.json name_server_providers), so the
+// shared-name-server horizontal signal can skip it regardless of how many of the
+// provider's customers are in the database.
+func isNameServerProvider(host string) bool {
+	for _, p := range loadDNSRules().NameServerProviders {
+		if p.re != nil && p.re.MatchString(host) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // resolution is what a stored name reaches through its DNS records.
 type resolution struct {

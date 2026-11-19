@@ -286,8 +286,10 @@ nsPivot:
 			}
 		}
 	}
-	sharedDNSHostPivot(ctx, g, ownApexes, RRTypeNS, SigSharedNameServer, "shared name server", nsMaxApexes, add)
-	sharedDNSHostPivot(ctx, g, ownApexes, rrTypeMX, SigSharedMX, "shared mail exchanger", mxMaxApexes, add)
+	sharedDNSHostPivot(ctx, g, ownApexes, RRTypeNS, SigSharedNameServer, "shared name server", nsMaxApexes,
+		isNameServerProvider, add)
+	sharedDNSHostPivot(ctx, g, ownApexes, rrTypeMX, SigSharedMX, "shared mail exchanger", mxMaxApexes,
+		isMailProvider, add)
 
 	// Official website: domains the organization publishes as its own site
 	// (Organization --website--> URL --domain--> FQDN).
@@ -326,15 +328,26 @@ nsPivot:
 	return report, nil
 }
 
+// isMailProvider reports whether host is a mail exchanger of a known mail
+// provider (email.json mail_providers), so the shared-mail-exchanger horizontal
+// signal can skip it regardless of how many of the provider's customers are in
+// the database.
+func isMailProvider(host string) bool {
+	return mailProviderOf(loadEmailRules(), host) != ""
+}
+
 // sharedDNSHostPivot adds related domains that share a DNS host record of the
 // given RR type — a name server (NS) or a mail exchanger (MX) — with one of the
 // organization's own apex domains. In OAM both are the same shape (an apex FQDN
 // pointing to a server FQDN via a dns_record edge), so both are found the same
-// way, differing only by RR type. A host shared by more than maxApexes distinct
-// apexes is provider infrastructure (managed DNS or a mail provider) and is
-// skipped, not scored. add returning false (the domain cap) stops the pivot.
+// way, differing only by RR type. A host a known provider operates (isProvider,
+// from a curated provider list) is skipped regardless of database coverage; a
+// host shared by more than maxApexes distinct apexes is treated as provider
+// infrastructure the list does not yet name and is skipped too. Neither is
+// scored. add returning false (the domain cap) stops the pivot.
 func sharedDNSHostPivot(ctx context.Context, g graph.Graph, ownApexes []string, rrType int,
-	signalID, signalLabel string, maxApexes int, add func(string, string, string, ...graph.WitnessEdge) bool) {
+	signalID, signalLabel string, maxApexes int, isProvider func(string) bool,
+	add func(string, string, string, ...graph.WitnessEdge) bool) {
 	seenHost := map[string]bool{}
 	for _, apexID := range ownApexes {
 		hosts, err := g.Edges(ctx, apexID, "out", "dns_record", time.Time{})
@@ -346,6 +359,13 @@ func sharedDNSHostPivot(ctx context.Context, g graph.Graph, ownApexes []string, 
 				continue
 			}
 			seenHost[he.ToID] = true
+
+			// A name server or mail exchanger a known provider operates serves
+			// many unrelated customers, so it is never ownership evidence, even
+			// when few of its tenants are in the database yet.
+			if host, err := g.GetAsset(ctx, he.ToID); err == nil && isProvider(graph.FQDNName(host)) {
+				continue
+			}
 
 			others, err := g.Edges(ctx, he.ToID, "in", "dns_record", time.Time{})
 			if err != nil {

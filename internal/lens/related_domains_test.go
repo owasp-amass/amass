@@ -97,6 +97,20 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 	fqdn("fq_acme_dns", "acme-dns.net")
 	dnsLink("fq_acme_dns", "dns_ns_host", RRTypeNS)
 
+	// Provider guard: acme.net also points its mail at a known mail provider
+	// (Google Workspace, an alt*.aspmx host) and its DNS at a known managed-DNS
+	// provider (Cloudflare). An unrelated domain sharing those provider hosts
+	// must never be surfaced, even though few of each provider's tenants are in
+	// this graph, so the apex-count cap alone would not catch them.
+	fqdn("prov_mx", "alt1.aspmx.l.google.com")
+	dnsLink("fq_acme_net", "prov_mx", rrTypeMX)
+	fqdn("fq_stranger_mail", "stranger-mail.com")
+	dnsLink("fq_stranger_mail", "prov_mx", rrTypeMX)
+	fqdn("prov_ns", "quip.ns.cloudflare.com")
+	dnsLink("fq_acme_net", "prov_ns", RRTypeNS)
+	fqdn("fq_stranger_dns", "stranger-dns.com")
+	dnsLink("fq_stranger_dns", "prov_ns", RRTypeNS)
+
 	return g
 }
 
@@ -136,6 +150,14 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	// acme-dns.net comes only from the shared-name-server signal, via its DNS record.
 	if d := got["acme-dns.net"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
 		t.Errorf("acme-dns.net should come from the DNS name-server signal: %+v", d)
+	}
+	// A domain sharing only a known provider's mail exchanger or name server is
+	// never surfaced: the provider guard skips the host whatever the coverage.
+	if _, ok := got["stranger-mail.com"]; ok {
+		t.Error("a domain sharing a known mail provider (Google Workspace) must not be correlated on")
+	}
+	if _, ok := got["stranger-dns.com"]; ok {
+		t.Error("a domain sharing a known managed-DNS provider (Cloudflare) must not be correlated on")
 	}
 	// acme.com is found by all three signals, and corroboration ranks it above
 	// any single signal (noisy-OR of the catalog weights).

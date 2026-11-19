@@ -1,12 +1,29 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "How the lenses resolve a stored name to the addresses it reaches. A name's DNS relations (purpose dns in the semantics table) lead to an address when the other end is one of address_types, and to another name when the record type is one of alias_rr_types: a CNAME makes its owner an alias of the target, whose records apply instead (RFC 1034 section 3.6.2). delegation_rr_types are the records that delegate a zone to name servers (NS, RFC 1034 section 4.2.1). mail_rr_types are the records naming a domain's mail servers (MX, RFC 5321 section 5.1). max_alias_depth bounds an alias chain; resolvers bound them too, since a chain can loop (RFC 1034 section 5.3.2). record_type_names maps a stored record's numeric RR type to the label the lenses show; a type absent from the map is shown as TYPE<number>. Add values here, not in Go code.",
+  "_about": "How the lenses resolve a stored name to the addresses it reaches. A name's DNS relations (purpose dns in the semantics table) lead to an address when the other end is one of address_types, and to another name when the record type is one of alias_rr_types: a CNAME makes its owner an alias of the target, whose records apply instead (RFC 1034 section 3.6.2). delegation_rr_types are the records that delegate a zone to name servers (NS, RFC 1034 section 4.2.1). mail_rr_types are the records naming a domain's mail servers (MX, RFC 5321 section 5.1). max_alias_depth bounds an alias chain; resolvers bound them too, since a chain can loop (RFC 1034 section 5.3.2). record_type_names maps a stored record's numeric RR type to the label the lenses show; a type absent from the map is shown as TYPE<number>. name_server_providers name the managed-DNS providers whose authoritative name servers serve many unrelated customers, so that a name server matching one is not read as evidence of shared ownership by the shared-name-server horizontal signal (the mail-exchanger equivalent is email.json mail_providers): pattern is a regular expression matched, ignoring case, against the whole name server host name, and source is the provider's own documentation of the host names it assigns. This recognizes a provider regardless of how many of its customers are in the database, where the apex-count cap only catches it once many are. A name server no pattern matches is still subject to that cap. Add providers here, not in Go code, and only with such a source. Add values here, not in Go code.",
   "dns_purpose": "dns",
   "address_types": ["IPAddress"],
   "alias_rr_types": [5],
   "delegation_rr_types": [2],
   "mail_rr_types": [15],
   "max_alias_depth": 8,
+  "name_server_providers": [
+    {
+      "provider": "Amazon Route 53",
+      "pattern": "^ns-[0-9]+\\.awsdns-[0-9]+\\.(com|net|org|co\\.uk)$",
+      "source": "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/SOA-NSrecords.html"
+    },
+    {
+      "provider": "Cloudflare",
+      "pattern": "^[a-z0-9-]+\\.ns\\.cloudflare\\.com$",
+      "source": "https://developers.cloudflare.com/dns/nameservers/"
+    },
+    {
+      "provider": "Google Cloud DNS",
+      "pattern": "^ns-cloud-[a-d][0-9]+\\.googledomains\\.com$",
+      "source": "https://docs.cloud.google.com/dns/docs/update-name-servers"
+    }
+  ],
   "record_type_names": {
     "1": "A",
     "2": "NS",

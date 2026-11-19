@@ -27,7 +27,7 @@
   "mail_providers": [
     {
       "provider": "Google Workspace",
-      "pattern": "^(smtp\\.google\\.com|aspmx[0-9]*\\.l\\.google\\.com)$",
+      "pattern": "^(smtp\\.google\\.com|(alt[0-9]+\\.)?aspmx[0-9]*\\.l\\.google\\.com)$",
       "source": "https://knowledge.workspace.google.com/kb/how-to-update-your-mx-records-to-work-with-gmail-000005563"
     },
     {
