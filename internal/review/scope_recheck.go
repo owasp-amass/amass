@@ -65,17 +65,18 @@ func recheckScopeExpansions(ctx context.Context, j *Journal, check witnessChecke
 		}
 
 		if isAIReviewer(e.Reviewer) {
-			if err := j.RecordScopeExpansion(ScopeExpansion{ID: e.ID, OrgID: e.OrgID, Org: e.Org, Domain: e.Domain,
-				Status: ProposalRetracted, Reviewer: RecheckReviewer}); err != nil {
+			if err := j.RecordScopeExpansion(ScopeExpansion{ID: e.ID, OrgID: e.OrgID, Org: e.Org,
+				AssetType: e.AssetType, Asset: e.Asset, Status: ProposalRetracted,
+				Reviewer: RecheckReviewer}); err != nil {
 				return res, err
 			}
 			res.Retracted = append(res.Retracted, e)
 		} else {
 			// A person approved it: reopen as a pending proposal for re-review
 			// rather than undoing a human decision.
-			if err := j.RecordScopeExpansion(ScopeExpansion{ID: e.ID, OrgID: e.OrgID, Org: e.Org, Domain: e.Domain,
-				Confidence: e.Confidence, Signals: e.Signals, SignalIDs: e.SignalIDs, Witness: e.Witness,
-				Status: ProposalPending}); err != nil {
+			if err := j.RecordScopeExpansion(ScopeExpansion{ID: e.ID, OrgID: e.OrgID, Org: e.Org,
+				AssetType: e.AssetType, Asset: e.Asset, Confidence: e.Confidence, Signals: e.Signals,
+				SignalIDs: e.SignalIDs, Witness: e.Witness, Status: ProposalPending}); err != nil {
 				return res, err
 			}
 			res.Flagged = append(res.Flagged, e)

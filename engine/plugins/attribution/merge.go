@@ -474,11 +474,11 @@ func (t *tracker) recheck(ctx context.Context, adapter oamrepo.Adapter) {
 		return
 	}
 	for _, e := range sres.Retracted {
-		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation retracted %s from scope: its evidence is gone "+
-			"(org %s)", e.Domain, e.Org))
+		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation retracted %s %s from scope: its evidence is gone "+
+			"(org %s)", e.Kind(), e.Asset, e.Org))
 	}
 	for _, e := range sres.Flagged {
-		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation reopened %s for review: its evidence is gone "+
-			"(org %s)", e.Domain, e.Org))
+		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation reopened %s %s for review: its evidence is gone "+
+			"(org %s)", e.Kind(), e.Asset, e.Org))
 	}
 }

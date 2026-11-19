@@ -19,7 +19,7 @@ func TestRecheckScopeExpansions(t *testing.T) {
 		return []graph.WitnessEdge{{FromID: "dr-" + domain, Label: "registrant_contact", ToID: "cr-1", To: domain}}
 	}
 	seed := func(domain, reviewer string) {
-		if err := j.RecordScopeExpansion(ScopeExpansion{OrgID: "org-1", Org: "Acme", Domain: domain,
+		if err := j.RecordScopeExpansion(ScopeExpansion{OrgID: "org-1", Org: "Acme", Asset: domain,
 			Confidence: 80, SignalIDs: []string{"shared-registrant-org"}, Witness: witness(domain),
 			Status: ProposalApplied, Reviewer: reviewer}); err != nil {
 			t.Fatal(err)
@@ -45,10 +45,10 @@ func TestRecheckScopeExpansions(t *testing.T) {
 	if res.Checked != 3 {
 		t.Errorf("checked = %d, want 3", res.Checked)
 	}
-	if len(res.Retracted) != 1 || res.Retracted[0].Domain != "acme.net" {
+	if len(res.Retracted) != 1 || res.Retracted[0].Asset != "acme.net" {
 		t.Errorf("retracted = %+v, want [acme.net]", res.Retracted)
 	}
-	if len(res.Flagged) != 1 || res.Flagged[0].Domain != "acme.org" {
+	if len(res.Flagged) != 1 || res.Flagged[0].Asset != "acme.org" {
 		t.Errorf("flagged = %+v, want [acme.org]", res.Flagged)
 	}
 
@@ -59,7 +59,7 @@ func TestRecheckScopeExpansions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(applied) != 1 || applied[0].Domain != "acme.com" {
+	if len(applied) != 1 || applied[0].Asset != "acme.com" {
 		t.Errorf("applied after re-check = %+v, want only acme.com", applied)
 	}
 }

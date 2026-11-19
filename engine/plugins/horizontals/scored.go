@@ -129,8 +129,8 @@ func (h *horizPlugin) recordExpansion(j *review.Journal, orgID, org string, d le
 		return
 	}
 	_ = j.RecordScopeExpansion(review.ScopeExpansion{
-		OrgID: orgID, Org: org, Domain: d.Domain, Confidence: d.Confidence,
-		Signals: d.Signals, SignalIDs: d.SignalIDs, Witness: d.Witness,
+		OrgID: orgID, Org: org, AssetType: review.DefaultScopeAssetType, Asset: d.Domain,
+		Confidence: d.Confidence, Signals: d.Signals, SignalIDs: d.SignalIDs, Witness: d.Witness,
 		Status: status, Reviewer: reviewer,
 	})
 }

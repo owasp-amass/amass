@@ -16,24 +16,34 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/graph"
 )
 
-// ScopeExpansionPrefix prefixes the id of a horizontal scope-expansion record,
-// so it is never mistaken for another kind of proposal.
+// ScopeExpansionPrefix prefixes the id of a scope-expansion record, so it is
+// never mistaken for another kind of proposal.
 const ScopeExpansionPrefix = "hdom-"
 
-// ScopeExpansion records a registered (apex) domain the scored horizontal
-// correlation added to, or proposed for, an enumeration's scope, with the
-// evidence behind it. It makes a runtime scope change auditable and reversible:
-// the reevaluation sweep re-tests an applied expansion as the enumeration brings
-// in new evidence and retracts it if the evidence no longer supports it, so
-// scope is never silently or permanently grown on a stale conclusion
-// (ai-design-principles.md, principles 9 & 13). An applied expansion was added
-// to scope during the run; a pending one is corroboration-only and waits for a
-// person; a retracted one was reconsidered and removed.
+// DefaultScopeAssetType is the asset type a scope expansion names when none is
+// recorded, so the original horizontal domain records (which stored no type)
+// keep meaning an FQDN.
+const DefaultScopeAssetType = "FQDN"
+
+// ScopeExpansion records an asset the scored correlation added to, or proposed
+// for, an enumeration's scope, with the evidence behind it. It is asset-agnostic
+// — a registered domain (FQDN, the default), a netblock, or an autonomous system
+// — identified by AssetType and the asset's key (Asset). It makes a runtime
+// scope change auditable and reversible: the reevaluation sweep re-tests an
+// applied expansion as the enumeration brings in new evidence and retracts it if
+// the evidence no longer supports it, so scope is never silently or permanently
+// grown on a stale conclusion (ai-design-principles.md, principles 9 & 13). An
+// applied expansion was added to scope during the run; a pending one is
+// corroboration-only and waits for a person; a retracted one was reconsidered
+// and removed.
 type ScopeExpansion struct {
-	ID         string              `json:"id"`
-	OrgID      string              `json:"org_id"`
-	Org        string              `json:"org"`
-	Domain     string              `json:"domain"`
+	ID    string `json:"id"`
+	OrgID string `json:"org_id"`
+	Org   string `json:"org"`
+	// AssetType is the OAM type of the scoped asset ("FQDN", "Netblock",
+	// "AutonomousSystem"); empty means FQDN for the original domain records.
+	AssetType  string              `json:"asset_type,omitempty"`
+	Asset      string              `json:"asset"`
 	Confidence int                 `json:"confidence"`
 	Signals    []string            `json:"signals,omitempty"`
 	SignalIDs  []string            `json:"signal_ids,omitempty"`
@@ -43,25 +53,36 @@ type ScopeExpansion struct {
 	At         time.Time           `json:"at"`
 }
 
-// ScopeExpansionID is a stable identifier for an organization/domain scope
-// expansion, so the same expansion is recorded once and a reconsidered one is
-// recognized rather than duplicated.
-func ScopeExpansionID(orgID, domain string) string {
-	sum := sha256.Sum256([]byte(orgID + "\x00" + domain))
+// Kind returns the scoped asset's OAM type, defaulting to FQDN.
+func (e ScopeExpansion) Kind() string {
+	if e.AssetType == "" {
+		return DefaultScopeAssetType
+	}
+	return e.AssetType
+}
+
+// ScopeExpansionID is a stable identifier for an organization's scope expansion
+// of one asset, so the same expansion is recorded once and a reconsidered one is
+// recognized rather than duplicated. An empty assetType is the FQDN default.
+func ScopeExpansionID(orgID, assetType, asset string) string {
+	if assetType == "" {
+		assetType = DefaultScopeAssetType
+	}
+	sum := sha256.Sum256([]byte(orgID + "\x00" + assetType + "\x00" + asset))
 	return ScopeExpansionPrefix + hex.EncodeToString(sum[:8])
 }
 
 // RecordScopeExpansion appends a scope-expansion record — applied, pending
 // review, or retracted — filling the id and timestamp when unset.
 func (j *Journal) RecordScopeExpansion(e ScopeExpansion) error {
-	if e.OrgID == "" || e.Domain == "" {
-		return errors.New("scope expansion needs an organization and a domain")
+	if e.OrgID == "" || e.Asset == "" {
+		return errors.New("scope expansion needs an organization and an asset")
 	}
 	if e.Status != ProposalApplied && e.Status != ProposalPending && e.Status != ProposalRetracted {
 		return fmt.Errorf("invalid scope-expansion status %q", e.Status)
 	}
 	if e.ID == "" {
-		e.ID = ScopeExpansionID(e.OrgID, e.Domain)
+		e.ID = ScopeExpansionID(e.OrgID, e.AssetType, e.Asset)
 	}
 	if e.At.IsZero() {
 		e.At = time.Now().UTC()
