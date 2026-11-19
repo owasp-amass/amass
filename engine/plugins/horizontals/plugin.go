@@ -17,6 +17,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/ai"
 	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"github.com/owasp-amass/amass/v5/internal/registrant"
 	"github.com/owasp-amass/amass/v5/internal/review"
@@ -46,6 +47,10 @@ type horizPlugin struct {
 	// journals caches the review journal by path, so scored scope expansions
 	// are recorded in the same journal automatic attribution uses.
 	journals map[string]*review.Journal
+	// scorers caches the trained horizontal model by journal path (nil when
+	// none is trained); scorerLoaded records which paths have been tried.
+	scorers      map[string]*ai.HorizontalModel
+	scorerLoaded map[string]bool
 }
 
 func NewHorizontals() et.Plugin {
@@ -55,8 +60,10 @@ func NewHorizontals() et.Plugin {
 			Name:       "Horizontals",
 			Confidence: 75,
 		},
-		lookup:   os.LookupEnv,
-		journals: make(map[string]*review.Journal),
+		lookup:       os.LookupEnv,
+		journals:     make(map[string]*review.Journal),
+		scorers:      make(map[string]*ai.HorizontalModel),
+		scorerLoaded: make(map[string]bool),
 	}
 }
 

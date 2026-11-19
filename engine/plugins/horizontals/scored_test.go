@@ -5,11 +5,17 @@
 package horizontals
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/plugintest"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
@@ -107,6 +113,51 @@ func TestExpandRelatedDomainsWidensScope(t *testing.T) {
 	h.expandRelatedDomains(&et.Event{Session: sess, Entity: proxy}, proxy)
 	if inScope(sess, "stranger.com") {
 		t.Error("a privacy-proxy organization must not widen scope")
+	}
+}
+
+func TestHorizontalScorerLoads(t *testing.T) {
+	sess := plugintest.NewSession(t)
+	sess.Config().Dir = t.TempDir()
+	h := NewHorizontals().(*horizPlugin)
+
+	_, journalPath, err := sess.Config().AIAttribution(os.LookupEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelPath := ai.HorizontalModelPath(journalPath)
+	if err := os.MkdirAll(filepath.Dir(modelPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	model := classify.LinearModel{
+		ModelID: "test-horiz", Task: ai.HorizontalTask, FeatureVersion: ai.HorizontalFeatureVersion,
+		SkipThreshold: 0.7, ReviewThreshold: 0.7,
+		Classes: []classify.LinearClass{
+			{Label: "unrelated", Bias: 0, Weights: map[string]float64{"signal:" + lens.SigSharedNameServer: 0}},
+			{Label: "potential_relation", Bias: 0, Weights: map[string]float64{"signal:" + lens.SigSharedNameServer: 5}},
+		},
+	}
+	data, err := json.Marshal(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modelPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := h.horizontalScorer(sess)
+	if s == nil || s.ModelName() != "test-horiz" {
+		t.Fatalf("horizontalScorer should load the model, got %v", s)
+	}
+	if h.horizontalScorer(sess) != s {
+		t.Error("the scorer should be cached, not reloaded")
+	}
+
+	// A different session with attribution off gets no scorer.
+	off := plugintest.NewSession(t)
+	off.Config().AI = &config.AISettings{Attribution: config.AttributionOff}
+	if NewHorizontals().(*horizPlugin).horizontalScorer(off) != nil {
+		t.Error("attribution off should yield no scorer")
 	}
 }
 

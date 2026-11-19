@@ -6,6 +6,7 @@ package horizontals
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
 	"github.com/owasp-amass/amass/v5/internal/lens"
 	"github.com/owasp-amass/amass/v5/internal/review"
@@ -69,12 +71,53 @@ func (h *horizPlugin) expandRelatedDomains(e *et.Event, orgEnt *dbt.Entity) {
 			slog.Group("plugin", "name", h.name))
 		h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalApplied, review.AutomaticReviewer)
 	}
-	// Corroboration-only candidates are proposed for a person, never auto-added.
+	// Corroboration-only candidates: a trained model may promote one to a scope
+	// expansion; otherwise it is proposed for a person, never auto-added.
+	scorer := h.horizontalScorer(sess)
 	for _, d := range needsReview {
+		if scorer != nil {
+			if prob, perr := scorer.Probability(d.SignalIDs, d.Confidence); perr == nil && prob >= scorer.Threshold() {
+				if h.widenScopeToDomain(ctx, sess, d.Domain) {
+					sess.Log().Info("horizontal correlation widened scope (model)",
+						"domain", d.Domain, "org", report.Org, "probability", prob,
+						slog.Group("plugin", "name", h.name))
+					h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalApplied, scorer.ModelName())
+				}
+				continue
+			}
+		}
 		h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalPending, "")
 	}
 
 	support.MarkAssetMonitored(sess, orgEnt, h.source)
+}
+
+// horizontalScorer returns the trained horizontal model beside the session's
+// review journal, loaded once per path, or nil when none is trained (then the
+// weighted HorizontalScore alone decides).
+func (h *horizPlugin) horizontalScorer(sess et.Session) *ai.HorizontalModel {
+	_, path, err := sess.Config().AIAttribution(h.lookup)
+	if err != nil || path == "" {
+		return nil
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.scorerLoaded[path] {
+		return h.scorers[path]
+	}
+
+	m, err := ai.LoadHorizontalScorer(path)
+	if err != nil {
+		sess.Log().Error(fmt.Sprintf("horizontal model: %v", err), slog.Group("plugin", "name", h.name))
+	} else if m != nil {
+		sess.Log().Info(fmt.Sprintf("horizontal expansion adjudicated by model %s", m.ModelName()),
+			slog.Group("plugin", "name", h.name))
+	}
+	h.scorerLoaded[path] = true
+	h.scorers[path] = m
+
+	return m
 }
 
 func (h *horizPlugin) recordExpansion(j *review.Journal, orgID, org string, d lens.HorizontalDomain,
