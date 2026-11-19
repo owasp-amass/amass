@@ -6,6 +6,7 @@ package horizontals
 
 import (
 	"encoding/json"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/lens"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
@@ -158,6 +160,47 @@ func TestHorizontalScorerLoads(t *testing.T) {
 	off.Config().AI = &config.AISettings{Attribution: config.AttributionOff}
 	if NewHorizontals().(*horizPlugin).horizontalScorer(off) != nil {
 		t.Error("attribution off should yield no scorer")
+	}
+}
+
+func TestExpandRelatedInfrastructureWidensScope(t *testing.T) {
+	sess := plugintest.NewSession(t)
+	transforms(sess)
+	sess.Config().AI = &config.AISettings{Attribution: config.AttributionOff}
+	h := NewHorizontals().(*horizPlugin)
+
+	org := sess.Asset(t, &oamorg.Organization{ID: "org-1", Name: "Acme Corporation"})
+	cr := sess.Asset(t, &oamcon.ContactRecord{DiscoveredAt: "https://rdap.example/ip/acme"})
+	sess.Edge(t, cr, link("organization"), org)
+
+	// A netblock registered to the org (strong), with its Netblock asset.
+	nbCIDR := netip.MustParsePrefix("192.0.2.0/24")
+	ipr := sess.Asset(t, &oamreg.IPNetRecord{CIDR: nbCIDR, Handle: "NET-192-0-2-0-1", Type: "IPv4",
+		StartAddress: netip.MustParseAddr("192.0.2.0"), EndAddress: netip.MustParseAddr("192.0.2.255"), Name: "ACME"})
+	sess.Edge(t, ipr, link("registrant"), cr)
+	sess.Asset(t, &oamnet.Netblock{CIDR: nbCIDR, Type: "IPv4"})
+
+	// An AS registered to the org (strong), plus a prefix it announces
+	// (supporting — review only).
+	asr := sess.Asset(t, &oamreg.AutnumRecord{Number: 64500, Handle: "AS64500", Name: "ACME"})
+	sess.Edge(t, asr, link("registrant"), cr)
+	as := sess.Asset(t, &oamnet.AutonomousSystem{Number: 64500})
+	sess.Edge(t, as, link("registration"), asr)
+	annCIDR := netip.MustParsePrefix("203.0.113.0/24")
+	ann := sess.Asset(t, &oamnet.Netblock{CIDR: annCIDR, Type: "IPv4"})
+	sess.Edge(t, as, link("announces"), ann)
+
+	h.expandRelatedInfrastructure(&et.Event{Session: sess, Entity: org}, org)
+
+	if _, c := sess.Scope().IsAssetInScope(&oamnet.Netblock{CIDR: nbCIDR, Type: "IPv4"}, 0); c <= 0 {
+		t.Error("the RIR-registered netblock should be added to scope")
+	}
+	if _, c := sess.Scope().IsAssetInScope(&oamnet.AutonomousSystem{Number: 64500}, 0); c <= 0 {
+		t.Error("the RIR-registered AS should be added to scope")
+	}
+	// The announced-only prefix is a supporting signal, so it must not auto-expand.
+	if _, c := sess.Scope().IsAssetInScope(&oamnet.Netblock{CIDR: annCIDR, Type: "IPv4"}, 0); c > 0 {
+		t.Error("an announced-only netblock must not auto-expand scope")
 	}
 }
 

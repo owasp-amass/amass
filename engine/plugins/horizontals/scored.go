@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,6 +146,115 @@ func (h *horizPlugin) widenScopeToDomain(ctx context.Context, sess et.Session, d
 	}
 
 	ents, err := sess.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{"name": domain})
+	if err != nil || len(ents) != 1 {
+		return false
+	}
+	ent := ents[0]
+	if !sess.Scope().Add(ent.Asset) {
+		return false
+	}
+	if econf := h.confidence(sess, ent.Asset.AssetType()); econf > 0 {
+		if a, c := sess.Scope().IsAssetInScope(ent.Asset, econf); c >= econf && strings.EqualFold(a.Key(),
+			ent.Asset.Key()) {
+			_ = sess.Backlog().Enqueue(ent)
+		}
+	}
+
+	return true
+}
+
+// expandRelatedInfrastructure is the scored replacement for the single-signal
+// netblock/AS expansion the handlers used to do. For an in-scope organization it
+// scores the netblocks and autonomous systems the infrastructure signals tie to
+// it (internal/lens: RIR netblock/AS registrant, and prefixes the org's AS
+// announces, with privacy-proxy registrants excluded), adds the strongly-
+// supported ones to scope, and records every decision in the review journal so
+// it is auditable and reconsiderable by the same reevaluation sweep. Announced-
+// only (corroboration) candidates are left as pending proposals. Scope is never
+// grown when the run is Rigid. It runs at most once per organization per TTL
+// window, under its own source so it does not collide with the domain pass.
+func (h *horizPlugin) expandRelatedInfrastructure(e *et.Event, orgEnt *dbt.Entity) {
+	sess := e.Session
+	if sess.Config().Rigid || orgEnt == nil {
+		return
+	}
+	if _, ok := orgEnt.Asset.(*oamorg.Organization); !ok {
+		return
+	}
+
+	since, err := support.TTLStartTime(sess.Config(), string(oam.Organization), string(oam.Netblock), h.name)
+	if err != nil {
+		return
+	}
+	if support.AssetMonitoredWithinTTL(sess, orgEnt, h.infraSource, since) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), time.Minute)
+	defer cancel()
+
+	adapter := oamrepo.Adapter{Repo: sess.DB(), Neo4jDatabase: oamrepo.Neo4jDatabaseName(sess.Config())}
+	report, err := lens.FindRelatedInfrastructure(ctx, adapter, orgEnt.ID)
+	if err != nil {
+		sess.Log().Error(err.Error(), slog.Group("plugin", "name", h.name))
+		return
+	}
+
+	expand, needsReview := lens.InfrastructureExpansion(report)
+	j := h.journalFor(sess)
+	for _, a := range expand {
+		if !h.widenScopeToAsset(ctx, sess, a.AssetType, a.Asset) {
+			continue
+		}
+		sess.Log().Info("infrastructure correlation widened scope",
+			"type", a.AssetType, "asset", a.Asset, "org", report.Org, "confidence", a.Confidence,
+			slog.Group("plugin", "name", h.name))
+		h.recordInfraExpansion(j, orgEnt.ID, report.Org, a, review.ProposalApplied, review.AutomaticReviewer)
+	}
+	for _, a := range needsReview {
+		h.recordInfraExpansion(j, orgEnt.ID, report.Org, a, review.ProposalPending, "")
+	}
+
+	support.MarkAssetMonitored(sess, orgEnt, h.infraSource)
+}
+
+func (h *horizPlugin) recordInfraExpansion(j *review.Journal, orgID, org string, a lens.InfrastructureAsset,
+	status, reviewer string) {
+	if j == nil {
+		return
+	}
+	_ = j.RecordScopeExpansion(review.ScopeExpansion{
+		OrgID: orgID, Org: org, AssetType: a.AssetType, Asset: a.Asset,
+		Confidence: a.Confidence, Signals: a.Signals, SignalIDs: a.SignalIDs, Witness: a.Witness,
+		Status: status, Reviewer: reviewer,
+	})
+}
+
+// widenScopeToAsset adds a netblock (by CIDR) or autonomous system (by number)
+// to the session scope and enqueues it, mirroring widenScopeToDomain. It reports
+// whether the asset was newly added (false when unknown or already in scope).
+func (h *horizPlugin) widenScopeToAsset(ctx context.Context, sess et.Session, assetType, asset string) bool {
+	asset = strings.ToLower(strings.TrimSpace(asset))
+	if asset == "" {
+		return false
+	}
+
+	var otype oam.AssetType
+	var filter dbt.ContentFilters
+	switch assetType {
+	case "Netblock":
+		otype, filter = oam.Netblock, dbt.ContentFilters{"cidr": asset}
+	case "AutonomousSystem":
+		n, err := strconv.Atoi(asset)
+		if err != nil {
+			return false
+		}
+		otype, filter = oam.AutonomousSystem, dbt.ContentFilters{"number": n}
+	default:
+		return false
+	}
+
+	ents, err := sess.DB().FindEntitiesByContent(ctx, otype, time.Time{}, 1, filter)
 	if err != nil || len(ents) != 1 {
 		return false
 	}

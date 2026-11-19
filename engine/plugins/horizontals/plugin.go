@@ -40,6 +40,10 @@ type horizPlugin struct {
 	horRegRec   *horRegRec
 	horTlsCert  *horTlsCert
 	source      *et.Source
+	// infraSource marks organizations monitored by the scored netblock/AS
+	// expansion, separately from the domain pass (monitoring is per source), so
+	// both passes run for the same organization.
+	infraSource *et.Source
 	// lookup resolves environment variables for the AI-attribution journal
 	// configuration; overridable in tests.
 	lookup func(string) (string, bool)
@@ -60,6 +64,7 @@ func NewHorizontals() et.Plugin {
 			Name:       "Horizontals",
 			Confidence: 75,
 		},
+		infraSource:  &et.Source{Name: "Horizontals-Infrastructure", Confidence: 75},
 		lookup:       os.LookupEnv,
 		journals:     make(map[string]*review.Journal),
 		scorers:      make(map[string]*ai.HorizontalModel),
