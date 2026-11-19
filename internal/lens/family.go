@@ -1220,12 +1220,23 @@ func (s *familySearch) sameAs(a, b *familyProfile) (sameReason, bool) {
 // University and Hopkins Hospital differ in a word that is not a rename
 // word, so they stay apart.
 func (s *familySearch) renamed(a, b string) bool {
-	wa, wb := strings.Fields(a), strings.Fields(b)
+	return renamedNames(a, b)
+}
+
+// renamedNames reports whether two organization names are the same but for
+// rename words — a college that became a university — using the family rules'
+// rename_words and generic_words. It is the shared, data-driven check used by
+// both the family lens and the identity corrector (which must not propose
+// removing a legal name that is only such a rename of a known name), and it
+// compares case-insensitively.
+func renamedNames(a, b string) bool {
+	rules := loadFamilyRules()
+	wa, wb := strings.Fields(strings.ToLower(a)), strings.Fields(strings.ToLower(b))
 	stop := abbreviationStopWords()
 	distinct := func(ws []string) map[string]bool {
 		out := map[string]bool{}
 		for _, w := range ws {
-			if !slices.Contains(s.rules.GenericWords, w) {
+			if !slices.Contains(rules.GenericWords, w) {
 				out[w] = true
 			}
 		}
@@ -1250,7 +1261,7 @@ func (s *familySearch) renamed(a, b string) bool {
 				continue
 			}
 			switch {
-			case slices.Contains(s.rules.RenameWords, w):
+			case slices.Contains(rules.RenameWords, w):
 				rename = true
 			case slices.Contains(stop, w):
 			default:

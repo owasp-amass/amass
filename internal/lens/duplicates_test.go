@@ -206,6 +206,11 @@ func TestBrandName(t *testing.T) {
 		"DigiCert Inc":                     "digicert",
 		"S.A.":                             "s.a",
 		"Internet Security Research Group": "internet security research group",
+		// Governance/legal-entity wrappers are stripped from the front.
+		"The Trustees of Hamilton College": "hamilton college",
+		"Trustees of Dartmouth College":    "dartmouth college",
+		// A bare leading "the" is not a governance prefix and stays.
+		"The North Face Inc": "the north face",
 	} {
 		if got := brandName(in); got != want {
 			t.Errorf("brandName(%q) = %q, want %q", in, got, want)

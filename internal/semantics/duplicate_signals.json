@@ -82,7 +82,8 @@
       "weight": 0.2,
       "matcher": "same_brand",
       "params": {
-        "legal_forms": ["inc", "incorporated", "corp", "corporation", "co", "company", "llc", "l.l.c", "ltd", "limited", "plc", "gmbh", "ag", "sa", "s.a", "nv", "n.v", "nv-sa", "bv", "b.v", "sarl", "s.a.r.l", "s.à r.l", "srl", "s.r.l", "spa", "s.p.a", "pty", "pty ltd", "pte", "pte ltd", "oy", "ab", "as", "a/s", "kk", "k.k", "lp", "llp", "pbc", "sas", "s.a.s"]
+        "legal_forms": ["inc", "incorporated", "corp", "corporation", "co", "company", "llc", "l.l.c", "ltd", "limited", "plc", "gmbh", "ag", "sa", "s.a", "nv", "n.v", "nv-sa", "bv", "b.v", "sarl", "s.a.r.l", "s.à r.l", "srl", "s.r.l", "spa", "s.p.a", "pty", "pty ltd", "pte", "pte ltd", "oy", "ab", "as", "a/s", "kk", "k.k", "lp", "llp", "pbc", "sas", "s.a.s"],
+        "governance_prefixes": ["the trustees of the", "the trustees of", "trustees of the", "trustees of", "the board of trustees of the", "the board of trustees of", "board of trustees of", "the regents of the", "the regents of", "the board of regents of the", "the board of regents of", "the president and fellows of", "the rector and visitors of the", "the rector and visitors of", "the curators of the", "the curators of", "the governors of the", "the governors of"]
       },
       "finds": "Two organizations whose names are the same once case, punctuation and legal forms such as Inc, LLC, Ltd or NV-SA are removed.",
       "rationale": "Sources spell one company's name differently: a certificate says 'Google Trust Services LLC' where another says 'Google Trust Services'. A matching name supports other evidence, but it is never strong: organizations in different jurisdictions often share a name and are different companies.",

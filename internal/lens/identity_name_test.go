@@ -28,6 +28,11 @@ func TestLegalNameAgrees(t *testing.T) {
 		{"institution college/university", "utica college", []string{"utica university"}, true},
 		{"institution university/college", "utica university", []string{"utica college"}, true},
 		{"institution institute/university", "suny polytechnic institute", []string{"suny polytechnic university"}, true},
+		// Governance/legal-entity wrapper: "The Trustees of Hamilton College" is
+		// a legal name for "Hamilton College", not a wrong identity (brandName
+		// strips the wrapper so the brands match).
+		{"governance prefix trustees", "the trustees of hamilton college", []string{"hamilton college"}, true},
+		{"governance prefix the regents", "the regents of the university of michigan", []string{"university of michigan"}, true},
 		// Empty legal name has nothing to disagree with.
 		{"empty legal", "", []string{"amazon"}, true},
 
@@ -64,6 +69,7 @@ func TestLegalNameAgreementViaSubsidiary(t *testing.T) {
 		{"division suffix is subsidiary", "cogent communications group, llc", []string{"cogent communications"}, true, true},
 		{"acronym is not subsidiary", "fomento economico mexicano s a b de c v", []string{"femsa"}, true, false},
 		{"institution rename is not subsidiary", "utica college", []string{"utica university"}, true, false},
+		{"governance prefix is not subsidiary", "the trustees of hamilton college", []string{"hamilton college"}, true, false},
 		{"disagree", "mol corporation", []string{"microsoft"}, false, false},
 	}
 

@@ -73,9 +73,14 @@ type SignalParams struct {
 	FreeMail []string `json:"free_mail,omitempty"`
 	// IDTypes, LegalForms and NamesMustAgree configure the duplicate
 	// organization signals in duplicate_signals.json.
-	IDTypes        []string `json:"id_types,omitempty"`
-	LegalForms     []string `json:"legal_forms,omitempty"`
-	NamesMustAgree bool     `json:"names_must_agree,omitempty"`
+	IDTypes    []string `json:"id_types,omitempty"`
+	LegalForms []string `json:"legal_forms,omitempty"`
+	// GovernancePrefixes are leading governance or legal-entity wrappers
+	// ("the trustees of", "the regents of") stripped from a name before its
+	// brand is compared, so a legal name like "The Trustees of Hamilton College"
+	// matches the common name "Hamilton College".
+	GovernancePrefixes []string `json:"governance_prefixes,omitempty"`
+	NamesMustAgree     bool     `json:"names_must_agree,omitempty"`
 }
 
 // OwnershipSignal is one kind of ownership evidence and why it counts.

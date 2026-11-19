@@ -658,6 +658,16 @@ func brandName(name string) string {
 
 	words = slices.DeleteFunc(words, func(w string) bool { return w == "" })
 
+	// Strip a leading governance or legal-entity wrapper ("the trustees of
+	// hamilton college" -> "hamilton college"), longest prefix first, never
+	// removing the whole name.
+	for _, p := range governancePrefixes() {
+		if len(words) > len(p) && hasPrefixTokens(words, p) {
+			words = words[len(p):]
+			break
+		}
+	}
+
 	forms := legalForms()
 	for len(words) > 1 {
 		if n := len(words); n > 2 && forms[normLegalForm(words[n-2]+" "+words[n-1])] {
@@ -673,6 +683,20 @@ func brandName(name string) string {
 	}
 
 	return strings.Join(words, " ")
+}
+
+// hasPrefixTokens reports whether words begins with the tokens of p.
+func hasPrefixTokens(words, p []string) bool {
+	if len(words) < len(p) {
+		return false
+	}
+	for i, w := range p {
+		if words[i] != w {
+			return false
+		}
+	}
+
+	return true
 }
 
 func parentChildLabels() []string {

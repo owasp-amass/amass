@@ -6,6 +6,7 @@ package lens
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -123,6 +124,28 @@ var legalForms = sync.OnceValue(func() map[string]bool {
 func normLegalForm(s string) string {
 	return strings.Trim(strings.ToLower(strings.TrimSpace(s)), ".,")
 }
+
+// governancePrefixes returns the leading governance or legal-entity wrappers
+// stripped from a name before its brand is compared ("the trustees of hamilton
+// college" -> "hamilton college"), from the same_brand matcher's parameters.
+// Each phrase is tokenized and the list is sorted longest-first so the most
+// specific prefix is removed.
+var governancePrefixes = sync.OnceValue(func() [][]string {
+	var out [][]string
+	for _, s := range DuplicateSignals() {
+		if s.Matcher != matchSameBrand {
+			continue
+		}
+		for _, p := range s.Params.GovernancePrefixes {
+			if toks := strings.Fields(strings.ToLower(strings.TrimSpace(p))); len(toks) > 0 {
+				out = append(out, toks)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+
+	return out
+})
 
 // DuplicateSignalsMarkdown renders the duplicate catalog as the user
 // documentation in docs/ai/DUPLICATES.md.
