@@ -102,16 +102,40 @@ func (h *horaddr) lookupPTRRecordData(sess et.Session, ptr *dbt.Entity) (*dbt.En
 }
 
 func (h *horaddr) process(e *et.Event, ip *oamnet.IPAddress, fqdn *dbt.Entity) {
-	// sweep around the IP, if the PTR record resolves to a FQDN that's in scope
-	if _, conf := e.Session.Scope().IsAssetInScope(fqdn.Asset, 0); conf > 0 {
-		h.performSweep(e, ip)
+	// The neighborhood sweep is informed by infrastructure ownership: when the IP
+	// sits in a netblock the organization owns (confirmed by the scored
+	// infrastructure correlation and in scope), the whole range is the org's, so
+	// the sweep runs and is widened. Otherwise the sweep runs only when the IP's
+	// PTR name is in scope — a name-confirmed IP justifies a modest probe of its
+	// immediate neighbors, but adjacency in an unowned (often shared/cloud) range
+	// is not evidence of ownership, so it stays narrow.
+	owned := h.inOwnedNetblock(e.Session, ip)
+	if _, conf := e.Session.Scope().IsAssetInScope(fqdn.Asset, 0); conf > 0 || owned {
+		h.performSweep(e, ip, owned)
 	}
 }
 
-func (h *horaddr) performSweep(e *et.Event, ip *oamnet.IPAddress) {
+// inOwnedNetblock reports whether the IP falls within a netblock already in
+// scope — i.e. one the organization owns, per the scored infrastructure
+// correlation (or an operator-provided netblock).
+func (h *horaddr) inOwnedNetblock(sess et.Session, ip *oamnet.IPAddress) bool {
+	for _, nb := range sess.Scope().Netblocks() {
+		if nb != nil && nb.CIDR.Contains(ip.Address) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *horaddr) performSweep(e *et.Event, ip *oamnet.IPAddress, owned bool) {
 	size := 32
 	if e.Session.Config().Active {
 		size = 64
+	}
+	// A confirmed-owned range is all the organization's, so a wider sweep is
+	// justified; an unowned range stays conservative.
+	if owned {
+		size *= 2
 	}
 
 	support.IPAddressSweep(e, ip, h.plugin.source, size, h.plugin.submitIPAddress)
