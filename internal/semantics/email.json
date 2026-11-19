@@ -66,6 +66,21 @@
       "provider": "Microsoft 365",
       "pattern": "(^|\\.)(outlook|microsoft|microsoftonline)\\.com$",
       "source": "https://learn.microsoft.com/en-us/microsoft-365/enterprise/external-domain-name-system-records"
+    },
+    {
+      "provider": "dmarcian",
+      "pattern": "(^|\\.)dmarcian\\.(com|eu)$",
+      "source": "https://dmarcian.com/getting-started-with-dmarcian/"
+    },
+    {
+      "provider": "Valimail",
+      "pattern": "(^|\\.)vali\\.email$",
+      "source": "https://support.valimail.com/en/support/solutions/articles/48001225072"
+    },
+    {
+      "provider": "Red Sift OnDMARC",
+      "pattern": "(^|\\.)ondmarc\\.com$",
+      "source": "https://redsift.com/guides/email-protocol-configuration-guide/learn-more-about-dmarc"
     }
   ]
 }
