@@ -195,7 +195,7 @@ amass ai -question "Which subdomains are associated with owasp.org?" plan
 ```
 
 Narrow, explicit questions compile without a model. Other questions need
-`-model` (or `AMASS_AI_MODEL`) so the goal planner can run.
+`-model` (or `AMASS_LLM_MODEL`) so the goal planner can run.
 
 Run a saved or hand-written Query. Route and hierarchy queries need no model:
 

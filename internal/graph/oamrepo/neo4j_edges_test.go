@@ -94,12 +94,12 @@ func TestNeo4jDatabaseName(t *testing.T) {
 	}
 }
 
-// TestAdapterBoundedTraversalOnNeo4j runs only when AMASS_AI_TEST_NEO4J_DSN
+// TestAdapterBoundedTraversalOnNeo4j runs only when AMASS_TEST_NEO4J_DSN
 // names a disposable Neo4j database, as in the ai-integration CI job.
 func TestAdapterBoundedTraversalOnNeo4j(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_TEST_NEO4J_DSN")
+	dsn := os.Getenv("AMASS_TEST_NEO4J_DSN")
 	if dsn == "" {
-		t.Skip("set AMASS_AI_TEST_NEO4J_DSN to a disposable Neo4j database")
+		t.Skip("set AMASS_TEST_NEO4J_DSN to a disposable Neo4j database")
 	}
 
 	repo, err := assetdb.New(neo4jrepo.Neo4j, dsn)

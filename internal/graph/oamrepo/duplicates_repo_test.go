@@ -34,11 +34,11 @@ func TestFindDuplicateOrganizationsOnSQLite(t *testing.T) {
 }
 
 // TestFindDuplicateOrganizationsOnPostgres runs the same search against
-// the empty PostgreSQL database named by AMASS_AI_POSTGRES_DUPLICATES_DSN.
+// the empty PostgreSQL database named by AMASS_TEST_POSTGRES_DUPLICATES_DSN.
 func TestFindDuplicateOrganizationsOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_DUPLICATES_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_DUPLICATES_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_DUPLICATES_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_DUPLICATES_DSN is not set")
 	}
 
 	repo, err := assetdb.New(postgres.Postgres, dsn)

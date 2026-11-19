@@ -34,11 +34,11 @@ func TestMergeAndUnmergeOrganizationsOnSQLite(t *testing.T) {
 }
 
 // TestMergeAndUnmergeOrganizationsOnPostgres runs the same merge against
-// the empty PostgreSQL database named by AMASS_AI_POSTGRES_MERGE_DSN.
+// the empty PostgreSQL database named by AMASS_TEST_POSTGRES_MERGE_DSN.
 func TestMergeAndUnmergeOrganizationsOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_MERGE_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_MERGE_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_MERGE_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_MERGE_DSN is not set")
 	}
 
 	repo, err := assetdb.New(postgres.Postgres, dsn)

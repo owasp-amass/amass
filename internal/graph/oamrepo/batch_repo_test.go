@@ -138,11 +138,11 @@ func TestAdapterBatchReadsOnSQLite(t *testing.T) {
 }
 
 // TestAdapterBatchReadsOnPostgres runs against the empty PostgreSQL
-// database named by AMASS_AI_POSTGRES_BATCH_DSN.
+// database named by AMASS_TEST_POSTGRES_BATCH_DSN.
 func TestAdapterBatchReadsOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_BATCH_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_BATCH_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_BATCH_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_BATCH_DSN is not set")
 	}
 
 	repo, err := assetdb.New(postgres.Postgres, dsn)
@@ -155,11 +155,11 @@ func TestAdapterBatchReadsOnPostgres(t *testing.T) {
 }
 
 // TestAdapterBatchReadsOnNeo4j runs against the disposable Neo4j database
-// named by AMASS_AI_TEST_NEO4J_DSN.
+// named by AMASS_TEST_NEO4J_DSN.
 func TestAdapterBatchReadsOnNeo4j(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_TEST_NEO4J_DSN")
+	dsn := os.Getenv("AMASS_TEST_NEO4J_DSN")
 	if dsn == "" {
-		t.Skip("set AMASS_AI_TEST_NEO4J_DSN to a disposable Neo4j database")
+		t.Skip("set AMASS_TEST_NEO4J_DSN to a disposable Neo4j database")
 	}
 
 	repo, err := assetdb.New(neo4jrepo.Neo4j, dsn)

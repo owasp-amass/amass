@@ -17,7 +17,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "amass-ai-classifier-train:", err)
+		fmt.Fprintln(os.Stderr, "amass-classifier-train:", err)
 		os.Exit(1)
 	}
 }

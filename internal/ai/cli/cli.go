@@ -89,7 +89,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	fs.StringVar(&providerName, "provider", "compatible",
 		"Model provider: ollama (native API), compatible (OpenAI-style) or anthropic")
 	fs.StringVar(&modelName, "model", "", "Model name; required for ask/infer")
-	fs.StringVar(&keyEnv, "api-key-env", "AMASS_AI_API_KEY", "Name of environment variable containing provider key")
+	fs.StringVar(&keyEnv, "api-key-env", "AMASS_LLM_API_KEY", "Name of environment variable containing provider key")
 	fs.StringVar(&question, "question", "", "Natural-language question")
 	fs.StringVar(&evalPath, "eval-cases", "",
 		"Question evaluation set JSON for eval (default: the embedded set of reported questions)")
@@ -213,7 +213,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		// Keep default-on triage when a YAML ai: section omits this boolean.
 		// An explicit environment override or positive YAML value changes it;
 		// -classifier-review=false always disables review routing.
-		_, fromEnv := os.LookupEnv("AMASS_AI_CLASSIFIER_REVIEW")
+		_, fromEnv := os.LookupEnv("AMASS_CLASSIFIER_REVIEW")
 		if fromEnv || effective.ClassifierReview {
 			classifierReview = effective.ClassifierReview
 		}
@@ -254,7 +254,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		graphExpansions = effective.MaxExpansions
 	}
 	if !explicitFlags["guidance-rounds"] {
-		_, fromEnv := os.LookupEnv("AMASS_AI_GUIDANCE_ROUNDS")
+		_, fromEnv := os.LookupEnv("AMASS_LLM_GUIDANCE_ROUNDS")
 		if cfg.AI != nil || fromEnv {
 			guidanceRounds = effective.GuidanceRounds
 		}
@@ -397,8 +397,8 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		if mcpOperator {
 			// Whoever can start this process may act: stdio has no token.
 			op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{Dir: dir, ConfigFile: configPath,
-				RunJournal:          os.Getenv("AMASS_AI_MCP_RUN_JOURNAL"),
-				RequireConfirmation: os.Getenv("AMASS_AI_MCP_REQUIRE_CONFIRMATION") == "true"})
+				RunJournal:          os.Getenv("AMASS_MCP_RUN_JOURNAL"),
+				RequireConfirmation: os.Getenv("AMASS_MCP_REQUIRE_CONFIRMATION") == "true"})
 			if err != nil {
 				return fmt.Errorf("operator mode: %w", err)
 			}
@@ -682,7 +682,7 @@ func validateModelEndpoint(endpoint string, allowHTTP bool) error {
 		return nil
 	}
 	if !allowHTTP {
-		return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_AI_ALLOW_HTTP=true for a trusted internal endpoint")
+		return errors.New("remote HTTP inference requires explicit -allow-http or AMASS_LLM_ALLOW_HTTP=true for a trusted internal endpoint")
 	}
 
 	return nil

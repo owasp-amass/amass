@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Command amass-ai-provider-health verifies that the chosen LLM is
+// Command amass-llm-provider-health verifies that the chosen LLM is
 // actually responding. Probes are cached between health checks.
 package main
 
@@ -34,40 +34,40 @@ type state struct {
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "amass-ai-provider-health:", err)
+		fmt.Fprintln(os.Stderr, "amass-llm-provider-health:", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	provider := os.Getenv("AMASS_AI_PROVIDER")
+	provider := os.Getenv("AMASS_LLM_PROVIDER")
 	if provider == "" {
 		provider = "compatible"
 	}
 
-	modelName := os.Getenv("AMASS_AI_MODEL")
-	endpoint := os.Getenv("AMASS_AI_ENDPOINT")
+	modelName := os.Getenv("AMASS_LLM_MODEL")
+	endpoint := os.Getenv("AMASS_LLM_ENDPOINT")
 	if modelName == "" || endpoint == "" {
-		return errors.New("AMASS_AI_MODEL and AMASS_AI_ENDPOINT must be configured")
+		return errors.New("AMASS_LLM_MODEL and AMASS_LLM_ENDPOINT must be configured")
 	}
 
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Hostname() == "" || u.User != nil {
 		return errors.New("invalid model endpoint")
 	}
-	if u.Scheme != "https" && (u.Scheme != "http" || os.Getenv("AMASS_AI_ALLOW_HTTP") != "true") {
-		return errors.New("model HTTP requires explicit AMASS_AI_ALLOW_HTTP=true; otherwise use HTTPS")
+	if u.Scheme != "https" && (u.Scheme != "http" || os.Getenv("AMASS_LLM_ALLOW_HTTP") != "true") {
+		return errors.New("model HTTP requires explicit AMASS_LLM_ALLOW_HTTP=true; otherwise use HTTPS")
 	}
 
 	timeout := 4 * time.Minute
-	if raw := os.Getenv("AMASS_AI_MODEL_TIMEOUT"); raw != "" {
+	if raw := os.Getenv("AMASS_LLM_MODEL_TIMEOUT"); raw != "" {
 		timeout, err = time.ParseDuration(raw)
 		if err != nil || timeout < 5*time.Second || timeout > 15*time.Minute {
 			return errors.New("invalid model timeout")
 		}
 	}
 
-	apiKey := os.Getenv("AMASS_AI_API_KEY")
+	apiKey := os.Getenv("AMASS_LLM_API_KEY")
 	client := &http.Client{Timeout: timeout}
 	var model llm.Model
 	switch provider {
@@ -77,11 +77,11 @@ func run() error {
 		}
 
 		m := llm.NewOllamaModel(endpoint, modelName, client)
-		m.Think = os.Getenv("AMASS_AI_THINK") == "true"
-		if raw := os.Getenv("AMASS_AI_CONTEXT_TOKENS"); raw != "" {
+		m.Think = os.Getenv("AMASS_LLM_THINK") == "true"
+		if raw := os.Getenv("AMASS_LLM_CONTEXT_TOKENS"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil || n < 2048 || n > 262144 {
-				return errors.New("AMASS_AI_CONTEXT_TOKENS must be 2048..262144")
+				return errors.New("AMASS_LLM_CONTEXT_TOKENS must be 2048..262144")
 			}
 
 			m.ContextTokens = n
@@ -92,7 +92,7 @@ func run() error {
 		model = ai.CompatibleModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}
 	case "anthropic":
 		if apiKey == "" {
-			return errors.New("the Anthropic provider requires AMASS_AI_API_KEY")
+			return errors.New("the Anthropic provider requires AMASS_LLM_API_KEY")
 		}
 
 		model = llm.AnthropicModel{Endpoint: endpoint, ModelName: modelName, APIKey: apiKey, Client: client}

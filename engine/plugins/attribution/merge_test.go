@@ -83,7 +83,7 @@ func runMergeWatcher(t *testing.T, mode string) (repository.Repository, map[stri
 
 	ents := seedDuplicates(t, db)
 	journal := filepath.Join(t.TempDir(), "review.jsonl")
-	env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": mode}
+	env := map[string]string{"AMASS_REVIEW_JOURNAL": journal, "AMASS_ATTRIBUTION": mode}
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond
@@ -267,7 +267,7 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 	}
 
 	// A later enumeration over the same database.
-	env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": config.AttributionAuto}
+	env := map[string]string{"AMASS_REVIEW_JOURNAL": journal, "AMASS_ATTRIBUTION": config.AttributionAuto}
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond
@@ -312,7 +312,7 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 
 	ents := seedDuplicates(t, db)
 	journal := filepath.Join(t.TempDir(), "review.jsonl")
-	env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": config.AttributionAuto}
+	env := map[string]string{"AMASS_REVIEW_JOURNAL": journal, "AMASS_ATTRIBUTION": config.AttributionAuto}
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond
@@ -385,7 +385,7 @@ func TestBusyOtherSessionsDoNotHoldADrainedSession(t *testing.T) {
 
 			ents := seedDuplicates(t, db)
 			journal := filepath.Join(t.TempDir(), "review.jsonl")
-			env := map[string]string{"AMASS_AI_JOURNAL": journal, "AMASS_AI_ATTRIBUTION": mode}
+			env := map[string]string{"AMASS_REVIEW_JOURNAL": journal, "AMASS_ATTRIBUTION": mode}
 			p := NewAttribution().(*plugin)
 			p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 			p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 10*time.Millisecond

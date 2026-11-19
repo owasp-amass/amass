@@ -30,7 +30,7 @@ func TestRecheckRetractsWhenEvidenceIsGoneOnSQLite(t *testing.T) {
 
 	ents := seed(t, db)
 	journal := filepath.Join(t.TempDir(), "review.jsonl")
-	env := map[string]string{"AMASS_AI_JOURNAL": journal}
+	env := map[string]string{"AMASS_REVIEW_JOURNAL": journal}
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	p.quiet, p.maxWait, p.mergeCheck = 50*time.Millisecond, time.Second, 0

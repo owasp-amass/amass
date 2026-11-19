@@ -49,7 +49,7 @@ func (a *ApprovalLinks) now() time.Time {
 // New records an action awaiting approval and returns its link.
 func (a *ApprovalLinks) New(message string, act func() (string, error)) (string, time.Time, error) {
 	if a.BaseURL == "" {
-		return "", time.Time{}, errors.New("the server does not know its public URL (AMASS_AI_MCP_PUBLIC_URL)")
+		return "", time.Time{}, errors.New("the server does not know its public URL (AMASS_MCP_PUBLIC_URL)")
 	}
 
 	id := newSessionID()

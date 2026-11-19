@@ -18,12 +18,12 @@ import (
 
 // TestLensesOnNeo4j runs the lens, review and adapter checks the SQLite
 // tests run against the disposable Neo4j database named by
-// AMASS_AI_TEST_NEO4J_DSN, as in the ai-integration CI job. Each check starts
+// AMASS_TEST_NEO4J_DSN, as in the ai-integration CI job. Each check starts
 // from an empty database, since several read every stored organization.
 func TestLensesOnNeo4j(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_TEST_NEO4J_DSN")
+	dsn := os.Getenv("AMASS_TEST_NEO4J_DSN")
 	if dsn == "" {
-		t.Skip("set AMASS_AI_TEST_NEO4J_DSN to a disposable Neo4j database")
+		t.Skip("set AMASS_TEST_NEO4J_DSN to a disposable Neo4j database")
 	}
 
 	repo, err := assetdb.New(neo4jrepo.Neo4j, dsn)

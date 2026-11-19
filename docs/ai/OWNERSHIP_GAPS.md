@@ -95,8 +95,8 @@ before it runs, and anything it adds is enumerated in the same session.
 
 | Setting | YAML (`ai:` section) | Environment | Default |
 | --- | --- | --- | --- |
-| Mode: `auto`, `journal` (write nothing automatically) or `off` | `attribution` | `AMASS_AI_ATTRIBUTION` | `auto` |
-| Review journal | `journal` | `AMASS_AI_JOURNAL` | `ai-review.jsonl` in the output directory |
+| Mode: `auto`, `journal` (write nothing automatically) or `off` | `attribution` | `AMASS_ATTRIBUTION` | `auto` |
+| Review journal | `journal` | `AMASS_REVIEW_JOURNAL` | `ai-review.jsonl` in the output directory |
 
 The environment variables apply to the engine process. The journal is
 always kept, because it is what makes a person's decision stick: a

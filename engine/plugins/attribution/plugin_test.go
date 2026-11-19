@@ -160,7 +160,7 @@ func TestAttributionPassWritesAndWidensScopeOnSQLite(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ents := seed(t, db)
 	journal := filepath.Join(t.TempDir(), "review.jsonl")
-	env := map[string]string{"AMASS_AI_JOURNAL": journal}
+	env := map[string]string{"AMASS_REVIEW_JOURNAL": journal}
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	// Duplicate merging has its own test; this one counts only the pass.
@@ -222,7 +222,7 @@ func TestAttributionPassWritesAndWidensScopeOnSQLite(t *testing.T) {
 func TestAttributionCanBeTurnedOff(t *testing.T) {
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) {
-		if k == "AMASS_AI_ATTRIBUTION" {
+		if k == "AMASS_ATTRIBUTION" {
 			return "off", true
 		}
 		return "", false
@@ -233,7 +233,7 @@ func TestAttributionCanBeTurnedOff(t *testing.T) {
 	sess := &fakeSession{id: uuid.New(), ctx: ctx, cfg: config.NewConfig(), scope: &fakeScope{org: "X"},
 		stats: &et.SessionStats{}}
 	if p.tracker(sess) != nil {
-		t.Error("attribution ran with AMASS_AI_ATTRIBUTION=off")
+		t.Error("attribution ran with AMASS_ATTRIBUTION=off")
 	}
 }
 
@@ -247,7 +247,7 @@ func TestAttributionLoadsTheTrainedModel(t *testing.T) {
 	}
 
 	p := NewAttribution().(*plugin)
-	env := map[string]string{"AMASS_AI_JOURNAL": filepath.Join(dir, "review.jsonl")}
+	env := map[string]string{"AMASS_REVIEW_JOURNAL": filepath.Join(dir, "review.jsonl")}
 	p.lookup = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -270,7 +270,7 @@ func TestAttributionSkipsOrganizationsOutsideTheEnumeratedDomains(t *testing.T) 
 	journal := filepath.Join(t.TempDir(), "review.jsonl")
 	p := NewAttribution().(*plugin)
 	p.lookup = func(k string) (string, bool) {
-		if k == "AMASS_AI_JOURNAL" {
+		if k == "AMASS_REVIEW_JOURNAL" {
 			return journal, true
 		}
 		return "", false

@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "owasp-amass-ai": {
-      "command": "/absolute/path/to/amass-ai-mcp",
+      "command": "/absolute/path/to/amass-mcp",
       "args": ["-dir", "/path/to/amass/data"]
     }
   }

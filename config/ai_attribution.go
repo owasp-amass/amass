@@ -10,7 +10,7 @@ import (
 )
 
 // AIAttribution returns the attribution mode and journal path for c, with
-// the AMASS_AI_ATTRIBUTION and AMASS_AI_JOURNAL environment overrides.
+// the AMASS_ATTRIBUTION and AMASS_REVIEW_JOURNAL environment overrides.
 func (c *Config) AIAttribution(lookup func(string) (string, bool)) (string, string, error) {
 	var base AISettings
 	if c.AI != nil {

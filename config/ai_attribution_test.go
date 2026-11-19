@@ -24,14 +24,14 @@ func TestAIAttributionDefaultsAndOverrides(t *testing.T) {
 		t.Errorf("YAML settings = %q, %q, %v", mode, journal, err)
 	}
 
-	env := map[string]string{"AMASS_AI_ATTRIBUTION": "off", "AMASS_AI_JOURNAL": "/shared/review.jsonl"}
+	env := map[string]string{"AMASS_ATTRIBUTION": "off", "AMASS_REVIEW_JOURNAL": "/shared/review.jsonl"}
 	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	if mode, journal, err = c.AIAttribution(lookup); err != nil || mode != AttributionOff ||
 		journal != "/shared/review.jsonl" {
 		t.Errorf("environment overrides = %q, %q, %v", mode, journal, err)
 	}
 
-	env["AMASS_AI_ATTRIBUTION"] = "sometimes"
+	env["AMASS_ATTRIBUTION"] = "sometimes"
 	if _, _, err := c.AIAttribution(lookup); err == nil {
 		t.Error("an unknown attribution mode was accepted")
 	}

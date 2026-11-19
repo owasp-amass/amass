@@ -100,11 +100,11 @@ func TestAdapterEdgesPageOnSQLite(t *testing.T) {
 }
 
 // TestAdapterEdgesPageOnPostgres runs against the empty PostgreSQL database
-// named by AMASS_AI_POSTGRES_PAGES_DSN.
+// named by AMASS_TEST_POSTGRES_PAGES_DSN.
 func TestAdapterEdgesPageOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_PAGES_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_PAGES_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_PAGES_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_PAGES_DSN is not set")
 	}
 
 	repo, err := assetdb.New(postgres.Postgres, dsn)

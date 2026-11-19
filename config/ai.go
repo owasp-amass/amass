@@ -62,17 +62,17 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		key    string
 		target *string
 	}{
-		{"AMASS_AI_PROVIDER", &c.Provider},
-		{"AMASS_AI_ENDPOINT", &c.Endpoint},
-		{"AMASS_AI_MODEL", &c.Model},
-		{"AMASS_AI_API_KEY_ENV", &c.APIKeyEnv},
-		{"AMASS_AI_MODEL_TIMEOUT", &c.ModelTimeout},
-		{"AMASS_AI_INVESTIGATION_TIMEOUT", &c.InvestigationTimeout},
-		{"AMASS_AI_TEMPERATURE", &c.Temperature},
-		{"AMASS_AI_CLASSIFIER_MODEL", &c.ClassifierModel},
-		{"AMASS_AI_CLASSIFIER_ENDPOINT", &c.ClassifierEndpoint},
-		{"AMASS_AI_ATTRIBUTION", &c.Attribution},
-		{"AMASS_AI_JOURNAL", &c.Journal},
+		{"AMASS_LLM_PROVIDER", &c.Provider},
+		{"AMASS_LLM_ENDPOINT", &c.Endpoint},
+		{"AMASS_LLM_MODEL", &c.Model},
+		{"AMASS_LLM_API_KEY_ENV", &c.APIKeyEnv},
+		{"AMASS_LLM_MODEL_TIMEOUT", &c.ModelTimeout},
+		{"AMASS_LLM_INVESTIGATION_TIMEOUT", &c.InvestigationTimeout},
+		{"AMASS_LLM_TEMPERATURE", &c.Temperature},
+		{"AMASS_CLASSIFIER_MODEL", &c.ClassifierModel},
+		{"AMASS_CLASSIFIER_ENDPOINT", &c.ClassifierEndpoint},
+		{"AMASS_ATTRIBUTION", &c.Attribution},
+		{"AMASS_REVIEW_JOURNAL", &c.Journal},
 	}
 	for _, pair := range stringsEnv {
 		if value, ok := lookup(pair.key); ok {
@@ -84,9 +84,9 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		key    string
 		target *bool
 	}{
-		{"AMASS_AI_ALLOW_HTTP", &c.AllowHTTP},
-		{"AMASS_AI_CLASSIFIER_REVIEW", &c.ClassifierReview},
-		{"AMASS_AI_THINK", &c.Think},
+		{"AMASS_LLM_ALLOW_HTTP", &c.AllowHTTP},
+		{"AMASS_CLASSIFIER_REVIEW", &c.ClassifierReview},
+		{"AMASS_LLM_THINK", &c.Think},
 	}
 	for _, pair := range bools {
 		if raw, ok := lookup(pair.key); ok {
@@ -103,13 +103,13 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		key    string
 		target *int
 	}{
-		{"AMASS_AI_DEPTH", &c.MaxDepth},
-		{"AMASS_AI_MAX_MATCHES", &c.MaxMatches},
-		{"AMASS_AI_MAX_PATHS_PER_ASSET", &c.MaxPathsPerAsset},
-		{"AMASS_AI_MAX_EXPANSIONS", &c.MaxExpansions},
-		{"AMASS_AI_GUIDANCE_ROUNDS", &c.GuidanceRounds},
-		{"AMASS_AI_MAX_TOKENS", &c.MaxTokens},
-		{"AMASS_AI_CONTEXT_TOKENS", &c.ContextTokens},
+		{"AMASS_LLM_DEPTH", &c.MaxDepth},
+		{"AMASS_LLM_MAX_MATCHES", &c.MaxMatches},
+		{"AMASS_LLM_MAX_PATHS_PER_ASSET", &c.MaxPathsPerAsset},
+		{"AMASS_LLM_MAX_EXPANSIONS", &c.MaxExpansions},
+		{"AMASS_LLM_GUIDANCE_ROUNDS", &c.GuidanceRounds},
+		{"AMASS_LLM_MAX_TOKENS", &c.MaxTokens},
+		{"AMASS_LLM_CONTEXT_TOKENS", &c.ContextTokens},
 	}
 	for _, pair := range ints {
 		if raw, ok := lookup(pair.key); ok {

@@ -34,11 +34,11 @@ func TestIdentityConflictsOnSQLite(t *testing.T) {
 }
 
 // TestIdentityConflictsOnPostgres runs the same check against the empty
-// PostgreSQL database named by AMASS_AI_POSTGRES_IDENTITY_DSN.
+// PostgreSQL database named by AMASS_TEST_POSTGRES_IDENTITY_DSN.
 func TestIdentityConflictsOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_IDENTITY_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_IDENTITY_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_IDENTITY_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_IDENTITY_DSN is not set")
 	}
 
 	repo, err := assetdb.New(postgres.Postgres, dsn)

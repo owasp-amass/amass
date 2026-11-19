@@ -33,10 +33,10 @@ func TestAISettingsYAMLAndEnvironmentPrecedence(t *testing.T) {
 	}
 
 	env := map[string]string{
-		"AMASS_AI_MODEL":             "qwen3:14b",
-		"AMASS_AI_DEPTH":             "12",
-		"AMASS_AI_CLASSIFIER_REVIEW": "true",
-		"AMASS_AI_MODEL_TIMEOUT":     "6m",
+		"AMASS_LLM_MODEL":         "qwen3:14b",
+		"AMASS_LLM_DEPTH":         "12",
+		"AMASS_CLASSIFIER_REVIEW": "true",
+		"AMASS_LLM_MODEL_TIMEOUT": "6m",
 	}
 	out, err := ResolveAISettings(*c.AI, func(k string) (string, bool) { v, ok := env[k]; return v, ok })
 	if err != nil {
@@ -50,12 +50,12 @@ func TestAISettingsYAMLAndEnvironmentPrecedence(t *testing.T) {
 
 func TestAISettingsInvalidEnvironmentValuesFailClosed(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
-		{"AMASS_AI_ALLOW_HTTP", "maybe"},
-		{"AMASS_AI_MODEL_TIMEOUT", "zero"},
-		{"AMASS_AI_INVESTIGATION_TIMEOUT", "0s"},
-		{"AMASS_AI_MAX_PATHS_PER_ASSET", "-1"},
-		{"AMASS_AI_GUIDANCE_ROUNDS", "4"},
-		{"AMASS_AI_DEPTH", "x"},
+		{"AMASS_LLM_ALLOW_HTTP", "maybe"},
+		{"AMASS_LLM_MODEL_TIMEOUT", "zero"},
+		{"AMASS_LLM_INVESTIGATION_TIMEOUT", "0s"},
+		{"AMASS_LLM_MAX_PATHS_PER_ASSET", "-1"},
+		{"AMASS_LLM_GUIDANCE_ROUNDS", "4"},
+		{"AMASS_LLM_DEPTH", "x"},
 	} {
 		t.Run(tc.key, func(t *testing.T) {
 			_, err := ResolveAISettings(AISettings{}, func(k string) (string, bool) {
@@ -84,7 +84,7 @@ func TestAISettingsDisabledByDefault(t *testing.T) {
 }
 
 func TestResolveAISettingsTokensAndTemperature(t *testing.T) {
-	env := map[string]string{"AMASS_AI_MAX_TOKENS": "2048", "AMASS_AI_TEMPERATURE": "0"}
+	env := map[string]string{"AMASS_LLM_MAX_TOKENS": "2048", "AMASS_LLM_TEMPERATURE": "0"}
 	got, err := ResolveAISettings(AISettings{}, func(k string) (string, bool) { v, ok := env[k]; return v, ok })
 	if err != nil || got.MaxTokens != 2048 || got.Temperature != "0" {
 		t.Fatalf("got %+v err=%v", got, err)
@@ -103,7 +103,7 @@ func TestResolveAISettingsTokensAndTemperature(t *testing.T) {
 }
 
 func TestResolveAISettingsOllamaOptions(t *testing.T) {
-	env := map[string]string{"AMASS_AI_CONTEXT_TOKENS": "16384", "AMASS_AI_THINK": "true"}
+	env := map[string]string{"AMASS_LLM_CONTEXT_TOKENS": "16384", "AMASS_LLM_THINK": "true"}
 	got, err := ResolveAISettings(AISettings{}, func(k string) (string, bool) { v, ok := env[k]; return v, ok })
 	if err != nil || got.ContextTokens != 16384 || !got.Think {
 		t.Fatalf("got %+v err=%v", got, err)

@@ -228,7 +228,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	fs.BoolVar(&readStats, "read-stats", false,
 		"Print the database reads the run made and their time to standard error")
 	fs.DurationVar(&timeout, "investigation-timeout", 8*time.Minute,
-		"Maximum time for one lens or review run (default from AMASS_AI_INVESTIGATION_TIMEOUT, the limit amass ai also uses)")
+		"Maximum time for one lens or review run (default from AMASS_LLM_INVESTIGATION_TIMEOUT, the limit amass ai also uses)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -238,10 +238,10 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 
 	explicit := false
 	fs.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "investigation-timeout" })
-	if v, ok := os.LookupEnv("AMASS_AI_INVESTIGATION_TIMEOUT"); ok && !explicit {
+	if v, ok := os.LookupEnv("AMASS_LLM_INVESTIGATION_TIMEOUT"); ok && !explicit {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return fmt.Errorf("AMASS_AI_INVESTIGATION_TIMEOUT: %w", err)
+			return fmt.Errorf("AMASS_LLM_INVESTIGATION_TIMEOUT: %w", err)
 		}
 
 		timeout = d

@@ -1,6 +1,6 @@
 # MCP investigation tools
 
-Both MCP servers (`amass ai mcp` over stdio and `amass-ai-mcp-http`) list two
+Both MCP servers (`amass ai mcp` over stdio and `amass-mcp-http`) list two
 tools next to the read-only graph tools. They let an MCP client, which is
 itself the model, use the answer kinds and the evidence checks directly.
 
@@ -68,7 +68,7 @@ name.
 subject controls, from the controlled-assets lens: a Mermaid diagram of
 asset types with counts and the relations between them, every asset as
 well when there are at most 40, and, from the HTTP server when
-`AMASS_AI_MCP_PUBLIC_URL` is set, a link to an interactive D3 graph and a
+`AMASS_MCP_PUBLIC_URL` is set, a link to an interactive D3 graph and a
 GEXF file for Gephi (valid for an hour, served on localhost). Drawings
 cover up to 3,000 assets.
 
@@ -114,9 +114,9 @@ A server started with an operator configuration also offers tools that act:
 | `apply_config` | Writes a complete configuration draft (see `describe_config` and `validate_config`) to the configuration file after the user approves it and sees the exact masked diff. Refuses a draft that sets data source credentials. |
 
 Over HTTP the operator tools are offered only to clients that present
-`AMASS_AI_MCP_OPERATOR_TOKEN`, which must differ from the read-only token;
+`AMASS_MCP_OPERATOR_TOKEN`, which must differ from the read-only token;
 a session belongs to the token that opened it. Over stdio,
-`amass ai -operator mcp` (or `amass-ai-mcp -operator`) enables them for
+`amass ai -operator mcp` (or `amass-mcp -operator`) enables them for
 whoever can start the process. Operator sessions use event streams so the
 server can ask for approval in the middle of a tool call.
 
@@ -126,12 +126,12 @@ Approval: `start_enumeration`, `apply_config` and the writing
 1. the client's own dialog (MCP elicitation: an input-required result on
    protocol 2026-07-28, an `elicitation/create` request on earlier
    versions);
-2. from the HTTP server with `AMASS_AI_MCP_PUBLIC_URL` set, a one-time local
+2. from the HTTP server with `AMASS_MCP_PUBLIC_URL` set, a one-time local
    approval link (15 minutes) the assistant gives the user: the page shows
    the action and carries it out only when the user presses Approve, a form
    POST a model fetching the page cannot make;
 3. otherwise (stdio) the client's own tool-call approval, helped by the
-   tool annotations, unless `AMASS_AI_MCP_REQUIRE_CONFIRMATION=true`, which
+   tool annotations, unless `AMASS_MCP_REQUIRE_CONFIRMATION=true`, which
    refuses instead.
 
 These are safeguards against a model acting on its own; the operator token
@@ -144,8 +144,8 @@ transfer attempts and certificate and service probes on the configured
 ports, and covers at most a /16 IPv4 or /48 IPv6 range. Two runs may run
 at once; a run ends when its work settles, after 30 minutes without
 progress, or after 24 hours. Runs are recorded in
-`AMASS_AI_MCP_RUN_JOURNAL` and resumed after a restart while the engine
-still has them. Watches are kept in `AMASS_AI_MCP_WATCHES` (at most 32); a
+`AMASS_MCP_RUN_JOURNAL` and resumed after a restart while the engine
+still has them. Watches are kept in `AMASS_MCP_WATCHES` (at most 32); a
 due run that cannot start because of the running limit is retried an hour
 later.
 

@@ -60,7 +60,7 @@ func (k *KeyLinks) New(source string) (string, time.Time, error) {
 		return "", time.Time{}, errors.New("invalid data source name")
 	}
 	if k.BaseURL == "" {
-		return "", time.Time{}, errors.New("the server does not know its public URL (AMASS_AI_MCP_PUBLIC_URL)")
+		return "", time.Time{}, errors.New("the server does not know its public URL (AMASS_MCP_PUBLIC_URL)")
 	}
 
 	id := newSessionID()

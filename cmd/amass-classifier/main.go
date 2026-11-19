@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Command amass-ai-classifier serves the independent, local classifier.
+// Command amass-classifier serves the independent, local classifier.
 // If no trained model is mounted, it routes observed OAM evidence to review or escalation without claiming ownership.
 package main
 
@@ -24,13 +24,13 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "amass-ai-classifier:", err)
+		fmt.Fprintln(os.Stderr, "amass-classifier:", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	path := strings.TrimSpace(os.Getenv("AMASS_AI_CLASSIFIER_MODEL"))
+	path := strings.TrimSpace(os.Getenv("AMASS_CLASSIFIER_MODEL"))
 	var model *classify.LinearModel
 	if path != "" {
 		data, err := os.ReadFile(path)
@@ -59,7 +59,7 @@ func run() error {
 			"classifier: default OAM provenance classifier active; review/escalation only, no ownership conclusions")
 	}
 
-	addr := os.Getenv("AMASS_AI_CLASSIFIER_LISTEN")
+	addr := os.Getenv("AMASS_CLASSIFIER_LISTEN")
 	if addr == "" {
 		addr = "0.0.0.0:8092"
 	}

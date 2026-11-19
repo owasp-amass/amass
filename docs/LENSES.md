@@ -55,7 +55,7 @@ evidence does and nothing is left behind to clean up.
 Every command takes `-format text` (the default) or `-format json`, `-dir`
 and `-config` like the other subcommands, and `-journal` for the review
 journal (by default the one automatic attribution uses, set by
-`AMASS_AI_JOURNAL`).
+`AMASS_REVIEW_JOURNAL`).
 
 ## Subdomains
 
@@ -861,7 +861,7 @@ Retracting restores the duplicate and removes what the merge added. When
 more than two organizations are linked as one (NASA stored five times), each
 is proposed for merging into the one with the most evidence, not into every
 other: four proposals instead of ten. During
-an enumeration with `AMASS_AI_ATTRIBUTION=auto`, proposed merges are applied
+an enumeration with `AMASS_ATTRIBUTION=auto`, proposed merges are applied
 once the engine's enumerations have finished their work.
 
 ## Identity corrections

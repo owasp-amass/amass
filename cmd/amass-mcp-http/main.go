@@ -27,7 +27,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "amass-ai-mcp-http:", err)
+		fmt.Fprintln(os.Stderr, "amass-mcp-http:", err)
 		os.Exit(1)
 	}
 }
@@ -36,9 +36,9 @@ func run() error {
 	cfgFile := flag.String("config", "/.config/amass/config.yaml", "Existing Amass configuration")
 	addr := flag.String("listen", "0.0.0.0:8090", "Internal MCP HTTP listener")
 	flag.Parse()
-	token := os.Getenv("AMASS_AI_MCP_TOKEN")
+	token := os.Getenv("AMASS_MCP_TOKEN")
 	if len(token) < 32 {
-		return errors.New("AMASS_AI_MCP_TOKEN must be a strong random secret (at least 32 characters)")
+		return errors.New("AMASS_MCP_TOKEN must be a strong random secret (at least 32 characters)")
 	}
 
 	cfg := config.NewConfig()
@@ -73,24 +73,24 @@ func run() error {
 	}
 
 	// Interactive drawings are served at links the visualize tool returns.
-	if public := os.Getenv("AMASS_AI_MCP_PUBLIC_URL"); public != "" {
+	if public := os.Getenv("AMASS_MCP_PUBLIC_URL"); public != "" {
 		server.Viz = &mcp.VizLinks{BaseURL: public, Runner: server.Runner}
 	}
 
 	// Operator mode: a second, different token unlocks the tools that start
 	// enumerations, review proposals and manage data sources.
-	if opToken := os.Getenv("AMASS_AI_MCP_OPERATOR_TOKEN"); opToken != "" {
+	if opToken := os.Getenv("AMASS_MCP_OPERATOR_TOKEN"); opToken != "" {
 		if len(opToken) < 32 || opToken == token {
-			return errors.New("AMASS_AI_MCP_OPERATOR_TOKEN must be a strong random secret (at least 32 " +
-				"characters) different from AMASS_AI_MCP_TOKEN")
+			return errors.New("AMASS_MCP_OPERATOR_TOKEN must be a strong random secret (at least 32 " +
+				"characters) different from AMASS_MCP_TOKEN")
 		}
 
 		op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{
 			ConfigFile:          *cfgFile,
-			RunJournal:          os.Getenv("AMASS_AI_MCP_RUN_JOURNAL"),
-			WatchFile:           os.Getenv("AMASS_AI_MCP_WATCHES"),
-			PublicURL:           os.Getenv("AMASS_AI_MCP_PUBLIC_URL"),
-			RequireConfirmation: os.Getenv("AMASS_AI_MCP_REQUIRE_CONFIRMATION") == "true",
+			RunJournal:          os.Getenv("AMASS_MCP_RUN_JOURNAL"),
+			WatchFile:           os.Getenv("AMASS_MCP_WATCHES"),
+			PublicURL:           os.Getenv("AMASS_MCP_PUBLIC_URL"),
+			RequireConfirmation: os.Getenv("AMASS_MCP_REQUIRE_CONFIRMATION") == "true",
 		})
 		if err != nil {
 			return fmt.Errorf("operator mode: %w", err)
@@ -129,7 +129,7 @@ func run() error {
 }
 
 // vulnRefreshEnv set to "off" stops the daily vulnerability data refresh.
-const vulnRefreshEnv = "AMASS_AI_MCP_VULN_REFRESH"
+const vulnRefreshEnv = "AMASS_MCP_VULN_REFRESH"
 
 // refreshVulnerabilities keeps the vulnerable lens's data current: it is
 // refreshed once a day, and when the catalog gains products.

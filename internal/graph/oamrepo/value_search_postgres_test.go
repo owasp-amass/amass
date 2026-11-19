@@ -17,11 +17,11 @@ import (
 )
 
 // TestTokenAndSPFAttributeOwnershipOnPostgres runs the value signals against
-// the empty PostgreSQL database named by AMASS_AI_POSTGRES_TEST_DSN.
+// the empty PostgreSQL database named by AMASS_TEST_POSTGRES_DSN.
 func TestTokenAndSPFAttributeOwnershipOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_TEST_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_TEST_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_DSN is not set")
 	}
 
 	db, err := assetdb.New(postgres.Postgres, dsn)
@@ -51,11 +51,11 @@ func TestTokenAndSPFAttributeOwnershipOnPostgres(t *testing.T) {
 }
 
 // TestServiceAndReverseDNSSignalsOnPostgres runs checkServiceSignals against
-// the empty PostgreSQL database named by AMASS_AI_POSTGRES_SIGNALS_DSN.
+// the empty PostgreSQL database named by AMASS_TEST_POSTGRES_SIGNALS_DSN.
 func TestServiceAndReverseDNSSignalsOnPostgres(t *testing.T) {
-	dsn := os.Getenv("AMASS_AI_POSTGRES_SIGNALS_DSN")
+	dsn := os.Getenv("AMASS_TEST_POSTGRES_SIGNALS_DSN")
 	if dsn == "" {
-		t.Skip("AMASS_AI_POSTGRES_SIGNALS_DSN is not set")
+		t.Skip("AMASS_TEST_POSTGRES_SIGNALS_DSN is not set")
 	}
 
 	db, err := assetdb.New(postgres.Postgres, dsn)
