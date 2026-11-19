@@ -108,11 +108,17 @@ func (d *dnsSubs) queryPolicies(e *et.Event, apex *dbt.Entity, subdomain string)
 		d.plugin.txt.store(e, fqdn, a.rr)
 		support.MarkAssetMonitored(e.Session, fqdn, d.plugin.txt.source)
 		d.linkBelow(e, apex, fqdn)
+		if a.name == "_dmarc."+subdomain {
+			d.storeDMARCEdges(e, apex, a.rr)
+		}
 		for _, r := range a.rr {
 			e.Session.Log().Info("TXT record discovered", "fqdn", a.name, "txt", txtData(r.(*dns.TXT)),
 				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
 	}
+
+	// The SPF record is published on the apex itself, not a policy name.
+	d.storeSPFEdges(e, apex, subdomain)
 }
 
 // linkBelow records that name is a node of the zone apex, as the apex

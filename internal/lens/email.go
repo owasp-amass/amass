@@ -105,6 +105,7 @@ type emailRules struct {
 	NoneSPF         string            `json:"none_spf"`
 	Sources         map[string]string `json:"sources"`
 	MailProviders   []mailProvider    `json:"mail_providers"`
+	PolicyProviders []hostProvider    `json:"policy_providers"`
 }
 
 // mailProvider names who receives mail sent to MX hosts its pattern matches.
@@ -136,9 +137,37 @@ var loadEmailRules = sync.OnceValue(func() emailRules {
 
 		r.MailProviders[i].re = re
 	}
+	for i, p := range r.PolicyProviders {
+		if p.Provider == "" || p.Pattern == "" || !strings.HasPrefix(p.Source, "https://") {
+			panic("email.json: policy provider " + p.Provider + ": provider, pattern and a documentation source " +
+				"are required")
+		}
+
+		re, err := regexp.Compile("(?i)" + p.Pattern)
+		if err != nil {
+			panic("email.json: policy provider " + p.Provider + ": " + err.Error())
+		}
+
+		r.PolicyProviders[i].re = re
+	}
 
 	return r
 })
+
+// isPolicyProvider reports whether domain is a shared mail-policy provider
+// (email.json policy_providers) whose own domain appears in many unrelated
+// domains' SPF includes or DMARC reporting addresses, so the spf-authorizes and
+// dmarc-reports-to horizontal signals do not read it as common ownership. It is
+// secondary to the per-target fanout cap.
+func isPolicyProvider(domain string) bool {
+	for _, p := range loadEmailRules().PolicyProviders {
+		if p.re != nil && p.re.MatchString(domain) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // FindEmailSecurity walks the controlled footprint of a domain or
 // organization and reports, for each of its registered domains, who handles

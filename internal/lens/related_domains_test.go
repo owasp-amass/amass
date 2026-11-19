@@ -111,6 +111,15 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 	fqdn("fq_stranger_dns", "stranger-dns.com")
 	dnsLink("fq_stranger_dns", "prov_ns", RRTypeNS)
 
+	// Mail-policy references: two unrelated apexes point their published mail
+	// policy at acme.net (an org apex). dmarc-pub.example sends its DMARC reports
+	// there (strong); spf-pub.example authorizes it in SPF (supporting). The edge
+	// runs from the publishing apex to the referenced org domain.
+	fqdn("fq_dmarc_pub", "dmarc-pub.example")
+	link("fq_dmarc_pub", "fq_acme_net", "dmarc_reports_to")
+	fqdn("fq_spf_pub", "spf-pub.example")
+	link("fq_spf_pub", "fq_acme_net", "spf_authorizes")
+
 	return g
 }
 
@@ -126,7 +135,7 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 		got[d.Domain] = d
 	}
 	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org", "acme.org",
-		"acme-mail.org", "acme-dns.net"} {
+		"acme-mail.org", "acme-dns.net", "dmarc-pub.example", "spf-pub.example"} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("missing related domain %q; got %+v", want, r.Domains)
 		}
@@ -150,6 +159,14 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 	// acme-dns.net comes only from the shared-name-server signal, via its DNS record.
 	if d := got["acme-dns.net"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
 		t.Errorf("acme-dns.net should come from the DNS name-server signal: %+v", d)
+	}
+	// dmarc-pub.example points its DMARC reporting at an org domain (strong).
+	if d := got["dmarc-pub.example"]; d.Confidence != relatedDMARCConfidence || len(d.Signals) != 1 {
+		t.Errorf("dmarc-pub.example should come from the DMARC-reporting signal: %+v", d)
+	}
+	// spf-pub.example authorizes an org domain in its SPF record (supporting).
+	if d := got["spf-pub.example"]; d.Confidence != relatedSPFConfidence || len(d.Signals) != 1 {
+		t.Errorf("spf-pub.example should come from the SPF-authorization signal: %+v", d)
 	}
 	// A domain sharing only a known provider's mail exchanger or name server is
 	// never surfaced: the provider guard skips the host whatever the coverage.
@@ -187,12 +204,20 @@ func TestHorizontalExpansionPartition(t *testing.T) {
 		return false
 	}
 
-	// Every domain with a strong signal (registrant, cert or official website)
-	// is in the expand set.
-	for _, name := range []string{"acme.com", "acme.net", "acme.io", "acme.org"} {
+	// Every domain with a strong signal (registrant, cert, official website or
+	// DMARC reporting to an org domain) is in the expand set.
+	for _, name := range []string{"acme.com", "acme.net", "acme.io", "acme.org", "dmarc-pub.example"} {
 		if !in(expand, name) {
 			t.Errorf("%s has a strong signal and should be in the expand set", name)
 		}
+	}
+	// spf-pub.example is tied only by SPF authorization (supporting), so it needs
+	// review rather than auto-expanding.
+	if !in(review, "spf-pub.example") {
+		t.Errorf("spf-pub.example (SPF only) should need review, got expand=%v review=%v", expand, review)
+	}
+	if in(expand, "spf-pub.example") {
+		t.Error("a lone SPF-authorization match must not auto-expand scope")
 	}
 	// acme-labs.org is tied only by a shared name server (supporting), so it
 	// needs review rather than auto-expanding.

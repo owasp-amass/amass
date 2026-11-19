@@ -16,6 +16,8 @@ Horizontal correlation associates more registered (apex) domains with a target o
 | [Shared certificate subject organization](#cert-subject-org) | strong | identity | 0.75 |
 | [Shared name server](#shared-name-server) | supporting | infrastructure | 0.65 |
 | [Shared mail exchanger](#shared-mx) | supporting | infrastructure | 0.60 |
+| [DMARC reports to the organization](#dmarc-reports-to) | strong | infrastructure | 0.70 |
+| [SPF authorizes the organization's senders](#spf-authorizes) | supporting | infrastructure | 0.55 |
 | [Official website](#official-website) | strong | identity | 0.80 |
 
 <a id="shared-registrant-org"></a>
@@ -94,6 +96,46 @@ Horizontal correlation associates more registered (apex) domains with a target o
 
 - Managed mail providers and SaaS email gateways are the MX for many unrelated customers.
 - A parent company can run one mail system for legally separate subsidiaries.
+
+<a id="dmarc-reports-to"></a>
+## DMARC reports to the organization
+
+`dmarc-reports-to`: strong infrastructure signal, weight 0.70 (confidence 70).
+
+**Finds:** Another registered domain whose DMARC record sends its aggregate or forensic reports (rua/ruf) to a domain the organization owns.
+
+**Why it counts:** A domain's DMARC record names where its mail-authentication reports are sent. Pointing them at a domain the organization controls is a deliberate administrative act: that organization's mail team collects and acts on the reports, so the two domains are administered together. The reporting address is derived from the published DMARC TXT record, which is kept as evidence.
+
+**Guards:**
+
+- A reporting domain referenced by more distinct apex domains than the lens cap is a shared DMARC processor (dmarcian, Valimail and the like), not common ownership, and is skipped, not scored.
+- A reporting domain a known mail-policy provider operates is skipped regardless of how many referencing domains are in the database.
+- Only the organization's own domains are used as the reporting anchor.
+
+**Can still mislead when:**
+
+- A managed DMARC service receives many unrelated customers' reports at its own domain.
+- An external reporting destination requires the destination to authorize it, which this signal does not yet verify.
+
+<a id="spf-authorizes"></a>
+## SPF authorizes the organization's senders
+
+`spf-authorizes`: supporting infrastructure signal, weight 0.55 (confidence 55).
+
+**Finds:** Another registered domain whose SPF record delegates its sending (include: or redirect=) to a domain the organization owns.
+
+**Why it counts:** An SPF include or redirect names a domain allowed to send mail as the publishing domain. Delegating to a domain the organization controls means the organization's mail infrastructure sends on the other domain's behalf, which is evidence of common administration. It is supporting rather than strong because a provider's SPF macro is included by many unrelated customers.
+
+**Guards:**
+
+- An SPF domain referenced by more distinct apex domains than the lens cap is a shared sending provider (a mail provider's SPF macro) and is skipped, not scored.
+- An SPF domain a known mail-policy provider operates is skipped regardless of coverage.
+- Only the organization's own domains are used as the SPF anchor.
+
+**Can still mislead when:**
+
+- A hosting or email provider's SPF macro domain is included by all of its customers.
+- A domain can keep an include for a service it no longer uses.
 
 <a id="official-website"></a>
 ## Official website

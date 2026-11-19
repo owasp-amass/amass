@@ -61,6 +61,12 @@ const (
 	// this: a shared mail provider (Google Workspace, Microsoft 365, …), not
 	// evidence of shared ownership.
 	mxMaxApexes = 25
+	// dmarcMaxPublishers and spfMaxPublishers skip one of the organization's
+	// domains referenced by more distinct apexes than this in their DMARC
+	// reporting or SPF records: a shared mail-policy endpoint (a DMARC processor
+	// or a provider's SPF macro), not evidence of shared ownership.
+	dmarcMaxPublishers = 25
+	spfMaxPublishers   = 25
 )
 
 // The per-signal confidences come from the horizontal signal catalog
@@ -72,6 +78,8 @@ var (
 	relatedCertConfidence       = HorizontalConfidence(SigCertSubjectOrg)
 	relatedNSConfidence         = HorizontalConfidence(SigSharedNameServer)
 	relatedMXConfidence         = HorizontalConfidence(SigSharedMX)
+	relatedDMARCConfidence      = HorizontalConfidence(SigDMARCReportsTo)
+	relatedSPFConfidence        = HorizontalConfidence(SigSPFAuthorizes)
 	relatedWebsiteConfidence    = HorizontalConfidence(SigOfficialWebsite)
 )
 
@@ -291,6 +299,13 @@ nsPivot:
 	sharedDNSHostPivot(ctx, g, ownApexes, rrTypeMX, SigSharedMX, "shared mail exchanger", mxMaxApexes,
 		isMailProvider, add)
 
+	// Mail-policy references: another domain that points its DMARC reporting or
+	// SPF sending at one of the organization's own domains.
+	policyReferencePivot(ctx, g, ownApexes, "dmarc_reports_to", SigDMARCReportsTo, "shared DMARC reporting",
+		dmarcMaxPublishers, isPolicyProvider, add)
+	policyReferencePivot(ctx, g, ownApexes, "spf_authorizes", SigSPFAuthorizes, "SPF authorization",
+		spfMaxPublishers, isPolicyProvider, add)
+
 	// Official website: domains the organization publishes as its own site
 	// (Organization --website--> URL --domain--> FQDN).
 	if websites, err := g.Edges(ctx, orgID, "out", "website", time.Time{}); err == nil {
@@ -334,6 +349,64 @@ nsPivot:
 // the database.
 func isMailProvider(host string) bool {
 	return mailProviderOf(loadEmailRules(), host) != ""
+}
+
+// policyReferencePivot adds related domains that point their published mail
+// policy at one of the organization's own apex domains: another domain whose SPF
+// record authorizes the org's domain to send (spf_authorizes) or whose DMARC
+// record sends its reports to the org's domain (dmarc_reports_to). The engine
+// derives both edges from the publishing domain's TXT records and runs them from
+// the publishing apex to the referenced domain, so this walks the incoming edges
+// of the given label on each of the organization's own apexes. A referenced
+// domain pointed at by more than maxPublishers distinct apexes, or one a known
+// mail-policy provider operates (isProvider), is shared mail-policy
+// infrastructure and is skipped, not scored.
+func policyReferencePivot(ctx context.Context, g graph.Graph, ownApexes []string, label,
+	signalID, signalLabel string, maxPublishers int, isProvider func(string) bool,
+	add func(string, string, string, ...graph.WitnessEdge) bool) {
+	for _, apexID := range ownApexes {
+		target, err := g.GetAsset(ctx, apexID)
+		if err != nil {
+			continue
+		}
+		if isProvider(graph.RegisteredDomain(graph.FQDNName(target))) {
+			continue // the organization's own domain is itself a shared endpoint
+		}
+
+		edges, err := g.Edges(ctx, apexID, "in", label, time.Time{})
+		if err != nil {
+			continue
+		}
+		apexSet := map[string]bool{}
+		type publisher struct {
+			apex string
+			edge graph.Relation
+		}
+		var pubs []publisher
+		for _, pe := range edges {
+			pf, err := g.GetAsset(ctx, pe.FromID)
+			if err != nil {
+				continue
+			}
+			apex := graph.RegisteredDomain(graph.FQDNName(pf))
+			if apex == "" {
+				continue
+			}
+			apexSet[apex] = true
+			pubs = append(pubs, publisher{apex: apex, edge: pe})
+		}
+		if len(apexSet) > maxPublishers {
+			continue // a shared mail-policy endpoint referenced by many domains
+		}
+
+		for _, p := range pubs {
+			w := graph.WitnessEdge{EdgeID: p.edge.ID, Label: label, RelationType: p.edge.Type,
+				FromID: p.edge.FromID, FromType: "FQDN", ToID: p.edge.ToID, ToType: "FQDN"}
+			if !add(p.apex, signalID, signalLabel, w) {
+				return
+			}
+		}
+	}
 }
 
 // sharedDNSHostPivot adds related domains that share a DNS host record of the

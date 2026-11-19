@@ -76,6 +76,44 @@
       ]
     },
     {
+      "id": "dmarc-reports-to",
+      "title": "DMARC reports to the organization",
+      "kind": "infrastructure",
+      "strength": "strong",
+      "weight": 0.7,
+      "matcher": "dmarc_reports_to",
+      "finds": "Another registered domain whose DMARC record sends its aggregate or forensic reports (rua/ruf) to a domain the organization owns.",
+      "rationale": "A domain's DMARC record names where its mail-authentication reports are sent. Pointing them at a domain the organization controls is a deliberate administrative act: that organization's mail team collects and acts on the reports, so the two domains are administered together. The reporting address is derived from the published DMARC TXT record, which is kept as evidence.",
+      "guards": [
+        "A reporting domain referenced by more distinct apex domains than the lens cap is a shared DMARC processor (dmarcian, Valimail and the like), not common ownership, and is skipped, not scored.",
+        "A reporting domain a known mail-policy provider operates is skipped regardless of how many referencing domains are in the database.",
+        "Only the organization's own domains are used as the reporting anchor."
+      ],
+      "counter_indications": [
+        "A managed DMARC service receives many unrelated customers' reports at its own domain.",
+        "An external reporting destination requires the destination to authorize it, which this signal does not yet verify."
+      ]
+    },
+    {
+      "id": "spf-authorizes",
+      "title": "SPF authorizes the organization's senders",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.55,
+      "matcher": "spf_authorizes",
+      "finds": "Another registered domain whose SPF record delegates its sending (include: or redirect=) to a domain the organization owns.",
+      "rationale": "An SPF include or redirect names a domain allowed to send mail as the publishing domain. Delegating to a domain the organization controls means the organization's mail infrastructure sends on the other domain's behalf, which is evidence of common administration. It is supporting rather than strong because a provider's SPF macro is included by many unrelated customers.",
+      "guards": [
+        "An SPF domain referenced by more distinct apex domains than the lens cap is a shared sending provider (a mail provider's SPF macro) and is skipped, not scored.",
+        "An SPF domain a known mail-policy provider operates is skipped regardless of coverage.",
+        "Only the organization's own domains are used as the SPF anchor."
+      ],
+      "counter_indications": [
+        "A hosting or email provider's SPF macro domain is included by all of its customers.",
+        "A domain can keep an include for a service it no longer uses."
+      ]
+    },
+    {
       "id": "official-website",
       "title": "Official website",
       "kind": "identity",
