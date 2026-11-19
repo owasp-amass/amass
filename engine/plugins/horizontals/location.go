@@ -13,7 +13,6 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 type horLocation struct {
@@ -69,36 +68,17 @@ func (h *horLocation) processInScope(e *et.Event) {
 		if from.Asset.AssetType() != oam.ContactRecord {
 			continue
 		}
-		// add the contact record orgs and locations to the scope, and run the
-		// scored horizontal domain expansion for each organization (replacing the
-		// old single-signal domain/certificate enqueues below).
+		// Run the scored horizontal domain and infrastructure expansion for each
+		// organization at this location, and bring the organizations and
+		// locations into scope (replacing the old single-signal enqueues).
 		if orgs, locs := h.plugin.lookupContactRecordOrgsAndLocations(e.Session, from); len(orgs) > 0 || len(locs) > 0 {
 			for _, o := range orgs {
 				h.plugin.expandRelatedDomains(e, o)
+				h.plugin.expandRelatedInfrastructure(e, o)
 				h.plugin.enqueueIfOutOfScope(e.Session, o)
 			}
 			for _, loc := range locs {
 				h.plugin.enqueueIfOutOfScope(e.Session, loc)
-			}
-		}
-		// if the contact record belongs to a registration record, add the AS
-		// netblocks or registered netblock to the scope.
-		if edges, err := e.Session.DB().IncomingEdges(ctx, from, since); err == nil {
-			for _, edge := range edges {
-				if from, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil {
-					switch v := from.Asset.(type) {
-					case *oamreg.AutnumRecord:
-						if !h.plugin.isEntityInScope(e.Session, from) {
-							if as := h.plugin.addASNetblocksToScope(e.Session, v.Number); as != nil {
-								h.plugin.addToScopeAndEnqueue(e.Session, as)
-							}
-						}
-					case *oamreg.IPNetRecord:
-						if nb, err := h.plugin.getRegisteredNetblockEntity(e.Session, from); err == nil && nb != nil {
-							h.plugin.enqueueIfOutOfScope(e.Session, nb)
-						}
-					}
-				}
 			}
 		}
 	}
