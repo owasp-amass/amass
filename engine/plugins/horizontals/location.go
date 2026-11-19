@@ -12,7 +12,6 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
@@ -70,16 +69,20 @@ func (h *horLocation) processInScope(e *et.Event) {
 		if from.Asset.AssetType() != oam.ContactRecord {
 			continue
 		}
-		// add the contact record orgs and locations to the scope
+		// add the contact record orgs and locations to the scope, and run the
+		// scored horizontal domain expansion for each organization (replacing the
+		// old single-signal domain/certificate enqueues below).
 		if orgs, locs := h.plugin.lookupContactRecordOrgsAndLocations(e.Session, from); len(orgs) > 0 || len(locs) > 0 {
 			for _, o := range orgs {
+				h.plugin.expandRelatedDomains(e, o)
 				h.plugin.enqueueIfOutOfScope(e.Session, o)
 			}
 			for _, loc := range locs {
 				h.plugin.enqueueIfOutOfScope(e.Session, loc)
 			}
 		}
-		// if the contact record belongs to a registration record or TLS certificate, add to the scope
+		// if the contact record belongs to a registration record, add the AS
+		// netblocks or registered netblock to the scope.
 		if edges, err := e.Session.DB().IncomingEdges(ctx, from, since); err == nil {
 			for _, edge := range edges {
 				if from, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil {
@@ -90,16 +93,10 @@ func (h *horLocation) processInScope(e *et.Event) {
 								h.plugin.addToScopeAndEnqueue(e.Session, as)
 							}
 						}
-					case *oamreg.DomainRecord:
-						if fqdn, err := h.plugin.getRegisteredDomainEntity(e.Session, from); err == nil && fqdn != nil {
-							h.plugin.enqueueIfOutOfScope(e.Session, fqdn)
-						}
 					case *oamreg.IPNetRecord:
 						if nb, err := h.plugin.getRegisteredNetblockEntity(e.Session, from); err == nil && nb != nil {
 							h.plugin.enqueueIfOutOfScope(e.Session, nb)
 						}
-					case *oamcert.TLSCertificate:
-						h.plugin.enqueueIfOutOfScope(e.Session, from)
 					}
 				}
 			}

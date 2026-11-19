@@ -1,0 +1,137 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package horizontals
+
+import (
+	"context"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/amass/v5/internal/review"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
+)
+
+// expandRelatedDomains is the scored replacement for the single-signal domain
+// expansion the handlers used to do. For an in-scope organization it scores the
+// registered domains the horizontal signals tie to it (internal/lens: shared
+// registrant, certificate subject, name server, official website, with privacy-
+// proxy and provider/CDN values excluded and corroborating signals combined),
+// adds the strongly-supported ones to scope, and records every decision in the
+// review journal so it is auditable and can be reconsidered (the reevaluation
+// sweep). Candidates with only corroboration are left as pending proposals for a
+// person. Scope is never grown when the run is Rigid. It runs at most once per
+// organization per TTL window.
+func (h *horizPlugin) expandRelatedDomains(e *et.Event, orgEnt *dbt.Entity) {
+	sess := e.Session
+	if sess.Config().Rigid || orgEnt == nil {
+		return
+	}
+	if _, ok := orgEnt.Asset.(*oamorg.Organization); !ok {
+		return
+	}
+
+	since, err := support.TTLStartTime(sess.Config(), string(oam.Organization), string(oam.FQDN), h.name)
+	if err != nil {
+		return
+	}
+	if support.AssetMonitoredWithinTTL(sess, orgEnt, h.source, since) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), time.Minute)
+	defer cancel()
+
+	adapter := oamrepo.Adapter{Repo: sess.DB(), Neo4jDatabase: oamrepo.Neo4jDatabaseName(sess.Config())}
+	report, err := lens.FindRelatedDomains(ctx, adapter, orgEnt.ID)
+	if err != nil {
+		sess.Log().Error(err.Error(), slog.Group("plugin", "name", h.name))
+		return
+	}
+
+	expand, needsReview := lens.HorizontalExpansion(report)
+	j := h.journalFor(sess)
+	for _, d := range expand {
+		if !h.widenScopeToDomain(ctx, sess, d.Domain) {
+			continue
+		}
+		sess.Log().Info("horizontal correlation widened scope",
+			"domain", d.Domain, "org", report.Org, "confidence", d.Confidence,
+			slog.Group("plugin", "name", h.name))
+		h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalApplied, review.AutomaticReviewer)
+	}
+	// Corroboration-only candidates are proposed for a person, never auto-added.
+	for _, d := range needsReview {
+		h.recordExpansion(j, orgEnt.ID, report.Org, d, review.ProposalPending, "")
+	}
+
+	support.MarkAssetMonitored(sess, orgEnt, h.source)
+}
+
+func (h *horizPlugin) recordExpansion(j *review.Journal, orgID, org string, d lens.HorizontalDomain,
+	status, reviewer string) {
+	if j == nil {
+		return
+	}
+	_ = j.RecordScopeExpansion(review.ScopeExpansion{
+		OrgID: orgID, Org: org, Domain: d.Domain, Confidence: d.Confidence,
+		Signals: d.Signals, SignalIDs: d.SignalIDs, Witness: d.Witness,
+		Status: status, Reviewer: reviewer,
+	})
+}
+
+// widenScopeToDomain adds the registered domain's FQDN to the session scope and
+// enqueues it, mirroring addToScopeAndEnqueue. It reports whether the domain was
+// newly added (false when it is unknown or already in scope).
+func (h *horizPlugin) widenScopeToDomain(ctx context.Context, sess et.Session, domain string) bool {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if domain == "" {
+		return false
+	}
+
+	ents, err := sess.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{"name": domain})
+	if err != nil || len(ents) != 1 {
+		return false
+	}
+	ent := ents[0]
+	if !sess.Scope().Add(ent.Asset) {
+		return false
+	}
+	if econf := h.confidence(sess, ent.Asset.AssetType()); econf > 0 {
+		if a, c := sess.Scope().IsAssetInScope(ent.Asset, econf); c >= econf && strings.EqualFold(a.Key(),
+			ent.Asset.Key()) {
+			_ = sess.Backlog().Enqueue(ent)
+		}
+	}
+
+	return true
+}
+
+// journalFor returns the review journal automatic attribution uses, so scored
+// scope expansions are recorded alongside the other AI decisions, or nil when
+// attribution (and therefore the journal) is off.
+func (h *horizPlugin) journalFor(sess et.Session) *review.Journal {
+	mode, path, err := sess.Config().AIAttribution(h.lookup)
+	if err != nil || mode == config.AttributionOff || path == "" {
+		return nil
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	j, ok := h.journals[path]
+	if !ok {
+		j = &review.Journal{Path: path}
+		h.journals[path] = j
+	}
+
+	return j
+}

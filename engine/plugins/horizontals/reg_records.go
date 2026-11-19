@@ -140,10 +140,14 @@ func (h *horRegRec) processDomainRecord(e *et.Event, orgs []*dbt.Entity, locs []
 	}
 
 	if found {
-		// get the registered domain FQDN entity
-		if fqdn, err := h.plugin.getRegisteredDomainEntity(e.Session, e.Entity); err == nil && fqdn != nil {
-			// add the FQDN to the session scope and review it
-			h.plugin.enqueueIfOutOfScope(e.Session, e.Entity)
+		// The registered domain is added through the scored horizontal
+		// expansion for each in-scope organization (which includes this
+		// domain via the shared-registrant signal), rather than a direct
+		// single-signal enqueue, so the scope change is scored and journaled.
+		for _, o := range orgs {
+			if h.plugin.isEntityInScope(e.Session, o) {
+				h.plugin.expandRelatedDomains(e, o)
+			}
 		}
 		for _, o := range orgs {
 			h.plugin.enqueueIfOutOfScope(e.Session, o)

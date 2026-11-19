@@ -12,7 +12,6 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
@@ -53,6 +52,12 @@ func (h *horOrg) check(e *et.Event) error {
 }
 
 func (h *horOrg) processInScope(e *et.Event) {
+	// Scored horizontal domain expansion for this in-scope organization: the
+	// registered domains its signals tie to it are scored and the strong ones
+	// added to scope, journaled and reconsiderable, in place of the old
+	// single-signal domain enqueues below.
+	h.plugin.expandRelatedDomains(e, e.Entity)
+
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), time.Minute)
 	defer cancel()
 
@@ -96,16 +101,10 @@ func (h *horOrg) processInScope(e *et.Event) {
 								h.plugin.addToScopeAndEnqueue(e.Session, as)
 							}
 						}
-					case *oamreg.DomainRecord:
-						if fqdn, err := h.plugin.getRegisteredDomainEntity(e.Session, from); err == nil && fqdn != nil {
-							h.plugin.enqueueIfOutOfScope(e.Session, fqdn)
-						}
 					case *oamreg.IPNetRecord:
 						if nb, err := h.plugin.getRegisteredNetblockEntity(e.Session, from); err == nil && nb != nil {
 							h.plugin.enqueueIfOutOfScope(e.Session, nb)
 						}
-					case *oamcert.TLSCertificate:
-						h.plugin.enqueueIfOutOfScope(e.Session, from)
 					}
 				}
 			}

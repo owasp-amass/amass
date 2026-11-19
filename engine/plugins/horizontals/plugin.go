@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -17,6 +19,7 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"github.com/owasp-amass/amass/v5/internal/registrant"
+	"github.com/owasp-amass/amass/v5/internal/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
@@ -36,6 +39,13 @@ type horizPlugin struct {
 	horRegRec   *horRegRec
 	horTlsCert  *horTlsCert
 	source      *et.Source
+	// lookup resolves environment variables for the AI-attribution journal
+	// configuration; overridable in tests.
+	lookup func(string) (string, bool)
+	mu     sync.Mutex
+	// journals caches the review journal by path, so scored scope expansions
+	// are recorded in the same journal automatic attribution uses.
+	journals map[string]*review.Journal
 }
 
 func NewHorizontals() et.Plugin {
@@ -45,6 +55,8 @@ func NewHorizontals() et.Plugin {
 			Name:       "Horizontals",
 			Confidence: 75,
 		},
+		lookup:   os.LookupEnv,
+		journals: make(map[string]*review.Journal),
 	}
 }
 
