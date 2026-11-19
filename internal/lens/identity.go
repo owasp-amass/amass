@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/biter777/countries"
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -332,24 +333,24 @@ func (s *identitySearch) check(o graph.Asset, legal, juris string) (*IdentityCon
 		return nil, err
 	}
 
+	nameChecked := legal != "" && len(independent) > 0
+	nameAgrees, viaSubsidiary := legalNameAgreement(legal, independent)
+
 	var reasons []string
-	if jc := jurisdictionCountry(juris); jc != "" && len(countries) > 0 && !countries[jc] {
-		reasons = append(reasons, fmt.Sprintf("jurisdiction %s, but its contact records are in %s", juris,
-			strings.Join(sortedKeys(countries), ", ")))
+	// A jurisdiction that disagrees with the contact countries flags a probably
+	// different entity — a same-named company registered abroad. The exception is
+	// a legal name that is a regional variant of a name we already have (a
+	// subsidiary, e.g. "cisco systems france"): that already explains the foreign
+	// jurisdiction, so it is not evidence of a wrong identity.
+	if !viaSubsidiary {
+		if jc := jurisdictionCountry(juris); jc != "" && len(countries) > 0 && !countries[jc] {
+			reasons = append(reasons, fmt.Sprintf("jurisdiction %s, but its contact records are in %s", juris,
+				strings.Join(sortedKeys(countries), ", ")))
+		}
 	}
-	if legal != "" && len(independent) > 0 {
-		lb := brandName(legal)
-		agrees := false
-		for _, n := range independent {
-			if brandName(n) == lb {
-				agrees = true
-				break
-			}
-		}
-		if !agrees {
-			reasons = append(reasons, fmt.Sprintf("legal name %q matches none of the names other sources gave it (%s)",
-				legal, strings.Join(independent, "; ")))
-		}
+	if nameChecked && !nameAgrees {
+		reasons = append(reasons, fmt.Sprintf("legal name %q matches none of the names other sources gave it (%s)",
+			legal, strings.Join(independent, "; ")))
 	}
 	if len(reasons) == 0 {
 		return nil, nil
@@ -401,6 +402,133 @@ func jurisdictionCountry(j string) string {
 }
 
 // countryCode normalizes a country name or code to ISO 3166 alpha-2.
+// legalNameAgrees reports whether a GLEIF-supplied legal name is consistent with
+// at least one name other sources gave the organization. Beyond an exact brand
+// match it accepts the two ways a real legal name legitimately differs from the
+// common name, so a genuine subsidiary or an acronym is not mistaken for a wrong
+// identity:
+//   - a country/region or division suffix on the brand (a subsidiary), e.g.
+//     "cisco systems france" or "cogent communications group" for "cisco systems"
+//     and "cogent communications";
+//   - an acronym, e.g. "femsa" for "fomento economico mexicano s a b de c v".
+//
+// It is deliberately permissive: a false agreement only suppresses a removal
+// proposal (leaving the data for a human to judge), whereas a false disagreement
+// proposes deleting a correct legal name.
+func legalNameAgrees(legal string, independent []string) bool {
+	agrees, _ := legalNameAgreement(legal, independent)
+	return agrees
+}
+
+// legalNameAgreement reports whether the legal name agrees with a name other
+// sources gave the organization, and whether that agreement came from a
+// country/region or division suffix (a subsidiary, e.g. "cisco systems france").
+// A subsidiary agreement also explains a foreign jurisdiction, so the caller
+// suppresses the jurisdiction-mismatch reason in that case; an exact or acronym
+// agreement does not.
+func legalNameAgreement(legal string, independent []string) (agrees, viaSubsidiary bool) {
+	lb := brandName(legal)
+	if lb == "" {
+		return true, false
+	}
+	lacr := nameAcronym(legal)
+
+	for _, n := range independent {
+		nb := brandName(n)
+		if nb == "" {
+			continue
+		}
+		if brandIsSubsidiaryOf(lb, nb) || brandIsSubsidiaryOf(nb, lb) {
+			return true, true
+		}
+		if nb == lb {
+			agrees = true
+			continue
+		}
+		// Acronym either way: a short name that is the initials of the other.
+		if acronymMatches(lacr, n) || acronymMatches(nameAcronym(n), legal) {
+			agrees = true
+		}
+	}
+	return agrees, false
+}
+
+// brandIsSubsidiaryOf reports whether brand sub is brand parent followed only by
+// country/region or division tokens, i.e. sub names a subsidiary of parent.
+func brandIsSubsidiaryOf(sub, parent string) bool {
+	subw := strings.Fields(sub)
+	pw := strings.Fields(parent)
+	if len(pw) == 0 || len(subw) <= len(pw) {
+		return false
+	}
+	for i := range pw {
+		if subw[i] != pw[i] {
+			return false
+		}
+	}
+	for _, extra := range subw[len(pw):] {
+		if !regionOrDivisionToken(extra) {
+			return false
+		}
+	}
+	return true
+}
+
+// regionOrDivisionToken reports whether a trailing brand token is a country or
+// region name, a corporate-division word, or a legal-form token, rather than
+// part of the brand. Legal forms are included so a subsidiary suffix is matched
+// whether or not brandName stripped the form (it only strips trailing ones).
+func regionOrDivisionToken(w string) bool {
+	switch w {
+	case "international", "global", "worldwide", "group", "holding", "holdings",
+		"europe", "americas", "asia", "apac", "emea", "latam":
+		return true
+	}
+	if legalForms()[normLegalForm(w)] {
+		return true
+	}
+	return countryCode(w) != ""
+}
+
+// nameAcronym returns the lower-case initials of the significant words of a
+// name, keeping the initials of single-letter legal-form tokens (so "s a b"
+// contributes to an acronym like FEMSA) and dropping connector words.
+func nameAcronym(name string) string {
+	var b strings.Builder
+	for _, w := range strings.FieldsFunc(strings.ToLower(name), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	}) {
+		switch w {
+		case "de", "of", "the", "and", "for", "y", "del", "la", "le":
+			continue
+		}
+		b.WriteByte(w[0])
+	}
+	return b.String()
+}
+
+// acronymMatches reports whether candidate is the acronym acr, allowing acr to
+// carry a few trailing legal-form initials the candidate omits (so "femsa" is a
+// prefix of "femsabcv"). It requires length >= 4 to avoid coincidence.
+func acronymMatches(acr, candidate string) bool {
+	c := lettersDigitsLower(candidate)
+	if len(c) < 4 || len(acr) < len(c) {
+		return false
+	}
+	return strings.HasPrefix(acr, c)
+}
+
+// lettersDigitsLower reduces s to its lower-case letters and digits.
+func lettersDigitsLower(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func countryCode(c string) string {
 	c = strings.TrimSpace(c)
 	if c == "" {
