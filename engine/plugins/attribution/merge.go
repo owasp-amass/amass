@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	orgsupport "github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
@@ -481,4 +482,9 @@ func (t *tracker) recheck(ctx context.Context, adapter oamrepo.Adapter) {
 		t.sess.Log().Info(fmt.Sprintf("AI horizontal correlation reopened %s %s for review: its evidence is gone "+
 			"(org %s)", e.Kind(), e.Asset, e.Org))
 	}
+
+	// Refund the owned-netblock sweep budgets by how many swept addresses have
+	// turned out to host real assets, so exploration keeps flowing to networks
+	// that are paying off while dead space stays bounded.
+	support.RecheckSweepBudgets(ctx, t.sess.DB(), t.sess.ID().String())
 }

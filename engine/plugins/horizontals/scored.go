@@ -21,6 +21,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
@@ -261,6 +262,13 @@ func (h *horizPlugin) widenScopeToAsset(ctx context.Context, sess et.Session, as
 	ent := ents[0]
 	if !sess.Scope().Add(ent.Asset) {
 		return false
+	}
+	// Seed the sweep budget for a newly owned netblock, so the neighborhood
+	// sweep of its addresses is bounded (and refunded by evidence) rather than
+	// probing a large owned network wholesale. Keyed on the canonical CIDR to
+	// match horaddr.inOwnedNetblock.
+	if nb, ok := ent.Asset.(*oamnet.Netblock); ok {
+		support.SweepBudgetFor(sess.ID().String()).Seed(nb.CIDR.String(), support.SweepSeedWindow)
 	}
 	if econf := h.confidence(sess, ent.Asset.AssetType()); econf > 0 {
 		if a, c := sess.Scope().IsAssetInScope(ent.Asset, econf); c >= econf && strings.EqualFold(a.Key(),
