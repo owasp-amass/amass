@@ -25,9 +25,19 @@ func relatedInfraGraph() graphtest.FakeGraph {
 		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to,
 			Label: label, Type: "SimpleRelation"})
 	}
+	// The AS that AutnumRecord asr1 registers, and a prefix it announces: a
+	// supporting (announced-only) netblock. AutonomousSystem --registration-->
+	// AutnumRecord, and AutonomousSystem --announces--> Netblock.
+	g.Assets["as1"] = graph.Asset{ID: "as1", Type: "AutonomousSystem", Key: "64500",
+		Content: map[string]any{"number": "64500"}}
+	g.Assets["nb1"] = graph.Asset{ID: "nb1", Type: "Netblock", Key: "203.0.113.0/24",
+		Content: map[string]any{"cidr": "203.0.113.0/24"}}
+
 	link("cr1", "acme", "organization")
 	link("ipr1", "cr1", "registrant")
 	link("asr1", "cr1", "registrant")
+	link("as1", "asr1", "registration")
+	link("as1", "nb1", "announces")
 
 	// A privacy-proxy organization with its own netblock registration: never
 	// correlated on.
@@ -63,10 +73,21 @@ func TestFindRelatedInfrastructure(t *testing.T) {
 		t.Errorf("AS from the AutnumRecord registrant should be present: %+v", r.Assets)
 	}
 
-	// Both are strong signals, so both are eligible to expand.
+	// The announced-only netblock is a supporting signal, so it surfaces for
+	// review rather than auto-expanding.
+	ann, ok := got["Netblock 203.0.113.0/24"]
+	if !ok || ann.Confidence != InfrastructureConfidence(SigASNAnnouncedNetblock) {
+		t.Errorf("announced netblock should surface at the supporting confidence: %+v", r.Assets)
+	}
+
+	// The two RIR-registered assets expand; the announced-only netblock needs
+	// review.
 	expand, review := InfrastructureExpansion(r)
-	if len(expand) != 2 || len(review) != 0 {
-		t.Errorf("both registrant-backed assets should be in the expand set: expand=%+v review=%+v", expand, review)
+	if len(expand) != 2 {
+		t.Errorf("the registrant-backed netblock and AS should expand: %+v", expand)
+	}
+	if len(review) != 1 || review[0].Asset != "203.0.113.0/24" {
+		t.Errorf("the announced-only netblock should need review: %+v", review)
 	}
 }
 

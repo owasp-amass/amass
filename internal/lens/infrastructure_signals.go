@@ -22,17 +22,20 @@ var infrastructureSignalsJSON = semantics.File("infrastructure_signals.json")
 
 // Infrastructure signal IDs, as used in code and in infrastructure_signals.json.
 const (
-	SigIPNetRegistrantOrg = "ipnet-registrant-org"
-	SigASNRegistrantOrg   = "asn-registrant-org"
+	SigIPNetRegistrantOrg   = "ipnet-registrant-org"
+	SigASNRegistrantOrg     = "asn-registrant-org"
+	SigASNAnnouncedNetblock = "asn-announced-netblock"
 )
 
 // Infrastructure signal matchers: how each signal is found in the graph.
 const (
-	matchInfraIPNetReg = "ipnet_registrant_org"
-	matchInfraASNReg   = "asn_registrant_org"
+	matchInfraIPNetReg    = "ipnet_registrant_org"
+	matchInfraASNReg      = "asn_registrant_org"
+	matchInfraASNAnnounce = "asn_announced_netblock"
 )
 
-var infrastructureMatchers = map[string]bool{matchInfraIPNetReg: true, matchInfraASNReg: true}
+var infrastructureMatchers = map[string]bool{matchInfraIPNetReg: true, matchInfraASNReg: true,
+	matchInfraASNAnnounce: true}
 
 var loadInfrastructureCatalog = sync.OnceValues(func() (signalCatalog, error) {
 	var c signalCatalog

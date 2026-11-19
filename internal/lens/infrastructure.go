@@ -34,6 +34,12 @@ import (
 // A WHOIS privacy proxy or a placeholder organization is shared by many
 // unrelated registrations, so such a subject is never correlated on.
 
+// asnMaxNetblocks skips an autonomous system announcing more prefixes than this
+// as the announced-netblock corroboration source: a very large or transit AS
+// announces address space it does not own, so its announcements are not
+// evidence of the organization's ownership.
+const asnMaxNetblocks = 512
+
 // InfrastructureAsset is a netblock or autonomous system an infrastructure
 // signal ties to the subject organization, with the evidence and confidence
 // behind it. AssetType is the OAM type ("Netblock" or "AutonomousSystem") and
@@ -107,6 +113,7 @@ func FindRelatedInfrastructure(ctx context.Context, g graph.Graph, orgID string)
 
 	ipnetSig := "shared netblock registrant organization: " + name
 	asnSig := "shared AS registrant organization: " + name
+	announceSig := "announced by an AS registered to: " + name
 	orgWitness := func(ce graph.Relation) graph.WitnessEdge {
 		return graph.WitnessEdge{EdgeID: ce.ID, Label: "organization", RelationType: ce.Type,
 			FromID: ce.FromID, FromType: "ContactRecord", ToID: ce.ToID, ToType: "Organization", To: name}
@@ -143,6 +150,35 @@ contacts:
 				if !add("AutonomousSystem", graph.ContentString(rec, "number"), SigASNRegistrantOrg, asnSig,
 					w, orgWitness(ce)) {
 					break contacts
+				}
+				// Corroboration: netblocks the organization's AS announces.
+				// AutonomousSystem --registration--> AutnumRecord, so the AS is
+				// reached by the incoming registration edge; its announced
+				// prefixes are a supporting signal (announcement is operation,
+				// not registration).
+				ases, err := g.Edges(ctx, re.FromID, "in", "registration", time.Time{})
+				if err != nil {
+					continue
+				}
+				for _, ae := range ases {
+					regW := graph.WitnessEdge{EdgeID: ae.ID, Label: "registration", RelationType: ae.Type,
+						FromID: ae.FromID, FromType: "AutonomousSystem", ToID: ae.ToID, ToType: "AutnumRecord"}
+					anns, err := g.Edges(ctx, ae.FromID, "out", "announces", time.Time{})
+					if err != nil || len(anns) > asnMaxNetblocks {
+						continue // a very large or transit AS is not evidence of ownership
+					}
+					for _, ann := range anns {
+						nb, err := g.GetAsset(ctx, ann.ToID)
+						if err != nil {
+							continue
+						}
+						annW := graph.WitnessEdge{EdgeID: ann.ID, Label: "announces", RelationType: ann.Type,
+							FromID: ann.FromID, FromType: "AutonomousSystem", ToID: ann.ToID, ToType: "Netblock"}
+						if !add("Netblock", graph.ContentString(nb, "cidr"), SigASNAnnouncedNetblock,
+							announceSig, regW, annW) {
+							break contacts
+						}
+					}
 				}
 			}
 		}

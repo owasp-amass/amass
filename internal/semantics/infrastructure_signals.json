@@ -37,6 +37,24 @@
         "A parent or network operator can hold the AS registration for legally separate subsidiaries.",
         "Upstream providers sometimes register AS numbers on behalf of customers."
       ]
+    },
+    {
+      "id": "asn-announced-netblock",
+      "title": "Netblock announced by the organization's AS",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.6,
+      "matcher": "asn_announced_netblock",
+      "finds": "A netblock announced (originated) by an autonomous system whose RIR registration names the target organization.",
+      "rationale": "A prefix originated by the organization's own AS is routed by its network, corroborating that the address space is operated by it. It is supporting rather than strong because an AS routinely announces space it does not own — transit and customer routes among them — so announcement is operation, not registration. Combined with an RIR registration naming the organization (ipnet-registrant-org) it raises a netblock's confidence; announcement alone needs review.",
+      "guards": [
+        "Counts only for a netblock announced by an AS that is itself registered to the organization (asn-registrant-org).",
+        "A privacy or proxy registrant organization on the AS is never an anchor."
+      ],
+      "counter_indications": [
+        "A transit AS announces its customers' prefixes without owning them.",
+        "Route leaks and hijacks announce prefixes the AS has no claim to."
+      ]
     }
   ]
 }

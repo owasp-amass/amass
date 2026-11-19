@@ -21,7 +21,7 @@ func TestInfrastructureSignalCatalogIsValid(t *testing.T) {
 			t.Errorf("signal %s documents no guards or counter-indications", s.ID)
 		}
 	}
-	for _, id := range []string{SigIPNetRegistrantOrg, SigASNRegistrantOrg} {
+	for _, id := range []string{SigIPNetRegistrantOrg, SigASNRegistrantOrg, SigASNAnnouncedNetblock} {
 		if _, ok := LookupInfrastructureSignal(id); !ok {
 			t.Errorf("signal %s used in code is missing from the catalog", id)
 		}
@@ -40,6 +40,16 @@ func TestInfrastructureScore(t *testing.T) {
 		if c, strong := InfrastructureScore([]string{id}); c != want || !strong {
 			t.Errorf("InfrastructureScore(%q) = (%d, %v), want (%d, true)", id, c, strong, want)
 		}
+	}
+	// The announced-netblock signal is supporting: it scores but is not strong,
+	// so on its own it needs review rather than auto-expanding.
+	if c, strong := InfrastructureScore([]string{SigASNAnnouncedNetblock}); c != 60 || strong {
+		t.Errorf("announced-netblock score = (%d, %v), want (60, false)", c, strong)
+	}
+	// A netblock that is both RIR-registered and announced is corroborated higher
+	// than either alone, and is strong.
+	if c, strong := InfrastructureScore([]string{SigIPNetRegistrantOrg, SigASNAnnouncedNetblock}); c <= 75 || !strong {
+		t.Errorf("registered+announced score = (%d, %v), want >75 and strong", c, strong)
 	}
 	if InfrastructureConfidence("nope") != 0 {
 		t.Error("an unknown signal id should yield confidence 0")

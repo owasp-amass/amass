@@ -12,6 +12,7 @@ Infrastructure correlation associates more netblocks and autonomous systems with
 | --- | --- | --- | --- |
 | [Shared netblock registrant organization](#ipnet-registrant-org) | strong | identity | 0.75 |
 | [Shared AS registrant organization](#asn-registrant-org) | strong | identity | 0.75 |
+| [Netblock announced by the organization's AS](#asn-announced-netblock) | supporting | infrastructure | 0.60 |
 
 <a id="ipnet-registrant-org"></a>
 ## Shared netblock registrant organization
@@ -50,3 +51,22 @@ Infrastructure correlation associates more netblocks and autonomous systems with
 
 - A parent or network operator can hold the AS registration for legally separate subsidiaries.
 - Upstream providers sometimes register AS numbers on behalf of customers.
+
+<a id="asn-announced-netblock"></a>
+## Netblock announced by the organization's AS
+
+`asn-announced-netblock`: supporting infrastructure signal, weight 0.60 (confidence 60).
+
+**Finds:** A netblock announced (originated) by an autonomous system whose RIR registration names the target organization.
+
+**Why it counts:** A prefix originated by the organization's own AS is routed by its network, corroborating that the address space is operated by it. It is supporting rather than strong because an AS routinely announces space it does not own — transit and customer routes among them — so announcement is operation, not registration. Combined with an RIR registration naming the organization (ipnet-registrant-org) it raises a netblock's confidence; announcement alone needs review.
+
+**Guards:**
+
+- Counts only for a netblock announced by an AS that is itself registered to the organization (asn-registrant-org).
+- A privacy or proxy registrant organization on the AS is never an anchor.
+
+**Can still mislead when:**
+
+- A transit AS announces its customers' prefixes without owning them.
+- Route leaks and hijacks announce prefixes the AS has no claim to.
