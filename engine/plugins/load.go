@@ -7,7 +7,9 @@ package plugins
 import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/censys"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/edgar"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/fofa"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/ocds"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
@@ -19,6 +21,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usaspending"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/usgrants"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/wikidata"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/zoomeye"
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v5/engine/plugins/attribution"
 	"github.com/owasp-amass/amass/v5/engine/plugins/breach"
@@ -93,6 +96,9 @@ var pluginNewFuncs = []func() et.Plugin{
 	wikidata.NewWikidata,
 	schemaorg.NewSchemaOrg,
 	shodan.NewShodan,
+	censys.NewCensys,
+	fofa.NewFOFA,
+	zoomeye.NewZoomEye,
 	scrape.NewBing,
 	scrape.NewDNSHistory,
 	scrape.NewDuckDuckGo,
