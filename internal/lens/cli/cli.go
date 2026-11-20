@@ -358,6 +358,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		return listRelatedInfrastructure(ctx, g, domainName, orgName, format, out)
 	case "accounts":
 		return listAccounts(ctx, g, domainName, orgName, journalPath, format, out, errout)
+	case "applied":
+		return listApplied(journalPath, format, out)
 	}
 
 	if l, ok := lens.SubjectLensNamed(operation); ok {

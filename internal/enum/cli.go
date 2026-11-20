@@ -376,6 +376,12 @@ func printPendingProposals(cfg *config.Config) {
 	if line := summary.Line(); line != "" {
 		_, _ = afmt.G.Fprintf(color.Error, "\n%s\n", line)
 	}
+
+	if applied, aerr := lenscli.AppliedByAISummary(journal, time.Time{}); aerr == nil {
+		if line := applied.Line(); line != "" {
+			_, _ = afmt.G.Fprintf(color.Error, "\n%s\n", line)
+		}
+	}
 }
 
 func getStats(c *client.Client, token uuid.UUID) (*et.SessionStats, error) {
