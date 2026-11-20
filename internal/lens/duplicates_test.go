@@ -358,3 +358,105 @@ func TestDuplicateProfilesReadEveryContact(t *testing.T) {
 			bounded.report.Reason)
 	}
 }
+
+
+// TestCompareOrganizations locks the bounded, incremental duplicate scoring the
+// attribution merge pass relies on: a seed against a true duplicate and an
+// unrelated org, and two seeds against each other.
+func TestCompareOrganizations(t *testing.T) {
+	g := graphtest.NewOrgGraph()
+	// A seed and a true duplicate: same LEI, registration and brand.
+	g.Org("100", "globex", "globex", "BE", "0459134256")
+	g.Org("101", "globex", "globex", "BE", "0459134256")
+	g.Ident("100", "lei", "875500H0WKURA9XATD59")
+	g.Ident("101", "lei", "875500H0WKURA9XATD59")
+	// An unrelated organization sharing nothing with the seed.
+	g.Org("200", "initech", "initech", "US-DE", "9999999")
+
+	r, err := CompareOrganizations(context.Background(), g.Graph, []string{"100"}, []string{"101", "200"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	find := func(a, b string) *DuplicateCandidate {
+		for i := range r.Candidates {
+			c := &r.Candidates[i]
+			if (c.Survivor.ID == a && c.Duplicate.ID == b) || (c.Survivor.ID == b && c.Duplicate.ID == a) {
+				return c
+			}
+		}
+		return nil
+	}
+	has := func(c *DuplicateCandidate, sig string) bool {
+		for _, s := range c.Signals {
+			if s.Signal == sig {
+				return true
+			}
+		}
+		return false
+	}
+
+	c := find("100", "101")
+	if c == nil {
+		t.Fatalf("100 and 101 (same LEI, registration, brand) should be a candidate; got %+v", r.Candidates)
+	}
+	for _, want := range []string{"shared_registry_identifier", "shared_registration", "same_brand_name"} {
+		if !has(c, want) {
+			t.Errorf("candidate 100<->101 missing signal %q: %+v", want, c.Signals)
+		}
+	}
+	if c.Score <= 0 || c.Decision == "" {
+		t.Errorf("candidate 100<->101 should be scored and decided: score=%v decision=%q", c.Score, c.Decision)
+	}
+	if u := find("100", "200"); u != nil {
+		t.Errorf("the seed and an unrelated org must not be a candidate: %+v", u)
+	}
+
+	// Two seeds are compared against each other with no candidate list.
+	r2, err := CompareOrganizations(context.Background(), g.Graph, []string{"100", "101"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := false
+	for _, cc := range r2.Candidates {
+		if (cc.Survivor.ID == "100" && cc.Duplicate.ID == "101") ||
+			(cc.Survivor.ID == "101" && cc.Duplicate.ID == "100") {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Errorf("two duplicate seed organizations should be compared; got %+v", r2.Candidates)
+	}
+}
+
+// TestPathWitness checks the evidence-chain builder many lenses rely on: one
+// witness edge per path edge that has a following node, oriented by the edge's
+// own direction, and a trailing edge beyond the nodes dropped.
+func TestPathWitness(t *testing.T) {
+	a := graph.Asset{ID: "a", Type: "Organization"}
+	b := graph.Asset{ID: "b", Type: "DomainRecord"}
+	c := graph.Asset{ID: "c", Type: "ContactRecord"}
+	p := graph.PlanMatch{
+		Nodes: []graph.Asset{a, b, c},
+		Edges: []graph.Relation{
+			{ID: "e1", Label: "registration", Type: "SimpleRelation", FromID: "a", ToID: "b"},
+			{ID: "e2", Label: "registrant_contact", Type: "SimpleRelation", FromID: "b", ToID: "c"},
+		},
+	}
+	w := PathWitness(p)
+	if len(w) != 2 {
+		t.Fatalf("want 2 witness edges, got %d: %+v", len(w), w)
+	}
+	if w[0].EdgeID != "e1" || w[0].FromID != "a" || w[0].ToID != "b" || w[0].Label != "registration" {
+		t.Errorf("edge 0 = %+v", w[0])
+	}
+	if w[1].EdgeID != "e2" || w[1].FromID != "b" || w[1].ToID != "c" {
+		t.Errorf("edge 1 = %+v", w[1])
+	}
+
+	// Fewer nodes than edges: the trailing edge with no following node is dropped.
+	p2 := graph.PlanMatch{Nodes: []graph.Asset{a, b}, Edges: p.Edges}
+	if w2 := PathWitness(p2); len(w2) != 1 {
+		t.Errorf("a path with fewer nodes than edges keeps only covered edges: %+v", w2)
+	}
+}

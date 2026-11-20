@@ -285,7 +285,8 @@ func (g *gapSearch) emailDomainSignals(rec graph.Asset) error {
 		if !s.forward || !registrationContactLabels[s.edge.Label] || s.other.Type != "ContactRecord" {
 			continue
 		}
-		for _, dom := range g.contactEmailDomains(s.other) {
+		domains, _ := g.w.contactEmailDomains(s.other)
+		for _, dom := range domains {
 			if dom != "" && !free[dom] {
 				owners[dom] = s.other
 			}
@@ -532,30 +533,6 @@ func (g *gapSearch) addSecurityTxtCandidate(apex, service graph.Asset, detail st
 	g.add(host, def.ID, "FQDN security.txt FQDN", witness)
 }
 
-// contactEmailDomains returns the registered domains of a contact record's
-// email identifiers.
-func (g *gapSearch) contactEmailDomains(cr graph.Asset) []string {
-	steps, err := g.w.steps(cr)
-	if err != nil {
-		return nil
-	}
-
-	var out []string
-	seen := map[string]bool{}
-	for _, s := range steps {
-		if !s.forward || s.edge.Label != "id" || s.other.Type != "Identifier" ||
-			!strings.EqualFold(graph.ContentString(s.other, "id_type"), "email") {
-			continue
-		}
-		if _, dom, ok := strings.Cut(strings.ToLower(graph.ContentString(s.other, "id")), "@"); ok && dom != "" {
-			if reg := graph.RegisteredDomain(dom); reg != "" && !seen[reg] {
-				seen[reg] = true
-				out = append(out, reg)
-			}
-		}
-	}
-	return out
-}
 
 func (g *gapSearch) fingerprintSignals(owned graph.Asset) error {
 	defs := signalsByMatcher(matchFingerprint)

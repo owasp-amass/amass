@@ -512,7 +512,7 @@ func (d dependencyScan) fallbackName(visited []graph.Asset) (string, string, boo
 		// A contact with no organization is named by its email domain: one of
 		// the subject's own domains makes it the subject's own contact (a
 		// university's network engineer), any other names the outside party.
-		domains, err := d.contactEmailDomains(best)
+		domains, err := d.w.contactEmailDomains(best)
 		if err != nil {
 			return "", "", false, "", err
 		}
@@ -596,10 +596,12 @@ func (d dependencyScan) fallbackName(visited []graph.Asset) (string, string, boo
 	return graph.AssetLabel(best), best.ID, false, best.ID, nil
 }
 
-// contactEmailDomains returns the registered domains of a contact
-// record's email identifiers, sorted.
-func (d dependencyScan) contactEmailDomains(cr graph.Asset) ([]string, error) {
-	steps, err := d.w.steps(cr)
+// contactEmailDomains returns the registered domains of a contact record's
+// email identifiers (the Identifier assets reached by a forward "id" edge whose
+// id_type is email), lower-cased, de-duplicated and sorted. It is the shared
+// helper used by the dependency scan and the ownership-gap search.
+func (w *lensWalker) contactEmailDomains(cr graph.Asset) ([]string, error) {
+	steps, err := w.steps(cr)
 	if err != nil {
 		return nil, err
 	}
@@ -610,8 +612,10 @@ func (d dependencyScan) contactEmailDomains(cr graph.Asset) ([]string, error) {
 			!strings.EqualFold(graph.ContentString(s.other, "id_type"), "email") {
 			continue
 		}
-		if _, dom, ok := strings.Cut(graph.ContentString(s.other, "id"), "@"); ok && dom != "" {
-			set[graph.RegisteredDomain(dom)] = true
+		if _, dom, ok := strings.Cut(strings.ToLower(graph.ContentString(s.other, "id")), "@"); ok && dom != "" {
+			if reg := graph.RegisteredDomain(dom); reg != "" {
+				set[reg] = true
+			}
 		}
 	}
 
