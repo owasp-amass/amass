@@ -121,6 +121,8 @@ var oamSemantics = map[string]graph.RelationMeaning{
 	"URL|file|SimpleRelation|File":                                     {Attribution: "attribute", Purpose: "web", Vendor: true},
 	"URL|ip_address|SimpleRelation|IPAddress":                          {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 	"URL|port|PortRelation|Service":                                    {Attribution: "infrastructure", Purpose: "network", Vendor: true},
+	"Service|fingerprint|SimpleRelation|Identifier":                    {Attribution: "attribute", Purpose: "web", Vendor: true},
+	"URL|fingerprint|SimpleRelation|Identifier":                        {Attribution: "attribute", Purpose: "web", Vendor: true},
 }
 
 // VendorCatalog is the full OAM semantics table with selectors.

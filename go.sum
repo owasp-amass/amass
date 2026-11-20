@@ -240,6 +240,8 @@ github.com/owasp-amass/open-asset-model v0.15.2-0.20261119064532-63081ce14de2 h1
 github.com/owasp-amass/open-asset-model v0.15.2-0.20261119064532-63081ce14de2/go.mod h1:lNpoDkozJlcCDJvJ3utYqNOZJi/lRlkM1KLHHEDYc80=
 github.com/owasp-amass/open-asset-model v0.15.2-0.20261120014408-0dd5ec1699c7 h1:0sJiq7aw4LbO+dgNQ1G5r/bZryoJESR4KGkxf7gE3xQ=
 github.com/owasp-amass/open-asset-model v0.15.2-0.20261120014408-0dd5ec1699c7/go.mod h1:lNpoDkozJlcCDJvJ3utYqNOZJi/lRlkM1KLHHEDYc80=
+github.com/owasp-amass/open-asset-model v0.15.2-0.20261120144953-55e79f59aa4c h1:79j8fGmt3T765CFr+kvWUp9LLl84Cg659wmu/YVGExE=
+github.com/owasp-amass/open-asset-model v0.15.2-0.20261120144953-55e79f59aa4c/go.mod h1:lNpoDkozJlcCDJvJ3utYqNOZJi/lRlkM1KLHHEDYc80=
 github.com/owasp-amass/resolve v0.10.1 h1:oVgY1mkcgxWPMits6ZAMjT9IdFcsXsGPE/1iZqex8ys=
 github.com/owasp-amass/resolve v0.10.1/go.mod h1:U5k7VLq8i7Vbq68hH+2mFbwxUiolrQWIVTOAnO+h9F4=
 github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=

@@ -68,15 +68,16 @@ func moreSignalsFixture() valueGraph {
 	registered("solo-site.org")
 	link("dr-solo-site.org", "name_server", "ada.ns.dnshost.example", "SimpleRelation")
 
-	jarm := graph.Evidence{Kind: "SimpleProperty", Property: map[string]any{"property_name": "JARM",
-		"property_value": "2ad2ad0002ad2ad0042d42d000000ad"}}
+	const jarmHash = "2ad2ad0002ad2ad0042d42d000000ad"
+	jarmID := "JARM:" + jarmHash
+	add(jarmID, "Identifier", jarmID, map[string]any{"id_type": "JARM", "id": jarmHash})
 	service("svc-www", nil)
 	link("www.colgate.edu", "port", "svc-www", "PortRelation")
-	g.EvidenceByID["svc-www"] = []graph.Evidence{jarm}
+	link("svc-www", "fingerprint", jarmID, "SimpleRelation")
 	registered("jarm-twin.example")
 	service("svc-twin", nil)
 	link("jarm-twin.example", "port", "svc-twin", "PortRelation")
-	g.EvidenceByID["svc-twin"] = []graph.Evidence{jarm}
+	link("svc-twin", "fingerprint", jarmID, "SimpleRelation")
 	return g
 }
 

@@ -37,10 +37,12 @@ func TestFindExposure(t *testing.T) {
 	}
 
 	svcWeb := g.Assets["svc-web"]
-	if svcWeb.Content == nil {
-		svcWeb.Content = map[string]any{}
+	content, _ := svcWeb.Content.(map[string]any)
+	if content == nil {
+		content = map[string]any{}
 	}
-	svcWeb.Content["output"] = "<html><head><title>Sign in to your account</title></head><body>Please sign in.</body></html>"
+	content["output"] = "<html><head><title>Sign in to your account</title></head><body>Please sign in.</body></html>"
+	svcWeb.Content = content
 	g.Assets["svc-web"] = svcWeb
 	g.EvidenceByID["portal.colgate.edu"] = append(g.EvidenceByID["portal.colgate.edu"],
 		graphtest.TXTRecord("heritage=external-dns,external-dns/owner=prod,external-dns/resource=ingress/hr/portal"))
