@@ -42,7 +42,8 @@ func danglingFixture() graphtest.VendorGraph {
 
 	for _, n := range []string{"shop.colgate.edu", "colgate.azurewebsites.net", "old.colgate.edu",
 		"legacy.example-host.com", "l1.colgate.edu", "l2.colgate.edu", "promo.colgate.edu",
-		"promo.lapsed-agency.com", "ok.colgate.edu", "ok.example-host.com"} {
+		"promo.lapsed-agency.com", "ok.colgate.edu", "ok.example-host.com",
+		"selector1._domainkey.colgate.edu", "selector1-colgate-edu._domainkey.sel.onmicrosoft.com"} {
 		name(n)
 	}
 	for _, n := range []string{"shop", "old", "l1", "l2", "promo", "ok"} {
@@ -59,6 +60,12 @@ func danglingFixture() graphtest.VendorGraph {
 	record("ok.colgate.edu", "ok.example-host.com", 5)
 	ip("ip-ok", "203.0.113.10")
 	record("ok.example-host.com", "ip-ok", 1)
+
+	// A DKIM selector (an underscored RFC 8552 name) CNAMEs to a key host with
+	// no stored address; that is normal for a _domainkey record, not a dangling
+	// takeover, so the lens must not report it.
+	link("colgate.edu", "node", "selector1._domainkey.colgate.edu")
+	record("selector1._domainkey.colgate.edu", "selector1-colgate-edu._domainkey.sel.onmicrosoft.com", 5)
 
 	// The registry's name server domain expires in ten days.
 	registered("ultradns.net", "2026-11-24")
@@ -110,6 +117,9 @@ func TestFindDanglingDNS(t *testing.T) {
 	for _, f := range r.Findings {
 		if f.Name == "ok.colgate.edu" {
 			t.Errorf("an alias with a stored address was reported: %+v", f)
+		}
+		if f.Name == "selector1._domainkey.colgate.edu" {
+			t.Errorf("an underscored (DKIM) name with no address was reported as dangling: %+v", f)
 		}
 	}
 	if r.Findings[0].Kind != DanglingClaimable {

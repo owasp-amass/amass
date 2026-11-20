@@ -120,6 +120,21 @@ var loadDanglingRules = sync.OnceValue(func() danglingRules {
 // danglingNow is the clock registrations are compared with; tests replace it.
 var danglingNow = time.Now
 
+// underscoredName reports whether name is an RFC 8552 "underscored" DNS name —
+// one with a label that begins with "_", such as a DKIM selector
+// (selector1._domainkey.example.com), _dmarc, _acme-challenge, or an SRV name
+// (_sip._tcp.example.com). These names carry TXT/SRV/other records rather than
+// addresses, so an alias of one resolving to no A record is expected, not a
+// dangling host or a takeover candidate.
+func underscoredName(name string) bool {
+	for _, label := range strings.Split(strings.ToLower(name), ".") {
+		if strings.HasPrefix(label, "_") {
+			return true
+		}
+	}
+	return false
+}
+
 // claimable returns the service whose resources name is one of.
 func claimable(name string) (claimableService, bool) {
 	name = strings.ToLower(strings.TrimSuffix(name, "."))
@@ -269,7 +284,8 @@ func (s *danglingScan) name(a graph.Asset) error {
 	case res.Loop || res.Deep:
 		s.add(DanglingFinding{Kind: DanglingLoop, Name: name, NameID: a.ID, Target: target, Via: via,
 			Detail: "the alias chain returns to a name already in it or exceeds the resolver depth limit"})
-	case res.Aliased() && len(res.Addresses) == 0 && !s.ownDomains[graph.RegisteredDomain(target)]:
+	case res.Aliased() && len(res.Addresses) == 0 && !s.ownDomains[graph.RegisteredDomain(target)] &&
+		!underscoredName(name):
 		if svc, ok := claimable(target); ok {
 			s.add(DanglingFinding{Kind: DanglingClaimable, Name: name, NameID: a.ID, Target: target, Via: via,
 				Service: svc.Service, Source: svc.Source,
