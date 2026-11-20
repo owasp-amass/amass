@@ -26,6 +26,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
+	"github.com/owasp-amass/amass/v5/engine/plugins/identity"
 	"github.com/owasp-amass/amass/v5/engine/plugins/lookalike"
 	mtasts "github.com/owasp-amass/amass/v5/engine/plugins/mta_sts"
 	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
@@ -77,6 +78,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	gleif.NewGLEIF,
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
+	identity.NewIdentity,
 	lookalike.NewLookalikes,
 	mtasts.NewMTASTS,
 	ocds.NewOCDS,

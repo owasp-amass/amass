@@ -134,6 +134,12 @@ relations:
   - {source: FQDN, label: dmarc_reports_to, relation_type: SimpleRelation, destination: FQDN,
      attribution: shared, purpose: dns, reviewed: true,
      note: "The source domain's DMARC policy sends aggregate/forensic reports to this domain: either a DMARC-processing vendor (dmarcian, Valimail) or a related domain of the same organization. The target may be shared with unrelated parties, so ownership does not pass through; same-organization targets are correlated by the horizontal mail-policy signal instead."}
+  - {source: FQDN, label: identity_tenant, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity, reviewed: true,
+     note: "The identity tenant the domain authenticates against, as a provider identifier (a Microsoft Entra tenant GUID or an Okta org), read from the provider's own metadata. It is a descriptive attribute of the domain, not an asset it owns; domains sharing one tenant identifier are correlated as the same organization by the horizontal identity signal."}
+  - {source: FQDN, label: federated_with, relation_type: SimpleRelation, destination: FQDN,
+     attribution: shared, purpose: identity, reviewed: true,
+     note: "Another domain that shares the source domain's identity tenant federation (for example a sibling domain returned by Microsoft GetFederationInformation). Tenant membership usually indicates the same organization, but a tenant can include guest or vanity domains, so ownership does not pass through automatically; same-organization targets are correlated by the horizontal identity signal."}
   - {source: FQDN, label: node, relation_type: SimpleRelation, destination: FQDN,
      attribution: same_subject, purpose: hierarchy,
      note: "Parent domain to subdomain in the FQDN hierarchy (engine scope association). A subdomain is normally controlled by the apex domain owner."}
