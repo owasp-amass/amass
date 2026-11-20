@@ -102,8 +102,12 @@ func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 		return ips
 	}
 
+	qfn := support.PerformQuery
+	if fm, ok := e.Meta.(*support.FQDNMeta); ok && fm.FromRecord {
+		qfn = support.PerformQueryNoWildcard
+	}
 	for _, qtype := range d.queries {
-		if rr, err := support.PerformQuery(e.Session.Ctx(), fqdn.Name, qtype); err == nil {
+		if rr, err := qfn(e.Session.Ctx(), fqdn.Name, qtype); err == nil {
 			if records := d.store(e, name, rr); len(records) > 0 {
 				ips = append(ips, records...)
 				support.MarkAssetMonitored(e.Session, name, d.source)

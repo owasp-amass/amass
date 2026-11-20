@@ -99,6 +99,19 @@ var detector *wildcards.Detector
 // context ctx is (et.NetUsage), so the sessions' shares of the pool can be
 // compared.
 func PerformQuery(ctx context.Context, name string, qtype uint16) ([]dns.RR, error) {
+	return performQuery(ctx, name, qtype, true)
+}
+
+// PerformQueryNoWildcard is PerformQuery without wildcard suppression, for a
+// name obtained from an authoritative DNS record (a CNAME target). Wildcard
+// suppression exists to discard brute-forced or altered names that resolve only
+// because their zone serves a wildcard; a name DNS handed us in a record is
+// real, so its records are returned even when the zone wildcards.
+func PerformQueryNoWildcard(ctx context.Context, name string, qtype uint16) ([]dns.RR, error) {
+	return performQuery(ctx, name, qtype, false)
+}
+
+func performQuery(ctx context.Context, name string, qtype uint16, checkWildcard bool) ([]dns.RR, error) {
 	usage := et.NetUsageFrom(ctx)
 	for i := 1; i <= 10; i++ {
 		msg := utils.QueryMsg(name, qtype)
@@ -118,7 +131,7 @@ func PerformQuery(ctx context.Context, name string, qtype uint16) ([]dns.RR, err
 		}
 
 		if err == nil && resp != nil {
-			if wildcardDetected(ctx, resp, detector) {
+			if checkWildcard && wildcardDetected(ctx, resp, detector) {
 				return nil, errors.New("wildcard detected")
 			}
 			if len(resp.Answer) > 0 {
