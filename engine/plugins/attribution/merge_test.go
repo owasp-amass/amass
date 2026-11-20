@@ -359,7 +359,7 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 		t.Fatal("attribution is off")
 	}
 
-	done := session(1, 0)
+	done := session(1, 1)
 	dtr := p.tracker(done)
 	if dtr == nil {
 		t.Fatal("attribution is off")
@@ -376,9 +376,11 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 		t.Fatalf("the drained session's watcher stopped waiting: background work = %d", n)
 	}
 
-	// The other enumeration drains; only its own watcher is left.
+	// The other enumeration finishes its work. A finished session stays
+	// drained (remainder 0) even after its own watcher exits, so neither
+	// watcher sees the other flip back to busy and wait out othersWait.
 	busy.stats.Lock()
-	busy.stats.WorkItemsTotal, busy.stats.WorkItemsCompleted = 11, 10
+	busy.stats.WorkItemsTotal, busy.stats.WorkItemsCompleted = 11, 11
 	busy.stats.Unlock()
 
 	awaitBackgroundZero(t, done, busy)
