@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/internal/fingerprint"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/registrant"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
@@ -67,6 +68,11 @@ const (
 	// or a provider's SPF macro), not evidence of shared ownership.
 	dmarcMaxPublishers = 25
 	spfMaxPublishers   = 25
+	// fpMaxApexes skips a service fingerprint Identifier carried by more
+	// distinct apex domains than this: a shared default or CDN value (a
+	// framework favicon, a parked-page body), not evidence of shared
+	// ownership, even after the default-value catalog skip.
+	fpMaxApexes = 25
 )
 
 // The per-signal confidences come from the horizontal signal catalog
@@ -115,7 +121,7 @@ type nsSibling struct {
 // FindRelatedDomains finds the registered domains the horizontal signals tie to
 // an organization, read-only. It returns nothing for a privacy proxy or a
 // placeholder organization, which many unrelated domains share (principle 8).
-func FindRelatedDomains(ctx context.Context, g graph.Graph, orgID string) (RelatedDomainsReport, error) {
+func FindRelatedDomains(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, orgID string) (RelatedDomainsReport, error) {
 	org, err := g.GetAsset(ctx, orgID)
 	if err != nil {
 		return RelatedDomainsReport{}, err
@@ -328,6 +334,22 @@ nsPivot:
 				if !add(apex, SigOfficialWebsite, "official website", webW, domW) {
 					break websiteLoop
 				}
+			}
+		}
+	}
+
+	// Shared service fingerprints: another apex whose web service carries the
+	// same distinctive fingerprint Identifier (analytics id, favicon or page
+	// content) as one of the organization's own services. This reaches the
+	// service layer, so it needs the relationship schema; without it (a caller
+	// that passes none) the rest of the lens still runs.
+	if schema != nil {
+		if meaning := graph.MeaningsOf(schema); meaning != nil {
+			if bounded, ok := g.(graph.BoundedGraph); ok {
+				fpReport := &ThirdPartyReport{Root: org, FootprintTypes: map[string]int{}}
+				w := newLensWalker(ctx, g, bounded, meaning, schema.Relations(), org, fpReport)
+				w.maxAssets, w.maxReads = LensLimits{}.assets(), LensLimits{}.reads()
+				sharedFingerprintPivot(ctx, g, w, org, add)
 			}
 		}
 	}
@@ -546,4 +568,135 @@ func FormatRelatedDomainsReport(r RelatedDomainsReport) string {
 	}
 
 	return b.String()
+}
+
+
+// fingerprintSignalFor maps a service fingerprint id_type to the horizontal
+// signal it supports, for the id_types that are good horizontal evidence. A
+// JARM (a TLS-stack fingerprint shared by many unrelated servers) and the page
+// title (too generic) are deliberately not horizontal evidence and return
+// false.
+func fingerprintSignalFor(idType string) (signalID, label string, ok bool) {
+	switch idType {
+	case fingerprint.AnalyticsID:
+		return SigSharedAnalyticsID, "shared analytics identifier", true
+	case fingerprint.FaviconMMH3:
+		return SigSharedFavicon, "shared favicon", true
+	case fingerprint.BodySHA256:
+		return SigSharedPageContent, "shared page content", true
+	}
+
+	return "", "", false
+}
+
+// sharedFingerprintPivot adds related domains whose web service carries the same
+// distinctive fingerprint Identifier (analytics identifier, favicon hash or
+// page-content hash) as one of the organization's own services. It walks the
+// organization's controlled footprint to its services, and for each service's
+// fingerprint edge to an Identifier reads the other services carrying that same
+// Identifier and takes the registered domain of each one's FQDN host. A default
+// or signal-free value (fingerprint_defaults.json) is skipped, and an Identifier
+// carried by more distinct apex domains than fpMaxApexes is treated as a shared
+// default or CDN value and skipped, not scored. add returning false (the domain
+// cap) stops the pivot.
+func sharedFingerprintPivot(ctx context.Context, g graph.Graph, w *lensWalker, org graph.Asset,
+	add func(string, string, string, ...graph.WitnessEdge) bool) {
+	owned, order, err := w.controlledFootprint([]graph.Asset{org})
+	if err != nil {
+		return
+	}
+	seenSvc := map[string]bool{}
+	for _, id := range order {
+		host := owned[id]
+		steps, err := w.steps(host)
+		if err != nil {
+			continue
+		}
+		for _, hs := range steps {
+			if !hs.forward || hs.other.Type != "Service" || seenSvc[hs.other.ID] {
+				continue
+			}
+			seenSvc[hs.other.ID] = true
+			svc := hs.other
+
+			svcSteps, err := w.steps(svc)
+			if err != nil {
+				continue
+			}
+			for _, fs := range svcSteps {
+				if !fs.forward || fs.edge.Label != "fingerprint" {
+					continue
+				}
+				ident := fs.other
+				idType := graph.ContentString(ident, "id_type")
+				signalID, label, ok := fingerprintSignalFor(idType)
+				if !ok {
+					continue
+				}
+				value := graph.ContentString(ident, "id")
+				if value == "" || semantics.IsDefaultFingerprint(idType, value) {
+					continue
+				}
+				ownW := graph.WitnessEdge{EdgeID: fs.edge.ID, Label: "fingerprint", RelationType: fs.edge.Type,
+					FromID: svc.ID, FromType: "Service", ToID: ident.ID, ToType: "Identifier", To: idType + ":" + value}
+				if !fingerprintSiblings(ctx, g, svc.ID, ident.ID, signalID, label, ownW, add) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// fingerprintSiblings reads the other services carrying the Identifier identID
+// and adds the registered domain of each one's FQDN host, unless the Identifier
+// is over the shared-value cap. ownW is the witness for the organization's own
+// service that holds the same Identifier.
+func fingerprintSiblings(ctx context.Context, g graph.Graph, ownSvcID, identID, signalID, label string,
+	ownW graph.WitnessEdge, add func(string, string, string, ...graph.WitnessEdge) bool) bool {
+	carriers, err := g.Edges(ctx, identID, "in", "fingerprint", time.Time{})
+	if err != nil {
+		return true
+	}
+	type sibling struct {
+		apex     string
+		fpEdge   graph.Relation
+		hostEdge graph.Relation
+	}
+	apexSet := map[string]bool{}
+	var sibs []sibling
+	for _, ce := range carriers {
+		if ce.FromID == ownSvcID {
+			continue
+		}
+		hosts, err := g.Edges(ctx, ce.FromID, "in", "port", time.Time{})
+		if err != nil {
+			continue
+		}
+		for _, he := range hosts {
+			fq, err := g.GetAsset(ctx, he.FromID)
+			if err != nil || fq.Type != "FQDN" {
+				continue
+			}
+			apex := graph.RegisteredDomain(graph.FQDNName(fq))
+			if apex == "" {
+				continue
+			}
+			apexSet[apex] = true
+			sibs = append(sibs, sibling{apex: apex, fpEdge: ce, hostEdge: he})
+		}
+	}
+	if len(apexSet) > fpMaxApexes {
+		return true // a shared default or CDN value, not ownership evidence
+	}
+	for _, sb := range sibs {
+		sibW := graph.WitnessEdge{EdgeID: sb.fpEdge.ID, Label: "fingerprint", RelationType: sb.fpEdge.Type,
+			FromID: sb.fpEdge.FromID, FromType: "Service", ToID: sb.fpEdge.ToID, ToType: "Identifier"}
+		hostW := graph.WitnessEdge{EdgeID: sb.hostEdge.ID, Label: "port", RelationType: sb.hostEdge.Type,
+			FromID: sb.hostEdge.FromID, FromType: "FQDN", ToID: sb.hostEdge.ToID, ToType: "Service", To: sb.apex}
+		if !add(sb.apex, signalID, label, ownW, sibW, hostW) {
+			return false
+		}
+	}
+
+	return true
 }

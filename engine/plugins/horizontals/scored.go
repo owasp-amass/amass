@@ -56,7 +56,7 @@ func (h *horizPlugin) expandRelatedDomains(e *et.Event, orgEnt *dbt.Entity) {
 	defer cancel()
 
 	adapter := oamrepo.Adapter{Repo: sess.DB(), Neo4jDatabase: oamrepo.Neo4jDatabaseName(sess.Config())}
-	report, err := lens.FindRelatedDomains(ctx, adapter, orgEnt.ID)
+	report, err := lens.FindRelatedDomains(ctx, adapter, oamrepo.Catalog{}, orgEnt.ID)
 	if err != nil {
 		sess.Log().Error(err.Error(), slog.Group("plugin", "name", h.name))
 		return

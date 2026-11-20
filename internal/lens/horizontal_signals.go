@@ -29,6 +29,11 @@ const (
 	SigDMARCReportsTo   = "dmarc-reports-to"
 	SigSPFAuthorizes    = "spf-authorizes"
 	SigOfficialWebsite  = "official-website"
+	// Shared service fingerprints: another apex whose service carries the
+	// same distinctive fingerprint Identifier as one of the org's services.
+	SigSharedAnalyticsID = "shared-analytics-id"
+	SigSharedFavicon     = "shared-favicon"
+	SigSharedPageContent = "shared-page-content"
 )
 
 // Horizontal signal matchers: how each signal is found in the graph.
@@ -40,10 +45,11 @@ const (
 	matchHorDMARC         = "dmarc_reports_to"
 	matchHorSPF           = "spf_authorizes"
 	matchHorWebsite       = "official_website"
+	matchHorFingerprint   = "shared_service_fingerprint"
 )
 
 var horizontalMatchers = map[string]bool{matchHorRegistrantOrg: true, matchHorCertOrg: true,
-	matchHorNameServer: true, matchHorMX: true, matchHorDMARC: true, matchHorSPF: true, matchHorWebsite: true}
+	matchHorNameServer: true, matchHorMX: true, matchHorDMARC: true, matchHorSPF: true, matchHorWebsite: true, matchHorFingerprint: true}
 
 var loadHorizontalCatalog = sync.OnceValues(func() (signalCatalog, error) {
 	var c signalCatalog

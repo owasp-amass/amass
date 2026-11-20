@@ -130,6 +130,63 @@
         "A curated source can record a campaign or microsite domain hosted by a third party as an official website.",
         "An out-of-date record can name a domain the organization no longer controls."
       ]
+    },
+    {
+      "id": "shared-analytics-id",
+      "title": "Shared analytics identifier",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.7,
+      "matcher": "shared_service_fingerprint",
+      "finds": "Another registered domain whose web service embeds the same analytics or tag-manager identifier (a Google Analytics or Tag Manager property, a Facebook pixel and the like) as one of the organization's own services.",
+      "rationale": "An analytics or tag-manager property is registered to one account and embedded by that account's own sites to report their traffic together. Two sites carrying the same property identifier are administered by the same account, which is strong evidence of common control. The identifier is a shared Identifier asset, so the match is a one-hop graph pivot, not a value scan.",
+      "guards": [
+        "A default or signal-free identifier value is skipped (internal/semantics/fingerprint_defaults.json).",
+        "An identifier embedded on more distinct apex domains than the lens cap is treated as a shared marketing or agency account, not common ownership, and is skipped.",
+        "Only identifiers on the organization's own services are used as anchors."
+      ],
+      "counter_indications": [
+        "A marketing agency can embed one analytics property across several unrelated clients.",
+        "A template or theme can ship a placeholder property identifier that several unrelated sites keep."
+      ]
+    },
+    {
+      "id": "shared-favicon",
+      "title": "Shared favicon",
+      "kind": "content",
+      "strength": "supporting",
+      "weight": 0.6,
+      "matcher": "shared_service_fingerprint",
+      "finds": "Another registered domain whose web service serves a favicon with the same hash as one of the organization's own services.",
+      "rationale": "Organizations reuse one brand favicon across their sites, so two services serving a byte-identical favicon are often the same operator's. It is supporting rather than strong because content-management frameworks and hosting panels ship default favicons that many unrelated sites keep unchanged.",
+      "guards": [
+        "A default or framework favicon hash is skipped (fingerprint_defaults.json).",
+        "A favicon served by more distinct apex domains than the lens cap is treated as a shared default or CDN asset and is skipped.",
+        "Only favicons on the organization's own services are used as anchors."
+      ],
+      "counter_indications": [
+        "A framework, CMS theme or hosting panel ships a default favicon that unrelated sites keep.",
+        "A hosting provider can serve one favicon across many parked or placeholder sites."
+      ]
+    },
+    {
+      "id": "shared-page-content",
+      "title": "Shared page content",
+      "kind": "content",
+      "strength": "supporting",
+      "weight": 0.6,
+      "matcher": "shared_service_fingerprint",
+      "finds": "Another registered domain whose web service returns a page body with the same hash as one of the organization's own services.",
+      "rationale": "A byte-identical, non-trivial page body served from two domains is usually one deployment answering on both, which is evidence of common control. It is supporting because parked, placeholder and default-install pages are identical across many unrelated domains.",
+      "guards": [
+        "A default, parked or placeholder page hash is skipped (fingerprint_defaults.json), and only normalized bodies above a minimum size are hashed at collection.",
+        "A body served by more distinct apex domains than the lens cap is treated as a shared parked or default page and is skipped.",
+        "Only page bodies on the organization's own services are used as anchors."
+      ],
+      "counter_indications": [
+        "Parking services, registrars and hosting providers serve one placeholder body across many unrelated domains.",
+        "A CDN error or maintenance page can be identical across unrelated sites."
+      ]
     }
   ]
 }

@@ -66,7 +66,7 @@ func listRelatedDomains(ctx context.Context, g oamrepo.Adapter, domain, org, for
 		return err
 	}
 
-	r, err := lens.FindRelatedDomains(ctx, g, root.ID)
+	r, err := lens.FindRelatedDomains(ctx, g, oamrepo.Catalog{}, root.ID)
 	if err != nil {
 		return err
 	}

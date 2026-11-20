@@ -126,7 +126,7 @@ func relatedDomainsGraph() graphtest.FakeGraph {
 func TestFindRelatedDomainsSignals(t *testing.T) {
 	g := relatedDomainsGraph()
 
-	r, err := FindRelatedDomains(context.Background(), g, "acme")
+	r, err := FindRelatedDomains(context.Background(), g, nil, "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestFindRelatedDomainsSignals(t *testing.T) {
 func TestHorizontalExpansionPartition(t *testing.T) {
 	g := relatedDomainsGraph()
 
-	r, err := FindRelatedDomains(context.Background(), g, "acme")
+	r, err := FindRelatedDomains(context.Background(), g, nil, "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,11 +232,102 @@ func TestHorizontalExpansionPartition(t *testing.T) {
 func TestFindRelatedDomainsSkipsPrivacyProxy(t *testing.T) {
 	g := relatedDomainsGraph()
 
-	r, err := FindRelatedDomains(context.Background(), g, "proxy")
+	r, err := FindRelatedDomains(context.Background(), g, nil, "proxy")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(r.Domains) != 0 {
 		t.Errorf("a privacy-proxy organization must not be correlated on, got %+v", r.Domains)
+	}
+}
+
+
+// fingerprintRelatedGraph models an organization (acme) that owns www.acme.com,
+// reached org <- contact <- domain record <- apex FQDN, whose web service
+// carries a distinctive analytics identifier and a JARM. An unrelated apex
+// twin.org shares the analytics identifier; jarm-twin.org shares only the JARM.
+func fingerprintRelatedGraph() graphtest.FakeGraph {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}}
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	link := func(from, to, label, rt string) {
+		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to, Label: label, Type: rt})
+	}
+	svc := func(id string) { add(id, "Service", id, map[string]any{"unique_id": id, "service_type": "web-service"}) }
+
+	add("acme", "Organization", "Acme Corporation:1", map[string]any{"name": "Acme Corporation"})
+	add("cr1", "ContactRecord", "cr1", map[string]any{})
+	link("cr1", "acme", "organization", "SimpleRelation")
+	add("dr1", "DomainRecord", "acme.com", map[string]any{"domain": "acme.com"})
+	link("dr1", "cr1", "registrant_contact", "SimpleRelation")
+	add("fq_acme", "FQDN", "www.acme.com", map[string]any{"name": "www.acme.com"})
+	link("fq_acme", "dr1", "registration", "SimpleRelation")
+
+	svc("svc_acme")
+	link("fq_acme", "svc_acme", "port", "PortRelation")
+	add("id_ga", "Identifier", "analytics_id:UA-ACME-1", map[string]any{"id_type": "analytics_id", "id": "UA-ACME-1"})
+	link("svc_acme", "id_ga", "fingerprint", "SimpleRelation")
+	add("id_jarm", "Identifier", "JARM:2ad2ad", map[string]any{"id_type": "JARM", "id": "2ad2ad"})
+	link("svc_acme", "id_jarm", "fingerprint", "SimpleRelation")
+
+	// twin.org shares the analytics identifier (a strong horizontal signal).
+	svc("svc_twin")
+	add("fq_twin", "FQDN", "www.twin.org", map[string]any{"name": "www.twin.org"})
+	link("fq_twin", "svc_twin", "port", "PortRelation")
+	link("svc_twin", "id_ga", "fingerprint", "SimpleRelation")
+
+	// jarm-twin.org shares only the JARM, which is not horizontal evidence.
+	svc("svc_jarm_twin")
+	add("fq_jarm_twin", "FQDN", "www.jarm-twin.org", map[string]any{"name": "www.jarm-twin.org"})
+	link("fq_jarm_twin", "svc_jarm_twin", "port", "PortRelation")
+	link("svc_jarm_twin", "id_jarm", "fingerprint", "SimpleRelation")
+
+	return g
+}
+
+func TestFindRelatedDomainsFingerprint(t *testing.T) {
+	g := fingerprintRelatedGraph()
+	schema := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
+
+	r, err := FindRelatedDomains(context.Background(), g, schema, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]HorizontalDomain{}
+	for _, d := range r.Domains {
+		got[d.Domain] = d
+	}
+
+	// twin.org shares Acme's analytics identifier: a strong signal.
+	d, ok := got["twin.org"]
+	if !ok {
+		t.Fatalf("twin.org should be tied by the shared analytics id; got %+v", r.Domains)
+	}
+	hasSig := false
+	for _, id := range d.SignalIDs {
+		if id == SigSharedAnalyticsID {
+			hasSig = true
+		}
+	}
+	if !hasSig || d.Confidence != HorizontalConfidence(SigSharedAnalyticsID) {
+		t.Errorf("twin.org should carry only the shared-analytics-id signal: %+v", d)
+	}
+
+	// A strong signal auto-expands scope.
+	expand, _ := HorizontalExpansion(r)
+	inExpand := false
+	for _, e := range expand {
+		if e.Domain == "twin.org" {
+			inExpand = true
+		}
+	}
+	if !inExpand {
+		t.Errorf("a shared analytics id is strong and should auto-expand; expand=%+v", expand)
+	}
+
+	// A shared JARM is a TLS-stack fingerprint, not horizontal evidence.
+	if _, ok := got["jarm-twin.org"]; ok {
+		t.Errorf("a shared JARM must not tie a related domain: %+v", got["jarm-twin.org"])
 	}
 }

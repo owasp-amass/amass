@@ -19,6 +19,9 @@ Horizontal correlation associates more registered (apex) domains with a target o
 | [DMARC reports to the organization](#dmarc-reports-to) | strong | infrastructure | 0.70 |
 | [SPF authorizes the organization's senders](#spf-authorizes) | supporting | infrastructure | 0.55 |
 | [Official website](#official-website) | strong | identity | 0.80 |
+| [Shared analytics identifier](#shared-analytics-id) | strong | identity | 0.70 |
+| [Shared favicon](#shared-favicon) | supporting | content | 0.60 |
+| [Shared page content](#shared-page-content) | supporting | content | 0.60 |
 
 <a id="shared-registrant-org"></a>
 ## Shared registrant organization
@@ -155,3 +158,63 @@ Horizontal correlation associates more registered (apex) domains with a target o
 
 - A curated source can record a campaign or microsite domain hosted by a third party as an official website.
 - An out-of-date record can name a domain the organization no longer controls.
+
+<a id="shared-analytics-id"></a>
+## Shared analytics identifier
+
+`shared-analytics-id`: strong identity signal, weight 0.70 (confidence 70).
+
+**Finds:** Another registered domain whose web service embeds the same analytics or tag-manager identifier (a Google Analytics or Tag Manager property, a Facebook pixel and the like) as one of the organization's own services.
+
+**Why it counts:** An analytics or tag-manager property is registered to one account and embedded by that account's own sites to report their traffic together. Two sites carrying the same property identifier are administered by the same account, which is strong evidence of common control. The identifier is a shared Identifier asset, so the match is a one-hop graph pivot, not a value scan.
+
+**Guards:**
+
+- A default or signal-free identifier value is skipped (internal/semantics/fingerprint_defaults.json).
+- An identifier embedded on more distinct apex domains than the lens cap is treated as a shared marketing or agency account, not common ownership, and is skipped.
+- Only identifiers on the organization's own services are used as anchors.
+
+**Can still mislead when:**
+
+- A marketing agency can embed one analytics property across several unrelated clients.
+- A template or theme can ship a placeholder property identifier that several unrelated sites keep.
+
+<a id="shared-favicon"></a>
+## Shared favicon
+
+`shared-favicon`: supporting content signal, weight 0.60 (confidence 60).
+
+**Finds:** Another registered domain whose web service serves a favicon with the same hash as one of the organization's own services.
+
+**Why it counts:** Organizations reuse one brand favicon across their sites, so two services serving a byte-identical favicon are often the same operator's. It is supporting rather than strong because content-management frameworks and hosting panels ship default favicons that many unrelated sites keep unchanged.
+
+**Guards:**
+
+- A default or framework favicon hash is skipped (fingerprint_defaults.json).
+- A favicon served by more distinct apex domains than the lens cap is treated as a shared default or CDN asset and is skipped.
+- Only favicons on the organization's own services are used as anchors.
+
+**Can still mislead when:**
+
+- A framework, CMS theme or hosting panel ships a default favicon that unrelated sites keep.
+- A hosting provider can serve one favicon across many parked or placeholder sites.
+
+<a id="shared-page-content"></a>
+## Shared page content
+
+`shared-page-content`: supporting content signal, weight 0.60 (confidence 60).
+
+**Finds:** Another registered domain whose web service returns a page body with the same hash as one of the organization's own services.
+
+**Why it counts:** A byte-identical, non-trivial page body served from two domains is usually one deployment answering on both, which is evidence of common control. It is supporting because parked, placeholder and default-install pages are identical across many unrelated domains.
+
+**Guards:**
+
+- A default, parked or placeholder page hash is skipped (fingerprint_defaults.json), and only normalized bodies above a minimum size are hashed at collection.
+- A body served by more distinct apex domains than the lens cap is treated as a shared parked or default page and is skipped.
+- Only page bodies on the organization's own services are used as anchors.
+
+**Can still mislead when:**
+
+- Parking services, registrars and hosting providers serve one placeholder body across many unrelated domains.
+- A CDN error or maintenance page can be identical across unrelated sites.
