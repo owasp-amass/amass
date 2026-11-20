@@ -45,6 +45,11 @@ type AISettings struct {
 	// Journal is the review journal path; empty uses review.jsonl in the
 	// Amass output directory.
 	Journal string `yaml:"journal,omitempty" json:"journal,omitempty"`
+	// AnnounceDecisions controls whether the classifier's applied decisions and
+	// new proposals are announced proactively (the end-of-run summary and the
+	// assistant push). Nil means the default — on whenever attribution is not
+	// off; set false to silence the announcements without changing attribution.
+	AnnounceDecisions *bool `yaml:"announce_decisions,omitempty" json:"announce_decisions,omitempty"`
 }
 
 // Attribution modes.
@@ -97,6 +102,14 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 
 			*pair.target = value
 		}
+	}
+
+	if raw, ok := lookup("AMASS_AI_ANNOUNCE_DECISIONS"); ok {
+		value, err := strconv.ParseBool(strings.TrimSpace(raw))
+		if err != nil {
+			return c, fmt.Errorf("AMASS_AI_ANNOUNCE_DECISIONS: invalid boolean")
+		}
+		c.AnnounceDecisions = &value
 	}
 
 	ints := []struct {

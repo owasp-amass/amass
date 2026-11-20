@@ -377,9 +377,11 @@ func printPendingProposals(cfg *config.Config) {
 		_, _ = afmt.G.Fprintf(color.Error, "\n%s\n", line)
 	}
 
-	if applied, aerr := lenscli.AppliedByAISummary(journal, time.Time{}); aerr == nil {
-		if line := applied.Line(); line != "" {
-			_, _ = afmt.G.Fprintf(color.Error, "\n%s\n", line)
+	if cfg.AnnounceAIDecisions(os.LookupEnv) {
+		if applied, aerr := lenscli.AppliedByAISummary(journal, time.Time{}); aerr == nil {
+			if line := applied.Line(); line != "" {
+				_, _ = afmt.G.Fprintf(color.Error, "\n%s\n", line)
+			}
 		}
 	}
 }

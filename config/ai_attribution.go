@@ -34,3 +34,28 @@ func (c *Config) AIAttribution(lookup func(string) (string, bool)) (string, stri
 
 	return mode, journal, nil
 }
+
+// AnnounceAIDecisions reports whether the classifier's applied decisions and new
+// proposals should be announced proactively. The default is on whenever
+// attribution is not off; AISettings.AnnounceDecisions (or
+// AMASS_AI_ANNOUNCE_DECISIONS) set to false silences the announcements without
+// changing whether the classifier acts.
+func (c *Config) AnnounceAIDecisions(lookup func(string) (string, bool)) bool {
+	mode, _, err := c.AIAttribution(lookup)
+	if err != nil || mode == AttributionOff {
+		return false
+	}
+
+	base := AISettings{}
+	if c.AI != nil {
+		base = *c.AI
+	}
+	s, err := ResolveAISettings(base, lookup)
+	if err != nil {
+		return false
+	}
+	if s.AnnounceDecisions != nil {
+		return *s.AnnounceDecisions
+	}
+	return true
+}
