@@ -72,6 +72,7 @@ Operator mode: this connection can also collect data and change the database, ea
 - To start from a phone number or a street address instead of a target, give plan_enumeration a phone or address: it resolves the organizations tied to the seed and plans a passive enumeration of their registered domains (never the phone or address itself). Show the user the resolved organizations and domains the plan lists before start_enumeration. A shared or registered-agent address is reported and not enumerated; a seed not yet in the database plans a passive resolution pass, after which you plan again to review and enumerate the domains found.
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run. A finished run also reports pending_proposals (counts by kind) when the run left proposals awaiting review.
 - When a run reports pending_proposals, present them for the user to decide on: call list_proposals with pending true, group them by kind, and for each explain the evidence behind it with get_evidence and walk_relations (for example, that two organization records share an LEI and a registrant phone, so they are likely the same company, or how an identity contradicts the evidence). Then review_proposal approves, rejects or retracts one; approving and retracting write to the database and ask the user first. Never approve on the user's behalf — the decision is theirs. list_proposals also shows every ownership, merge, identity and person-named proposal when pending is false.
+- A finished run also reports applied_by_ai (counts by kind) for the changes the classifier applied automatically during the run (ownership edges, organization merges, identity corrections, scope expansions). Tell the user what the AI decided on its own and explain the evidence with get_evidence and walk_relations; list_proposals with applied true lists them. These are already applied, so the only action is review_proposal retract to undo one — ask the user first, and never retract on their behalf.
 - watch_target re-runs a planned enumeration on a schedule (at most every 6 hours) after the user approves it once; list_watches shows each watch with what its last run found, and stop_watch removes one.
 - data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.
 - To change how enumerations run, draft a complete configuration (describe_config gives the schema, current settings and a template), check it with validate_config, then call apply_config with the same content; the user approves the exact change and sees a masked diff. Never put data source credentials in a configuration; the operator adds keys through data_source_key_link.`
@@ -309,6 +310,12 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 				if s, err := lenscli.PendingProposalsSummary(op.Journal); err == nil && s.Total > 0 {
 					out["pending_proposals"] = s
 				}
+				// Surface what the classifier applied automatically during this
+				// run, so the assistant can tell the user what the AI decided on
+				// its own, not only what awaits review.
+				if a, err := lenscli.AppliedByAISummary(op.Journal, run.StartedAt); err == nil && a.Total > 0 {
+					out["applied_by_ai"] = a
+				}
 			}
 
 			return jsonResult(out), nil
@@ -431,6 +438,8 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 		obj(nil, map[string]any{
 			"pending": map[string]any{"type": "boolean",
 				"description": "List only proposals that are still awaiting a decision."},
+			"applied": map[string]any{"type": "boolean",
+				"description": "List instead the changes the AI classifier applied automatically."},
 		}), readOnly(),
 		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
 			if op.Journal == "" {
@@ -439,6 +448,7 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 
 			var a struct {
 				Pending bool `json:"pending"`
+				Applied bool `json:"applied"`
 			}
 			if len(raw) > 0 {
 				if err := json.Unmarshal(raw, &a); err != nil {
@@ -447,7 +457,10 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			}
 
 			text, err := lenscli.ProposalsText(op.Journal)
-			if a.Pending {
+			switch {
+			case a.Applied:
+				text, err = lenscli.AppliedProposalsText(op.Journal)
+			case a.Pending:
 				text, err = lenscli.PendingProposalsText(op.Journal)
 			}
 			if err != nil {

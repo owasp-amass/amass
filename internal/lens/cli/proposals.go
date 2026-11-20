@@ -622,3 +622,17 @@ func listApplied(journalPath, format string, out io.Writer) error {
 	_, err = fmt.Fprintln(out, line)
 	return err
 }
+
+// AppliedProposalsText renders, for the MCP list, a one-line summary of the
+// changes the AI classifier applied to the graph, the applied counterpart of
+// PendingProposalsText.
+func AppliedProposalsText(journalPath string) (string, error) {
+	s, err := AppliedByAISummary(journalPath, time.Time{})
+	if err != nil {
+		return "", err
+	}
+	if line := s.Line(); line != "" {
+		return line, nil
+	}
+	return "The AI classifier has applied no changes.", nil
+}
