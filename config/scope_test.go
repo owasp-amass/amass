@@ -96,6 +96,18 @@ func TestConfigParseIPsParseRange(t *testing.T) {
 			args:    args{s: "192.168.0.255-192.168.0.260"},
 			wantErr: true,
 		},
+		{
+			name:    "short-hand end exceeds the last octet",
+			p:       new(ParseIPs),
+			args:    args{s: "192.168.0.1-300"},
+			wantErr: true,
+		},
+		{
+			name:    "hostname-like start does not panic",
+			p:       new(ParseIPs),
+			args:    args{s: "host-1"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
