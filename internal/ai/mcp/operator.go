@@ -73,6 +73,7 @@ Operator mode: this connection can also collect data and change the database, ea
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run. A finished run also reports pending_proposals (counts by kind) when the run left proposals awaiting review.
 - When a run reports pending_proposals, present them for the user to decide on: call list_proposals with pending true, group them by kind, and for each explain the evidence behind it with get_evidence and walk_relations (for example, that two organization records share an LEI and a registrant phone, so they are likely the same company, or how an identity contradicts the evidence). Then review_proposal approves, rejects or retracts one; approving and retracting write to the database and ask the user first. Never approve on the user's behalf — the decision is theirs. list_proposals also shows every ownership, merge, identity and person-named proposal when pending is false.
 - A finished run also reports applied_by_ai (counts by kind) for the changes the classifier applied automatically during the run (ownership edges, organization merges, identity corrections, scope expansions). Tell the user what the AI decided on its own and explain the evidence with get_evidence and walk_relations; list_proposals with applied true lists them. These are already applied, so the only action is review_proposal retract to undo one — ask the user first, and never retract on their behalf.
+- To keep the user aware in near real time, offer to watch a run the user starts or points you at: re-check enumeration_status periodically while it is still going, and as soon as pending_proposals or applied_by_ai rises, surface the new items at once (explain each with get_evidence and walk_relations, ask before any decision) instead of waiting for the run to finish. This is user-initiated, so do it when asked and stop when the user says so.
 - watch_target re-runs a planned enumeration on a schedule (at most every 6 hours) after the user approves it once; list_watches shows each watch with what its last run found, and stop_watch removes one.
 - data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.
 - To change how enumerations run, draft a complete configuration (describe_config gives the schema, current settings and a template), check it with validate_config, then call apply_config with the same content; the user approves the exact change and sees a masked diff. Never put data source credentials in a configuration; the operator adds keys through data_source_key_link.`
@@ -302,11 +303,12 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			if run.Finished() && runner.Graph != nil {
 				out["found"] = foundSince(ctx, runner, run)
 			}
-			// Surface the proposals the run left waiting, so the assistant can
-			// present them for review without the user knowing to ask. The
-			// attribution pass holds the session open until it has recorded
-			// them, so a finished run's journal already reflects it.
-			if run.Finished() && op.Journal != "" {
+			// Surface the proposals awaiting review and the decisions the
+			// classifier applied, so the assistant can present them without the
+			// user knowing to ask. Reported while the run is still going too (the
+			// incremental attribution pass records them mid-run), so a watching
+			// assistant can raise them in near real time, not only at the end.
+			if op.Journal != "" {
 				if s, err := lenscli.PendingProposalsSummary(op.Journal); err == nil && s.Total > 0 {
 					out["pending_proposals"] = s
 				}
