@@ -9,7 +9,7 @@
       "service_label": "service",
       "asn_hints": ["AS16509", "AS14618", "AS8987", "AS38895"],
       "names": ["amazon", "aws", "amazon web services", "amazon data services", "amazon technologies", "a100 row"],
-      "domains": ["amazonaws.com", "cloudfront.net", "awsglobalaccelerator.com", "elasticbeanstalk.com", "awsapps.com"],
+      "domains": ["amazonaws.com", "cloudfront.net", "awsglobalaccelerator.com", "elasticbeanstalk.com", "awsapps.com", "on.aws", "awsapprunner.com", "amplifyapp.com"],
       "feeds": [
         {"url": "https://ip-ranges.amazonaws.com/ip-ranges.json", "format": "aws", "has_region": true, "has_service": true}
       ],
@@ -22,7 +22,7 @@
       "service_label": "service",
       "asn_hints": ["AS15169", "AS396982", "AS139070", "AS139190"],
       "names": ["google", "google cloud", "google llc"],
-      "domains": ["googleusercontent.com", "googleapis.com", "googlehosted.com", "appspot.com", "firebaseapp.com", "web.app", "run.app"],
+      "domains": ["googleusercontent.com", "googleapis.com", "googlehosted.com", "appspot.com", "firebaseapp.com", "web.app", "run.app", "cloudfunctions.net"],
       "feeds": [
         {"url": "https://www.gstatic.com/ipranges/cloud.json", "format": "gcp", "has_region": true, "has_service": true}
       ],
@@ -35,7 +35,7 @@
       "service_label": "system service",
       "asn_hints": ["AS8075", "AS8068", "AS8069", "AS12076"],
       "names": ["azure", "microsoft azure", "microsoft"],
-      "domains": ["azurefd.net", "azureedge.net", "azurewebsites.net", "trafficmanager.net", "cloudapp.azure.com", "cloudapp.net", "windows.net", "onmicrosoft.com", "azure.com", "azurecontainer.io"],
+      "domains": ["azurefd.net", "azureedge.net", "azurewebsites.net", "trafficmanager.net", "cloudapp.azure.com", "cloudapp.net", "windows.net", "onmicrosoft.com", "azure.com", "azurecontainer.io", "azurecontainerapps.io", "azurestaticapps.net"],
       "feeds": [
         {"url": "https://www.microsoft.com/en-us/download/details.aspx?id=56519", "format": "azure", "has_region": true, "has_service": true}
       ],

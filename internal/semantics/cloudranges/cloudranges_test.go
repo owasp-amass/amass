@@ -69,6 +69,15 @@ func TestProviderByDomain(t *testing.T) {
 		{"fastly.net", "Fastly", true},
 		{"github.io", "GitHub", true},
 		{"onmicrosoft.com", "Microsoft Azure", true},
+		// Serverless / cloud-native host patterns (Unit 5).
+		{"abc123.lambda-url.us-east-1.on.aws", "Amazon Web Services", true},
+		{"myapi.execute-api.us-east-1.amazonaws.com", "Amazon Web Services", true},
+		{"app.us-east-1.awsapprunner.com", "Amazon Web Services", true},
+		{"main.d1234.amplifyapp.com", "Amazon Web Services", true},
+		{"svc-abc.a.run.app", "Google Cloud", true},
+		{"us-central1-proj.cloudfunctions.net", "Google Cloud", true},
+		{"app.happy-sky.eastus.azurecontainerapps.io", "Microsoft Azure", true},
+		{"site.azurestaticapps.net", "Microsoft Azure", true},
 		{"colgate.edu", "", false},
 		{"", "", false},
 	}
