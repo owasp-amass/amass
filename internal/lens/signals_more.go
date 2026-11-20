@@ -533,7 +533,6 @@ func (g *gapSearch) addSecurityTxtCandidate(apex, service graph.Asset, detail st
 	g.add(host, def.ID, "FQDN security.txt FQDN", witness)
 }
 
-
 func (g *gapSearch) fingerprintSignals(owned graph.Asset) error {
 	defs := signalsByMatcher(matchFingerprint)
 	if len(defs) == 0 {

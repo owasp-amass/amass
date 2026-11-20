@@ -570,7 +570,6 @@ func FormatRelatedDomainsReport(r RelatedDomainsReport) string {
 	return b.String()
 }
 
-
 // fingerprintSignalFor maps a service fingerprint id_type to the horizontal
 // signal it supports, for the id_types that are good horizontal evidence. A
 // JARM (a TLS-stack fingerprint shared by many unrelated servers) and the page

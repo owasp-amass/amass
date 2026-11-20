@@ -359,7 +359,6 @@ func TestDuplicateProfilesReadEveryContact(t *testing.T) {
 	}
 }
 
-
 // TestCompareOrganizations locks the bounded, incremental duplicate scoring the
 // attribution merge pass relies on: a seed against a true duplicate and an
 // unrelated org, and two seeds against each other.

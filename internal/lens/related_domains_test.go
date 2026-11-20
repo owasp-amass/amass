@@ -241,7 +241,6 @@ func TestFindRelatedDomainsSkipsPrivacyProxy(t *testing.T) {
 	}
 }
 
-
 // fingerprintRelatedGraph models an organization (acme) that owns www.acme.com,
 // reached org <- contact <- domain record <- apex FQDN, whose web service
 // carries a distinctive analytics identifier and a JARM. An unrelated apex
@@ -254,7 +253,9 @@ func fingerprintRelatedGraph() graphtest.FakeGraph {
 	link := func(from, to, label, rt string) {
 		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to, Label: label, Type: rt})
 	}
-	svc := func(id string) { add(id, "Service", id, map[string]any{"unique_id": id, "service_type": "web-service"}) }
+	svc := func(id string) {
+		add(id, "Service", id, map[string]any{"unique_id": id, "service_type": "web-service"})
+	}
 
 	add("acme", "Organization", "Acme Corporation:1", map[string]any{"name": "Acme Corporation"})
 	add("cr1", "ContactRecord", "cr1", map[string]any{})
