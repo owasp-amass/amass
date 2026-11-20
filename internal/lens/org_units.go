@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -69,6 +70,45 @@ type orgUnitProfile struct {
 	linked map[string]bool
 }
 
+// orgUnitCohort is the set of organizations the org-unit sweep compares. When
+// the repository supports database-side grouping, it is the union of the
+// organizations that share an identifier or a Location with another — the only
+// organizations the sweep can pair (a name match alone never proposes) — so the
+// sweep skips the full scan. Otherwise it falls back to the bounded scan.
+func orgUnitCohort(ctx context.Context, g graph.Graph) ([]graph.Asset, bool, error) {
+	if cg, ok := g.(CoKeyedGrouper); ok {
+		ids, full, err := coKeyedCohortIDs(ctx, cg, "Organization",
+			[]CoKeyKind{CoKeyIdentifier, CoKeyLocation}, dupMaxBucket, orgUnitMaxOrganizations)
+		if err == nil {
+			orgs := make([]graph.Asset, 0, len(ids))
+			for _, id := range ids {
+				if a, err := g.GetAsset(ctx, id); err == nil {
+					orgs = append(orgs, a)
+				}
+			}
+
+			return orgs, full, nil
+		}
+		if !errors.Is(err, ErrCoKeyedUnsupported) {
+			return nil, false, err
+		}
+		// The repository lacks database-side grouping; fall back to the scan.
+	}
+
+	orgs, err := g.FindAssets(ctx, "Organization", time.Time{}, orgUnitMaxOrganizations+1)
+	if err != nil {
+		return nil, false, err
+	}
+
+	truncated := false
+	if len(orgs) > orgUnitMaxOrganizations {
+		orgs = orgs[:orgUnitMaxOrganizations]
+		truncated = true
+	}
+
+	return orgs, truncated, nil
+}
+
 // FindOrgUnits compares the stored organizations and returns review-gated
 // org_unit proposals: a parent organization and a unit of it, linked by a
 // name-hierarchy signal and a strong shared link. Read-only; bounded by
@@ -76,12 +116,11 @@ type orgUnitProfile struct {
 func FindOrgUnits(ctx context.Context, g graph.Graph) (RelationReport, error) {
 	report := RelationReport{Kind: orgUnitKind}
 
-	orgs, err := g.FindAssets(ctx, "Organization", time.Time{}, orgUnitMaxOrganizations+1)
+	orgs, truncated, err := orgUnitCohort(ctx, g)
 	if err != nil {
 		return report, err
 	}
-	if len(orgs) > orgUnitMaxOrganizations {
-		orgs = orgs[:orgUnitMaxOrganizations]
+	if truncated {
 		report.Truncated = "more than the organization limit"
 	}
 

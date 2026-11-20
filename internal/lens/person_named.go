@@ -13,7 +13,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -99,32 +98,34 @@ func (s *personNamedSearch) edges(id, dir, label string) ([]graph.Relation, erro
 // legal identity for ones recorded under a person's name. It reads only.
 func FindPersonNamedOrganizations(ctx context.Context, g graph.Graph) (PersonNamedReport, error) {
 	s := &personNamedSearch{ctx: ctx, graph: g}
-	orgs, err := g.FindAssets(ctx, "Organization", time.Time{}, dupMaxOrganizations+1)
+	// Audit every organization that has no legal identity. The type is paged when
+	// the repository supports it (no cap); otherwise a bounded load is scanned.
+	capped, err := walkType(ctx, g, "Organization", typePageSize, dupMaxOrganizations,
+		func(o graph.Asset) (bool, error) {
+			if graph.ContentString(o, "legal_name") != "" || graph.ContentString(o, "jurisdiction") != "" ||
+				graph.ContentString(o, "registration_id") != "" {
+				return false, nil
+			}
+
+			s.report.Organizations++
+			c, err := s.check(o)
+			if errors.Is(err, errDupReadLimit) {
+				s.report.Truncated, s.report.Reason = true, err.Error()
+				return true, nil
+			} else if err != nil {
+				return false, err
+			}
+			if c != nil {
+				s.report.Candidates = append(s.report.Candidates, *c)
+			}
+
+			return false, nil
+		})
 	if err != nil {
 		return s.report, err
 	}
-	if len(orgs) > dupMaxOrganizations {
-		orgs = orgs[:dupMaxOrganizations]
+	if capped && !s.report.Truncated {
 		s.report.Truncated, s.report.Reason = true, fmt.Sprintf("more than %d organizations", dupMaxOrganizations)
-	}
-
-	for _, o := range orgs {
-		if graph.ContentString(o, "legal_name") != "" || graph.ContentString(o, "jurisdiction") != "" ||
-			graph.ContentString(o, "registration_id") != "" {
-			continue
-		}
-
-		s.report.Organizations++
-		c, err := s.check(o)
-		if errors.Is(err, errDupReadLimit) {
-			s.report.Truncated, s.report.Reason = true, err.Error()
-			break
-		} else if err != nil {
-			return s.report, err
-		}
-		if c != nil {
-			s.report.Candidates = append(s.report.Candidates, *c)
-		}
 	}
 
 	sort.Slice(s.report.Candidates, func(i, j int) bool {

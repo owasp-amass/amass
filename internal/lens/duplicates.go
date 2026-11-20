@@ -87,13 +87,9 @@ var errDupReadLimit = errors.New("database read limit")
 func FindDuplicateOrganizations(ctx context.Context, g graph.Graph) (DuplicateReport, error) {
 	s := &dupSearch{ctx: ctx, graph: g, profiles: map[string]*orgProfile{}}
 
-	orgs, err := g.FindAssets(ctx, "Organization", time.Time{}, dupMaxOrganizations+1)
+	orgs, err := s.duplicateCohort()
 	if err != nil {
 		return s.report, err
-	}
-	if len(orgs) > dupMaxOrganizations {
-		orgs = orgs[:dupMaxOrganizations]
-		s.truncate(fmt.Sprintf("more than %d organizations", dupMaxOrganizations))
 	}
 
 	for _, o := range orgs {
@@ -122,6 +118,78 @@ func FindDuplicateOrganizations(ctx context.Context, g graph.Graph) (DuplicateRe
 
 	s.finalize()
 	return s.report, nil
+}
+
+// duplicateCohort is the set of organizations the sweep profiles. When the
+// repository can group organizations by a shared blocking key in the database
+// (CoKeyedGrouper), the cohort is the union of the organizations that share an
+// identifier, contact record, registration or brand with another — the only
+// organizations that can pair — loaded in one batch, so the sweep never reads
+// the whole type. Otherwise it falls back to the bounded scan of every stored
+// organization. The pairing and scoring that follow are identical either way.
+func (s *dupSearch) duplicateCohort() ([]graph.Asset, error) {
+	if cg, ok := s.graph.(CoKeyedGrouper); ok {
+		orgs, err := s.coKeyedCohort(cg)
+		if err == nil {
+			return orgs, nil
+		}
+		if !errors.Is(err, ErrCoKeyedUnsupported) {
+			return nil, err
+		}
+		// The repository lacks database-side grouping; fall back to the scan.
+	}
+
+	orgs, err := s.graph.FindAssets(s.ctx, "Organization", time.Time{}, dupMaxOrganizations+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(orgs) > dupMaxOrganizations {
+		orgs = orgs[:dupMaxOrganizations]
+		s.truncate(fmt.Sprintf("more than %d organizations", dupMaxOrganizations))
+	}
+
+	return orgs, nil
+}
+
+// coKeyedCohort gathers the organizations that share a blocking key with
+// another, grouping them in the database, and loads them in one batch. A brand
+// grouping relies on the brand_key tag the backfill materializes; abbreviation
+// matches among the loaded organizations are still found by pairs().
+func (s *dupSearch) coKeyedCohort(cg CoKeyedGrouper) ([]graph.Asset, error) {
+	kinds := []CoKeyKind{CoKeyIdentifier, CoKeyContactRecord, CoKeyRegistration, CoKeyBrand}
+
+	ids, full, err := coKeyedCohortIDs(s.ctx, cg, "Organization", kinds, dupMaxBucket, dupMaxOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	if full {
+		s.truncate(fmt.Sprintf("more than %d organizations", dupMaxOrganizations))
+	}
+
+	return s.loadCohort(ids)
+}
+
+// loadCohort batch-loads the cohort ids into assets, within the read budget.
+func (s *dupSearch) loadCohort(ids []string) ([]graph.Asset, error) {
+	sort.Strings(ids)
+	if err := s.batch.loadIDs(s.ctx, s.graph, ids, s.spend); err != nil {
+		return nil, err
+	}
+
+	orgs := make([]graph.Asset, 0, len(ids))
+	for _, id := range ids {
+		a, err := s.asset(id)
+		if errors.Is(err, errDupReadLimit) {
+			s.truncate(err.Error())
+			break
+		} else if err != nil {
+			continue
+		}
+
+		orgs = append(orgs, a)
+	}
+
+	return orgs, nil
 }
 
 // candidate scores one pair of organization profiles and returns the

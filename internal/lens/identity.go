@@ -192,33 +192,36 @@ func anyEnrichment(sources []string) bool {
 // against the names and countries other sources recorded for it.
 func FindIdentityConflicts(ctx context.Context, g graph.Graph) (IdentityReport, error) {
 	s := &identitySearch{ctx: ctx, graph: g}
-	orgs, err := g.FindAssets(ctx, "Organization", time.Time{}, dupMaxOrganizations+1)
+
+	// Audit every organization that has a legal identity. The type is paged when
+	// the repository supports it (no cap); otherwise a bounded load is scanned.
+	capped, err := walkType(ctx, g, "Organization", typePageSize, dupMaxOrganizations,
+		func(o graph.Asset) (bool, error) {
+			legal := graph.ContentString(o, "legal_name")
+			juris := strings.ToUpper(strings.TrimSpace(graph.ContentString(o, "jurisdiction")))
+			if legal == "" && juris == "" {
+				return false, nil
+			}
+
+			s.report.Organizations++
+			c, err := s.check(o, legal, juris)
+			if errors.Is(err, errDupReadLimit) {
+				s.report.Truncated, s.report.Reason = true, err.Error()
+				return true, nil
+			} else if err != nil {
+				return false, err
+			}
+			if c != nil {
+				s.report.Conflicts = append(s.report.Conflicts, *c)
+			}
+
+			return false, nil
+		})
 	if err != nil {
 		return s.report, err
 	}
-	if len(orgs) > dupMaxOrganizations {
-		orgs = orgs[:dupMaxOrganizations]
+	if capped && !s.report.Truncated {
 		s.report.Truncated, s.report.Reason = true, fmt.Sprintf("more than %d organizations", dupMaxOrganizations)
-	}
-
-	for _, o := range orgs {
-		legal := graph.ContentString(o, "legal_name")
-		juris := strings.ToUpper(strings.TrimSpace(graph.ContentString(o, "jurisdiction")))
-		if legal == "" && juris == "" {
-			continue
-		}
-
-		s.report.Organizations++
-		c, err := s.check(o, legal, juris)
-		if errors.Is(err, errDupReadLimit) {
-			s.report.Truncated, s.report.Reason = true, err.Error()
-			break
-		} else if err != nil {
-			return s.report, err
-		}
-		if c != nil {
-			s.report.Conflicts = append(s.report.Conflicts, *c)
-		}
 	}
 
 	sort.Slice(s.report.Conflicts, func(i, j int) bool {

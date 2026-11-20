@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -80,21 +81,62 @@ type personProfile struct {
 	idents map[string]bool
 }
 
+// personDuplicateCohort is the set of persons the sweep compares. When the
+// repository supports database-side grouping, it is the union of the persons
+// that share a family-name key with another (the only persons that can bucket
+// together), so the sweep skips the full load. Otherwise it falls back to the
+// bounded load.
+func personDuplicateCohort(ctx context.Context, g graph.Graph) ([]graph.Asset, string, error) {
+	if cg, ok := g.(CoKeyedGrouper); ok {
+		ids, full, err := coKeyedCohortIDs(ctx, cg, "Person",
+			[]CoKeyKind{CoKeyPersonName}, dupMaxBucket, personMaxPersons)
+		if err == nil {
+			people := make([]graph.Asset, 0, len(ids))
+			for _, id := range ids {
+				if a, err := g.GetAsset(ctx, id); err == nil && a.Type == "Person" {
+					people = append(people, a)
+				}
+			}
+
+			truncated := ""
+			if full {
+				truncated = fmt.Sprintf("more than %d persons", personMaxPersons)
+			}
+
+			return people, truncated, nil
+		}
+		if !errors.Is(err, ErrCoKeyedUnsupported) {
+			return nil, "", err
+		}
+		// The repository lacks database-side grouping; fall back to the load.
+	}
+
+	people, err := g.FindAssets(ctx, "Person", time.Time{}, personMaxPersons+1)
+	if err != nil {
+		return nil, "", err
+	}
+
+	truncated := ""
+	if len(people) > personMaxPersons {
+		people = people[:personMaxPersons]
+		truncated = fmt.Sprintf("more than %d persons", personMaxPersons)
+	}
+
+	return people, truncated, nil
+}
+
 // FindPersonDuplicates finds, across the whole database, the Person records
 // that look like the same person — a variant of the same name plus a shared
 // organization or identifier — and returns them as review candidates. It reads
 // only. The whole-database load is bounded by personMaxPersons.
 func FindPersonDuplicates(ctx context.Context, g graph.Graph) (PersonDuplicateReport, error) {
-	people, err := g.FindAssets(ctx, "Person", time.Time{}, personMaxPersons+1)
+	people, truncated, err := personDuplicateCohort(ctx, g)
 	if err != nil {
 		return PersonDuplicateReport{}, err
 	}
 
 	var report PersonDuplicateReport
-	if len(people) > personMaxPersons {
-		people = people[:personMaxPersons]
-		report.Truncated = fmt.Sprintf("more than %d persons", personMaxPersons)
-	}
+	report.Truncated = truncated
 	report.Persons = len(people)
 
 	// Only persons that share a family name can be the same person, so compare
