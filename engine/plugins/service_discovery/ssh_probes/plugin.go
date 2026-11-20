@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
-	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -150,15 +149,9 @@ func (sp *sshProbing) probe(e *et.Event, entity *dbt.Entity, ip *network.IPAddre
 		return nil, outcomeStoreFailed
 	}
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
-	defer cancel()
-
 	var stored int
 	for _, key := range keys {
-		if _, err := e.Session.DB().CreateEntityProperty(ctx, svc, &oamgen.SimpleProperty{
-			PropertyName:  fingerprint.SSHHostKey,
-			PropertyValue: key,
-		}); err == nil {
+		if support.StoreFingerprint(e, svc, sp.source, fingerprint.SSHHostKey, key) {
 			stored++
 		}
 	}

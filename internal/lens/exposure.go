@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/owasp-amass/amass/v5/internal/fingerprint"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 )
@@ -77,14 +78,12 @@ type exposureClassRule struct {
 }
 
 type exposureRules struct {
-	License    string   `json:"_license"`
-	About      string   `json:"_about"`
-	PortSource string   `json:"port_source"`
-	URLTypes   []string `json:"url_types"`
-	URLField   string   `json:"url_field"`
-	// TitleProperty is the property a probe stores a service's page title as.
-	TitleProperty string              `json:"title_property"`
-	Classes       []exposureClassRule `json:"classes"`
+	License    string              `json:"_license"`
+	About      string              `json:"_about"`
+	PortSource string              `json:"port_source"`
+	URLTypes   []string            `json:"url_types"`
+	URLField   string              `json:"url_field"`
+	Classes    []exposureClassRule `json:"classes"`
 }
 
 var loadExposureRules = sync.OnceValue(func() exposureRules {
@@ -159,9 +158,7 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		i := classOfService(rules, svc)
 		if i < 0 {
 			var title string
-			if i, title, err = s.classOfTitle(rules, svc.Service); err != nil {
-				return out, err
-			}
+			i, title = s.classOfTitle(rules, svc.Service)
 			if i >= 0 {
 				label += fmt.Sprintf(" %q", title)
 			}
@@ -244,30 +241,28 @@ func classOfService(rules exposureRules, svc ExposedService) int {
 	return -1
 }
 
-// classOfTitle returns the index of the first class whose title patterns
-// match a page title stored for svc, and the title, or -1. It reads svc's
-// properties only when a class has title patterns and reads remain.
-func (s *scope) classOfTitle(rules exposureRules, svc graph.Asset) (int, string, error) {
-	if rules.TitleProperty == "" || !slices.ContainsFunc(rules.Classes, func(c exposureClassRule) bool {
+// classOfTitle returns the index of the first class whose title patterns match
+// the page title the probe stored for svc, and the title, or -1. The title is
+// taken from the service's saved page body, so it needs no extra read and does
+// not depend on how the title is stored for correlation.
+func (s *scope) classOfTitle(rules exposureRules, svc graph.Asset) (int, string) {
+	if !slices.ContainsFunc(rules.Classes, func(c exposureClassRule) bool {
 		return len(c.titles) > 0
-	}) || s.spent() {
-		return -1, "", nil
+	}) {
+		return -1, ""
 	}
 
-	s.report.Reads++
-	evidence, err := s.w.graph.Evidence(s.w.ctx, svc.ID, 100)
-	if err != nil {
-		return -1, "", err
+	title := fingerprint.PageTitle(graph.ContentString(svc, "output"))
+	if title == "" {
+		return -1, ""
 	}
-	for _, title := range propertyValues(evidence, rules.TitleProperty) {
-		for i, c := range rules.Classes {
-			if slices.ContainsFunc(c.titles, func(re *regexp.Regexp) bool { return re.MatchString(title) }) {
-				return i, title, nil
-			}
+	for i, c := range rules.Classes {
+		if slices.ContainsFunc(c.titles, func(re *regexp.Regexp) bool { return re.MatchString(title) }) {
+			return i, title
 		}
 	}
 
-	return -1, "", nil
+	return -1, ""
 }
 
 // classifyTXT notes the TXT records stored for name that a class's TXT

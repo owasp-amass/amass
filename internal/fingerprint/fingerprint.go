@@ -4,10 +4,12 @@
 
 // Package fingerprint extracts the fingerprints Amass records for
 // correlating assets: page titles, analytics and tag identifiers, page
-// content hashes, favicon hashes, and names the SSH host key property. Every collector (the HTTP probes, a web
-// scraper) calls this package and stores each fingerprint as an OAM
-// SimpleProperty named Name with the value Value, so the stored data is the
-// same whichever component collected it.
+// content hashes, favicon hashes, and names the SSH host key id_type. Every
+// collector (the HTTP probes, the JARM and SSH probes, a web scraper) calls
+// this package and stores each fingerprint as a shared OAM Identifier of
+// id_type Name and id Value, linked from the asset by a "fingerprint" edge
+// (support.StoreFingerprint), so the stored data is the same whichever
+// component collected it and assets sharing a value are one hop apart.
 package fingerprint
 
 import (
@@ -18,7 +20,7 @@ import (
 	"strings"
 )
 
-// Property names: the storage contract with the ownership signals.
+// Fingerprint id_types: the storage contract with the ownership signals.
 const (
 	// Title is a page's trimmed <title>.
 	Title = "http_title"

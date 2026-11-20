@@ -180,19 +180,16 @@ func jarmTarget(host *dbt.Entity, edge *dbt.Edge) *fingerprint {
 	return nil
 }
 
-// store records each fingerprint on its port relation, and on the service
-// itself so that services sharing a fingerprint can be found by value.
+// store records each JARM hash as a shared Identifier{JARM:hash} linked from
+// the service by a "fingerprint" edge, so services sharing a TLS stack can be
+// found by value.
 func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
-	defer cancel()
-
 	seen := map[string]bool{}
 	for _, fp := range fps {
-		prop := &oamgen.SimpleProperty{PropertyName: "JARM", PropertyValue: fp.hash}
-		_, _ = e.Session.DB().CreateEdgeProperty(ctx, fp.port, prop)
-		if !seen[fp.hash] {
-			seen[fp.hash] = true
-			_, _ = e.Session.DB().CreateEntityProperty(ctx, e.Entity, prop)
+		if seen[fp.hash] {
+			continue
 		}
+		seen[fp.hash] = true
+		support.StoreFingerprint(e, e.Entity, j.source, "JARM", fp.hash)
 	}
 }

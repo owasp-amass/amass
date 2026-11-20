@@ -14,13 +14,11 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/lens"
 )
 
-func simpleProperty(name, value string) graph.Evidence {
-	return graph.Evidence{Kind: "SimpleProperty", Property: map[string]any{"property_name": name, "property_value": value}}
-}
-
 // webSignalsFixture adds web fingerprints to moreSignalsFixture: www.colgate.edu's
 // service carries an analytics ID, a favicon hash, a distinctive title and a
 // generic one, and other names, a URL and many services share some of them.
+// Each fingerprint is a shared Identifier{id_type:value} linked by a
+// "fingerprint" edge, the way the collectors store them.
 func webSignalsFixture() valueGraph {
 	g := moreSignalsFixture()
 	add := func(id, typ, key string, content map[string]any) {
@@ -30,27 +28,34 @@ func webSignalsFixture() valueGraph {
 		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to, Label: label,
 			Type: rt})
 	}
-	hosted := func(name, svc string, ev ...graph.Evidence) {
+	fp := func(subject, idType, value string) {
+		id := idType + ":" + value
+		add(id, "Identifier", id, map[string]any{"id_type": idType, "id": value})
+		link(subject, "fingerprint", id, "SimpleRelation")
+	}
+	hosted := func(name, svc string) {
 		add(name, "FQDN", name, map[string]any{"name": name})
 		add(svc, "Service", svc, map[string]any{"unique_id": svc})
 		link(name, "port", svc, "PortRelation")
-		g.EvidenceByID[svc] = ev
 	}
 
-	g.EvidenceByID["svc-www"] = append(g.EvidenceByID["svc-www"],
-		simpleProperty(fingerprint.AnalyticsID, "GTM-K9X2ZQ"),
-		simpleProperty(fingerprint.FaviconMMH3, "-1234567890"),
-		simpleProperty(fingerprint.Title, "Colgate University Alumni Portal"),
-		simpleProperty(fingerprint.Title, "403 Forbidden"))
+	fp("svc-www", fingerprint.AnalyticsID, "GTM-K9X2ZQ")
+	fp("svc-www", fingerprint.FaviconMMH3, "-1234567890")
+	fp("svc-www", fingerprint.Title, "Colgate University Alumni Portal")
+	fp("svc-www", fingerprint.Title, "403 Forbidden")
 
-	hosted("analytics-twin.example", "svc-at", simpleProperty(fingerprint.AnalyticsID, "GTM-K9X2ZQ"))
-	hosted("title-twin.example", "svc-tt", simpleProperty(fingerprint.Title, "Colgate University Alumni Portal"))
-	hosted("forbidden.example", "svc-fb", simpleProperty(fingerprint.Title, "403 Forbidden"))
+	hosted("analytics-twin.example", "svc-at")
+	fp("svc-at", fingerprint.AnalyticsID, "GTM-K9X2ZQ")
+	hosted("title-twin.example", "svc-tt")
+	fp("svc-tt", fingerprint.Title, "Colgate University Alumni Portal")
+	hosted("forbidden.example", "svc-fb")
+	fp("svc-fb", fingerprint.Title, "403 Forbidden")
 	add("url-promo", "URL", "https://promo.example/landing", map[string]any{"url": "https://promo.example/landing"})
-	g.EvidenceByID["url-promo"] = []graph.Evidence{simpleProperty(fingerprint.AnalyticsID, "GTM-K9X2ZQ")}
+	fp("url-promo", fingerprint.AnalyticsID, "GTM-K9X2ZQ")
 	for i := 0; i <= lens.GapMaxShared; i++ {
-		hosted(fmt.Sprintf("default-icon-%d.example", i), fmt.Sprintf("svc-icon-%d", i),
-			simpleProperty(fingerprint.FaviconMMH3, "-1234567890"))
+		svc := fmt.Sprintf("svc-icon-%d", i)
+		hosted(fmt.Sprintf("default-icon-%d.example", i), svc)
+		fp(svc, fingerprint.FaviconMMH3, "-1234567890")
 	}
 
 	return g
@@ -83,13 +88,17 @@ func TestWebFingerprintSignals(t *testing.T) {
 
 func TestSSHHostKeyReuse(t *testing.T) {
 	g := webSignalsFixture()
-	key := simpleProperty(fingerprint.SSHHostKey, "ssh-ed25519 SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
+	const keyval = "ssh-ed25519 SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"
+	keyID := fingerprint.SSHHostKey + ":" + keyval
+	g.Assets[keyID] = graph.Asset{ID: keyID, Type: "Identifier", Key: keyID,
+		Content: map[string]any{"id_type": fingerprint.SSHHostKey, "id": keyval}}
 	service := func(host, svc string) {
 		g.Assets[svc] = graph.Asset{ID: svc, Type: "Service", Key: svc, Content: map[string]any{"unique_id": svc,
 			"service_type": "ssh"}}
 		g.Links = append(g.Links, graph.Relation{ID: host + "-port-" + svc, FromID: host, ToID: svc, Label: "port",
 			Type: "PortRelation"})
-		g.EvidenceByID[svc] = []graph.Evidence{key}
+		g.Links = append(g.Links, graph.Relation{ID: svc + "-fingerprint-" + keyID, FromID: svc, ToID: keyID,
+			Label: "fingerprint", Type: "SimpleRelation"})
 	}
 
 	// The same key on an address in Colgate's netblock and on another.

@@ -585,16 +585,20 @@ func (g *gapSearch) fingerprintSignals(owned graph.Asset) error {
 			return nil
 		}
 
-		evidence, err := g.w.graph.Evidence(g.w.ctx, src.ID, 100)
+		steps, err := g.w.steps(src)
 		if err != nil {
 			return err
 		}
-		for _, def := range defs {
-			if !slices.Contains(fingerprintTypes(def), src.Type) {
+		for _, s := range steps {
+			if !s.forward || s.edge.Label != "fingerprint" || s.other.Type != "Identifier" {
 				continue
 			}
-			for _, value := range propertyValues(evidence, def.Params.Property) {
-				if !usefulFingerprint(def, value) {
+
+			idType := graph.ContentString(s.other, "id_type")
+			value := graph.ContentString(s.other, "id")
+			for _, def := range defs {
+				if !strings.EqualFold(def.Params.Property, idType) ||
+					!slices.Contains(fingerprintTypes(def), src.Type) || !usefulFingerprint(def, value) {
 					continue
 				}
 
@@ -602,7 +606,8 @@ func (g *gapSearch) fingerprintSignals(owned graph.Asset) error {
 				if sources[i].Label != "" {
 					lead = append(lead, sources[i])
 				}
-				if err := g.fingerprintMatches(def, owned, src, value, lead); err != nil {
+				lead = append(lead, WitnessOf(s.edge, src, s.other))
+				if err := g.fingerprintMatches(def, src, s.other, lead); err != nil {
 					return err
 				}
 			}
@@ -612,46 +617,56 @@ func (g *gapSearch) fingerprintSignals(owned graph.Asset) error {
 	return nil
 }
 
-// fingerprintMatches records the candidates behind the assets that carry
-// value, unless more than gapMaxShared do.
-func (g *gapSearch) fingerprintMatches(def OwnershipSignal, owned, src graph.Asset, value string, lead []graph.WitnessEdge) error {
-	for _, t := range fingerprintTypes(def) {
-		if !g.read() {
-			return nil
+// fingerprintMatches records the candidates behind the other assets that share
+// the fingerprint Identifier ident with src, unless more than GapMaxShared do.
+// The shared Identifier is the pivot: its incoming "fingerprint" edges are the
+// assets carrying the same value, read bounded so a value on many hosts (a
+// common favicon or title) is skipped rather than walked in full.
+func (g *gapSearch) fingerprintMatches(def OwnershipSignal, src, ident graph.Asset, lead []graph.WitnessEdge) error {
+	if !g.read() {
+		return nil
+	}
+
+	edges, more, err := graph.ReadEdges(g.w.ctx, g.w.graph, ident.ID, "in", "fingerprint", GapMaxShared+1, g.read)
+	if err != nil {
+		return err
+	}
+	if more || len(edges) > GapMaxShared {
+		return nil
+	}
+
+	for _, edge := range edges {
+		if edge.FromID == src.ID || edge.FromID == ident.ID {
+			continue
 		}
 
-		others, more, err := g.values.FindByTagValue(g.w.ctx, t, def.Params.Property, value, false, GapMaxShared+1)
+		o, err := g.w.asset(edge.FromID)
 		if err != nil {
 			return err
 		}
-		if more || len(others) > GapMaxShared {
+		if !slices.Contains(fingerprintTypes(def), o.Type) {
 			continue
 		}
-		for _, o := range others {
-			if o.ID == src.ID || o.ID == owned.ID {
+
+		g.w.assets[o.ID] = o
+		match := WitnessOf(edge, ident, o)
+		via := src.Type + " " + def.Params.Property + " " + o.Type
+		if o.Type != "Service" {
+			g.add(o, def.ID, via, append(append([]graph.WitnessEdge(nil), lead...), match))
+			continue
+		}
+
+		hosts, err := g.w.steps(o)
+		if err != nil {
+			return err
+		}
+		for _, h := range hosts {
+			if h.forward || h.edge.Label != "port" || (h.other.Type != "FQDN" && h.other.Type != "IPAddress") {
 				continue
 			}
 
-			g.w.assets[o.ID] = o
-			match := matched(src, o, "same_"+strings.ToLower(def.Params.Property), value)
-			via := src.Type + " " + def.Params.Property + " " + o.Type
-			if o.Type != "Service" {
-				g.add(o, def.ID, via, append(append([]graph.WitnessEdge(nil), lead...), match))
-				continue
-			}
-
-			hosts, err := g.w.steps(o)
-			if err != nil {
-				return err
-			}
-			for _, h := range hosts {
-				if h.forward || h.edge.Label != "port" || (h.other.Type != "FQDN" && h.other.Type != "IPAddress") {
-					continue
-				}
-
-				g.add(h.other, def.ID, via, append(append([]graph.WitnessEdge(nil), lead...), match,
-					WitnessOf(h.edge, o, h.other)))
-			}
+			g.add(h.other, def.ID, via, append(append([]graph.WitnessEdge(nil), lead...), match,
+				WitnessOf(h.edge, o, h.other)))
 		}
 	}
 

@@ -35,6 +35,10 @@ import (
 
 const page = `<html><head><title>Example Portal</title></head><body>hello</body></html>`
 
+// favicon is the icon the test server serves at /favicon.ico; the probe hashes
+// these bytes in Shodan's convention and stores the hash as a fingerprint.
+var favicon = []byte("\x00\x00\x01\x00amass-test-favicon-bytes")
+
 func newProbing(t *testing.T) (*httpProbing, *plugintest.Session) {
 	t.Helper()
 
@@ -52,6 +56,11 @@ func serve(t *testing.T, tls bool) *httptest.Server {
 	t.Helper()
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/favicon.ico" {
+			w.Header().Set("Content-Type", "image/x-icon")
+			_, _ = w.Write(favicon)
+			return
+		}
 		w.Header().Set("Server", "nginx/1.25.3")
 		_, _ = fmt.Fprint(w, page)
 	})
@@ -97,18 +106,24 @@ func selfSigned(t *testing.T, name string) cryptotls.Certificate {
 	return cryptotls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
 }
 
-func properties(t *testing.T, sess *plugintest.Session, ent *dbt.Entity) map[string]string {
+// fingerprints returns the id_type -> id of every fingerprint Identifier
+// linked from ent by a "fingerprint" edge.
+func fingerprints(t *testing.T, sess *plugintest.Session, ent *dbt.Entity) map[string]string {
 	t.Helper()
 
-	tags, err := sess.DB().FindEntityTags(sess.Ctx(), ent, time.Time{})
+	edges, err := sess.DB().OutgoingEdges(sess.Ctx(), ent, time.Time{}, "fingerprint")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	out := map[string]string{}
-	for _, tag := range tags {
-		if p, ok := tag.Property.(*oamgen.SimpleProperty); ok {
-			out[p.PropertyName] = p.PropertyValue
+	for _, edge := range edges {
+		id, err := sess.DB().FindEntityById(sess.Ctx(), edge.ToEntity.ID)
+		if err != nil || id == nil {
+			continue
+		}
+		if ident, ok := id.Asset.(*oamgen.Identifier); ok {
+			out[ident.Type] = ident.ID
 		}
 	}
 
@@ -134,8 +149,12 @@ func TestProbeStoresTheService(t *testing.T) {
 	if rel, ok := findings[0].Rel.(*oamgen.PortRelation); !ok || rel.PortNumber != 8080 || rel.Protocol != "TCP" {
 		t.Errorf("the relation is %+v", findings[0].Rel)
 	}
-	if got := properties(t, sess, findings[0].To)[fingerprint.Title]; got != "Example Portal" {
-		t.Errorf("the title fingerprint is %q", got)
+	fps := fingerprints(t, sess, findings[0].To)
+	if fps[fingerprint.Title] != "Example Portal" {
+		t.Errorf("the title fingerprint is %q", fps[fingerprint.Title])
+	}
+	if got, want := fps[fingerprint.FaviconMMH3], fingerprint.FaviconHash(favicon); got != want {
+		t.Errorf("the favicon fingerprint is %q, want %q", got, want)
 	}
 }
 

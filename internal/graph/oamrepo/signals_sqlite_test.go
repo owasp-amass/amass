@@ -64,12 +64,19 @@ func checkServiceSignals(t *testing.T, db repository.Repository) {
 		return &general.PortRelation{Name: "tcp_port_" + map[int]string{80: "80", 443: "443"}[n], PortNumber: n,
 			Protocol: "TCP"}
 	}
-	jarm := func(name, hash string) {
-		if _, err := db.CreateEntityProperty(ctx, ents[name], &general.SimpleProperty{PropertyName: "JARM",
-			PropertyValue: hash}); err != nil {
+	// fingerprintID stores a fingerprint as a shared Identifier{idType:value}
+	// and a "fingerprint" edge from the named entity, as the collectors do.
+	fingerprintID := func(name, idType, value string) {
+		id, err := db.CreateAsset(ctx, &general.Identifier{UniqueID: idType + ":" + value, ID: value, Type: idType})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.CreateEdge(ctx, &dbt.Edge{Relation: &general.SimpleRelation{Name: "fingerprint"},
+			FromEntity: ents[name], ToEntity: id}); err != nil {
 			t.Fatal(err)
 		}
 	}
+	jarm := func(name, hash string) { fingerprintID(name, "JARM", hash) }
 
 	create("colgate", &org.Organization{ID: "colgate", Name: "Colgate University"})
 	create("cr-colgate", &contact.ContactRecord{DiscoveredAt: "https://rdap.example/colgate"})
@@ -89,12 +96,7 @@ func checkServiceSignals(t *testing.T, db repository.Repository) {
 	link("twin", port(443), "svc-twin")
 	jarm("svc-twin", "2ad2ad0002ad2ad0042d42d000000ad")
 
-	analytics := func(name string) {
-		if _, err := db.CreateEntityProperty(ctx, ents[name], &general.SimpleProperty{
-			PropertyName: fingerprint.AnalyticsID, PropertyValue: "GTM-K9X2ZQ"}); err != nil {
-			t.Fatal(err)
-		}
-	}
+	analytics := func(name string) { fingerprintID(name, fingerprint.AnalyticsID, "GTM-K9X2ZQ") }
 	analytics("svc-www")
 	create("tagged", &oamdns.FQDN{Name: "colgate-tags.example"})
 	create("svc-tagged", &platform.Service{ID: "svc-tagged", Type: "web-service"})

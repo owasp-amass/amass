@@ -106,12 +106,37 @@ func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, por
 	e.Session.NetSem().Release()
 
 	if err == nil && resp != nil {
-		findings = append(findings, hp.store(e, resp, entity, port)...)
+		findings = append(findings, hp.store(e, resp, entity, port, hp.faviconHash(e, target))...)
 	}
 	return findings
 }
 
-func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.Entity, port int) []*support.Finding {
+// faviconMaxBytes bounds the favicon body that is hashed; real icons are small,
+// and a larger body is an error or default page rather than an icon.
+const faviconMaxBytes = 1 << 20
+
+// faviconHash fetches the service's /favicon.ico and returns its hash in the
+// convention Shodan and most recon tools use, or "" when there is no usable
+// icon. It is stored like the other fingerprints so that services sharing a
+// favicon can be found by value — the signal used to locate an origin server
+// behind a CDN by its favicon hash.
+func (hp *httpProbing) faviconHash(e *et.Event, target string) string {
+	e.Session.NetSem().Acquire()
+	defer e.Session.NetSem().Release()
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
+
+	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe,
+		&amasshttp.Request{URL: target + "/favicon.ico"})
+	if err != nil || resp == nil || resp.StatusCode != 200 || len(resp.Body) == 0 || len(resp.Body) > faviconMaxBytes {
+		return ""
+	}
+
+	return fingerprint.FaviconHash([]byte(resp.Body))
+}
+
+func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.Entity, port int, favicon string) []*support.Finding {
 	addr := entity.Asset.Key()
 	serv := support.ServiceWithIdentifier(addr, "tcp", port)
 
@@ -146,7 +171,7 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 		return findings
 	}
 
-	hp.storeFingerprints(e, s, resp)
+	hp.storeFingerprints(e, s, resp, favicon)
 
 	// for adding the source information
 	findings = append(findings, &support.Finding{
@@ -171,22 +196,18 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 }
 
 // storeFingerprints records the page's web fingerprints (title, analytics
-// identifiers, content hash) on the service, under the property names of the
-// fingerprint package that every collector shares.
-func (hp *httpProbing) storeFingerprints(e *et.Event, svc *dbt.Entity, resp *amasshttp.Response) {
+// identifiers, content hash, favicon hash) as shared Identifiers linked from the
+// service by a "fingerprint" edge, under the id_types of the fingerprint package
+// that every collector shares, so services and hosts sharing a value can be
+// found by it.
+func (hp *httpProbing) storeFingerprints(e *et.Event, svc *dbt.Entity, resp *amasshttp.Response, favicon string) {
 	fps := fingerprint.FromHTTP(resp.Header, resp.Body)
-	if len(fps) == 0 {
-		return
+	if favicon != "" {
+		fps = append(fps, fingerprint.Fingerprint{Name: fingerprint.FaviconMMH3, Value: favicon})
 	}
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
-	defer cancel()
-
 	for _, fp := range fps {
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, svc, &oamgen.SimpleProperty{
-			PropertyName:  fp.Name,
-			PropertyValue: fp.Value,
-		})
+		support.StoreFingerprint(e, svc, hp.source, fp.Name, fp.Value)
 	}
 }
 

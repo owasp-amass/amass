@@ -296,6 +296,9 @@ relations:
   - {source: Service, label: certificate, relation_type: SimpleRelation, destination: TLSCertificate,
      attribution: same_subject, purpose: certificate,
      note: "Certificate presented by the service (engine scope association)."}
+  - {source: Service, label: fingerprint, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: web, reviewed: true,
+     note: "A fingerprint of what the service served, as a shared Identifier whose id_type names the kind (favicon_mmh3, JARM, http_title, body_sha256, analytics_id, ssh_host_key) and whose id is the value. It is a descriptive attribute of the service, not an asset it owns; services and hosts carrying the same value share the one Identifier, so the ownership-gap lens pivots on them as a supporting signal. A value can be shared by unrelated parties (a CDN favicon, a templated title), so ownership does not pass through."}
   - {source: Service, label: product_used, relation_type: SimpleRelation, destination: Product,
      attribution: third_party, purpose: product,
      note: "Software the service runs; points to the vendor's product, not the service owner."}
@@ -371,3 +374,6 @@ relations:
   - {source: URL, label: port, relation_type: PortRelation, destination: Service,
      attribution: infrastructure, purpose: network,
      note: "Service serving the URL."}
+  - {source: URL, label: fingerprint, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: web, reviewed: true,
+     note: "A fingerprint of the page at this URL (for example an analytics identifier), as a shared Identifier whose id_type names the kind and whose id is the value; see the Service fingerprint relation. Descriptive of the page, so ownership does not pass through."}
