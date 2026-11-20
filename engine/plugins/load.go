@@ -42,6 +42,7 @@ import (
 
 var pluginNewFuncs = []func() et.Plugin{
 	api.NewAnubis,
+	api.NewBGPView,
 	api.NewBinaryEdge,
 	api.NewCertSpotter,
 	api.NewChaos,
