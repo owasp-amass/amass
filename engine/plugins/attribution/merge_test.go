@@ -6,7 +6,9 @@ package attribution
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,13 +121,7 @@ func runMergeWatcher(t *testing.T, mode string) (repository.Repository, map[stri
 	sess.stats.WorkItemsTotal, sess.stats.WorkItemsCompleted = 11, 10
 	sess.stats.Unlock()
 
-	deadline := time.Now().Add(20 * time.Second)
-	for sess.stats.Background() != 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if n := sess.stats.Background(); n != 0 {
-		t.Fatalf("the merge watcher did not finish: background work = %d", n)
-	}
+	awaitBackgroundZero(t, sess)
 
 	return db, ents, journal, sess
 }
@@ -288,10 +284,7 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 		}
 	}
 
-	deadline := time.Now().Add(20 * time.Second)
-	for sess.stats.Background() != 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	awaitBackgroundZero(t, sess)
 
 	for _, id := range []string{survivor, res.RestoredID} {
 		if _, err := db.FindEntityById(context.Background(), id); err != nil {
@@ -302,6 +295,40 @@ func TestUndoneMergeIsNotRepeated(t *testing.T) {
 
 // A merge waits while another enumeration on the engine still has work: it
 // could be writing to an organization the merge would delete.
+// mergeWaitTimeout is deliberately generous. The background merge watchers
+// finish in well under a second on a development machine, but a loaded CI runner
+// can be an order of magnitude slower, so a tight deadline turns ordinary
+// slowness into a spurious failure. awaitBackgroundZero returns as soon as the
+// work is done, so a healthy run never pays this timeout.
+const mergeWaitTimeout = 120 * time.Second
+
+// awaitBackgroundZero waits for every session's background work to reach zero,
+// then returns; on timeout it fails with each session's remaining count.
+func awaitBackgroundZero(t *testing.T, sessions ...*fakeSession) {
+	t.Helper()
+
+	deadline := time.Now().Add(mergeWaitTimeout)
+	for time.Now().Before(deadline) {
+		pending := false
+		for _, s := range sessions {
+			if s.stats.Background() != 0 {
+				pending = true
+				break
+			}
+		}
+		if !pending {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	counts := make([]string, len(sessions))
+	for i, s := range sessions {
+		counts[i] = fmt.Sprintf("session[%d] background=%d", i, s.stats.Background())
+	}
+	t.Fatalf("merge watchers did not finish within %s: %s", mergeWaitTimeout, strings.Join(counts, ", "))
+}
+
 func TestMergesWaitForOtherSessions(t *testing.T) {
 	db, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "concurrent.db"))
 	if err != nil {
@@ -354,13 +381,7 @@ func TestMergesWaitForOtherSessions(t *testing.T) {
 	busy.stats.WorkItemsTotal, busy.stats.WorkItemsCompleted = 11, 10
 	busy.stats.Unlock()
 
-	deadline := time.Now().Add(20 * time.Second)
-	for (done.stats.Background() != 0 || busy.stats.Background() != 0) && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if done.stats.Background() != 0 || busy.stats.Background() != 0 {
-		t.Fatal("the merge watchers did not finish")
-	}
+	awaitBackgroundZero(t, done, busy)
 
 	_, err1 := db.FindEntityById(context.Background(), ents["globalsign:1"].ID)
 	_, err2 := db.FindEntityById(context.Background(), ents["globalsign:2"].ID)
@@ -412,13 +433,7 @@ func TestBusyOtherSessionsDoNotHoldADrainedSession(t *testing.T) {
 			}
 			touchOrgs(dtr, ents)
 
-			deadline := time.Now().Add(20 * time.Second)
-			for done.stats.Background() != 0 && time.Now().Before(deadline) {
-				time.Sleep(10 * time.Millisecond)
-			}
-			if n := done.stats.Background(); n != 0 {
-				t.Fatalf("a busy enumeration elsewhere held the drained session: background work = %d", n)
-			}
+			awaitBackgroundZero(t, done)
 
 			for uid, e := range ents {
 				if _, err := db.FindEntityById(context.Background(), e.ID); err != nil {
