@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"regexp"
 	"strconv"
@@ -379,15 +380,19 @@ func (p *ParseIPs) parseRange(s string) error {
 		return p.appendIPs([]net.IP{ip})
 	}
 	start := net.ParseIP(twoIPs[0])
+	if start == nil {
+		return fmt.Errorf("%s is not a valid IP range", s)
+	}
 	end := net.ParseIP(twoIPs[1])
 	if end == nil {
 		num, err := strconv.Atoi(twoIPs[1])
-		if err == nil {
-			end = net.ParseIP(twoIPs[0])
+		if err == nil && num >= 0 && num <= math.MaxUint8 {
+			end = make(net.IP, len(start))
+			copy(end, start)
 			end[len(end)-1] = byte(num)
 		}
 	}
-	if start == nil || end == nil {
+	if end == nil {
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
 
