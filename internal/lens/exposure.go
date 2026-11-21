@@ -194,16 +194,24 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 			}
 		}
 		if a.Type == "FQDN" && !s.spent() {
-			// Bucket hosts are CNAME targets, not footprint members, so follow the
-			// alias chain (as the dangling lens does) and flag a name that points
-			// at a bucket a probe found world-readable.
-			if res, rerr := resolveName(s.w, a); rerr == nil && res.Aliased() {
+			// A footprint name is exposed when it is, or aliases to, a bucket host
+			// a probe found world-readable. Bucket hosts usually appear as CNAME
+			// targets (resolve the alias, as the dangling lens does), but one can
+			// also be a footprint member in its own right, so check the name
+			// itself first.
+			bucketID, display := "", ""
+			if _, _, ok := semantics.MatchBucketHost(graph.FQDNName(a)); ok {
+				bucketID, display = a.ID, graph.FQDNName(a)
+			} else if res, rerr := resolveName(s.w, a); rerr == nil && res.Aliased() {
 				target := res.Target(a)
 				if _, _, ok := semantics.MatchBucketHost(graph.FQDNName(target)); ok {
-					if ev, eerr := s.w.graph.Evidence(s.w.ctx, target.ID, 50); eerr == nil &&
-						slices.Contains(propertyValues(ev, "bucket_status"), "public") {
-						note(&publicBucket, graph.FQDNName(a))
-					}
+					bucketID, display = target.ID, graph.FQDNName(a)
+				}
+			}
+			if bucketID != "" {
+				if ev, eerr := s.w.graph.Evidence(s.w.ctx, bucketID, 50); eerr == nil &&
+					slices.Contains(propertyValues(ev, "bucket_status"), "public") {
+					note(&publicBucket, display)
 				}
 			}
 		}

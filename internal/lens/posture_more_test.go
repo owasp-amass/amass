@@ -65,6 +65,16 @@ func TestFindExposure(t *testing.T) {
 	g.EvidenceByID["colgate-public.s3.amazonaws.com"] = []graph.Evidence{
 		graphtest.SimpleProp("bucket_status", "public")}
 
+	// A bucket host that is itself a footprint member (not reached via a CNAME),
+	// also recorded world-readable; it must be flagged on its own, not only when
+	// something aliases to it.
+	g.Assets["colgate-direct.s3.amazonaws.com"] = graph.Asset{ID: "colgate-direct.s3.amazonaws.com", Type: "FQDN",
+		Key: "colgate-direct.s3.amazonaws.com", Content: map[string]any{"name": "colgate-direct.s3.amazonaws.com"}}
+	g.Links = append(g.Links, graph.Relation{ID: "colgate.edu-node-directbucket", FromID: "colgate.edu",
+		ToID: "colgate-direct.s3.amazonaws.com", Label: "node", Type: "SimpleRelation"})
+	g.EvidenceByID["colgate-direct.s3.amazonaws.com"] = []graph.Evidence{
+		graphtest.SimpleProp("bucket_status", "public")}
+
 	r, err := FindExposure(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -94,8 +104,9 @@ func TestFindExposure(t *testing.T) {
 	if classes[ExposureUnusualPort].Count != 1 || classes[ExposureBadCert].Count != 2 {
 		t.Errorf("classes = %+v", r.Classes)
 	}
-	if c := classes[ExposurePublicBucket]; c.Count != 1 || !slices.Contains(c.Examples, "docs.colgate.edu") {
-		t.Errorf("public bucket = %+v", c)
+	if c := classes[ExposurePublicBucket]; c.Count != 2 || !slices.Contains(c.Examples, "docs.colgate.edu") ||
+		!slices.Contains(c.Examples, "colgate-direct.s3.amazonaws.com") {
+		t.Errorf("public bucket = %+v (want the aliased name and the direct bucket host)", c)
 	}
 	if !strings.Contains(r.Text(), "Remote access and shells (2)") {
 		t.Errorf("report:\n%s", r.Text())
