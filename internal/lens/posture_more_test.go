@@ -52,6 +52,19 @@ func TestFindExposure(t *testing.T) {
 	g.Links = append(g.Links, graph.Relation{ID: "secret-domain", FromID: secret, ToID: "portal.colgate.edu",
 		Label: "domain", Type: "SimpleRelation"})
 
+	// A name aliased to a world-readable S3 bucket a probe recorded as public.
+	g.Assets["docs.colgate.edu"] = graph.Asset{ID: "docs.colgate.edu", Type: "FQDN", Key: "docs.colgate.edu",
+		Content: map[string]any{"name": "docs.colgate.edu"}}
+	g.Assets["colgate-public.s3.amazonaws.com"] = graph.Asset{ID: "colgate-public.s3.amazonaws.com", Type: "FQDN",
+		Key: "colgate-public.s3.amazonaws.com", Content: map[string]any{"name": "colgate-public.s3.amazonaws.com"}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "colgate.edu-node-docs", FromID: "colgate.edu", ToID: "docs.colgate.edu",
+			Label: "node", Type: "SimpleRelation"},
+		graph.Relation{ID: "docs-cname-bucket", FromID: "docs.colgate.edu", ToID: "colgate-public.s3.amazonaws.com",
+			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 5}}})
+	g.EvidenceByID["colgate-public.s3.amazonaws.com"] = []graph.Evidence{
+		graphtest.SimpleProp("bucket_status", "public")}
+
 	r, err := FindExposure(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +93,9 @@ func TestFindExposure(t *testing.T) {
 	}
 	if classes[ExposureUnusualPort].Count != 1 || classes[ExposureBadCert].Count != 2 {
 		t.Errorf("classes = %+v", r.Classes)
+	}
+	if c := classes[ExposurePublicBucket]; c.Count != 1 || !slices.Contains(c.Examples, "docs.colgate.edu") {
+		t.Errorf("public bucket = %+v", c)
 	}
 	if !strings.Contains(r.Text(), "Remote access and shells (2)") {
 		t.Errorf("report:\n%s", r.Text())

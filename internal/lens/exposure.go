@@ -37,9 +37,10 @@ var exposureLens = SubjectLens{
 
 // Exposure classes computed from the services lens rather than exposure.json.
 const (
-	ExposureUnusualPort = "unusual_ports"
-	ExposureBadCert     = "certificate_problems"
-	ExposureUnsupported = "unsupported_software"
+	ExposureUnusualPort  = "unusual_ports"
+	ExposureBadCert      = "certificate_problems"
+	ExposureUnsupported  = "unsupported_software"
+	ExposurePublicBucket = "public_bucket"
 )
 
 // ExposureClass is one kind of exposure and what falls in it.
@@ -140,6 +141,8 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	unsupported := ExposureClass{Name: ExposureUnsupported, Title: "Software its maker no longer supports",
 		Rationale: "release lines past their end of support get no security fixes; check whether the distribution " +
 			"backports them before treating the version as vulnerable"}
+	publicBucket := ExposureClass{Name: ExposurePublicBucket, Title: "World-readable storage buckets",
+		Rationale: "a publicly listable object-storage bucket exposes its files to anyone on the internet"}
 	note := func(c *ExposureClass, example string) {
 		c.Count++
 		if len(c.Examples) < exposureExamples {
@@ -190,6 +193,20 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 				return out, err
 			}
 		}
+		if a.Type == "FQDN" && !s.spent() {
+			// Bucket hosts are CNAME targets, not footprint members, so follow the
+			// alias chain (as the dangling lens does) and flag a name that points
+			// at a bucket a probe found world-readable.
+			if res, rerr := resolveName(s.w, a); rerr == nil && res.Aliased() {
+				target := res.Target(a)
+				if _, _, ok := semantics.MatchBucketHost(graph.FQDNName(target)); ok {
+					if ev, eerr := s.w.graph.Evidence(s.w.ctx, target.ID, 50); eerr == nil &&
+						slices.Contains(propertyValues(ev, "bucket_status"), "public") {
+						note(&publicBucket, graph.FQDNName(a))
+					}
+				}
+			}
+		}
 		if !slices.Contains(rules.URLTypes, a.Type) {
 			continue
 		}
@@ -214,7 +231,7 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	}
 
 	out.Services = len(services.Services)
-	for _, c := range append(classes, unsupported, unusual, certs) {
+	for _, c := range append(classes, unsupported, unusual, certs, publicBucket) {
 		if c.Count > 0 {
 			out.Classes = append(out.Classes, c)
 		}
