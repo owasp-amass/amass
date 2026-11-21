@@ -99,7 +99,7 @@ func queryByDomain(ctx context.Context, rl interface {
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.SourceClient, &amasshttp.Request{URL: u})
 	if err != nil || resp == nil || resp.Body == "" {
 		return nil, fmt.Errorf("wikidata query for %s failed: %v", domain, err)
 	}

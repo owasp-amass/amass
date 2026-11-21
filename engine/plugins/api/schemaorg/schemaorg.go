@@ -41,7 +41,7 @@ func fetchHomepage(ctx context.Context, rl interface {
 	for _, u := range []string{"https://" + domain + "/", "http://" + domain + "/"} {
 		_ = rl.Wait(ctx)
 		wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+		resp, err := amasshttp.RequestWebPage(wctx, amasshttp.SourceClient, &amasshttp.Request{URL: u})
 		cancel()
 		if err == nil && resp != nil && resp.Body != "" {
 			return resp.Body

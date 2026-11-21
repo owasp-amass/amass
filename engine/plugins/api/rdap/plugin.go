@@ -23,6 +23,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/pacer"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -84,11 +85,13 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: tlsConfig,
 	}
+	// registries refuse a burst (ARIN answers 429); pace each one adaptively
+	paced := pacer.Default.Transport(transport)
 	bs.HTTP = &http.Client{
-		Transport: transport,
+		Transport: paced,
 	}
 	httpClient := &http.Client{
-		Transport: transport,
+		Transport: paced,
 	}
 	rd.client = &rdap.Client{
 		HTTP:      httpClient,

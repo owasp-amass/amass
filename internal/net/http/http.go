@@ -20,6 +20,7 @@ import (
 
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	"github.com/owasp-amass/amass/v5/internal/net/pacer"
 )
 
 const (
@@ -41,6 +42,12 @@ var (
 
 // DefaultClient is the same HTTP client used by the package methods.
 var DefaultClient *http.Client
+
+// SourceClient is DefaultClient paced per data source host (internal/net/pacer):
+// for collectors that query third-party sources outside a session's clients.
+// Requests to the stack's own services (the engine API, libpostal) use
+// DefaultClient, which is not paced.
+var SourceClient *http.Client
 
 // Header represents the HTTP headers for requests and responses.
 type Header map[string][]string
@@ -89,6 +96,10 @@ func init() {
 			DisableCompression:    false,
 		},
 		Jar: nil,
+	}
+	SourceClient = &http.Client{
+		Timeout:   DefaultClient.Timeout,
+		Transport: pacer.Default.Transport(DefaultClient.Transport),
 	}
 
 	switch runtime.GOOS {

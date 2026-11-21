@@ -113,6 +113,7 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 	var engineLog slog.Handler
 	if reg != nil && reg.Log() != nil {
 		engineLog = reg.Log().Handler()
+		connectPacer(reg.Log())
 	}
 	s.log = slog.New(newTeeHandler(slog.NewJSONHandler(s.ps, nil), engineLog)).With("session", s.id)
 

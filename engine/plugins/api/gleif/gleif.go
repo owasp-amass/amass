@@ -33,7 +33,7 @@ func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyComple
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.SourceClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.Body == "" {
 		msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
@@ -77,7 +77,7 @@ func GLEIFSearchByAddress(ctx context.Context, city, country, postal string) ([]
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.SourceClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, fmt.Errorf("GLEIFSearchByAddress: failed to query the register: %v", err)
 	}
@@ -103,7 +103,7 @@ func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(wctx,
-		amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+		amasshttp.SourceClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func GLEIFGetDirectParentRecord(ctx context.Context, id string) (*LEIRecord, err
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(wctx,
-		amasshttp.DefaultClient, &amasshttp.Request{URL: u})
+		amasshttp.SourceClient, &amasshttp.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 		defer cancel()
 
 		resp, err := amasshttp.RequestWebPage(wctx,
-			amasshttp.DefaultClient, &amasshttp.Request{URL: link})
+			amasshttp.SourceClient, &amasshttp.Request{URL: link})
 		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 			return nil, err
 		}

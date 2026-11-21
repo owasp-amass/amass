@@ -11,6 +11,7 @@ import (
 	"time"
 
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net/pacer"
 )
 
 // Clients bundles the three clients + transports so you can close idle conns.
@@ -54,8 +55,11 @@ func NewClients(perHost int) (*Clients, error) {
 	}
 
 	return &Clients{
+		// data source queries are paced per host, adaptively; the probe
+		// client is not (active probes have their own per-host pacer, and a
+		// target's 503 is evidence, not a reason to slow down)
 		General: &http.Client{
-			Transport: genTr,
+			Transport: pacer.Default.Transport(genTr),
 			Timeout:   1 * time.Minute,
 			Jar:       gjar,
 		},
@@ -64,7 +68,7 @@ func NewClients(perHost int) (*Clients, error) {
 			Timeout:   30 * time.Second,
 		},
 		Crawl: &http.Client{
-			Transport: crwlTr,
+			Transport: pacer.Default.Transport(crwlTr),
 			Timeout:   2 * time.Minute,
 			Jar:       cjar,
 		},
