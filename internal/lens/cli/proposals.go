@@ -623,16 +623,29 @@ func listApplied(journalPath, format string, out io.Writer) error {
 	return err
 }
 
-// AppliedProposalsText renders, for the MCP list, a one-line summary of the
-// changes the AI classifier applied to the graph, the applied counterpart of
-// PendingProposalsText.
+// AppliedProposalsText lists, for the MCP list, each change the AI classifier
+// applied to the graph on its own, with the same detail "amass review" shows —
+// the applied counterpart of PendingProposalsText. (enumeration_status gives
+// the counts; this gives the items.)
 func AppliedProposalsText(journalPath string) (string, error) {
-	s, err := AppliedByAISummary(journalPath, time.Time{})
+	items, err := DecisionItems(journalPath)
 	if err != nil {
 		return "", err
 	}
-	if line := s.Line(); line != "" {
-		return line, nil
+
+	var b strings.Builder
+	n := 0
+	for _, d := range items {
+		if d.Status != DecisionApplied {
+			continue
+		}
+
+		n++
+		fmt.Fprintf(&b, "\n%s %s (applied by %s)\n%s\n", d.Kind, d.ID, d.Reviewer, d.Summary)
 	}
-	return "The AI classifier has applied no changes.", nil
+	if n == 0 {
+		return "The AI classifier has applied no changes.", nil
+	}
+
+	return fmt.Sprintf("%d change(s) the AI classifier applied automatically:\n", n) + b.String(), nil
 }

@@ -945,7 +945,7 @@ var decisionPoll = time.Second
 // watchDecisions waits until the review journal records a new pending proposal
 // or an AI-applied change after cursor, or until wait passes, and returns the
 // new items and the next cursor. Without a cursor it returns at once with the
-// cursor for the journal's end and the counts already pending and applied.
+// cursor for the journal's end.
 func watchDecisions(ctx context.Context, journal, cursor string, wait time.Duration) (*mcp.CallToolResult, error) {
 	deadline := time.Now().Add(wait)
 	for {
@@ -954,15 +954,9 @@ func watchDecisions(ctx context.Context, journal, cursor string, wait time.Durat
 			return nil, err
 		}
 		if cursor == "" {
-			out := map[string]any{"cursor": ch.Cursor, "items": []lenscli.DecisionItem{}}
-			if s, err := lenscli.PendingProposalsSummary(journal); err == nil {
-				out["pending_proposals"] = s
-			}
-			if s, err := lenscli.AppliedByAISummary(journal, time.Time{}); err == nil {
-				out["applied_by_ai"] = s
-			}
-
-			return jsonResult(out), nil
+			// Start from now. What is already pending or applied is what
+			// enumeration_status counts and list_proposals lists.
+			return jsonResult(lenscli.DecisionChanges{Items: []lenscli.DecisionItem{}, Cursor: ch.Cursor}), nil
 		}
 		if len(ch.Items) > 0 || ch.Reset || !time.Now().Before(deadline) {
 			if ch.Items == nil {

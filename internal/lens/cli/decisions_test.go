@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/lens"
@@ -74,6 +75,12 @@ func TestDecisionsSinceReportsNewItemsOnly(t *testing.T) {
 	if len(applied.Items) != 1 || applied.Items[0].ID != second.ID || applied.Items[0].Status != DecisionApplied ||
 		applied.Items[0].Reviewer != review.AutomaticReviewer {
 		t.Fatalf("after an AI-applied decision = %+v", applied.Items)
+	}
+
+	// list_proposals applied lists the item itself, not only a count.
+	text, err := AppliedProposalsText(path)
+	if err != nil || !strings.Contains(text, second.ID) || !strings.Contains(text, review.AutomaticReviewer) {
+		t.Errorf("applied listing = %q, %v", text, err)
 	}
 
 	// A line still being written is left for the next call.
