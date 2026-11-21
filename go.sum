@@ -234,10 +234,10 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openrdap/rdap v0.10.2 h1:dAP3rvrn9uInV6eBg1c6LNoEeWAKkgdqm09MRgKDpWo=
 github.com/openrdap/rdap v0.10.2/go.mod h1:3XWb3R5cdN59jD6MlxzwmAQw1MMio2QDH7+pwpgb5jY=
-github.com/owasp-amass/asset-db v0.24.6-0.20261121162555-488fc5ed92c1 h1:K5wTk60UcRdkcTmzmbo1fBjyRcnTeimMb8PxAM/qju8=
-github.com/owasp-amass/asset-db v0.24.6-0.20261121162555-488fc5ed92c1/go.mod h1:D4rCq8bCsAGuIzTE8/V+a+UU75M9zeKJTJj48bH+CAw=
-github.com/owasp-amass/open-asset-model v0.15.2-0.20261121161905-bfea47aa8087 h1:lO7V9EuybFACdSu08toYNNvvlJlb+uLtO00/eyS1UZY=
-github.com/owasp-amass/open-asset-model v0.15.2-0.20261121161905-bfea47aa8087/go.mod h1:lNpoDkozJlcCDJvJ3utYqNOZJi/lRlkM1KLHHEDYc80=
+github.com/owasp-amass/asset-db v0.24.6-0.20261121165813-888aa1157abb h1:/HOWly59gZ8mScpHs7mmnAbXzwW0wgymFCPtKbMs7+A=
+github.com/owasp-amass/asset-db v0.24.6-0.20261121165813-888aa1157abb/go.mod h1:kpeCfwS5PPBy1m2G/CVhAscFR/vS/AIkHIIxhjX2UG8=
+github.com/owasp-amass/open-asset-model v0.15.2-0.20261121161905-a135cb0ac200 h1:qf1TPKfOEnZt7hH2GcviEooZl5NG9wZKvcjmKDjD1z8=
+github.com/owasp-amass/open-asset-model v0.15.2-0.20261121161905-a135cb0ac200/go.mod h1:lNpoDkozJlcCDJvJ3utYqNOZJi/lRlkM1KLHHEDYc80=
 github.com/owasp-amass/resolve v0.10.1 h1:oVgY1mkcgxWPMits6ZAMjT9IdFcsXsGPE/1iZqex8ys=
 github.com/owasp-amass/resolve v0.10.1/go.mod h1:U5k7VLq8i7Vbq68hH+2mFbwxUiolrQWIVTOAnO+h9F4=
 github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=
