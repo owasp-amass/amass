@@ -162,5 +162,6 @@ func findEdge(ctx context.Context, g graph.Graph, from, label, to string) (bool,
 // automatic attribution act on it: pending, or retracted by a re-check.
 func Redecidable(e *OwnershipEntry) bool {
 	return e.Status == ProposalPending ||
-		(e.Status == ProposalRetracted && e.Outcome != nil && e.Outcome.Reviewer == RecheckReviewer)
+		(e.Status == ProposalRetracted && e.Outcome != nil &&
+			(e.Outcome.Reviewer == RecheckReviewer || e.Outcome.Reviewer == SupersededReviewer))
 }

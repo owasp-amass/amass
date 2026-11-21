@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/lens"
@@ -71,6 +72,10 @@ type AttributionResult struct {
 	// Unanchored reports an organization whose footprint holds none of the
 	// policy's anchor domains; nothing was proposed for it.
 	Unanchored bool
+	// Superseded are proposals not recorded because the organization is the
+	// duplicate side of a pending merge whose survivor already proposes the
+	// same asset.
+	Superseded []OwnershipProposal
 }
 
 // AppliedOwnership is a proposal written to the Asset Database.
@@ -122,6 +127,11 @@ func AttributeOwnership(ctx context.Context, g graph.Graph, schema graph.SchemaC
 		return res, err
 	}
 
+	merges, err := pendingMerges(j)
+	if err != nil {
+		return res, err
+	}
+
 	gains := map[string][]graph.Asset{}
 	for _, c := range report.Candidates {
 		if c.Attachment != nil {
@@ -137,6 +147,16 @@ func AttributeOwnership(ctx context.Context, g graph.Graph, schema graph.SchemaC
 			// Applied, rejected or retracted by a person: a decision was
 			// made. A re-check's retraction only says the evidence was gone.
 			continue
+		}
+		// Two records of one organization awaiting a merge would each be
+		// proposed as owning the same assets; keep the merge survivor's
+		// proposal and set the duplicate's aside.
+		if !known && merges.survivorProposes(org.ID, p.AssetID, state) {
+			res.Superseded = append(res.Superseded, p)
+			continue
+		}
+		if err := merges.supersedeDuplicates(j, org.ID, p.AssetID, state); err != nil {
+			return res, err
 		}
 
 		qualifies := p.Decision == lens.GapPropose
@@ -193,4 +213,76 @@ func anchored(domains, anchors []string) bool {
 	}
 
 	return false
+}
+
+// SupersededReviewer is the reviewer recorded when a pending ownership
+// proposal is set aside because the organization it names is the duplicate
+// side of a pending merge and the survivor proposes the same asset. Like a
+// re-check's retraction it is not a decision: if the merge is rejected, the
+// duplicate's next attribution pass may propose the asset again.
+const SupersededReviewer = "amass-ai (superseded by merge)"
+
+// mergePairs are the pending merges, by survivor and by duplicate.
+type mergePairs struct {
+	survivorsOf  map[string][]string // duplicate ID -> survivor IDs
+	duplicatesOf map[string][]string // survivor ID -> duplicate IDs
+}
+
+func pendingMerges(j *Journal) (mergePairs, error) {
+	m := mergePairs{survivorsOf: map[string][]string{}, duplicatesOf: map[string][]string{}}
+	entries, err := j.DuplicateEntries()
+	if err != nil {
+		return m, err
+	}
+
+	for _, e := range entries {
+		if e.Status != ProposalPending || e.Proposal.SurvivorID == "" || e.Proposal.DuplicateID == "" {
+			continue
+		}
+
+		s, d := e.Proposal.SurvivorID, e.Proposal.DuplicateID
+		m.survivorsOf[d] = append(m.survivorsOf[d], s)
+		m.duplicatesOf[s] = append(m.duplicatesOf[s], d)
+	}
+
+	return m, nil
+}
+
+// survivorProposes reports whether org is the duplicate side of a pending
+// merge whose survivor already has a proposal (in any state) for asset.
+func (m mergePairs) survivorProposes(org, asset string, state map[string]*OwnershipEntry) bool {
+	survivors := m.survivorsOf[org]
+	if len(survivors) == 0 || asset == "" {
+		return false
+	}
+
+	for _, e := range state {
+		if e.Proposal.AssetID == asset && slices.Contains(survivors, e.Proposal.OwnerID) {
+			return true
+		}
+	}
+	return false
+}
+
+// supersedeDuplicates sets aside the still-pending proposals for asset made
+// for organizations that are the duplicate side of a pending merge into org,
+// so the reviewer sees the survivor's proposal once.
+func (m mergePairs) supersedeDuplicates(j *Journal, org, asset string, state map[string]*OwnershipEntry) error {
+	dups := m.duplicatesOf[org]
+	if len(dups) == 0 || asset == "" {
+		return nil
+	}
+
+	for id, e := range state {
+		if e.Status != ProposalPending || e.Proposal.AssetID != asset || !slices.Contains(dups, e.Proposal.OwnerID) {
+			continue
+		}
+		if err := j.RecordOwnership(OwnershipOutcome{ProposalID: id, Status: ProposalRetracted,
+			Reviewer: SupersededReviewer}); err != nil {
+			return err
+		}
+
+		e.Status = ProposalRetracted
+	}
+	return nil
 }
