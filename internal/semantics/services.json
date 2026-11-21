@@ -20,8 +20,7 @@
     "smtp": [25, 465, 587],
     "ftp": [21],
     "pop3": [110, 995],
-    "imap": [143, 993],
-    "object-storage": [80, 443]
+    "imap": [143, 993]
   },
   "certificate_warning_days": 30
 }

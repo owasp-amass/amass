@@ -44,6 +44,8 @@
     {"type": "Service", "surface": "lens", "collected": true,
       "lenses": ["services", "exposure", "headers", "vulnerable_software", "disclosure", "web"],
       "note": "Listening services, what they expose, their headers, software and web applications."},
+    {"type": "StorageBucket", "surface": "lens", "collected": true, "lenses": ["services", "exposure", "dangling_dns"],
+      "note": "Object-storage buckets (S3, GCS, Azure Blob) reached from the footprint's names, stored by the active bucket probe with whether each exists and is world-listable. The services lens inventories them, the exposure lens flags world-readable ones, and the dangling lens confirms a takeover when a probe found a CNAME target's bucket missing."},
     {"type": "TLSCertificate", "surface": "lens", "collected": true, "lenses": ["certificates", "services"],
       "note": "Certificates, their validity, authorities and the hosts they cover."},
     {"type": "URL", "surface": "lens", "collected": true, "lenses": ["web", "exposure"],

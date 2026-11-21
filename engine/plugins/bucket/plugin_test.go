@@ -56,3 +56,35 @@ func TestClassifyUsesRealCatalog(t *testing.T) {
 		}
 	}
 }
+
+func TestNewStorageBucketFromProbeStatus(t *testing.T) {
+	var s3 semantics.BucketProvider
+	for _, p := range semantics.BucketProviders() {
+		if p.Key == "aws_s3" {
+			s3 = p
+		}
+	}
+	if s3.Service == "" {
+		t.Fatal("the catalog has no aws_s3 provider with a service name")
+	}
+
+	cases := []struct {
+		status         string
+		exists, public bool
+	}{
+		{"public", true, true},
+		{"exists", true, false},
+		{"absent", false, false},
+	}
+	for _, c := range cases {
+		b := newStorageBucket(s3, "example-assets", c.status)
+		if b.ID != "s3:example-assets" || b.Name != "example-assets" || b.Service != "s3" ||
+			b.Provider != "Amazon Web Services" {
+			t.Errorf("%s: identity = %+v", c.status, *b)
+		}
+		if b.Exists != c.exists || b.Public != c.public {
+			t.Errorf("%s: exists=%v public=%v, want exists=%v public=%v", c.status, b.Exists, b.Public,
+				c.exists, c.public)
+		}
+	}
+}

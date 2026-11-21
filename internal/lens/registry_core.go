@@ -85,6 +85,9 @@ func (r ServicesReport) Facts() []string {
 
 		out = append(out, s.ServiceType+" "+strings.Join(s.Endpoints, ", "))
 	}
+	for _, b := range r.Buckets {
+		out = append(out, b.String()+" at "+strings.Join(b.Hosts, ", "))
+	}
 	for _, a := range r.Applications {
 		out = append(out, "web application "+a.String()+" on "+a.Site)
 	}

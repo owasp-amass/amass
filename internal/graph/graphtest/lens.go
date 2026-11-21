@@ -46,6 +46,7 @@ var oamSemantics = map[string]graph.RelationMeaning{
 	"FQDN|dns_record|SRVDNSRelation|FQDN":                              {Attribution: "infrastructure", Purpose: "dns", Vendor: true},
 	"FQDN|node|SimpleRelation|FQDN":                                    {Attribution: "same_subject", Purpose: "hierarchy", Vendor: true},
 	"FQDN|port|PortRelation|Service":                                   {Attribution: "infrastructure", Purpose: "network", Vendor: true},
+	"FQDN|bucket|SimpleRelation|StorageBucket":                         {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 	"FQDN|registration|SimpleRelation|DomainRecord":                    {Attribution: "same_subject", Purpose: "registration", Vendor: true},
 	"FQDN|verified_for|SimpleRelation|Organization":                    {Attribution: "third_party", Purpose: "dns", Vendor: true},
 	"FQDN|verified_for|SimpleRelation|Service":                         {Attribution: "third_party", Purpose: "dns", Vendor: true},
@@ -122,6 +123,7 @@ var oamSemantics = map[string]graph.RelationMeaning{
 	"URL|ip_address|SimpleRelation|IPAddress":                          {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 	"URL|port|PortRelation|Service":                                    {Attribution: "infrastructure", Purpose: "network", Vendor: true},
 	"Service|fingerprint|SimpleRelation|Identifier":                    {Attribution: "attribute", Purpose: "web", Vendor: true},
+	"StorageBucket|provider|SimpleRelation|Organization":               {Attribution: "third_party", Purpose: "network", Vendor: true},
 	"URL|fingerprint|SimpleRelation|Identifier":                        {Attribution: "attribute", Purpose: "web", Vendor: true},
 }
 

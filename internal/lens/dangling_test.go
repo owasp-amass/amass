@@ -83,7 +83,7 @@ func danglingFixture() graphtest.VendorGraph {
 	}
 
 	// A CNAME to an S3 bucket host that resolves (so the no-stored-address check
-	// is skipped) but that a probe recorded as absent: a confirmed takeover the
+	// is skipped) but whose stored bucket a probe found missing: a confirmed takeover the
 	// pattern-only path would miss.
 	name("cdn.colgate.edu")
 	name("colgate-assets.s3.amazonaws.com")
@@ -91,11 +91,11 @@ func danglingFixture() graphtest.VendorGraph {
 	record("cdn.colgate.edu", "colgate-assets.s3.amazonaws.com", 5)
 	ip("ip-bucket", "52.216.0.1")
 	record("colgate-assets.s3.amazonaws.com", "ip-bucket", 1)
-	if g.EvidenceByID == nil {
-		g.EvidenceByID = map[string][]graph.Evidence{}
-	}
-	g.EvidenceByID["colgate-assets.s3.amazonaws.com"] = []graph.Evidence{
-		graphtest.SimpleProp("bucket_status", "absent")}
+	g.Assets["sb-colgate-assets"] = graph.Asset{ID: "sb-colgate-assets", Type: "StorageBucket", Key: "s3:colgate-assets",
+		Content: map[string]any{"unique_id": "s3:colgate-assets", "bucket_name": "colgate-assets", "provider": "Amazon Web Services",
+			"service": "s3", "exists": false, "public": false}}
+	g.Links = append(g.Links, graph.Relation{ID: "colgate-assets-bucket", FromID: "colgate-assets.s3.amazonaws.com",
+		ToID: "sb-colgate-assets", Label: "bucket", Type: "SimpleRelation"})
 
 	return g
 }

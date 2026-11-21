@@ -32,6 +32,7 @@ type BucketSignature struct {
 type BucketProvider struct {
 	Key           string          `json:"key"`
 	Organization  string          `json:"organization"`
+	Service       string          `json:"service"`
 	Patterns      []string        `json:"patterns"`
 	Endpoint      string          `json:"endpoint"`
 	Method        string          `json:"method"`
@@ -60,9 +61,9 @@ var loadBucketProviders = sync.OnceValue(func() []BucketProvider {
 
 	for i := range c.Providers {
 		p := &c.Providers[i]
-		if p.Key == "" || p.Organization == "" || p.Endpoint == "" || len(p.Patterns) == 0 ||
+		if p.Key == "" || p.Organization == "" || p.Service == "" || p.Endpoint == "" || len(p.Patterns) == 0 ||
 			!strings.HasPrefix(p.Source, "https://") {
-			panic("bucket_providers.json: each provider needs key, organization, endpoint, patterns and an https source")
+			panic("bucket_providers.json: each provider needs key, organization, service, endpoint, patterns and an https source")
 		}
 		if len(p.NotFound.Status) == 0 && len(p.NotFound.BodyContains) == 0 {
 			panic("bucket_providers.json: " + p.Key + " needs a not_found signature")

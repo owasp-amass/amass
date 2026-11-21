@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -63,20 +64,21 @@ func TestFindServicesInventoriesAliasedBuckets(t *testing.T) {
 
 	g := graphtest.ServicesFixture()
 	// A footprint name aliased to an object-storage bucket host (a CNAME target,
-	// not a footprint member) carrying an object-storage Service.
+	// not a footprint member) whose bucket the probe stored as a StorageBucket.
 	g.Assets["media.colgate.edu"] = graph.Asset{ID: "media.colgate.edu", Type: "FQDN", Key: "media.colgate.edu",
 		Content: map[string]any{"name": "media.colgate.edu"}}
 	g.Assets["colgate-media.s3.amazonaws.com"] = graph.Asset{ID: "colgate-media.s3.amazonaws.com", Type: "FQDN",
 		Key: "colgate-media.s3.amazonaws.com", Content: map[string]any{"name": "colgate-media.s3.amazonaws.com"}}
-	g.Assets["svc-bucket"] = graph.Asset{ID: "svc-bucket", Type: "Service", Key: "svc-bucket",
-		Content: map[string]any{"unique_id": "svc-bucket", "service_type": "object-storage"}}
+	g.Assets["sb-media"] = graph.Asset{ID: "sb-media", Type: "StorageBucket", Key: "s3:colgate-media",
+		Content: map[string]any{"unique_id": "s3:colgate-media", "bucket_name": "colgate-media",
+			"provider": "Amazon Web Services", "service": "s3", "exists": true, "public": true}}
 	g.Links = append(g.Links,
 		graph.Relation{ID: "colgate.edu-node-media", FromID: "colgate.edu", ToID: "media.colgate.edu",
 			Label: "node", Type: "SimpleRelation"},
 		graph.Relation{ID: "media-cname-bucket", FromID: "media.colgate.edu", ToID: "colgate-media.s3.amazonaws.com",
 			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 5}}},
-		graph.Relation{ID: "bucket-port-svc", FromID: "colgate-media.s3.amazonaws.com", ToID: "svc-bucket",
-			Label: "port", Type: "PortRelation", Content: map[string]any{"port_number": 443, "protocol": "TCP"}})
+		graph.Relation{ID: "media-host-bucket", FromID: "colgate-media.s3.amazonaws.com", ToID: "sb-media",
+			Label: "bucket", Type: "SimpleRelation"})
 
 	r, err := FindServices(context.Background(), g,
 		graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}, g.Assets["colgate.edu"], LensLimits{})
@@ -84,27 +86,23 @@ func TestFindServicesInventoriesAliasedBuckets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var bucket *ExposedService
-	for i := range r.Services {
-		if r.Services[i].Service.ID == "svc-bucket" {
-			bucket = &r.Services[i]
+	if len(r.Buckets) != 1 {
+		t.Fatalf("aliased bucket was not inventoried: %+v", r.Buckets)
+	}
+	b := r.Buckets[0]
+	if b.Name != "colgate-media" || b.Provider != "Amazon Web Services" || !b.Exists || !b.Public ||
+		!slices.Equal(b.Hosts, []string{"colgate-media.s3.amazonaws.com"}) ||
+		!slices.Equal(b.Via, []string{"media.colgate.edu"}) {
+		t.Errorf("bucket = %+v", b)
+	}
+	// A bucket is not a listening service: no Service is invented for it.
+	for _, svc := range r.Services {
+		if svc.ServiceType == "object-storage" {
+			t.Errorf("bucket inventoried as a service: %+v", svc)
 		}
 	}
-	if bucket == nil {
-		t.Fatalf("aliased object-storage bucket was not inventoried: %+v", r.Services)
-	}
-	hasEndpoint := false
-	for _, ep := range bucket.Endpoints {
-		if strings.Contains(ep, "colgate-media.s3.amazonaws.com") {
-			hasEndpoint = true
-		}
-	}
-	if bucket.ServiceType != "object-storage" || !hasEndpoint {
-		t.Errorf("bucket service = %+v", *bucket)
-	}
-	// 443 is an expected object-storage port, so it must not read as anomalous.
-	if len(bucket.UnusualPorts) != 0 {
-		t.Errorf("object-storage on an expected port flagged unusual: %+v", bucket.UnusualPorts)
+	if !strings.Contains(r.Text(), "Amazon Web Services bucket colgate-media (world-readable)") {
+		t.Errorf("report:\n%s", r.Text())
 	}
 }
 

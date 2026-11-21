@@ -146,6 +146,9 @@ relations:
   - {source: FQDN, label: port, relation_type: PortRelation, destination: Service,
      attribution: infrastructure, purpose: network,
      note: "Service listening for this name."}
+  - {source: FQDN, label: bucket, relation_type: SimpleRelation, destination: StorageBucket,
+     attribution: infrastructure, purpose: network,
+     note: "Object-storage bucket this name addresses (an S3, GCS or Azure Blob host). A hosting dependency like a listening service: the bucket may be missing at the provider (a claimable takeover target), so the edge does not establish who owns it."}
   - {source: FQDN, label: registration, relation_type: SimpleRelation, destination: DomainRecord,
      attribution: same_subject, purpose: registration,
      note: "The domain registration record (engine scope association)."}
@@ -332,6 +335,9 @@ relations:
   - {source: Service, label: security_hiring, relation_type: SimpleRelation, destination: URL,
      attribution: attribute, purpose: web,
      note: "Security hiring page linked from the service's security.txt."}
+  - {source: StorageBucket, label: provider, relation_type: SimpleRelation, destination: Organization,
+     attribution: third_party, purpose: network,
+     note: "The cloud provider that operates the bucket's global namespace (Amazon Web Services, Google Cloud, Microsoft Azure). It hosts the bucket but does not own the customer's data."}
   - {source: TLSCertificate, label: common_name, relation_type: SimpleRelation, destination: FQDN,
      attribution: same_subject, purpose: certificate,
      note: "Subject common name (engine scope association)."}

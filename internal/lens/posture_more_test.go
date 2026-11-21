@@ -52,7 +52,8 @@ func TestFindExposure(t *testing.T) {
 	g.Links = append(g.Links, graph.Relation{ID: "secret-domain", FromID: secret, ToID: "portal.colgate.edu",
 		Label: "domain", Type: "SimpleRelation"})
 
-	// A name aliased to a world-readable S3 bucket a probe recorded as public.
+	// A name aliased to a world-readable S3 bucket, stored by the probe as a
+	// public StorageBucket on the host's bucket relation.
 	g.Assets["docs.colgate.edu"] = graph.Asset{ID: "docs.colgate.edu", Type: "FQDN", Key: "docs.colgate.edu",
 		Content: map[string]any{"name": "docs.colgate.edu"}}
 	g.Assets["colgate-public.s3.amazonaws.com"] = graph.Asset{ID: "colgate-public.s3.amazonaws.com", Type: "FQDN",
@@ -62,8 +63,11 @@ func TestFindExposure(t *testing.T) {
 			Label: "node", Type: "SimpleRelation"},
 		graph.Relation{ID: "docs-cname-bucket", FromID: "docs.colgate.edu", ToID: "colgate-public.s3.amazonaws.com",
 			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 5}}})
-	g.EvidenceByID["colgate-public.s3.amazonaws.com"] = []graph.Evidence{
-		graphtest.SimpleProp("bucket_status", "public")}
+	g.Assets["sb-colgate-public"] = graph.Asset{ID: "sb-colgate-public", Type: "StorageBucket", Key: "s3:colgate-public",
+		Content: map[string]any{"unique_id": "s3:colgate-public", "bucket_name": "colgate-public", "provider": "Amazon Web Services",
+			"service": "s3", "exists": true, "public": true}}
+	g.Links = append(g.Links, graph.Relation{ID: "colgate-public-bucket", FromID: "colgate-public.s3.amazonaws.com",
+		ToID: "sb-colgate-public", Label: "bucket", Type: "SimpleRelation"})
 
 	// A bucket host that is itself a footprint member (not reached via a CNAME),
 	// also recorded world-readable; it must be flagged on its own, not only when
@@ -72,8 +76,27 @@ func TestFindExposure(t *testing.T) {
 		Key: "colgate-direct.s3.amazonaws.com", Content: map[string]any{"name": "colgate-direct.s3.amazonaws.com"}}
 	g.Links = append(g.Links, graph.Relation{ID: "colgate.edu-node-directbucket", FromID: "colgate.edu",
 		ToID: "colgate-direct.s3.amazonaws.com", Label: "node", Type: "SimpleRelation"})
-	g.EvidenceByID["colgate-direct.s3.amazonaws.com"] = []graph.Evidence{
-		graphtest.SimpleProp("bucket_status", "public")}
+	g.Assets["sb-colgate-direct"] = graph.Asset{ID: "sb-colgate-direct", Type: "StorageBucket", Key: "s3:colgate-direct",
+		Content: map[string]any{"unique_id": "s3:colgate-direct", "bucket_name": "colgate-direct", "provider": "Amazon Web Services",
+			"service": "s3", "exists": true, "public": true}}
+	g.Links = append(g.Links, graph.Relation{ID: "colgate-direct-bucket", FromID: "colgate-direct.s3.amazonaws.com",
+		ToID: "sb-colgate-direct", Label: "bucket", Type: "SimpleRelation"})
+
+	// A private bucket behind another name is not world-readable.
+	g.Assets["private.colgate.edu"] = graph.Asset{ID: "private.colgate.edu", Type: "FQDN", Key: "private.colgate.edu",
+		Content: map[string]any{"name": "private.colgate.edu"}}
+	g.Assets["colgate-private.s3.amazonaws.com"] = graph.Asset{ID: "colgate-private.s3.amazonaws.com", Type: "FQDN",
+		Key: "colgate-private.s3.amazonaws.com", Content: map[string]any{"name": "colgate-private.s3.amazonaws.com"}}
+	g.Assets["sb-colgate-private"] = graph.Asset{ID: "sb-colgate-private", Type: "StorageBucket", Key: "s3:colgate-private",
+		Content: map[string]any{"unique_id": "s3:colgate-private", "bucket_name": "colgate-private", "provider": "Amazon Web Services",
+			"service": "s3", "exists": true, "public": false}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "colgate.edu-node-private", FromID: "colgate.edu", ToID: "private.colgate.edu",
+			Label: "node", Type: "SimpleRelation"},
+		graph.Relation{ID: "private-cname-bucket", FromID: "private.colgate.edu", ToID: "colgate-private.s3.amazonaws.com",
+			Label: "dns_record", Type: "BasicDNSRelation", Content: map[string]any{"header": map[string]any{"rr_type": 5}}},
+		graph.Relation{ID: "colgate-private-bucket", FromID: "colgate-private.s3.amazonaws.com",
+			ToID: "sb-colgate-private", Label: "bucket", Type: "SimpleRelation"})
 
 	r, err := FindExposure(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{})
 	if err != nil {

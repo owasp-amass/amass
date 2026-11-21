@@ -91,6 +91,9 @@ type ServicesReport struct {
 	// runs on ("nginx 1.18.0").
 	ByProduct map[string]int `json:"by_product"`
 	ByPort    map[string]int `json:"by_port"`
+	// Buckets are the object-storage buckets the footprint's names are, or
+	// alias to, as the bucket probe stored them.
+	Buckets []StoredBucket `json:"buckets,omitempty"`
 	// Applications are the web applications recognized from the stored
 	// URLs (web_applications.json).
 	Applications []WebApplication `json:"applications,omitempty"`
@@ -196,8 +199,11 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		}
 	}
 
-	// Bucket hosts are CNAME targets, not footprint members, so also inventory
-	// the object-storage buckets the footprint's names alias to.
+	// Object-storage buckets are not listening services: the bucket probe
+	// stores each as a StorageBucket on its host's "bucket" relation. Bucket
+	// hosts are usually CNAME targets rather than footprint members, so
+	// inventory the buckets the footprint's names are, or alias to.
+	var buckets bucketInventory
 	for _, id := range order {
 		if ctx.Err() != nil || report.Reads >= w.maxReads {
 			break
@@ -206,50 +212,23 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		if a.Type != "FQDN" {
 			continue
 		}
-		res, aerr := resolveName(w, a)
-		if aerr != nil || !res.Aliased() {
+
+		host, ok, berr := bucketHost(w, a)
+		if berr != nil {
+			return out, berr
+		}
+		if !ok {
 			continue
 		}
-		target := res.Target(a)
-		if _, _, ok := semantics.MatchBucketHost(graph.FQDNName(target)); !ok {
-			continue
+		sb, ok, berr := storedBucket(w, host)
+		if berr != nil {
+			return out, berr
 		}
-
-		steps, serr := w.steps(target)
-		if serr != nil {
-			return out, serr
-		}
-		for _, s := range steps {
-			if !s.forward || !slices.Contains(rules.ServiceRelationTypes, s.edge.Type) ||
-				graph.ContentString(s.other, "service_type") != "object-storage" {
-				continue
-			}
-
-			svc, ok := services[s.other.ID]
-			if !ok {
-				svc, serr = describeService(w, s.other, rules)
-				if serr != nil {
-					return out, serr
-				}
-				services[s.other.ID] = svc
-				ids = append(ids, s.other.ID)
-			}
-
-			hosts[target.ID] = true
-			port := RelationDetail(s.edge)
-			endpoint := graph.FQDNName(target)
-			if port != "" {
-				endpoint += ":" + strings.Split(port, "/")[0]
-			}
-			graph.AddUnique(&svc.Endpoints, endpoint)
-			if port != "" {
-				graph.AddUnique(&svc.Ports, port)
-				if !portExpected(rules, svc.ServiceType, port) {
-					graph.AddUnique(&svc.UnusualPorts, port)
-				}
-			}
+		if ok {
+			buckets.add(sb, host, a)
 		}
 	}
+	out.Buckets = buckets.list()
 
 	for _, id := range ids {
 		svc := services[id]
@@ -419,6 +398,7 @@ func FormatServicesReport(r ServicesReport) string {
 	if len(r.Services) == 0 {
 		b.WriteString("No service is stored for its names, addresses or URLs. Services are stored by the HTTP and " +
 			"SSH probes during an active enumeration.\n")
+		writeBuckets(&b, r.Buckets)
 		writeWebApplications(&b, r.Applications)
 		return b.String()
 	}
@@ -516,6 +496,7 @@ func FormatServicesReport(r ServicesReport) string {
 		b.WriteString("\n")
 	}
 
+	writeBuckets(&b, r.Buckets)
 	writeWebApplications(&b, r.Applications)
 	b.WriteString("These are services stored by past probes, not a live scan. Identified software is read from " +
 		"stored headers and banners, which software can hide or fake.")

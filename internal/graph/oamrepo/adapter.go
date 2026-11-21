@@ -871,6 +871,7 @@ func (Catalog) SearchFields() []graph.AssetSearchSchema {
 		"Product":        {"unique_id", "product_name", "product_type"},
 		"ProductRelease": {"name"},
 		"Service":        {"unique_id", "service_type"},
+		"StorageBucket":  {"unique_id", "bucket_name", "provider", "service"},
 		"TLSCertificate": {"serial_number", "subject_common_name"},
 		"URL":            {"url", "scheme"},
 	}
