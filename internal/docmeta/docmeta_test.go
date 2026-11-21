@@ -169,3 +169,13 @@ func equal(a, b Metadata) bool {
 		a.Created == b.Created && a.Modified == b.Modified &&
 		strings.Join(a.Usernames, ",") == strings.Join(b.Usernames, ",")
 }
+
+// Account names are read from home-directory paths in any text; shared
+// folders that name no person are skipped.
+func TestUsernames(t *testing.T) {
+	got := Usernames(`Saved to C:\Users\jsmith\Desktop\plan.docx, copied from /home/mdoe/share and ` +
+		`C:\Users\Public\Documents; again C:\Users\JSmith\x`)
+	if strings.Join(got, ",") != "jsmith,mdoe" {
+		t.Errorf("usernames %v", got)
+	}
+}

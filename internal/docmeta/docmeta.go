@@ -100,6 +100,24 @@ func (m *Metadata) normalize() {
 	m.Usernames = slices.Compact(m.Usernames)
 }
 
+// Usernames returns the account names in the home-directory paths s holds
+// (C:\Users\<name>\…, /Users/<name>/…, /home/<name>/…), sorted, without the
+// folder names that name no person (Public, Default, …).
+func Usernames(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, match := range userPathRe.FindAllStringSubmatch(s, -1) {
+		name := match[1]
+		if name == "" || ignoredUser[strings.ToLower(name)] || seen[strings.ToLower(name)] {
+			continue
+		}
+		seen[strings.ToLower(name)] = true
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // userPathRe captures the account name in a home-directory path.
 var userPathRe = regexp.MustCompile(
 	`(?i)(?:[a-z]:\\(?:users|documents and settings)\\|/users/|/home/)([^\\/:*?"<>|\s]{1,64})`)

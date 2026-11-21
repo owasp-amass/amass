@@ -184,9 +184,17 @@ func pdfStringAt(data []byte, i int) (string, bool) {
 // literalString reads a PDF literal string's bytes up to its closing
 // parenthesis, honoring nested parentheses and backslash escapes.
 func literalString(data []byte) ([]byte, bool) {
+	out, _, ok := literalSpan(data, 4*maxField)
+	return out, ok
+}
+
+// literalSpan reads a literal string as literalString does, up to limit
+// bytes, and also returns how many input bytes it consumed, the closing
+// parenthesis included.
+func literalSpan(data []byte, limit int) ([]byte, int, bool) {
 	var out []byte
 	depth := 0
-	for i := 0; i < len(data) && len(out) < 4*maxField; i++ {
+	for i := 0; i < len(data) && len(out) < limit; i++ {
 		c := data[i]
 		switch {
 		case c == '\\' && i+1 < len(data):
@@ -224,7 +232,7 @@ func literalString(data []byte) ([]byte, bool) {
 			out = append(out, c)
 		case c == ')':
 			if depth == 0 {
-				return out, true
+				return out, i + 1, true
 			}
 			depth--
 			out = append(out, c)
@@ -233,7 +241,7 @@ func literalString(data []byte) ([]byte, bool) {
 		}
 	}
 
-	return out, false
+	return out, len(data), false
 }
 
 // decodePDFText decodes a PDF text string: UTF-16 with a byte-order mark, or
