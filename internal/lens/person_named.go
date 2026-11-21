@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -41,6 +42,9 @@ type PersonNamedOrg struct {
 	Person       string   `json:"person"`
 	ContactIDs   []string `json:"contact_ids"`
 	Domains      []string `json:"domains,omitempty"`
+	// CreatedAt is when the proposal was recorded; zero on records written
+	// before it was kept.
+	CreatedAt time.Time `json:"created_at,omitempty"`
 }
 
 // PersonNamedReport is the result of the person-named organization check.

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/lens"
 	"github.com/owasp-amass/amass/v5/internal/review"
@@ -191,5 +192,70 @@ func TestSignalsExplainEachRule(t *testing.T) {
 	}
 	if err := listSignals("mermaid", true, &out); err == nil {
 		t.Error("an unsupported format was accepted")
+	}
+}
+
+// A run reports the proposals it raised, not the journal's backlog: one
+// recorded before the run started is not counted, and a record without a time
+// counts only when everything is asked for.
+func TestPendingProposalsSinceScopesToARun(t *testing.T) {
+	path, _ := journalWithProposal(t) // recorded without a time (a legacy record)
+
+	before := time.Now().UTC().Add(-time.Hour)
+	runStart := time.Now().UTC()
+	mk := func(from string, at time.Time) review.OwnershipProposal {
+		edge := lens.ProposedEdge{FromID: from, FromType: "ContactRecord", From: "https://rdap.example/" + from,
+			Label: "organization", RelationType: "SimpleRelation", ToID: "2", ToType: "Organization",
+			To: "Synthetic University"}
+		return review.OwnershipProposal{ID: review.ProposalID(edge), Owner: "Synthetic University", OwnerID: "2",
+			Asset: edge.From, AssetID: from, AssetType: "ContactRecord", Edge: edge, Score: 0.9,
+			Decision: lens.GapPropose, CreatedAt: at}
+	}
+	if _, err := (&review.Journal{Path: path}).SubmitOwnership([]review.OwnershipProposal{
+		mk("10", before), mk("11", runStart.Add(time.Minute))}); err != nil {
+		t.Fatal(err)
+	}
+
+	all, err := PendingProposalsSince(path, time.Time{})
+	if err != nil || all.Ownership != 3 {
+		t.Errorf("all pending = %+v, %v; want 3", all, err)
+	}
+	run, err := PendingProposalsSince(path, runStart)
+	if err != nil || run.Ownership != 1 || run.Total != 1 {
+		t.Errorf("pending during the run = %+v, %v; want 1", run, err)
+	}
+}
+
+// A proposal whose asset is no longer stored (the database was reset since)
+// is hidden from the live listings with a count; without a check it is shown.
+func TestLiveListingsHideProposalsForMissingAssets(t *testing.T) {
+	path, p := journalWithProposal(t) // its contact record is entity "1"
+	gone := func(id string) bool { return id != "1" }
+
+	text, err := PendingProposalsTextLive(path, gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, p.ID) || !strings.Contains(text, "1 older proposal(s) are hidden") ||
+		!strings.Contains(text, "No proposals are awaiting review") {
+		t.Errorf("live pending listing:\n%s", text)
+	}
+
+	all, err := PendingProposalsText(path)
+	if err != nil || !strings.Contains(all, p.ID) || strings.Contains(all, "hidden") {
+		t.Errorf("unchecked pending listing:\n%s (%v)", all, err)
+	}
+
+	// Once the AI applies it, the applied listing hides it too.
+	if err := approveProposal(context.Background(), &fakeOwnershipWriter{}, path, p.ID, review.AutomaticReviewer,
+		&bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := AppliedProposalsTextLive(path, gone)
+	if err != nil || strings.Contains(applied, p.ID) {
+		t.Errorf("live applied listing:\n%s (%v)", applied, err)
+	}
+	if applied, err := AppliedProposalsTextLive(path, nil); err != nil || !strings.Contains(applied, p.ID) {
+		t.Errorf("unchecked applied listing:\n%s (%v)", applied, err)
 	}
 }

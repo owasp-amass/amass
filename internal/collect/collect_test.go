@@ -170,6 +170,7 @@ type fakeEngine struct {
 	seeded     []oam.Asset
 	terminated []uuid.UUID
 	seedErr    error
+	listErr    error
 }
 
 func newFake() *fakeEngine { return &fakeEngine{sessions: map[uuid.UUID]*et.SessionStats{}} }
@@ -215,6 +216,9 @@ func (f *fakeEngine) TerminateSession(_ context.Context, id uuid.UUID) error {
 func (f *fakeEngine) ListSessions(context.Context) ([]uuid.UUID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	var out []uuid.UUID
 	for id := range f.sessions {
 		out = append(out, id)
@@ -419,4 +423,37 @@ func TestPlanWithMoreTargets(t *testing.T) {
 	if _, err := configure(config.NewConfig(), tampered); err == nil {
 		t.Error("a plan whose expansion was changed was configured")
 	}
+}
+
+// When the engine cannot list its sessions at resume (it is still starting),
+// recorded runs are supervised anyway: one whose session is gone ends failed
+// instead of staying "running" forever, and one the engine still has goes on.
+func TestResumeSupervisesRunsWhenTheEngineCannotList(t *testing.T) {
+	f := newFake()
+	journal := filepath.Join(t.TempDir(), "runs.jsonl")
+	ctx := context.Background()
+
+	m := newManager(f, journal)
+	gone, _ := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "gone.example"},
+		Passive), "")
+	kept, _ := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "kept.example"},
+		Passive), "")
+	m.Close()
+
+	f.mu.Lock()
+	delete(f.sessions, uuid.MustParse(gone.ID))
+	f.listErr = errors.New("engine starting")
+	f.mu.Unlock()
+
+	m2 := newManager(f, journal)
+	defer m2.Close()
+	if err := m2.Resume(ctx); err == nil {
+		t.Error("an unreadable session list was not reported")
+	}
+
+	if r := waitState(t, m2, gone.ID, StateFailed); r.Error == "" {
+		t.Errorf("the failed run gives no reason: %+v", r)
+	}
+	f.progress(kept.ID, 3, 3)
+	waitState(t, m2, kept.ID, StateFinished)
 }

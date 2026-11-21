@@ -33,7 +33,13 @@ type DecisionItem struct {
 	Status   string `json:"status"`
 	Reviewer string `json:"reviewer,omitempty"`
 	Summary  string `json:"summary"`
+	// EntityIDs are the stored assets the item is about, so a listing can
+	// leave out items left over from a database that was since wiped.
+	EntityIDs []string `json:"entity_ids,omitempty"`
 }
+
+// Live reports whether every entity the item is about is still stored.
+func (d DecisionItem) Live(exists EntityExists) bool { return live(exists, d.EntityIDs...) }
 
 func (d DecisionItem) key() string { return d.Kind + "\x00" + d.ID + "\x00" + d.Status }
 
@@ -168,9 +174,9 @@ func decisionItemsOf(data []byte) ([]DecisionItem, error) {
 func DecisionItems(journalPath string) ([]DecisionItem, error) {
 	j := &review.Journal{Path: journalPath}
 	var out []DecisionItem
-	add := func(kind, id, status, reviewer, summary string) {
+	add := func(kind, id, status, reviewer, summary string, entities ...string) {
 		out = append(out, DecisionItem{Kind: kind, ID: id, Status: status, Reviewer: reviewer,
-			Summary: strings.TrimSpace(summary)})
+			Summary: strings.TrimSpace(summary), EntityIDs: entities})
 	}
 
 	owned, err := j.OwnershipEntries()
@@ -181,9 +187,10 @@ func DecisionItems(journalPath string) ([]DecisionItem, error) {
 		text := review.FormatOwnershipEntries([]review.OwnershipEntry{e})
 		switch {
 		case e.Status == review.ProposalPending:
-			add("ownership", e.Proposal.ID, DecisionPending, "", text)
+			add("ownership", e.Proposal.ID, DecisionPending, "", text, e.Proposal.Edge.FromID, e.Proposal.Edge.ToID)
 		case e.Status == review.ProposalApplied && e.Outcome != nil && isAIReviewer(e.Outcome.Reviewer):
-			add("ownership", e.Proposal.ID, DecisionApplied, e.Outcome.Reviewer, text)
+			add("ownership", e.Proposal.ID, DecisionApplied, e.Outcome.Reviewer, text, e.Proposal.Edge.FromID,
+				e.Proposal.Edge.ToID)
 		}
 	}
 
@@ -195,9 +202,9 @@ func DecisionItems(journalPath string) ([]DecisionItem, error) {
 		text := review.FormatDuplicateEntries([]review.DuplicateEntry{e})
 		switch {
 		case e.Status == review.ProposalPending:
-			add("merge", e.Proposal.ID, DecisionPending, "", text)
+			add("merge", e.Proposal.ID, DecisionPending, "", text, e.Proposal.SurvivorID, e.Proposal.DuplicateID)
 		case e.Status == review.ProposalApplied && e.Outcome != nil && isAIReviewer(e.Outcome.Reviewer):
-			add("merge", e.Proposal.ID, DecisionApplied, e.Outcome.Reviewer, text)
+			add("merge", e.Proposal.ID, DecisionApplied, e.Outcome.Reviewer, text, e.Proposal.SurvivorID)
 		}
 	}
 
@@ -209,9 +216,9 @@ func DecisionItems(journalPath string) ([]DecisionItem, error) {
 		text := review.FormatIdentityEntries([]review.IdentityEntry{e})
 		switch {
 		case e.Status == review.ProposalPending:
-			add("identity", e.Proposal.ID, DecisionPending, "", text)
+			add("identity", e.Proposal.ID, DecisionPending, "", text, e.Proposal.OrgID)
 		case e.Status == review.ProposalApplied && e.Outcome != nil && isAIReviewer(e.Outcome.Reviewer):
-			add("identity", e.Proposal.ID, DecisionApplied, e.Outcome.Reviewer, text)
+			add("identity", e.Proposal.ID, DecisionApplied, e.Outcome.Reviewer, text, e.Proposal.OrgID)
 		}
 	}
 
@@ -221,7 +228,7 @@ func DecisionItems(journalPath string) ([]DecisionItem, error) {
 	}
 	for _, e := range filterPendingPersonNamed(people) {
 		add("person_named", e.Proposal.ID, DecisionPending, "",
-			review.FormatPersonNamedEntries([]review.PersonNamedEntry{e}))
+			review.FormatPersonNamedEntries([]review.PersonNamedEntry{e}), e.Proposal.OrgID, e.Proposal.PersonID)
 	}
 
 	relations, err := j.RelationEntries("")
@@ -230,7 +237,7 @@ func DecisionItems(journalPath string) ([]DecisionItem, error) {
 	}
 	for _, e := range filterPendingRelation(relations) {
 		add("relation", e.Proposal.ID, DecisionPending, "",
-			review.FormatRelationEntries([]review.RelationEntry{e}))
+			review.FormatRelationEntries([]review.RelationEntry{e}), e.Proposal.FromID, e.Proposal.ToID)
 	}
 
 	expansions, err := j.AppliedScopeExpansions()
@@ -247,7 +254,7 @@ func DecisionItems(journalPath string) ([]DecisionItem, error) {
 		if len(e.Signals) > 0 {
 			text += ": " + strings.Join(e.Signals, ", ")
 		}
-		add("scope_expansion", e.ID, DecisionApplied, e.Reviewer, text)
+		add("scope_expansion", e.ID, DecisionApplied, e.Reviewer, text, e.OrgID)
 	}
 
 	return out, nil

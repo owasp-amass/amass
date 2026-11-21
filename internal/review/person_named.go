@@ -66,6 +66,9 @@ func (j *Journal) SubmitPersonNamed(candidates []lens.PersonNamedOrg) ([]lens.Pe
 		if _, ok := state[c.ID]; ok {
 			continue
 		}
+		if c.CreatedAt.IsZero() {
+			c.CreatedAt = time.Now().UTC()
+		}
 		if err := j.append("person_named_proposal", c); err != nil {
 			return added, err
 		}

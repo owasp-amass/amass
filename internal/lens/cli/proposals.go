@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -79,6 +80,31 @@ func listProposals(journalPath, format string, explicit bool, out io.Writer) err
 // a decision, so new ones can be surfaced for immediate review. The output has
 // the same shape as listProposals, limited to Status == ProposalPending.
 func pendingProposals(journalPath string, out io.Writer) error {
+	return pendingProposalsLive(journalPath, nil, out)
+}
+
+// EntityExists reports whether an entity is still in the Asset Database. The
+// review listings use it to hide proposals left over from a database that was
+// since wiped: their entities no longer exist, so they cannot be decided.
+type EntityExists func(id string) bool
+
+// live reports whether every entity is still stored, or true when there is no
+// check.
+func live(exists EntityExists, ids ...string) bool {
+	if exists == nil {
+		return true
+	}
+	for _, id := range ids {
+		if id != "" && !exists(id) {
+			return false
+		}
+	}
+	return true
+}
+
+// pendingProposalsLive is pendingProposals, leaving out the proposals whose
+// entities exists says are gone, and saying how many it left out.
+func pendingProposalsLive(journalPath string, exists EntityExists, out io.Writer) error {
 	if journalPath == "" {
 		return errors.New("-journal required")
 	}
@@ -106,15 +132,44 @@ func pendingProposals(journalPath string, out io.Writer) error {
 		return err
 	}
 
-	entries = filterPendingOwnership(entries)
-	merges = filterPendingDuplicate(merges)
-	identities = filterPendingIdentity(identities)
-	people = filterPendingPersonNamed(people)
-	relations = filterPendingRelation(relations)
+	stale := 0
+	keep := func(ok bool) bool {
+		if !ok {
+			stale++
+		}
+		return ok
+	}
+	entries = slices.DeleteFunc(filterPendingOwnership(entries), func(e review.OwnershipEntry) bool {
+		return !keep(live(exists, e.Proposal.Edge.FromID, e.Proposal.Edge.ToID))
+	})
+	merges = slices.DeleteFunc(filterPendingDuplicate(merges), func(e review.DuplicateEntry) bool {
+		return !keep(live(exists, e.Proposal.SurvivorID, e.Proposal.DuplicateID))
+	})
+	identities = slices.DeleteFunc(filterPendingIdentity(identities), func(e review.IdentityEntry) bool {
+		return !keep(live(exists, e.Proposal.OrgID))
+	})
+	people = slices.DeleteFunc(filterPendingPersonNamed(people), func(e review.PersonNamedEntry) bool {
+		return !keep(live(exists, e.Proposal.OrgID, e.Proposal.PersonID))
+	})
+	relations = slices.DeleteFunc(filterPendingRelation(relations), func(e review.RelationEntry) bool {
+		return !keep(live(exists, e.Proposal.FromID, e.Proposal.ToID))
+	})
+	staleNote := func() error {
+		if stale == 0 {
+			return nil
+		}
+		_, err := fmt.Fprintf(out, "\n%d older proposal(s) are hidden: their assets are no longer in the database "+
+			"(it was reset since they were proposed), so they cannot be decided. Reset the review journal with "+
+			"the database to clear them.\n", stale)
+		return err
+	}
 
 	total := len(entries) + len(merges) + len(identities) + len(people) + len(relations)
 	if total == 0 {
 		_, err = fmt.Fprintln(out, "No proposals are awaiting review.")
+		if err == nil {
+			err = staleNote()
+		}
 		return err
 	}
 
@@ -134,6 +189,9 @@ func pendingProposals(journalPath string, out io.Writer) error {
 	}
 	if err == nil && len(relations) > 0 {
 		_, err = fmt.Fprint(out, "\nRelationship proposals:\n\n"+review.FormatRelationEntries(relations))
+	}
+	if err == nil {
+		err = staleNote()
 	}
 	return err
 }
@@ -156,6 +214,14 @@ type PendingSummary struct {
 // still awaiting a decision. It reads the same journal `amass review` reads, so
 // its counts match what a review session would show.
 func PendingProposalsSummary(journalPath string) (PendingSummary, error) {
+	return PendingProposalsSince(journalPath, time.Time{})
+}
+
+// PendingProposalsSince counts, by kind, the proposals still awaiting a
+// decision that were recorded at or after since, so a run reports the
+// proposals it raised rather than the whole journal's backlog. A zero since
+// counts them all. A proposal recorded without a time is counted only then.
+func PendingProposalsSince(journalPath string, since time.Time) (PendingSummary, error) {
 	var s PendingSummary
 	if journalPath == "" {
 		return s, errors.New("-journal required")
@@ -183,11 +249,32 @@ func PendingProposalsSummary(journalPath string) (PendingSummary, error) {
 		return s, err
 	}
 
-	s.Ownership = len(filterPendingOwnership(entries))
-	s.Merges = len(filterPendingDuplicate(merges))
-	s.Identities = len(filterPendingIdentity(identities))
-	s.PersonNamed = len(filterPendingPersonNamed(people))
-	s.Relations = len(filterPendingRelation(relations))
+	recent := func(at time.Time) bool { return since.IsZero() || !at.Before(since) }
+	for _, e := range filterPendingOwnership(entries) {
+		if recent(e.Proposal.CreatedAt) {
+			s.Ownership++
+		}
+	}
+	for _, e := range filterPendingDuplicate(merges) {
+		if recent(e.Proposal.CreatedAt) {
+			s.Merges++
+		}
+	}
+	for _, e := range filterPendingIdentity(identities) {
+		if recent(e.Proposal.CreatedAt) {
+			s.Identities++
+		}
+	}
+	for _, e := range filterPendingPersonNamed(people) {
+		if recent(e.Proposal.CreatedAt) {
+			s.PersonNamed++
+		}
+	}
+	for _, e := range filterPendingRelation(relations) {
+		if recent(e.Proposal.CreatedAt) {
+			s.Relations++
+		}
+	}
 	s.Total = s.Ownership + s.Merges + s.Identities + s.PersonNamed + s.Relations
 	return s, nil
 }
@@ -628,6 +715,12 @@ func listApplied(journalPath, format string, out io.Writer) error {
 // the applied counterpart of PendingProposalsText. (enumeration_status gives
 // the counts; this gives the items.)
 func AppliedProposalsText(journalPath string) (string, error) {
+	return AppliedProposalsTextLive(journalPath, nil)
+}
+
+// AppliedProposalsTextLive is AppliedProposalsText, leaving out the changes
+// whose entities exists says are gone.
+func AppliedProposalsTextLive(journalPath string, exists EntityExists) (string, error) {
 	items, err := DecisionItems(journalPath)
 	if err != nil {
 		return "", err
@@ -636,7 +729,7 @@ func AppliedProposalsText(journalPath string) (string, error) {
 	var b strings.Builder
 	n := 0
 	for _, d := range items {
-		if d.Status != DecisionApplied {
+		if d.Status != DecisionApplied || !live(exists, d.EntityIDs...) {
 			continue
 		}
 

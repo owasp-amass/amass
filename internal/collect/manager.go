@@ -177,16 +177,22 @@ func (m *Manager) Resume(ctx context.Context) error {
 		return nil
 	}
 
-	live, err := m.Engine.ListSessions(ctx)
-	if err != nil {
-		return fmt.Errorf("list engine sessions: %w", err)
-	}
+	live, listErr := m.Engine.ListSessions(ctx)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, r := range pending {
 		token, err := uuid.Parse(r.ID)
-		if err == nil && slices.Contains(live, token) {
+		switch {
+		case err != nil:
+		case listErr != nil:
+			// The engine cannot say which sessions it has (it may still be
+			// starting): supervise the run anyway, so polling either picks it
+			// back up or marks it failed, rather than leaving it recorded as
+			// running with nothing watching it.
+			m.supervise(token, r)
+			continue
+		case slices.Contains(live, token):
 			m.supervise(token, r)
 			continue
 		}
@@ -196,6 +202,9 @@ func (m *Manager) Resume(ctx context.Context) error {
 		m.record(r)
 	}
 
+	if listErr != nil {
+		return fmt.Errorf("list engine sessions: %w", listErr)
+	}
 	return nil
 }
 

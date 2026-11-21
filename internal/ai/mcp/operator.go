@@ -6,11 +6,13 @@ package mcp
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -315,7 +317,9 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			// incremental attribution pass records them mid-run), so a watching
 			// assistant can raise them in near real time, not only at the end.
 			if op.Journal != "" {
-				if s, err := lenscli.PendingProposalsSummary(op.Journal); err == nil && s.Total > 0 {
+				// Both counts cover this run only; list_proposals with pending
+				// true shows the journal's whole backlog.
+				if s, err := lenscli.PendingProposalsSince(op.Journal, run.StartedAt); err == nil && s.Total > 0 {
 					out["pending_proposals"] = s
 				}
 				// Surface what the classifier applied automatically during this
@@ -449,7 +453,7 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			"applied": map[string]any{"type": "boolean",
 				"description": "List instead the changes the AI classifier applied automatically."},
 		}), readOnly(),
-		func(_ context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
 			if op.Journal == "" {
 				return nil, errors.New("no review journal is configured")
 			}
@@ -467,9 +471,9 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			text, err := lenscli.ProposalsText(op.Journal)
 			switch {
 			case a.Applied:
-				text, err = lenscli.AppliedProposalsText(op.Journal)
+				text, err = lenscli.AppliedProposalsTextLive(op.Journal, entityExists(ctx, runner.Graph))
 			case a.Pending:
-				text, err = lenscli.PendingProposalsText(op.Journal)
+				text, err = lenscli.PendingProposalsTextLive(op.Journal, entityExists(ctx, runner.Graph))
 			}
 			if err != nil {
 				return nil, err
@@ -516,7 +520,8 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 				wait = min(max(*a.Wait, 0), maxDecisionWait)
 			}
 
-			return watchDecisions(ctx, op.Journal, a.Cursor, time.Duration(wait)*time.Second)
+			return watchDecisions(ctx, op.Journal, a.Cursor, time.Duration(wait)*time.Second,
+				entityExists(ctx, runner.Graph))
 		})
 
 	add(ToolReviewProposal, "Review an Amass proposal",
@@ -946,7 +951,8 @@ var decisionPoll = time.Second
 // or an AI-applied change after cursor, or until wait passes, and returns the
 // new items and the next cursor. Without a cursor it returns at once with the
 // cursor for the journal's end.
-func watchDecisions(ctx context.Context, journal, cursor string, wait time.Duration) (*mcp.CallToolResult, error) {
+func watchDecisions(ctx context.Context, journal, cursor string, wait time.Duration,
+	exists lenscli.EntityExists) (*mcp.CallToolResult, error) {
 	deadline := time.Now().Add(wait)
 	for {
 		ch, err := lenscli.DecisionsSince(journal, cursor)
@@ -958,6 +964,9 @@ func watchDecisions(ctx context.Context, journal, cursor string, wait time.Durat
 			// enumeration_status counts and list_proposals lists.
 			return jsonResult(lenscli.DecisionChanges{Items: []lenscli.DecisionItem{}, Cursor: ch.Cursor}), nil
 		}
+		// Items about assets no longer stored (left from a database since
+		// wiped) cannot be decided, so they are not announced.
+		ch.Items = slices.DeleteFunc(ch.Items, func(d lenscli.DecisionItem) bool { return !d.Live(exists) })
 		if len(ch.Items) > 0 || ch.Reset || !time.Now().Before(deadline) {
 			if ch.Items == nil {
 				ch.Items = []lenscli.DecisionItem{}
@@ -974,4 +983,32 @@ func watchDecisions(ctx context.Context, journal, cursor string, wait time.Durat
 		case <-time.After(min(decisionPoll, time.Until(deadline))):
 		}
 	}
+}
+
+// entityExists returns a check that an entity is still in the Asset Database,
+// cached for one tool call. Only a lookup that finds no row says an entity is
+// gone; any other error (the database unreachable) is not read as gone, so a
+// listing never hides proposals because of an outage.
+func entityExists(ctx context.Context, g graph.Graph) lenscli.EntityExists {
+	if g == nil {
+		return nil
+	}
+
+	cache := map[string]bool{}
+	return func(id string) bool {
+		if v, ok := cache[id]; ok {
+			return v
+		}
+
+		_, err := g.GetAsset(ctx, id)
+		ok := err == nil || !missingEntity(err)
+		cache[id] = ok
+		return ok
+	}
+}
+
+// missingEntity reports whether a lookup error means the entity is not
+// stored, as the SQL backends report it.
+func missingEntity(err error) bool {
+	return errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no rows")
 }
