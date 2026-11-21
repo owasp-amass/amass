@@ -63,11 +63,10 @@ func ScrapeSubdomainNames(s string) []string {
 }
 
 func ExtractURLFromString(s string) *url.URL {
-	if u := urlre.FindString(s); u != "" {
-		if !strings.HasPrefix(u, "http") && !strings.HasPrefix(u, "https") {
-			u = "http://" + u
+	for _, match := range urlre.FindAllString(s, -1) {
+		if u := webURL(match); u != nil {
+			return u
 		}
-		return RawURLToOAM(u)
 	}
 	return nil
 }
@@ -75,22 +74,61 @@ func ExtractURLFromString(s string) *url.URL {
 func ExtractURLsFromString(s string) []*url.URL {
 	var results []*url.URL
 
-	matches := urlre.FindAllString(s, -1)
-	if matches == nil {
-		return results
-	}
-
-	for _, match := range matches {
-		if match != "" {
-			if !strings.HasPrefix(match, "http") && !strings.HasPrefix(match, "https") {
-				match = "http://" + match
-			}
-			if u := RawURLToOAM(match); u != nil {
-				results = append(results, u)
-			}
+	for _, match := range urlre.FindAllString(s, -1) {
+		if u := webURL(match); u != nil {
+			results = append(results, u)
 		}
 	}
 	return results
+}
+
+// webURL turns a match of the relaxed URL pattern into a web URL, or nil when
+// it is not one. The pattern also matches email addresses and other schemes
+// ("mailto:helpdesk@example.edu", "tel:+1…"); prefixing those with http://
+// made fake URLs whose "username" was the mailbox, so a match with a scheme
+// other than http(s), or without a scheme but with an "@", is not a web URL.
+// Email addresses are extracted separately (ExtractEmailsFromString).
+func webURL(match string) *url.URL {
+	if match == "" {
+		return nil
+	}
+
+	lower := strings.ToLower(match)
+	switch {
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+	case schemere.MatchString(lower):
+		// mailto:, tel:, ftp:, data:, javascript: and other non-web schemes
+		return nil
+	case strings.Contains(strings.SplitN(match, "/", 2)[0], "@"):
+		// a bare email address (an "@" before any path), not a host
+		return nil
+	default:
+		match = "http://" + match
+	}
+
+	return RawURLToOAM(match)
+}
+
+// schemere matches a leading URI scheme ("mailto:", "tel:"), but not a host
+// with a port ("example.com:8080").
+var schemere = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:[^0-9]`)
+
+// emailre matches email addresses in free text.
+var emailre = regexp.MustCompile(`(?i)\b[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b`)
+
+// ExtractEmailsFromString returns the distinct email addresses in s, in
+// lowercase and in the order first seen.
+func ExtractEmailsFromString(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range emailre.FindAllString(s, -1) {
+		m = strings.ToLower(strings.TrimRight(m, "."))
+		if !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func Shutdown() {

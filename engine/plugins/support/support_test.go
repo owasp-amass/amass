@@ -76,3 +76,45 @@ func TestKeyIDString(t *testing.T) {
 		t.Errorf("KeyIDString(nil) = %q", got)
 	}
 }
+
+// Email addresses and non-web schemes in a page are not URLs: the relaxed
+// pattern matched "mailto:webmaster@hamilton.edu" and bare addresses, and
+// prefixing them with http:// stored fake URLs whose username was the mailbox.
+func TestExtractURLsSkipsEmailsAndOtherSchemes(t *testing.T) {
+	body := `<a href="mailto:webmaster@hamilton.edu">email</a> collegeevents@hamilton.edu
+		<a href="tel:+13158594011">call</a> <a href="https://www.hamilton.edu/library">library</a>
+		lib.hamilton.edu:3000/images/x.jpg medium.com/@hamilton http://ocsp.digicert.com`
+
+	var got []string
+	for _, u := range ExtractURLsFromString(body) {
+		got = append(got, u.Raw)
+	}
+	want := []string{
+		"https://www.hamilton.edu/library",
+		"http://lib.hamilton.edu:3000/images/x.jpg",
+		"http://medium.com/@hamilton",
+		"http://ocsp.digicert.com",
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("URLs = %v, want %v", got, want)
+	}
+	for _, u := range ExtractURLsFromString(body) {
+		if u.Username != "" || u.Password != "" {
+			t.Errorf("a URL carries a mailbox as credentials: %s", u.Raw)
+		}
+	}
+
+	if u := ExtractURLFromString("contact: mailto:a@b.edu then https://b.edu/x"); u == nil ||
+		u.Raw != "https://b.edu/x" {
+		t.Errorf("ExtractURLFromString = %v", u)
+	}
+}
+
+func TestExtractEmailsFromString(t *testing.T) {
+	got := ExtractEmailsFromString(`mailto:WebMaster@Hamilton.edu, collegeevents@hamilton.edu.
+		again webmaster@hamilton.edu and not-an-email@ or @hamilton.edu`)
+	want := []string{"webmaster@hamilton.edu", "collegeevents@hamilton.edu"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("emails = %v, want %v", got, want)
+	}
+}
