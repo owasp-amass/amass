@@ -196,6 +196,61 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		}
 	}
 
+	// Bucket hosts are CNAME targets, not footprint members, so also inventory
+	// the object-storage buckets the footprint's names alias to.
+	for _, id := range order {
+		if ctx.Err() != nil || report.Reads >= w.maxReads {
+			break
+		}
+		a := owned[id]
+		if a.Type != "FQDN" {
+			continue
+		}
+		res, aerr := resolveName(w, a)
+		if aerr != nil || !res.Aliased() {
+			continue
+		}
+		target := res.Target(a)
+		if _, _, ok := semantics.MatchBucketHost(graph.FQDNName(target)); !ok {
+			continue
+		}
+
+		steps, serr := w.steps(target)
+		if serr != nil {
+			return out, serr
+		}
+		for _, s := range steps {
+			if !s.forward || !slices.Contains(rules.ServiceRelationTypes, s.edge.Type) ||
+				graph.ContentString(s.other, "service_type") != "object-storage" {
+				continue
+			}
+
+			svc, ok := services[s.other.ID]
+			if !ok {
+				svc, serr = describeService(w, s.other, rules)
+				if serr != nil {
+					return out, serr
+				}
+				services[s.other.ID] = svc
+				ids = append(ids, s.other.ID)
+			}
+
+			hosts[target.ID] = true
+			port := RelationDetail(s.edge)
+			endpoint := graph.FQDNName(target)
+			if port != "" {
+				endpoint += ":" + strings.Split(port, "/")[0]
+			}
+			graph.AddUnique(&svc.Endpoints, endpoint)
+			if port != "" {
+				graph.AddUnique(&svc.Ports, port)
+				if !portExpected(rules, svc.ServiceType, port) {
+					graph.AddUnique(&svc.UnusualPorts, port)
+				}
+			}
+		}
+	}
+
 	for _, id := range ids {
 		svc := services[id]
 		sort.Strings(svc.Endpoints)
