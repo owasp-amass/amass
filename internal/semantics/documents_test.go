@@ -25,3 +25,28 @@ func TestDocumentRules(t *testing.T) {
 		}
 	}
 }
+
+// Default author values name no one and are told apart without case.
+func TestPlaceholderAuthors(t *testing.T) {
+	r := Documents()
+	for _, a := range []string{"Microsoft Office User", " windows user ", "Administrator"} {
+		if !r.IsPlaceholderAuthor(a) {
+			t.Errorf("%q is a placeholder author", a)
+		}
+	}
+	if r.IsPlaceholderAuthor("Jane Doe") {
+		t.Error("a real name is not a placeholder")
+	}
+}
+
+func TestPlaceholderCompanies(t *testing.T) {
+	r := Documents()
+	for _, c := range []string{"Dell Inc.", "HP", " Home "} {
+		if !r.IsPlaceholderCompany(c) {
+			t.Errorf("%q is a placeholder company", c)
+		}
+	}
+	if r.IsPlaceholderCompany("Utica University") {
+		t.Error("a real organization is not a placeholder")
+	}
+}

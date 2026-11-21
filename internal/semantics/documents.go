@@ -22,12 +22,19 @@ type DocumentType struct {
 // DocumentRules say which documents the document collector reads and how
 // much it downloads. Loaded from documents.json; see that file's _about.
 type DocumentRules struct {
-	License  string         `json:"_license"`
-	About    string         `json:"_about"`
-	MaxBytes int64          `json:"max_bytes"`
-	Types    []DocumentType `json:"types"`
-	Sources  []string       `json:"sources"`
-	byExt    map[string]DocumentType
+	License  string `json:"_license"`
+	About    string `json:"_about"`
+	MaxBytes int64  `json:"max_bytes"`
+	// PlaceholderAuthors are author values written by default, naming no one.
+	PlaceholderAuthors []string `json:"placeholder_authors"`
+	// PlaceholderCompanies are Company values preset by a computer's maker or
+	// left by default, naming no author's organization.
+	PlaceholderCompanies []string       `json:"placeholder_companies"`
+	Types                []DocumentType `json:"types"`
+	Sources              []string       `json:"sources"`
+	byExt                map[string]DocumentType
+	placeholders         map[string]bool
+	companies            map[string]bool
 }
 
 // documentFormats are the formats that have an extractor (internal/docmeta).
@@ -52,6 +59,14 @@ var loadDocumentRules = sync.OnceValue(func() DocumentRules {
 		}
 		r.byExt[ext] = t
 	}
+	r.placeholders = make(map[string]bool, len(r.PlaceholderAuthors))
+	for _, a := range r.PlaceholderAuthors {
+		r.placeholders[strings.ToLower(strings.TrimSpace(a))] = true
+	}
+	r.companies = make(map[string]bool, len(r.PlaceholderCompanies))
+	for _, c := range r.PlaceholderCompanies {
+		r.companies[strings.ToLower(strings.TrimSpace(c))] = true
+	}
 	for _, s := range r.Sources {
 		if !strings.HasPrefix(s, "https://") {
 			panic("documents.json: sources must be https URLs")
@@ -68,4 +83,16 @@ func Documents() DocumentRules { return loadDocumentRules() }
 func (r DocumentRules) DocumentFor(p string) (DocumentType, bool) {
 	t, ok := r.byExt[strings.ToLower(path.Ext(p))]
 	return t, ok
+}
+
+// IsPlaceholderAuthor reports whether an author value is one office software
+// writes by default ("Microsoft Office User"), which names no person.
+func (r DocumentRules) IsPlaceholderAuthor(author string) bool {
+	return r.placeholders[strings.ToLower(strings.TrimSpace(author))]
+}
+
+// IsPlaceholderCompany reports whether a Company value is one a computer's
+// maker presets or one left by default ("Dell Inc.", "Home").
+func (r DocumentRules) IsPlaceholderCompany(company string) bool {
+	return r.companies[strings.ToLower(strings.TrimSpace(company))]
 }

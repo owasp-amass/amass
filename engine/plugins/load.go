@@ -29,6 +29,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/bucket"
 	"github.com/owasp-amass/amass/v5/engine/plugins/cloud"
 	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
+	"github.com/owasp-amass/amass/v5/engine/plugins/documents"
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v5/engine/plugins/identity"
@@ -68,6 +69,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewZetalytics,
 	archive.NewWayback,
 	archive.NewCommonCrawl,
+	documents.NewDocuments,
 	attribution.NewAttribution,
 	aviato.NewAviato,
 	bgptools.NewBGPTools,

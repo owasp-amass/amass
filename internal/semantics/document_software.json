@@ -1,0 +1,136 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Software that documents name as their creator or producer (PDF /Creator and /Producer, XMP CreatorTool, OOXML Application and AppVersion), for the document collector (Unit 11). A metadata value matching one of a product's patterns (regular expressions, matched without case against the whole value from its start) is stored as that Product, and the File gets created_with to it, or to its ProductRelease when a version group captured one. A Product's unique_id is its CPE name as NVD's CPE dictionary writes it (cpe:2.3:part:vendor:product), so any collector that stores the same software converges on one Product; source shows NVD's dictionary entry. A ProductRelease is named \"<name> <version>\". vendor is the Organization stored as the Product's manufacturer. A value matching no product is kept as a property only. Add products here, not in Go code.",
+  "products": [
+    {
+      "cpe": "cpe:2.3:a:microsoft:word",
+      "name": "Microsoft Word",
+      "vendor": "Microsoft Corporation",
+      "category": "word processor",
+      "patterns": [
+        "^microsoft(?:®)?\\s+(?:office\\s+|macintosh\\s+)?word(?:\\s+(?:for\\s+microsoft\\s+365|(?P<version>\\d{4}|\\d+\\.\\d+)))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Amicrosoft%3Aword"
+    },
+    {
+      "cpe": "cpe:2.3:a:microsoft:excel",
+      "name": "Microsoft Excel",
+      "vendor": "Microsoft Corporation",
+      "category": "spreadsheet",
+      "patterns": [
+        "^microsoft(?:®)?\\s+(?:office\\s+|macintosh\\s+)?excel(?:\\s+(?:for\\s+microsoft\\s+365|(?P<version>\\d{4}|\\d+\\.\\d+)))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Amicrosoft%3Aexcel"
+    },
+    {
+      "cpe": "cpe:2.3:a:microsoft:powerpoint",
+      "name": "Microsoft PowerPoint",
+      "vendor": "Microsoft Corporation",
+      "category": "presentation",
+      "patterns": [
+        "^microsoft(?:®)?\\s+(?:office\\s+|macintosh\\s+)?powerpoint(?:\\s+(?:for\\s+microsoft\\s+365|(?P<version>\\d{4}|\\d+\\.\\d+)))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Amicrosoft%3Apowerpoint"
+    },
+    {
+      "cpe": "cpe:2.3:a:adobe:acrobat",
+      "name": "Adobe Acrobat",
+      "vendor": "Adobe Inc.",
+      "category": "pdf editor",
+      "patterns": [
+        "^(?:adobe\\s+)?acrobat(?:\\s+(?:pro(?:\\s+dc)?|standard(?:\\s+dc)?|dc|distiller|pdfmaker))*(?:\\s+(?P<version>\\d+(?:\\.\\d+)*))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aadobe%3Aacrobat"
+    },
+    {
+      "cpe": "cpe:2.3:a:adobe:indesign",
+      "name": "Adobe InDesign",
+      "vendor": "Adobe Inc.",
+      "category": "desktop publishing",
+      "patterns": [
+        "^adobe\\s+indesign(?:\\s+cc)?(?:\\s+(?P<version>\\d+(?:\\.\\d+)*))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aadobe%3Aindesign"
+    },
+    {
+      "cpe": "cpe:2.3:a:adobe:photoshop",
+      "name": "Adobe Photoshop",
+      "vendor": "Adobe Inc.",
+      "category": "image editor",
+      "patterns": [
+        "^adobe\\s+photoshop(?:\\s+cc)?(?:\\s+(?P<version>\\d+(?:\\.\\d+)*))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aadobe%3Aphotoshop"
+    },
+    {
+      "cpe": "cpe:2.3:a:adobe:illustrator",
+      "name": "Adobe Illustrator",
+      "vendor": "Adobe Inc.",
+      "category": "vector graphics editor",
+      "patterns": [
+        "^adobe\\s+illustrator(?:\\s+cc)?(?:\\s+(?P<version>\\d+(?:\\.\\d+)*))?\\b"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aadobe%3Aillustrator"
+    },
+    {
+      "cpe": "cpe:2.3:a:libreoffice:libreoffice",
+      "name": "LibreOffice",
+      "vendor": "The Document Foundation",
+      "category": "office suite",
+      "patterns": [
+        "^libreoffice(?:[\\s/](?P<version>\\d+(?:\\.\\d+)*))?"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Alibreoffice%3Alibreoffice"
+    },
+    {
+      "cpe": "cpe:2.3:a:apache:openoffice",
+      "name": "Apache OpenOffice",
+      "vendor": "Apache Software Foundation",
+      "category": "office suite",
+      "patterns": [
+        "^(?:apache\\s+)?openoffice(?:\\.org)?(?:[\\s/](?P<version>\\d+(?:\\.\\d+)*))?"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aapache%3Aopenoffice"
+    },
+    {
+      "cpe": "cpe:2.3:o:apple:macos",
+      "name": "Apple macOS",
+      "vendor": "Apple Inc.",
+      "category": "operating system",
+      "patterns": [
+        "^macos\\s+version\\s+(?P<version>\\d+(?:\\.\\d+)*)"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Ao%3Aapple%3Amacos"
+    },
+    {
+      "cpe": "cpe:2.3:o:apple:mac_os_x",
+      "name": "Apple Mac OS X",
+      "vendor": "Apple Inc.",
+      "category": "operating system",
+      "patterns": [
+        "^mac\\s+os\\s+x\\s+(?:version\\s+)?(?P<version>\\d+(?:\\.\\d+)*)"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Ao%3Aapple%3Amac_os_x"
+    },
+    {
+      "cpe": "cpe:2.3:a:itextpdf:itext",
+      "name": "iText",
+      "vendor": "Apryse Software Corp.",
+      "category": "pdf library",
+      "patterns": [
+        "^itext(?:®|sharp|pdf)?\\s+(?P<version>\\d+(?:\\.\\d+)*)"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aitextpdf%3Aitext"
+    },
+    {
+      "cpe": "cpe:2.3:a:artifex:ghostscript",
+      "name": "Ghostscript",
+      "vendor": "Artifex Software, Inc.",
+      "category": "pdf renderer",
+      "patterns": [
+        "^(?:gpl\\s+|artifex\\s+)?ghostscript\\s+(?P<version>\\d+(?:\\.\\d+)*)"
+      ],
+      "source": "https://nvd.nist.gov/products/cpe/search/results?namingFormat=2.3&keyword=cpe%3A2.3%3Aa%3Aartifex%3Aghostscript"
+    }
+  ]
+}

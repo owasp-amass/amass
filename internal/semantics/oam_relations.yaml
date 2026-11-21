@@ -164,6 +164,9 @@ relations:
   - {source: File, label: author, relation_type: SimpleRelation, destination: Person,
      attribution: attribute, purpose: web,
      note: "Who the document's metadata names as its author or last editor. A stronger claim than a mention, but a document can be written for or about another party, so ownership does not pass through."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Account,
+     attribution: attribute, purpose: identity,
+     note: "An account the document's metadata shows, such as the user directory named in a file path (C:\\Users\\jsmith): the account belongs to the directory of the domain the document was published on. A mention does not confer ownership of the document."}
   - {source: File, label: contains, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: attribute, purpose: web,
      note: "A block of contact details inside the document, such as a signature; not used for a lone address or number."}
