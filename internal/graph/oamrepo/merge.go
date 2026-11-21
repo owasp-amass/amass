@@ -148,6 +148,14 @@ func (a Adapter) fillEmptyFields(ctx context.Context, surv, dup *dbt.Entity, rec
 		merged.Headcount = do.Headcount
 		rec.FilledFields = append(rec.FilledFields, "headcount")
 	}
+	// A distinct name on the duplicate — for example the full name when the
+	// survivor holds only an abbreviation — would otherwise be lost, since the
+	// name itself is never overwritten. Keep it as the legal name when the
+	// survivor has none, so no name is dropped by the merge.
+	if merged.LegalName == "" && do.Name != "" && !strings.EqualFold(do.Name, merged.Name) {
+		merged.LegalName = do.Name
+		rec.FilledFields = append(rec.FilledFields, "legal_name")
+	}
 	if len(rec.FilledFields) == 0 {
 		return nil
 	}
@@ -586,7 +594,14 @@ func (a Adapter) clearFilledFields(ctx context.Context, surv *dbt.Entity, dup *o
 	for _, f := range filled {
 		switch f {
 		case "legal_name":
-			clear(f, &next.LegalName, dup.LegalName)
+			// The merge fills legal_name from the duplicate's legal name, or,
+			// when it had none, from its distinct name; clear it back only when
+			// it still holds whichever value the merge put there.
+			was := dup.LegalName
+			if was == "" {
+				was = dup.Name
+			}
+			clear(f, &next.LegalName, was)
 		case "founding_date":
 			clear(f, &next.FoundingDate, dup.FoundingDate)
 		case "jurisdiction":

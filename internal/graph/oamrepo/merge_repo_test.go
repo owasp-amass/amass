@@ -50,6 +50,67 @@ func TestMergeAndUnmergeOrganizationsOnPostgres(t *testing.T) {
 	mergeAndUnmerge(t, repo)
 }
 
+// TestMergePreservesDistinctDuplicateName checks that a merge keeps the
+// duplicate's name when it differs from the survivor's (for example a full
+// name folded into an abbreviation), rather than dropping it.
+func TestMergePreservesDistinctDuplicateName(t *testing.T) {
+	repo, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "names.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = repo.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	f := mergeFixture{t: t, ctx: ctx, repo: repo}
+	adapter := Adapter{Repo: repo}
+
+	// The survivor holds the abbreviation; the duplicate holds the full name.
+	surv := f.asset(&oamorg.Organization{ID: "oclc:surv", Name: "oclc"})
+	dup := f.asset(&oamorg.Organization{ID: "oclc:dup", Name: "online computer library center"})
+
+	rec, err := adapter.MergeOrganizations(ctx, surv.ID, dup.ID, 90)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ent, err := repo.FindEntityById(ctx, surv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if so := ent.Asset.(*oamorg.Organization); so.Name != "oclc" {
+		t.Errorf("survivor name changed: %q", so.Name)
+	} else if so.LegalName != "online computer library center" {
+		t.Errorf("the duplicate's full name was not preserved as the legal name: %+v", so)
+	}
+	if !contains(rec.FilledFields, "legal_name") {
+		t.Errorf("filled fields %v lack legal_name", rec.FilledFields)
+	}
+
+	// Undo restores the duplicate and clears the preserved name again.
+	if _, err := adapter.UnmergeOrganizations(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	ent, err = repo.FindEntityById(ctx, surv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if so := ent.Asset.(*oamorg.Organization); so.LegalName != "" || so.Name != "oclc" {
+		t.Errorf("survivor after undo: %+v", so)
+	}
+
+	// A duplicate whose name matches the survivor's contributes no legal name.
+	surv2 := f.asset(&oamorg.Organization{ID: "oclc:s2", Name: "oclc"})
+	dup2 := f.asset(&oamorg.Organization{ID: "oclc:d2", Name: "oclc"})
+	rec2, err := adapter.MergeOrganizations(ctx, surv2.ID, dup2.ID, 90)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(rec2.FilledFields, "legal_name") {
+		t.Errorf("a same-name duplicate should not fill legal_name: %v", rec2.FilledFields)
+	}
+}
+
 type mergeFixture struct {
 	t    *testing.T
 	ctx  context.Context
