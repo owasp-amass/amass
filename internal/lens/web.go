@@ -313,16 +313,17 @@ func (r WebReport) Text() string {
 	if len(r.Applications) > 0 {
 		b.WriteString("\nWeb applications recognized:\n")
 		for _, a := range r.Applications {
-			fmt.Fprintf(&b, "  %s: %s", a.Site, a.Product)
+			// the application's own release, then the libraries it bundles
+			// under their own names, so a bundled release is never read as
+			// the application's
+			fmt.Fprintf(&b, "  %s: %s", a.Site, a.String())
 			if a.Vendor != "" {
 				fmt.Fprintf(&b, " (%s)", a.Vendor)
 			}
-			var vers []string
 			for _, id := range a.Identified {
-				vers = append(vers, id.Version)
-			}
-			if len(vers) > 0 {
-				fmt.Fprintf(&b, " %s", strings.Join(vers, ", "))
+				if id.Product != a.Product {
+					fmt.Fprintf(&b, "; bundles %s %s", id.Product, id.Version)
+				}
 			}
 			b.WriteString("\n")
 		}

@@ -138,3 +138,28 @@ func TestVulnerabilityCatalogCoversWebApplications(t *testing.T) {
 		}
 	}
 }
+
+// The core release is read from any core script WordPress versions with its
+// own release (wp-util, user-profile, password-strength-meter), and a
+// bundled jQuery release is named as jQuery, never as WordPress's.
+func TestWordPressCoreReleaseFromCoreScripts(t *testing.T) {
+	apps := identifyWebApplications([]graph.Asset{
+		urlAsset("u1", "https://board.example.edu/wp-includes/js/wp-util.min.js?ver=7.1.5"),
+		urlAsset("u2", "https://board.example.edu/wp-admin/js/user-profile.min.js?ver=7.1.5"),
+		urlAsset("u3", "https://board.example.edu/wp-includes/js/jquery/jquery.min.js?ver=3.7.1"),
+		urlAsset("u4", "https://board.example.edu/wp-includes/js/dist/hooks.min.js?ver=f0f188028580e8dc1255"),
+	})
+
+	if len(apps) != 1 {
+		t.Fatalf("applications %+v", apps)
+	}
+	if got := apps[0].String(); got != "WordPress 7.1.5" {
+		t.Errorf("name %q, want WordPress 7.1.5", got)
+	}
+
+	r := &WebReport{Applications: apps, Total: 4}
+	text := r.Text()
+	if !strings.Contains(text, "https://board.example.edu: WordPress 7.1.5 (WordPress Foundation); bundles jQuery 3.7.1") {
+		t.Errorf("web lens line:\n%s", text)
+	}
+}

@@ -9,8 +9,8 @@
       "source": "https://developer.wordpress.org/reference/functions/wp_default_scripts/",
       "versions": [
         {"product": "WordPress", "vendor": "WordPress Foundation",
-          "path": "/wp-includes/js/(?:comment-reply|wp-embed)(?:\\.min)?\\.js$", "query": "ver",
-          "source": "https://developer.wordpress.org/reference/classes/wp_scripts/"},
+          "path": "/wp-(?:includes|admin)/js/(?:comment-reply|wp-embed|wp-util|user-profile|password-strength-meter)(?:\\.min)?\\.js$", "query": "ver",
+          "source": "https://developer.wordpress.org/reference/functions/wp_default_scripts/"},
         {"product": "jQuery", "vendor": "OpenJS Foundation",
           "path": "/wp-includes/js/jquery/jquery(?:\\.min)?\\.js$", "query": "ver",
           "source": "https://developer.wordpress.org/reference/functions/wp_default_scripts/"}
