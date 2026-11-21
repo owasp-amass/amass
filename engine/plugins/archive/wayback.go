@@ -107,44 +107,90 @@ func (w *wayback) check(e *et.Event) error {
 	return nil
 }
 
-// query returns the captures the Wayback Machine holds under the domain, or
-// none when it refuses or fails.
+// waybackPageRows is how many captures one Wayback request asks for. The CDX
+// server builds each answer before sending it, so a whole domain in one
+// request can take minutes; smaller pages return sooner, and a slow or failed
+// page costs only itself.
+const waybackPageRows = 1000
+
+// waybackPageTimeout bounds one page request; the CDX server is often slow.
+const waybackPageTimeout = 3 * time.Minute
+
+// query returns the captures the Wayback Machine holds under the domain, read
+// a page at a time with the server's resume key, up to five times the URLs
+// kept per domain. A refused or failed page ends the reading, and the pages
+// already read are kept.
 func (w *wayback) query(e *et.Event, name string) []archiveRow {
+	limit := 5 * semantics.ArchiveURLs().MaxURLsPerDomain
+
+	var rows []archiveRow
+	var key string
+	for pages := 0; len(rows) < limit && pages < limit/waybackPageRows+1; pages++ {
+		page, next, ok := w.page(e, name, key)
+		rows = append(rows, page...)
+		if !ok || next == "" || len(page) == 0 {
+			break
+		}
+		key = next
+	}
+
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows
+}
+
+// page asks for one page of captures, after the resume key when there is one.
+// It returns the captures, the key for the next page ("" when this was the
+// last) and whether the archive answered.
+func (w *wayback) page(e *et.Event, name, key string) ([]archiveRow, string, bool) {
 	_ = support.WaitLimit(e.Session.Ctx(), w.rlimit)
 	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), waybackPageTimeout)
 	defer cancel()
 
-	// matchType=domain covers the name and every name below it; the limit
-	// bounds the answer, which for a large site is otherwise too big to
-	// return before the timeout
-	limit := 5 * semantics.ArchiveURLs().MaxURLsPerDomain
-	u := fmt.Sprintf("%s%s&limit=%d", w.URL, url.QueryEscape(name), limit)
+	// matchType=domain covers the name and every name below it
+	u := fmt.Sprintf("%s%s&limit=%d&showResumeKey=true", w.URL, url.QueryEscape(name), waybackPageRows)
+	if key != "" {
+		u += "&resumeKey=" + url.QueryEscape(key)
+	}
 	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u})
 	e.Session.NetSem().Release()
 	// a refusal or rate limit is not read as an answer, but is logged so a
 	// run that stores nothing can be told from one the archive refused
 	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
 		logRefusal(e, w.name, name, resp, err)
-		return nil
+		return nil, "", false
 	}
 
 	var raw [][]string
 	if err := json.Unmarshal([]byte(resp.Body), &raw); err != nil {
 		logRefusal(e, w.name, name, resp, err)
-		return nil
+		return nil, "", false
 	}
 
+	rows, next := waybackRows(raw)
+	return rows, next, true
+}
+
+// waybackRows reads a CDX JSON answer: the header row, then one row per
+// capture (original, timestamp), then, when more remain, an empty row and a
+// row holding only the resume key for the next page.
+func waybackRows(raw [][]string) ([]archiveRow, string) {
+	var next string
 	rows := make([]archiveRow, 0, len(raw))
-	for _, r := range raw {
+	for i, r := range raw {
 		switch len(r) {
-		case 1:
-			rows = append(rows, archiveRow{raw: r[0]})
+		case 0:
+			// the empty row comes just before the resume key
+			if i+1 < len(raw) && len(raw[i+1]) == 1 {
+				next = raw[i+1][0]
+			}
+			return rows, next
 		case 2:
 			rows = append(rows, archiveRow{raw: r[0], timestamp: r[1]})
 		}
 	}
-
-	return rows
+	return rows, next
 }

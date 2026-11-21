@@ -186,3 +186,27 @@ func TestKeepURLsPrefersParametersAndDepth(t *testing.T) {
 		t.Errorf("under the cap, all URLs are kept: %d", len(got))
 	}
 }
+
+// A page that holds more captures ends with an empty row and the resume key;
+// the key is not read as a capture.
+func TestWaybackRowsResumeKey(t *testing.T) {
+	raw := [][]string{
+		{"original", "timestamp"},
+		{"https://www.example.com/a", "20200101000000"},
+		{"https://www.example.com/b", "20200102000000"},
+		{},
+		{"com,example)/b 20200102000000"},
+	}
+
+	rows, next := waybackRows(raw)
+	if len(rows) != 3 || rows[2].raw != "https://www.example.com/b" {
+		t.Errorf("rows = %v, want the header and two captures", rows)
+	}
+	if next != "com,example)/b 20200102000000" {
+		t.Errorf("resume key = %q", next)
+	}
+
+	if _, next := waybackRows(raw[:3]); next != "" {
+		t.Errorf("the last page has no resume key, got %q", next)
+	}
+}
