@@ -189,6 +189,11 @@ type lensWalker struct {
 	// maxAssets and maxReads bound this run (see LensLimits).
 	maxAssets int
 	maxReads  int
+	// summarizeBareAddrs, when set, keeps an IPAddress reached through a held
+	// netblock only when it hosts a name or service; the other member
+	// addresses are counted in report.SummarizedAddresses rather than filling
+	// the footprint. Lenses that report address space itself leave it off.
+	summarizeBareAddrs bool
 	// footprint is the controlled footprint once it is being collected.
 	// Outside it the walker only looks for who controls an asset, so it
 	// never pages through an asset's descendants (amazonaws.com's names).
@@ -725,6 +730,16 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 				queue, deferred = deferred, nil
 				continue
 			}
+			if w.summarizeBareAddrs && c.asset.Type == "IPAddress" && w.viaNetblock(c.parent) {
+				hosts, err := w.ipHosts(c.asset)
+				if err != nil {
+					return nil, nil, err
+				}
+				if !hosts {
+					w.report.SummarizedAddresses++
+					continue
+				}
+			}
 			if len(owned) >= w.maxAssets {
 				w.truncate("controlled asset limit")
 				break
@@ -788,6 +803,37 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 	}
 
 	return owned, order, nil
+}
+
+// viaNetblock reports whether parentID is a netblock-like record, so an
+// IPAddress reached from it is one of its member addresses rather than an
+// address a name or service resolves to.
+func (w *lensWalker) viaNetblock(parentID string) bool {
+	p, ok := w.footprint[parentID]
+	if !ok {
+		return false
+	}
+
+	return p.Type == "Netblock" || p.Type == "IPNetRecord"
+}
+
+// ipHosts reports whether addr has a controlled name or service on it. The
+// summarizing lenses keep such addresses and summarize the rest, so a held
+// netblock's empty address space does not crowd names and services out of the
+// footprint before the asset limit is reached.
+func (w *lensWalker) ipHosts(addr graph.Asset) (bool, error) {
+	steps, err := w.steps(addr)
+	if err != nil {
+		return false, err
+	}
+
+	for _, s := range steps {
+		if footprintPass(s) && (s.other.Type == "FQDN" || s.other.Type == "Service") {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // WitnessOf orients a stored edge between a and b as it is stored.

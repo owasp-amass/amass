@@ -77,10 +77,14 @@ type ThirdPartyReport struct {
 	Owners         []string       `json:"owners,omitempty"`
 	Footprint      int            `json:"footprint"`
 	FootprintTypes map[string]int `json:"footprint_types"`
-	Vendors        []VendorUse    `json:"vendors"`
-	Reads          int            `json:"reads"`
-	Truncated      bool           `json:"truncated"`
-	Reason         string         `json:"reason,omitempty"`
+	// SummarizedAddresses counts member addresses of held netblocks that host
+	// no name or service and were summarized rather than kept in the footprint
+	// (see lensWalker.summarizeBareAddrs).
+	SummarizedAddresses int         `json:"summarized_addresses,omitempty"`
+	Vendors             []VendorUse `json:"vendors"`
+	Reads               int         `json:"reads"`
+	Truncated           bool        `json:"truncated"`
+	Reason              string      `json:"reason,omitempty"`
 	// UnrecognizedSPF and UnrecognizedTokens are set by the vendors lens: the
 	// domain's SPF includes no vendor entry matches, and the keys of its
 	// verification-like TXT records no DNS-SD prefix recognizes.

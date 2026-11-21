@@ -49,12 +49,15 @@ func TestFocusedFootprintSpendsLimitOnWhatItReads(t *testing.T) {
 		return types
 	}
 
-	email, exposure := count("email"), count("exposure")
-	if email["IPAddress"] != 0 || email["FQDN"] <= exposure["FQDN"] {
-		t.Errorf("focused email footprint %v, unfocused exposure footprint %v", email, exposure)
+	// network is the unfocused example: it has no focus entry and, unlike the
+	// summarizing lenses (cloud, services, exposure, ...), keeps every member
+	// address of a held netblock, so it still samples addresses here.
+	email, network := count("email"), count("network")
+	if email["IPAddress"] != 0 || email["FQDN"] <= network["FQDN"] {
+		t.Errorf("focused email footprint %v, unfocused network footprint %v", email, network)
 	}
-	if exposure["IPAddress"] == 0 {
-		t.Errorf("the unfocused footprint sampled no addresses: %v", exposure)
+	if network["IPAddress"] == 0 {
+		t.Errorf("the unfocused footprint sampled no addresses: %v", network)
 	}
 }
 

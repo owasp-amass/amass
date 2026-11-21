@@ -111,6 +111,22 @@ type scope struct {
 	ownNets    []netip.Prefix
 }
 
+// summarizeBareAddrLenses are the lenses that report names and services, not
+// address space, so their footprint walk keeps only the member addresses of a
+// held netblock that host something and summarizes the rest. network,
+// geography, coverage and concentration are deliberately absent: they report
+// the addresses themselves. vulnerable is covered through services, which it
+// builds on; certificates, email and domains already exclude bare addresses
+// through their focus.
+var summarizeBareAddrLenses = map[string]bool{
+	LensCloud:      true,
+	LensWeb:        true,
+	LensServices:   true,
+	LensExposure:   true,
+	LensHeaders:    true,
+	LensDisclosure: true,
+}
+
 // newScope walks the controlled footprint of root and the organizations
 // that own it, as the vendors lens does.
 func newScope(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset, limits LensLimits,
@@ -136,6 +152,7 @@ func newScope(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, ro
 		s.w.admitOnly = footprintFocusTypes(s.w.relations, meaning, targets)
 		s.w.expand = s.w.admitOnly
 	}
+	s.w.summarizeBareAddrs = summarizeBareAddrLenses[name]
 
 	roots := []graph.Asset{root}
 	owners, err := s.w.owningOrganizations(root)
@@ -215,16 +232,18 @@ func (s *scope) subject() string {
 
 // lensBase is what every scoped report carries.
 type lensBase struct {
-	Root      graph.Asset `json:"root"`
-	Owners    []string    `json:"owners,omitempty"`
-	Footprint int         `json:"footprint"`
-	Reads     int         `json:"reads"`
-	Truncated bool        `json:"truncated"`
-	Reason    string      `json:"reason,omitempty"`
+	Root                graph.Asset `json:"root"`
+	Owners              []string    `json:"owners,omitempty"`
+	Footprint           int         `json:"footprint"`
+	SummarizedAddresses int         `json:"summarized_addresses,omitempty"`
+	Reads               int         `json:"reads"`
+	Truncated           bool        `json:"truncated"`
+	Reason              string      `json:"reason,omitempty"`
 }
 
 func (s *scope) base() lensBase {
-	return lensBase{Root: s.root, Owners: s.ownerNames(), Footprint: len(s.owned), Reads: s.report.Reads,
+	return lensBase{Root: s.root, Owners: s.ownerNames(), Footprint: len(s.owned),
+		SummarizedAddresses: s.report.SummarizedAddresses, Reads: s.report.Reads,
 		Truncated: s.report.Truncated, Reason: s.report.Reason}
 }
 
