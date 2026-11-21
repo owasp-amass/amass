@@ -67,6 +67,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewVirusTotal,
 	api.NewZetalytics,
 	archive.NewWayback,
+	archive.NewCommonCrawl,
 	attribution.NewAttribution,
 	aviato.NewAviato,
 	bgptools.NewBGPTools,
