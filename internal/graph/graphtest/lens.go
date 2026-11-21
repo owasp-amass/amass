@@ -52,6 +52,7 @@ var oamSemantics = map[string]graph.RelationMeaning{
 	"FQDN|verified_for|SimpleRelation|Service":                         {Attribution: "third_party", Purpose: "dns", Vendor: true},
 	"File|contains|SimpleRelation|ContactRecord":                       {Attribution: "attribute", Purpose: "web", Vendor: true},
 	"File|contains|SimpleRelation|URL":                                 {Attribution: "attribute", Purpose: "web", Vendor: true},
+	"File|fingerprint|SimpleRelation|Identifier":                       {Attribution: "attribute", Purpose: "web", Vendor: true},
 	"File|url|SimpleRelation|URL":                                      {Attribution: "attribute", Purpose: "web", Vendor: true},
 	"FundsTransfer|id|SimpleRelation|Identifier":                       {Attribution: "attribute", Purpose: "financial", Vendor: true},
 	"FundsTransfer|recipient|SimpleRelation|Account":                   {Attribution: "attribute", Purpose: "financial", Vendor: true},

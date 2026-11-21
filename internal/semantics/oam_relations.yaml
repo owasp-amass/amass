@@ -164,6 +164,9 @@ relations:
   - {source: File, label: contains, relation_type: SimpleRelation, destination: URL,
      attribution: attribute, purpose: web,
      note: "Data found inside the file."}
+  - {source: File, label: fingerprint, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: web,
+     note: "The file's content hash as a shared Identifier (id_type file_sha256), so the same document found at several URLs or published by several parties is one hop apart; see the Service fingerprint relation. Identical files can be shared by unrelated parties (a vendor's brochure), so ownership does not pass through."}
   - {source: File, label: url, relation_type: SimpleRelation, destination: URL,
      attribution: attribute, purpose: web,
      note: "Where the file was retrieved."}
