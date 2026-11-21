@@ -457,3 +457,31 @@ func TestResumeSupervisesRunsWhenTheEngineCannotList(t *testing.T) {
 	f.progress(kept.ID, 3, 3)
 	waitState(t, m2, kept.ID, StateFinished)
 }
+
+// A run whose session the engine no longer lists (the engine was restarted)
+// is marked lost at the next poll instead of after the error budget, so its
+// scope can be collected again at once.
+func TestPollMarksVanishedSessionLost(t *testing.T) {
+	f := newFake()
+	m := newManager(f, "")
+	m.PollInterval = 5 * time.Millisecond
+	defer m.Close()
+
+	run, err := m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "f.example"}, Passive), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.mu.Lock()
+	delete(f.sessions, uuid.MustParse(run.ID))
+	f.mu.Unlock()
+
+	if r := waitState(t, m, run.ID, StateLost); r.Error == "" {
+		t.Errorf("lost run without a reason: %+v", r)
+	}
+	if _, err := m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "f.example"}, Passive), ""); err != nil {
+		t.Errorf("the scope stayed blocked: %v", err)
+	}
+}

@@ -290,6 +290,16 @@ func (m *Manager) poll(ctx context.Context, token uuid.UUID, id string) {
 
 		sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		stats, err := m.Engine.SessionStats(sctx, token)
+		// A failed poll may be the engine starting or busy, which is worth
+		// waiting out; but an engine that answers its session list without
+		// this session has said for certain that the run is gone (it was
+		// restarted), and waiting would only keep the run's scope blocked.
+		gone := false
+		if err != nil || stats == nil {
+			if live, lerr := m.Engine.ListSessions(sctx); lerr == nil && !slices.Contains(live, token) {
+				gone = true
+			}
+		}
 		cancel()
 		if ctx.Err() != nil {
 			return
@@ -305,6 +315,8 @@ func (m *Manager) poll(ctx context.Context, token uuid.UUID, id string) {
 		now := m.now()
 		end := ""
 		switch {
+		case gone:
+			end, r.Error = StateLost, "the engine no longer has this session"
 		case err != nil || stats == nil:
 			if errs++; errs >= maxPollErrors {
 				end, r.Error = StateFailed, fmt.Sprintf("the engine stopped answering: %v", err)
