@@ -15,10 +15,13 @@ import (
 var lensRulesJSON = semantics.File("lens.json")
 
 type lensRules struct {
-	License    string              `json:"_license"`
-	About      string              `json:"_about"`
-	FollowLast []string            `json:"follow_last"`
-	Focus      map[string][]string `json:"focus"`
+	License    string   `json:"_license"`
+	About      string   `json:"_about"`
+	FollowLast []string `json:"follow_last"`
+	// SkipHostedURLs are the lenses whose footprint walk leaves out URLs
+	// reached from a host name; see lens.json's _about.
+	SkipHostedURLs []string            `json:"skip_hosted_urls"`
+	Focus          map[string][]string `json:"focus"`
 }
 
 var loadLensRules = sync.OnceValue(func() lensRules {
@@ -40,6 +43,17 @@ var followLast = sync.OnceValue(func() map[string]bool {
 
 	return out
 })
+
+// skipsHostedURLs reports whether a lens's footprint walk leaves out URLs
+// reached from a host name.
+var skipsHostedURLs = func(name string) bool {
+	for _, n := range loadLensRules().SkipHostedURLs {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
 
 // lensFocus returns the asset types a lens reads from its footprint, or nil
 // when it reads every type. Tests replace it to compare with unfocused walks.

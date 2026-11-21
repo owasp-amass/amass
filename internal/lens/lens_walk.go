@@ -194,6 +194,11 @@ type lensWalker struct {
 	// addresses are counted in report.SummarizedAddresses rather than filling
 	// the footprint. Lenses that report address space itself leave it off.
 	summarizeBareAddrs bool
+	// skipHostedURLs, when set, leaves out of the footprint a URL reached from
+	// a host name (a page under the host, which leads only back to it) and
+	// counts it in report.SkippedURLs. Lenses that never read URLs set it;
+	// a URL reached from an organization (its website) is still admitted.
+	skipHostedURLs bool
 	// footprint is the controlled footprint once it is being collected.
 	// Outside it the walker only looks for who controls an asset, so it
 	// never pages through an asset's descendants (amazonaws.com's names).
@@ -733,6 +738,10 @@ func (w *lensWalker) controlledFootprint(roots []graph.Asset) (map[string]graph.
 				}
 
 				queue, deferred = deferred, nil
+				continue
+			}
+			if w.skipHostedURLs && c.asset.Type == "URL" && w.footprint[c.parent].Type == "FQDN" {
+				w.report.SkippedURLs++
 				continue
 			}
 			if w.summarizeBareAddrs && c.asset.Type == "IPAddress" && w.viaNetblock(c.parent) {

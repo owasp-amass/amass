@@ -80,11 +80,14 @@ type ThirdPartyReport struct {
 	// SummarizedAddresses counts member addresses of held netblocks that host
 	// no name or service and were summarized rather than kept in the footprint
 	// (see lensWalker.summarizeBareAddrs).
-	SummarizedAddresses int         `json:"summarized_addresses,omitempty"`
-	Vendors             []VendorUse `json:"vendors"`
-	Reads               int         `json:"reads"`
-	Truncated           bool        `json:"truncated"`
-	Reason              string      `json:"reason,omitempty"`
+	SummarizedAddresses int `json:"summarized_addresses,omitempty"`
+	// SkippedURLs counts URLs under the footprint's host names left out by a
+	// lens that does not read URLs (see lensWalker.skipHostedURLs).
+	SkippedURLs int         `json:"skipped_urls,omitempty"`
+	Vendors     []VendorUse `json:"vendors"`
+	Reads       int         `json:"reads"`
+	Truncated   bool        `json:"truncated"`
+	Reason      string      `json:"reason,omitempty"`
 	// UnrecognizedSPF and UnrecognizedTokens are set by the vendors lens: the
 	// domain's SPF includes no vendor entry matches, and the keys of its
 	// verification-like TXT records no DNS-SD prefix recognizes.

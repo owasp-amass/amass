@@ -154,6 +154,7 @@ func newScope(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, ro
 		s.w.expand = s.w.admitOnly
 	}
 	s.w.summarizeBareAddrs = summarizeBareAddrLenses[name]
+	s.w.skipHostedURLs = skipsHostedURLs(name)
 
 	roots := []graph.Asset{root}
 	owners, err := s.w.owningOrganizations(root)

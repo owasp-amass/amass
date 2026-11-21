@@ -1,8 +1,23 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "How the lenses walk an organization's controlled assets. When a footprint is larger than the asset limit, the limit is shared out a type at a time in turn, so it samples every kind of asset. follow_last lists OAM asset types that take their turn but whose own relations a lens follows only after every other controlled asset's: they are numerous and mostly lead back to assets the lens already follows (a URL sits on a name already in the footprint), so following them first would spend reads before the names, certificates and networks that show more outside parties. They are still followed while the limits allow. Add values here, not in Go code. focus names, for a lens, the OAM asset types it reads from the footprint; that lens's walk then admits and follows only those types and the types the semantics table says can lead to them, so its asset limit is spent on what it reports. A lens without an entry walks every type.",
+  "_about": "How the lenses walk an organization's controlled assets. When a footprint is larger than the asset limit, the limit is shared out a type at a time in turn, so it samples every kind of asset. follow_last lists OAM asset types that take their turn but whose own relations a lens follows only after every other controlled asset's: they are numerous and mostly lead back to assets the lens already follows (a URL sits on a name already in the footprint), so following them first would spend reads before the names, certificates and networks that show more outside parties. They are still followed while the limits allow. Add values here, not in Go code. focus names, for a lens, the OAM asset types it reads from the footprint; that lens's walk then admits and follows only those types and the types the semantics table says can lead to them, so its asset limit is spent on what it reports. A lens without an entry walks every type. skip_hosted_urls are lenses that never read URL assets: their footprint walk leaves out a URL reached from a host name (a page under the host, which leads only back to that host) and counts it, so pages stored by crawls and web archives do not crowd names and services out of the asset limit. A URL reached from an organization (its website) is still admitted, since it can be the only path to a name.",
   "follow_last": [
     "URL"
+  ],
+  "skip_hosted_urls": [
+    "certificates",
+    "cloud",
+    "concentration",
+    "dangling_dns",
+    "domains",
+    "email",
+    "funding",
+    "geography",
+    "headers",
+    "identifiers",
+    "lookalike_domains",
+    "network",
+    "subdomains"
   ],
   "focus": {
     "email": [

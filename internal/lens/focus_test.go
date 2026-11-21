@@ -203,3 +203,62 @@ func TestSummarizedNote(t *testing.T) {
 		t.Errorf("summarizedNote(2168) = %q", got)
 	}
 }
+
+// A lens that never reads URLs leaves out the pages under the footprint's host
+// names (counting them) but still admits the organization's website URL; a
+// lens that reads URLs keeps them all.
+func TestLensesThatDoNotReadURLsSkipHostedURLs(t *testing.T) {
+	g := graphtest.ServicesFixture()
+	const pages = 50
+	for i := 0; i < pages; i++ {
+		raw := fmt.Sprintf("https://www.colgate.edu/page/%d", i)
+		g.Assets[raw] = graph.Asset{ID: raw, Type: "URL", Key: raw, Content: map[string]any{"url": raw}}
+		g.Links = append(g.Links, graph.Relation{ID: raw + "-domain", FromID: raw, ToID: "www.colgate.edu",
+			Label: "domain", Type: "SimpleRelation"})
+	}
+	site := "https://www.colgate.edu/"
+	g.Assets[site] = graph.Asset{ID: site, Type: "URL", Key: site, Content: map[string]any{"url": site}}
+	g.Links = append(g.Links,
+		graph.Relation{ID: "colgate-website", FromID: "colgate", ToID: site, Label: "website", Type: "SimpleRelation"},
+		graph.Relation{ID: "site-domain", FromID: site, ToID: "www.colgate.edu", Label: "domain",
+			Type: "SimpleRelation"})
+
+	urls := func(name string) (pageCount int, siteKept bool, skipped int) {
+		s, err := newScope(context.Background(), g, postureCatalog(), g.Assets["colgate.edu"], LensLimits{}, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for id, a := range s.owned {
+			if a.Type != "URL" {
+				continue
+			}
+			if id == site {
+				siteKept = true
+			} else if strings.HasPrefix(id, "https://www.colgate.edu/page/") {
+				pageCount++
+			}
+		}
+		return pageCount, siteKept, s.report.SkippedURLs
+	}
+
+	if n, kept, skipped := urls(LensCloud); n != 0 || !kept || skipped != pages {
+		t.Errorf("cloud kept %d pages (want 0), website kept %v, skipped %d (want %d)", n, kept, skipped, pages)
+	}
+	if n, kept, skipped := urls(LensWeb); n != pages || !kept || skipped != 0 {
+		t.Errorf("web kept %d pages (want %d), website kept %v, skipped %d (want 0)", n, pages, kept, skipped)
+	}
+}
+
+// Every lens that skips hosted URLs is a registered lens.
+func TestSkipHostedURLsNamesLenses(t *testing.T) {
+	for _, name := range loadLensRules().SkipHostedURLs {
+		if _, ok := SubjectLensNamed(name); !ok {
+			t.Errorf("lens.json skip_hosted_urls names an unknown lens %q", name)
+		}
+	}
+	for _, reader := range []string{LensWeb, LensExposure, LensServices, LensAccounts, LensCoverage, LensChanges} {
+		if skipsHostedURLs(reader) {
+			t.Errorf("%s reads URLs but skips them", reader)
+		}
+	}
+}
