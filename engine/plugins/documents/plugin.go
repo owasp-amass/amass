@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
@@ -138,30 +139,67 @@ func (d *documents) check(e *et.Event) error {
 	}
 	support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 
-	var from string
-	var data []byte
-	if e.Session.Config().Active {
-		from = u.Raw
-		data, err = d.fetchDirect(e, u, rules.MaxBytes)
-	} else {
-		from = d.captureURL(e, u)
-		data, err = d.fetchArchive(e, from, rules.MaxBytes)
-	}
+	from, data, err := d.retrieve(e, u, dt, rules.MaxBytes)
 	if err != nil {
 		e.Session.Log().Info("document not retrieved", "url", u.Raw, "from", from, "error", err.Error(),
-			slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
-		return nil
-	}
-	if !looksLike(dt.Format, data) {
-		// a soft 404 or an error page served under the document's name
-		e.Session.Log().Info("document not retrieved", "url", u.Raw, "from", from,
-			"error", "the content is not a "+dt.Format+" document",
 			slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
 		return nil
 	}
 
 	d.store(e, e.Entity, u, dt, from, data)
 	return nil
+}
+
+// errNotDocument is returned when what came back is not the document, such as
+// the "page not found" HTML a site serves with a 200 status.
+var errNotDocument = errors.New("the content is not the document")
+
+// retrieve reads the document. In passive mode it reads the archive's copy.
+// In active mode it fetches the document's own URL and, when that fails or
+// returns something that is not the document (the page was removed and the
+// site answers with an HTML page), the archive's copy: an archived URL often
+// names a document the site no longer serves. It returns where the bytes came
+// from.
+func (d *documents) retrieve(e *et.Event, u *oamurl.URL, dt semantics.DocumentType, max int64) (string, []byte, error) {
+	if e.Session.Config().Active {
+		live := liveURL(u)
+		data, err := d.fetchDirect(e, u, live, max)
+		if err == nil && looksLike(dt.Format, data) {
+			return live, data, nil
+		}
+		if errors.Is(err, errTooLarge) {
+			return live, nil, err
+		}
+	}
+
+	capture := d.captureURL(e, u)
+	data, err := d.fetchArchive(e, capture, max)
+	if err != nil {
+		return capture, nil, err
+	}
+	if !looksLike(dt.Format, data) {
+		return capture, nil, fmt.Errorf("%w (%s expected)", errNotDocument, dt.Format)
+	}
+	return capture, data, nil
+}
+
+// liveURL is the URL to fetch: the stored URL without its scheme's default
+// port. Archives keep URLs as crawled ("http://host:80/a.pdf"), and some
+// sites redirect such a URL to https on port 80, which cannot answer.
+func liveURL(u *oamurl.URL) string {
+	raw := u.Raw
+	for _, def := range []struct{ scheme, port string }{{"http", ":80"}, {"https", ":443"}} {
+		prefix := def.scheme + "://" + u.Host + def.port
+		if !strings.HasPrefix(strings.ToLower(raw), strings.ToLower(prefix)) {
+			continue
+		}
+		// the port ends where the path, query or fragment begins, so ":80"
+		// is not taken from ":8080"
+		if rest := raw[len(prefix):]; rest == "" || strings.ContainsRune("/?#", rune(rest[0])) {
+			raw = def.scheme + "://" + u.Host + rest
+		}
+	}
+	return raw
 }
 
 // inScope reports whether the URL's host is in the session's scope; only
@@ -213,12 +251,12 @@ func (d *documents) fetchArchive(e *et.Event, capture string, max int64) ([]byte
 	return fetch(e, e.Session.Clients().General, capture, max)
 }
 
-func (d *documents) fetchDirect(e *et.Event, u *oamurl.URL, max int64) ([]byte, error) {
+func (d *documents) fetchDirect(e *et.Event, u *oamurl.URL, live string, max int64) ([]byte, error) {
 	if err := support.PaceProbe(e, u.Host); err != nil {
 		return nil, err
 	}
 	_ = support.WaitLimit(e.Session.Ctx(), d.direct)
-	return fetch(e, e.Session.Clients().Probe, u.Raw, max)
+	return fetch(e, e.Session.Clients().Probe, live, max)
 }
 
 // fetch GETs u and returns at most max bytes of its body: a longer document

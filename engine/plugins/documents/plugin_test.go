@@ -249,3 +249,65 @@ func TestLooksLike(t *testing.T) {
 		t.Error("OOXML magic")
 	}
 }
+
+// In active mode a document the site no longer serves (it answers with an
+// HTML page) is read from the archive's copy instead.
+func TestActiveFallsBackToArchive(t *testing.T) {
+	f := newFixture(t, http.StatusOK, pdfDoc)
+	f.sess.Config().Active = true
+
+	var live, archived atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/web/") {
+			archived.Add(1)
+			_, _ = w.Write([]byte(pdfDoc))
+			return
+		}
+		live.Add(1)
+		_, _ = fmt.Fprint(w, "<html>Page not found</html>")
+	}))
+	t.Cleanup(srv.Close)
+	f.d.ArchiveURL = srv.URL + "/web/"
+
+	target := strings.TrimPrefix(srv.URL, "http://")
+	f.sess.Clients().Probe = &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, network, target)
+		},
+	}}
+
+	raw := "http://docs.example.com/old/handbook.pdf"
+	if err := f.d.check(f.event(t, raw)); err != nil {
+		t.Fatal(err)
+	}
+	if live.Load() != 1 || archived.Load() != 1 {
+		t.Errorf("live asked %d times, archive %d; want one each", live.Load(), archived.Load())
+	}
+	fent := f.file(t, raw)
+	if fent == nil {
+		t.Fatal("the archived copy was not stored")
+	}
+	if from := props(t, f, fent)[PropRetrievedFrom]; !strings.Contains(from, "/web/2id_/"+raw) {
+		t.Errorf("retrieved from %q, want the archive capture", from)
+	}
+}
+
+func TestLiveURLDropsDefaultPorts(t *testing.T) {
+	cases := map[string]string{
+		"http://www.example.edu:80/a.pdf":     "http://www.example.edu/a.pdf",
+		"https://www.example.edu:443/b.pdf":   "https://www.example.edu/b.pdf",
+		"http://www.example.edu:8080/c.pdf":   "http://www.example.edu:8080/c.pdf",
+		"https://www.example.edu/d.pdf":       "https://www.example.edu/d.pdf",
+		"HTTP://www.example.edu:80/e.pdf?x=1": "http://www.example.edu/e.pdf?x=1",
+	}
+	for raw, want := range cases {
+		u := support.RawURLToOAM(raw)
+		if u == nil {
+			t.Fatalf("bad URL %q", raw)
+		}
+		if got := liveURL(u); got != want {
+			t.Errorf("liveURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
