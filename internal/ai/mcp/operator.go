@@ -38,6 +38,11 @@ type Operator struct {
 	Graph oamrepo.Adapter
 	// Journal is the review journal automatic attribution writes.
 	Journal string
+	// AnnounceDecisions lets watch_decisions report new proposals and the
+	// classifier's automatic changes as they are written (default on while
+	// attribution runs; AMASS_AI_ANNOUNCE_DECISIONS=false turns it off). It
+	// controls surfacing only, never whether the classifier acts.
+	AnnounceDecisions bool
 	// DataSources is the datasources file credentials are stored in.
 	DataSources string
 	// KeyLinks serves one-time pages for entering credentials, and
@@ -57,6 +62,7 @@ const (
 	ToolEnumerationStatus = "enumeration_status"
 	ToolStopEnumeration   = "stop_enumeration"
 	ToolListProposals     = "list_proposals"
+	ToolWatchDecisions    = "watch_decisions"
 	ToolReviewProposal    = "review_proposal"
 	ToolDataSources       = "data_sources"
 	ToolDataSourceKey     = "data_source_key_link"
@@ -73,7 +79,7 @@ Operator mode: this connection can also collect data and change the database, ea
 - Follow a run with enumeration_status; when it finishes, its result lists what was found, and investigate answers questions about it. stop_enumeration ends a run. A finished run also reports pending_proposals (counts by kind) when the run left proposals awaiting review.
 - When a run reports pending_proposals, present them for the user to decide on: call list_proposals with pending true, group them by kind, and for each explain the evidence behind it with get_evidence and walk_relations (for example, that two organization records share an LEI and a registrant phone, so they are likely the same company, or how an identity contradicts the evidence). Then review_proposal approves, rejects or retracts one; approving and retracting write to the database and ask the user first. Never approve on the user's behalf — the decision is theirs. list_proposals also shows every ownership, merge, identity and person-named proposal when pending is false.
 - A finished run also reports applied_by_ai (counts by kind) for the changes the classifier applied automatically during the run (ownership edges, organization merges, identity corrections, scope expansions). Tell the user what the AI decided on its own and explain the evidence with get_evidence and walk_relations; list_proposals with applied true lists them. These are already applied, so the only action is review_proposal retract to undo one — ask the user first, and never retract on their behalf.
-- To keep the user aware in near real time, offer to watch a run the user starts or points you at: re-check enumeration_status periodically while it is still going, and as soon as pending_proposals or applied_by_ai rises, surface the new items at once (explain each with get_evidence and walk_relations, ask before any decision) instead of waiting for the run to finish. This is user-initiated, so do it when asked and stop when the user says so.
+- To keep the user aware in near real time, offer to watch a run the user starts or points you at. Call watch_decisions once without a cursor to start from now, then call it again with the cursor it returned, in a loop: each call waits until a new proposal or an AI-applied change is written to the review journal (or up to its wait time) and returns those items with the next cursor. Surface each item at once — explain its evidence with get_evidence and walk_relations, ask the user before any decision, and never approve or retract on their behalf — and check enumeration_status between calls to stop when the run finishes or the user says so. This is user-initiated, so watch when asked.
 - watch_target re-runs a planned enumeration on a schedule (at most every 6 hours) after the user approves it once; list_watches shows each watch with what its last run found, and stop_watch removes one.
 - data_sources lists which data sources have credentials. data_source_key_link gives the user a one-time local link to enter a key; never ask the user to type a key into the chat.
 - To change how enumerations run, draft a complete configuration (describe_config gives the schema, current settings and a template), check it with validate_config, then call apply_config with the same content; the user approves the exact change and sees a masked diff. Never put data source credentials in a configuration; the operator adds keys through data_source_key_link.`
@@ -470,6 +476,47 @@ func operatorCapabilities(op *Operator, runner ai.ToolRunner) []capability {
 			}
 
 			return textResult(text), nil
+		})
+
+	add(ToolWatchDecisions, "Watch Amass decisions",
+		"Wait for new review items while an enumeration runs: proposals that now await the user's decision and "+
+			"changes the AI classifier applied on its own (ownership edges, organization merges, identity "+
+			"corrections, scope expansions). Call it first without a cursor to start from now; then pass the "+
+			"cursor it returns. Each call returns as soon as new items are written, or after wait_seconds with "+
+			"none, with the cursor for the next call. Reads the review journal only; it changes nothing.",
+		obj(nil, map[string]any{
+			"cursor": map[string]any{"type": "string",
+				"description": "The cursor a previous call returned; omit to start from now."},
+			"wait_seconds": map[string]any{"type": "integer", "minimum": 0, "maximum": maxDecisionWait,
+				"description": fmt.Sprintf("How long to wait for new items (default %d, at most %d).",
+					defaultDecisionWait, maxDecisionWait)},
+		}), readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, raw json.RawMessage) (*mcp.CallToolResult, error) {
+			if op.Journal == "" {
+				return nil, errors.New("no review journal is configured")
+			}
+			if !op.AnnounceDecisions {
+				return textResult("Decision announcements are turned off (attribution is off, or " +
+					"AMASS_AI_ANNOUNCE_DECISIONS is false). list_proposals still lists proposals and applied " +
+					"changes on request."), nil
+			}
+
+			var a struct {
+				Cursor string `json:"cursor"`
+				Wait   *int   `json:"wait_seconds"`
+			}
+			if len(raw) > 0 {
+				if err := json.Unmarshal(raw, &a); err != nil {
+					return nil, err
+				}
+			}
+
+			wait := defaultDecisionWait
+			if a.Wait != nil {
+				wait = min(max(*a.Wait, 0), maxDecisionWait)
+			}
+
+			return watchDecisions(ctx, op.Journal, a.Cursor, time.Duration(wait)*time.Second)
 		})
 
 	add(ToolReviewProposal, "Review an Amass proposal",
@@ -882,4 +929,55 @@ func textResult(s string) *mcp.CallToolResult {
 
 func errorResult(err error) *mcp.CallToolResult {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}}}
+}
+
+// Bounds of a watch_decisions call: long enough to save the assistant most
+// polls, short enough to stay under MCP clients' request timeouts.
+const (
+	defaultDecisionWait = 25
+	maxDecisionWait     = 50
+)
+
+// decisionPoll is how often a waiting watch_decisions call checks the journal;
+// a check that finds nothing appended costs one stat.
+var decisionPoll = time.Second
+
+// watchDecisions waits until the review journal records a new pending proposal
+// or an AI-applied change after cursor, or until wait passes, and returns the
+// new items and the next cursor. Without a cursor it returns at once with the
+// cursor for the journal's end and the counts already pending and applied.
+func watchDecisions(ctx context.Context, journal, cursor string, wait time.Duration) (*mcp.CallToolResult, error) {
+	deadline := time.Now().Add(wait)
+	for {
+		ch, err := lenscli.DecisionsSince(journal, cursor)
+		if err != nil {
+			return nil, err
+		}
+		if cursor == "" {
+			out := map[string]any{"cursor": ch.Cursor, "items": []lenscli.DecisionItem{}}
+			if s, err := lenscli.PendingProposalsSummary(journal); err == nil {
+				out["pending_proposals"] = s
+			}
+			if s, err := lenscli.AppliedByAISummary(journal, time.Time{}); err == nil {
+				out["applied_by_ai"] = s
+			}
+
+			return jsonResult(out), nil
+		}
+		if len(ch.Items) > 0 || ch.Reset || !time.Now().Before(deadline) {
+			if ch.Items == nil {
+				ch.Items = []lenscli.DecisionItem{}
+			}
+
+			return jsonResult(ch), nil
+		}
+
+		// Lines that were not decisions move the cursor on.
+		cursor = ch.Cursor
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(min(decisionPoll, time.Until(deadline))):
+		}
+	}
 }

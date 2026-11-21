@@ -26,6 +26,9 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai"
 	"github.com/owasp-amass/amass/v5/internal/collect"
 	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
+	"github.com/owasp-amass/amass/v5/internal/review"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
@@ -197,8 +200,8 @@ func TestOperatorToolsNeedTheOperatorToken(t *testing.T) {
 
 	operator := toolNames(t, connect(t, fx.url, operatorToken, nil))
 	for _, name := range []string{ToolPlanEnumeration, ToolStartEnumeration, ToolEnumerationStatus,
-		ToolStopEnumeration, ToolListProposals, ToolReviewProposal, ToolDataSources, ToolDataSourceKey,
-		"walk_relations"} {
+		ToolStopEnumeration, ToolListProposals, ToolWatchDecisions, ToolReviewProposal, ToolDataSources,
+		ToolDataSourceKey, "walk_relations"} {
 		if !operator[name] {
 			t.Errorf("operator tools lack %s", name)
 		}
@@ -485,6 +488,58 @@ func TestReviewToolsReadTheJournal(t *testing.T) {
 	text, isErr := call(t, cs, ToolReviewProposal, map[string]any{"proposal_id": "own-missing", "decision": "reject"})
 	if !isErr || !strings.Contains(text, "own-missing") {
 		t.Errorf("reject of a missing proposal: %s", text)
+	}
+}
+
+// watch_decisions starts from now, then returns a proposal written while it
+// waits; with announcements off it says so instead of watching.
+func TestWatchDecisionsReturnsItemsWrittenWhileWaiting(t *testing.T) {
+	defer func(d time.Duration) { decisionPoll = d }(decisionPoll)
+	decisionPoll = 20 * time.Millisecond
+
+	fx := newOperatorFixture(t)
+	cs := connect(t, fx.url, operatorToken, nil)
+
+	text, isErr := call(t, cs, ToolWatchDecisions, map[string]any{})
+	if isErr || !strings.Contains(text, "turned off") {
+		t.Fatalf("with announcements off = %s", text)
+	}
+
+	fx.op.AnnounceDecisions = true
+	text, isErr = call(t, cs, ToolWatchDecisions, map[string]any{})
+	var base struct {
+		Cursor string `json:"cursor"`
+	}
+	if isErr || json.Unmarshal([]byte(text), &base) != nil || base.Cursor == "" {
+		t.Fatalf("baseline = %s", text)
+	}
+
+	edge := lens.ProposedEdge{FromID: "1", FromType: "ContactRecord", From: "https://rdap.example/alumni",
+		Label: "organization", RelationType: "SimpleRelation", ToID: "2", ToType: "Organization",
+		To: "Synthetic University"}
+	p := review.OwnershipProposal{ID: review.ProposalID(edge), Owner: "Synthetic University", OwnerID: "2",
+		Asset: edge.From, AssetID: "1", AssetType: "ContactRecord", Edge: edge, Score: 0.9,
+		Decision: lens.GapPropose, Signals: []string{"identity via phone"}}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_, _ = (&review.Journal{Path: fx.op.Journal}).SubmitOwnership([]review.OwnershipProposal{p})
+	}()
+
+	text, isErr = call(t, cs, ToolWatchDecisions, map[string]any{"cursor": base.Cursor, "wait_seconds": 5})
+	var got lenscli.DecisionChanges
+	if isErr || json.Unmarshal([]byte(text), &got) != nil {
+		t.Fatalf("watch = %s", text)
+	}
+	if len(got.Items) != 1 || got.Items[0].ID != p.ID || got.Items[0].Status != lenscli.DecisionPending ||
+		got.Cursor == base.Cursor {
+		t.Errorf("watch returned %s", text)
+	}
+
+	// Nothing new: the call waits out its time and returns no items.
+	text, isErr = call(t, cs, ToolWatchDecisions, map[string]any{"cursor": got.Cursor, "wait_seconds": 0})
+	var none lenscli.DecisionChanges
+	if isErr || json.Unmarshal([]byte(text), &none) != nil || len(none.Items) != 0 || none.Cursor != got.Cursor {
+		t.Errorf("idle watch = %s", text)
 	}
 }
 
