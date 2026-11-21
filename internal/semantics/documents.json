@@ -1,0 +1,18 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Documents the document collector (Unit 11) reads for metadata. A URL whose path ends in one of types' extensions, found by any source (web archives, page links, security.txt, registries), is retrieved once: in passive mode from a web archive's stored copy, so the target is never contacted, and in active mode from the target's own URL. format selects the offline extractor (pdf: the Info dictionary and XMP; ooxml: docProps/core.xml and app.xml). media_type is recorded as the File's type. max_bytes caps a download; a larger document is recorded without its metadata. Add types here, not in Go code; a new format needs an extractor.",
+  "max_bytes": 10485760,
+  "types": [
+    {"ext": ".pdf",  "media_type": "application/pdf", "format": "pdf"},
+    {"ext": ".docx", "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "format": "ooxml"},
+    {"ext": ".docm", "media_type": "application/vnd.ms-word.document.macroEnabled.12", "format": "ooxml"},
+    {"ext": ".xlsx", "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "format": "ooxml"},
+    {"ext": ".xlsm", "media_type": "application/vnd.ms-excel.sheet.macroEnabled.12", "format": "ooxml"},
+    {"ext": ".pptx", "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "format": "ooxml"},
+    {"ext": ".pptm", "media_type": "application/vnd.ms-powerpoint.presentation.macroEnabled.12", "format": "ooxml"}
+  ],
+  "sources": [
+    "https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf",
+    "https://ecma-international.org/publications-and-standards/standards/ecma-376/"
+  ]
+}
