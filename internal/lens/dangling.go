@@ -280,6 +280,23 @@ func (s *danglingScan) name(a graph.Asset) error {
 		via = append(via, graph.FQDNName(x))
 	}
 	target := graph.FQDNName(res.Target(a))
+
+	// Confirmed bucket takeover: a CNAME to an object-storage bucket host that a
+	// probe found absent (NoSuchBucket) is claimable even when the host still
+	// resolves to the provider's endpoint, which the no-address check below
+	// misses. Reads the probe's bucket_status property off the target.
+	if res.Aliased() && !underscoredName(name) && !s.ownDomains[graph.RegisteredDomain(target)] {
+		if prov, _, ok := semantics.MatchBucketHost(target); ok {
+			if ev, err := s.w.graph.Evidence(s.w.ctx, res.Target(a).ID, 50); err == nil &&
+				slices.Contains(propertyValues(ev, "bucket_status"), "absent") {
+				s.add(DanglingFinding{Kind: DanglingClaimable, Name: name, NameID: a.ID, Target: target, Via: via,
+					Service: prov.Organization + " bucket", Source: prov.Source,
+					Detail: fmt.Sprintf("alias to the %s bucket %q, which a probe found does not exist "+
+						"(NoSuchBucket); anyone can create it and serve content as %s", prov.Organization, target, name)})
+			}
+		}
+	}
+
 	switch {
 	case res.Loop || res.Deep:
 		s.add(DanglingFinding{Kind: DanglingLoop, Name: name, NameID: a.ID, Target: target, Via: via,

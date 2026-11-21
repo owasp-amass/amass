@@ -15,8 +15,8 @@ package bucket
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,9 +189,12 @@ func matchSig(sig semantics.BucketSignature, resp *amasshttp.Response) bool {
 	return true
 }
 
-// store records the probe outcome on the bucket host (for the dangling lens's
-// takeover confirmation) and, for a live bucket, materializes an object-storage
-// Service as attack-surface inventory.
+// store records the probe outcome. The status, provider and bucket name are
+// written as properties on the bucket host, which the dangling and exposure
+// lenses read back via graph.Evidence (as resolve/domains/email/disclosure do
+// for their facts). A live bucket (exists or public) is additionally
+// materialized as an object-storage Service — attack-surface inventory the
+// services and exposure lenses list by service type.
 func (p *bucketProbe) store(e *et.Event, host *dbt.Entity, name string, prov semantics.BucketProvider,
 	bucket, status string) {
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
@@ -204,14 +207,14 @@ func (p *bucketProbe) store(e *et.Event, host *dbt.Entity, name string, prov sem
 	if status == "exists" || status == "public" {
 		serv := support.ServiceWithIdentifier(name, "tcp", 443)
 		serv.Type = "object-storage"
+		serv.Attributes = map[string][]string{
+			"provider": {prov.Organization},
+			"bucket":   {bucket},
+			"public":   {strconv.FormatBool(status == "public")},
+		}
 
 		portrel := &oamgen.PortRelation{Name: "tcp_port_443", PortNumber: 443, Protocol: "TCP"}
-		s, err := support.CreateServiceAsset(e.Session, host, portrel, serv, nil)
-		if err == nil && s != nil {
-			p.property(ctx, e, s, "provider", prov.Organization)
-			p.property(ctx, e, s, "bucket", bucket)
-			p.property(ctx, e, s, "public", fmt.Sprintf("%t", status == "public"))
-
+		if s, err := support.CreateServiceAsset(e.Session, host, portrel, serv, nil); err == nil && s != nil {
 			findings := []*support.Finding{{
 				From: host, FromName: host.Asset.Key(), To: s, ToName: "Service: " + serv.ID, Rel: portrel,
 			}}

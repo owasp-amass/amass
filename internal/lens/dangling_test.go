@@ -82,6 +82,21 @@ func danglingFixture() graphtest.VendorGraph {
 		}
 	}
 
+	// A CNAME to an S3 bucket host that resolves (so the no-stored-address check
+	// is skipped) but that a probe recorded as absent: a confirmed takeover the
+	// pattern-only path would miss.
+	name("cdn.colgate.edu")
+	name("colgate-assets.s3.amazonaws.com")
+	link("colgate.edu", "node", "cdn.colgate.edu")
+	record("cdn.colgate.edu", "colgate-assets.s3.amazonaws.com", 5)
+	ip("ip-bucket", "52.216.0.1")
+	record("colgate-assets.s3.amazonaws.com", "ip-bucket", 1)
+	if g.EvidenceByID == nil {
+		g.EvidenceByID = map[string][]graph.Evidence{}
+	}
+	g.EvidenceByID["colgate-assets.s3.amazonaws.com"] = []graph.Evidence{
+		graphtest.SimpleProp("bucket_status", "absent")}
+
 	return g
 }
 
@@ -103,6 +118,7 @@ func TestFindDanglingDNS(t *testing.T) {
 	want := []string{
 		DanglingClaimable + " shop.colgate.edu",
 		DanglingClaimable + " promo2.colgate.edu",
+		DanglingClaimable + " cdn.colgate.edu",
 		DanglingExpired + " promo.colgate.edu",
 		DanglingExpiring + " colgate.edu",
 		DanglingUnresolved + " old.colgate.edu",
@@ -120,6 +136,10 @@ func TestFindDanglingDNS(t *testing.T) {
 	if f := got[DanglingClaimable+" promo2.colgate.edu"]; !strings.Contains(f.Service, "Google Cloud Storage") ||
 		f.Source == "" {
 		t.Errorf("GCS claimable finding = %+v", f)
+	}
+	if f := got[DanglingClaimable+" cdn.colgate.edu"]; !strings.Contains(f.Detail, "does not exist") ||
+		f.Source == "" {
+		t.Errorf("confirmed bucket-takeover finding = %+v", f)
 	}
 	for _, f := range r.Findings {
 		if f.Name == "ok.colgate.edu" {
