@@ -43,13 +43,15 @@ func danglingFixture() graphtest.VendorGraph {
 	for _, n := range []string{"shop.colgate.edu", "colgate.azurewebsites.net", "old.colgate.edu",
 		"legacy.example-host.com", "l1.colgate.edu", "l2.colgate.edu", "promo.colgate.edu",
 		"promo.lapsed-agency.com", "ok.colgate.edu", "ok.example-host.com",
-		"selector1._domainkey.colgate.edu", "selector1-colgate-edu._domainkey.sel.onmicrosoft.com"} {
+		"selector1._domainkey.colgate.edu", "selector1-colgate-edu._domainkey.sel.onmicrosoft.com",
+		"promo2.colgate.edu", "c.storage.googleapis.com"} {
 		name(n)
 	}
-	for _, n := range []string{"shop", "old", "l1", "l2", "promo", "ok"} {
+	for _, n := range []string{"shop", "old", "l1", "l2", "promo", "promo2", "ok"} {
 		link("colgate.edu", "node", n+".colgate.edu")
 	}
 	record("shop.colgate.edu", "colgate.azurewebsites.net", 5)
+	record("promo2.colgate.edu", "c.storage.googleapis.com", 5)
 	record("old.colgate.edu", "legacy.example-host.com", 5)
 	record("l1.colgate.edu", "l2.colgate.edu", 5)
 	record("l2.colgate.edu", "l1.colgate.edu", 5)
@@ -100,6 +102,7 @@ func TestFindDanglingDNS(t *testing.T) {
 	}
 	want := []string{
 		DanglingClaimable + " shop.colgate.edu",
+		DanglingClaimable + " promo2.colgate.edu",
 		DanglingExpired + " promo.colgate.edu",
 		DanglingExpiring + " colgate.edu",
 		DanglingUnresolved + " old.colgate.edu",
@@ -113,6 +116,10 @@ func TestFindDanglingDNS(t *testing.T) {
 	}
 	if f := got[DanglingClaimable+" shop.colgate.edu"]; f.Service != "Azure App Service" || f.Source == "" {
 		t.Errorf("claimable finding = %+v", f)
+	}
+	if f := got[DanglingClaimable+" promo2.colgate.edu"]; !strings.Contains(f.Service, "Google Cloud Storage") ||
+		f.Source == "" {
+		t.Errorf("GCS claimable finding = %+v", f)
 	}
 	for _, f := range r.Findings {
 		if f.Name == "ok.colgate.edu" {
@@ -144,6 +151,9 @@ func TestClaimableServicesCiteSources(t *testing.T) {
 	}
 	if _, ok := claimable("bucket.s3-website-us-east-1.amazonaws.com"); !ok {
 		t.Error("an S3 website endpoint is not claimable")
+	}
+	if _, ok := claimable("c.storage.googleapis.com"); !ok {
+		t.Error("a Google Cloud Storage endpoint is not claimable")
 	}
 	if _, ok := claimable("d111111abcdef8.cloudfront.net"); ok {
 		t.Error("CloudFront distribution names are assigned, not claimable")

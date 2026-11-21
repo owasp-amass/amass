@@ -53,6 +53,11 @@
       "source": "https://aws.amazon.com/blogs/security/threat-tactic-spotlight-subdomain-takeover/"
     },
     {
+      "service": "Google Cloud Storage (global bucket namespace)",
+      "patterns": ["\\.storage\\.googleapis\\.com$", "\\.storage\\.cloud\\.google\\.com$"],
+      "source": "https://cloud.google.com/storage/docs/request-endpoints"
+    },
+    {
       "service": "AWS Elastic Beanstalk",
       "patterns": ["\\.elasticbeanstalk\\.com$"],
       "source": "https://aws.amazon.com/blogs/security/threat-tactic-spotlight-subdomain-takeover/"
