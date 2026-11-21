@@ -15,6 +15,7 @@ package archive
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/net/publicsuffix"
+	"golang.org/x/time/rate"
 )
 
 // PropArchiveFirstSeen is the property an archived URL carries: the date the
@@ -207,4 +209,46 @@ func logRefusal(e *et.Event, pname, domain string, resp *amasshttp.Response, err
 func logAnswer(e *et.Event, pname, domain string, captures, names, urls int) {
 	e.Session.Log().Info("archive answered", "domain", domain, "captures", captures, "names", names,
 		"urls", urls, slog.Group("plugin", "name", pname, "handler", pname+"-Handler"))
+}
+
+// archiveBackoff are the waits before each retry of an archive request that
+// failed or that the server refused for load. The Wayback Machine and the
+// Common Crawl index are keyless and often overloaded (502/503/504, 429), and
+// a refusal is usually over within a minute or two.
+var archiveBackoff = []time.Duration{20 * time.Second, time.Minute}
+
+// overloaded reports whether a status is the server refusing for load, which
+// is worth asking again, as opposed to an answer.
+func overloaded(status int) bool {
+	switch status {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// request GETs u, paced by lim, retrying after each wait in backoff while
+// the request fails or the server refuses for load. It returns the last
+// response, so a refusal that outlasts the retries is still logged as one.
+func request(e *et.Event, lim *rate.Limiter, backoff []time.Duration, timeout time.Duration,
+	u string) (*amasshttp.Response, error) {
+	for attempt := 0; ; attempt++ {
+		_ = support.WaitLimit(e.Session.Ctx(), lim)
+		e.Session.NetSem().Acquire()
+		ctx, cancel := context.WithTimeout(e.Session.Ctx(), timeout)
+		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u})
+		cancel()
+		e.Session.NetSem().Release()
+
+		if (err == nil && resp != nil && !overloaded(resp.StatusCode)) || attempt >= len(backoff) {
+			return resp, err
+		}
+
+		select {
+		case <-e.Session.Ctx().Done():
+			return resp, err
+		case <-time.After(backoff[attempt]):
+		}
+	}
 }

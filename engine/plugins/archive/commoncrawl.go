@@ -6,7 +6,6 @@ package archive
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -40,7 +38,9 @@ type commonCrawl struct {
 	IndexURL string
 	log      *slog.Logger
 	rlimit   *rate.Limiter
-	source   *et.Source
+	// backoff are the waits before retrying a refused or failed request.
+	backoff []time.Duration
+	source  *et.Source
 
 	mu    sync.Mutex
 	api   string
@@ -52,6 +52,7 @@ func NewCommonCrawl() et.Plugin {
 		name:     "CommonCrawl",
 		IndexURL: "https://index.commoncrawl.org/collinfo.json",
 		rlimit:   rate.NewLimiter(rate.Every(10*time.Second), 1),
+		backoff:  archiveBackoff,
 		source: &et.Source{
 			Name:       "CommonCrawl",
 			Confidence: 80,
@@ -208,14 +209,7 @@ func (c *commonCrawl) get(e *et.Event, u string) (string, bool) {
 // fetch makes one paced request and returns the body and status, or a zero
 // status when the request failed.
 func (c *commonCrawl) fetch(e *et.Event, u string) (string, int) {
-	_ = support.WaitLimit(e.Session.Ctx(), c.rlimit)
-	e.Session.NetSem().Acquire()
-	defer e.Session.NetSem().Release()
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 90*time.Second)
-	defer cancel()
-
-	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u})
+	resp, err := request(e, c.rlimit, c.backoff, 90*time.Second, u)
 	if err != nil || resp == nil {
 		return "", 0
 	}

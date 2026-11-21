@@ -44,6 +44,7 @@ func newWayback(t *testing.T, code int, page string) (*wayback, *plugintest.Sess
 
 	w := NewWayback().(*wayback)
 	w.rlimit = rate.NewLimiter(rate.Inf, 1)
+	w.backoff = nil
 	w.URL = srv.URL + "/cdx?url="
 
 	name := sess.Asset(t, &oamdns.FQDN{Name: "example.com"})
@@ -155,15 +156,49 @@ func TestWaybackAsksOncePerDomain(t *testing.T) {
 	}
 }
 
-// A rate limited or failed answer is not read for names or URLs.
+// A rate limited or failed answer is not read for names or URLs, and does
+// not count as asking: the domain is asked again on its next event.
 func TestWaybackRefusal(t *testing.T) {
-	w, _, disp, e, _ := newWayback(t, http.StatusTooManyRequests, `[["https://www.example.com/","20200101000000"]]`)
+	w, _, disp, e, hits := newWayback(t, http.StatusTooManyRequests, `[["https://www.example.com/","20200101000000"]]`)
+
+	for range 2 {
+		if err := w.check(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := disp.Events(); len(got) != 0 {
+		t.Errorf("a refused answer dispatched %d events", len(got))
+	}
+	if hits.Load() != 2 {
+		t.Errorf("asked %d times, want 2: a refusal is not an answer", hits.Load())
+	}
+}
+
+// A request the archive refuses for load is asked again after the backoff,
+// and the answer that follows is read.
+func TestWaybackRetriesOverload(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = fmt.Fprint(w, archivePage)
+	}))
+	t.Cleanup(srv.Close)
+
+	w, _, disp, e, _ := newWayback(t, http.StatusOK, archivePage)
+	w.URL = srv.URL + "/cdx?url="
+	w.backoff = []time.Duration{0}
 
 	if err := w.check(e); err != nil {
 		t.Fatal(err)
 	}
-	if got := disp.Events(); len(got) != 0 {
-		t.Errorf("a refused answer dispatched %d events", len(got))
+	if hits.Load() != 2 {
+		t.Errorf("asked %d times, want a retry after the 503", hits.Load())
+	}
+	if _, urls := dispatched(disp); len(urls) == 0 {
+		t.Error("the answer after the retry was not read")
 	}
 }
 

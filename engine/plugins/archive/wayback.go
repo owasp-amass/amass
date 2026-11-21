@@ -5,7 +5,6 @@
 package archive
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -30,7 +28,9 @@ type wayback struct {
 	URL    string
 	log    *slog.Logger
 	rlimit *rate.Limiter
-	source *et.Source
+	// backoff are the waits before retrying a refused or failed request.
+	backoff []time.Duration
+	source  *et.Source
 }
 
 func NewWayback() et.Plugin {
@@ -40,8 +40,9 @@ func NewWayback() et.Plugin {
 		name: "Wayback",
 		// One row per distinct URL (collapse=urlkey) with the timestamp of its
 		// first capture.
-		URL:    "https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original,timestamp&output=json&collapse=urlkey&url=",
-		rlimit: rate.NewLimiter(limit, 1),
+		URL:     "https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original,timestamp&output=json&collapse=urlkey&url=",
+		rlimit:  rate.NewLimiter(limit, 1),
+		backoff: archiveBackoff,
 		source: &et.Source{
 			Name:       "Wayback",
 			Confidence: 80,
@@ -95,10 +96,11 @@ func (w *wayback) check(e *et.Event) error {
 	}
 
 	rows, answered := w.query(e, fqdn.Name)
-	support.MarkAssetMonitored(e.Session, e.Entity, w.source)
 	if !answered {
+		// a refusal is not an answer: the domain is asked again later
 		return nil
 	}
+	support.MarkAssetMonitored(e.Session, e.Entity, w.source)
 
 	names, urls := harvest(e, w.source, w.name, rows)
 	logAnswer(e, w.name, fqdn.Name, len(rows), len(names), len(urls))
@@ -150,19 +152,12 @@ func (w *wayback) query(e *et.Event, name string) (rows []archiveRow, answered b
 // It returns the captures, the key for the next page ("" when this was the
 // last) and whether the archive answered.
 func (w *wayback) page(e *et.Event, name, key string) ([]archiveRow, string, bool) {
-	_ = support.WaitLimit(e.Session.Ctx(), w.rlimit)
-	e.Session.NetSem().Acquire()
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), waybackPageTimeout)
-	defer cancel()
-
 	// matchType=domain covers the name and every name below it
 	u := fmt.Sprintf("%s%s&limit=%d&showResumeKey=true", w.URL, url.QueryEscape(name), waybackPageRows)
 	if key != "" {
 		u += "&resumeKey=" + url.QueryEscape(key)
 	}
-	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u})
-	e.Session.NetSem().Release()
+	resp, err := request(e, w.rlimit, w.backoff, waybackPageTimeout, u)
 	// a refusal or rate limit is not read as an answer, but is logged so a
 	// run that stores nothing can be told from one the archive refused
 	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {

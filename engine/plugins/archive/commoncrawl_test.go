@@ -66,6 +66,7 @@ func newCommonCrawl(t *testing.T, indexStatus int) (*commonCrawl, *plugintest.Se
 
 	c := NewCommonCrawl().(*commonCrawl)
 	c.rlimit = rate.NewLimiter(rate.Inf, 1)
+	c.backoff = nil
 	c.IndexURL = srv.URL + "/collinfo.json"
 
 	name := sess.Asset(t, &oamdns.FQDN{Name: "example.com"})
