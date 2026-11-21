@@ -1,0 +1,11 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Which archived URLs the web-archive collectors (Unit 12) keep as URL assets. An archive returns every URL it captured for a domain, which for a large site is tens of thousands, most of them images, stylesheets and fonts that say nothing about the attack surface. static_extensions are path suffixes that are never kept (scripts and documents are kept: scripts name endpoints, documents feed metadata extraction). max_urls_per_domain caps the URLs kept per registered domain per query; when more qualify, URLs with a query string are preferred, then deeper paths, so parameters and application endpoints survive the cap. Every archived URL's host still counts toward subdomain discovery, whether or not the URL is kept. Only in-scope hosts are ever kept. Add values here, not in Go code.",
+  "max_urls_per_domain": 2000,
+  "static_extensions": [
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".bmp", ".tif", ".tiff", ".avif",
+    ".css", ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    ".mp3", ".mp4", ".m4a", ".m4v", ".avi", ".mov", ".webm", ".wav", ".flac", ".ogg", ".wmv", ".mpg", ".mpeg"
+  ],
+  "source": "https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server"
+}
