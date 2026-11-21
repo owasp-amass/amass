@@ -213,10 +213,38 @@ func pdfText(c []byte, text *textBuilder) {
 		if et < 0 {
 			et = len(c) - start
 		}
-		pdfTextObject(c[start:start+et], text)
-		text.write("\n")
+		if obj := c[start : start+et]; isTextObject(obj) {
+			pdfTextObject(obj, text)
+			text.write("\n")
+		}
 		i = start + et + 2
 	}
+}
+
+// maxTextObject is the longest text object read; image and font data that
+// happen to hold "BT" and "ET" are usually far longer.
+const maxTextObject = 64 << 10
+
+// textShowing finds a text-showing operator: Tj, TJ, ' or " after a string
+// or array.
+var textShowing = regexp.MustCompile(`[)\]>]\s*(?:Tj|TJ|'|")`)
+
+// isTextObject reports whether the bytes between a BT and an ET are a real
+// text object: short, almost all printable, and showing text. Compressed
+// image and font data can hold "BT" and "ET" by chance, and read as text it
+// is noise in which link and name patterns match.
+func isTextObject(obj []byte) bool {
+	if len(obj) == 0 || len(obj) > maxTextObject || !textShowing.Match(obj) {
+		return false
+	}
+
+	printable := 0
+	for _, b := range obj {
+		if (b >= 0x20 && b < 0x7f) || b == '\n' || b == '\r' || b == '\t' {
+			printable++
+		}
+	}
+	return printable*100 >= len(obj)*95
 }
 
 func pdfTextObject(obj []byte, text *textBuilder) {

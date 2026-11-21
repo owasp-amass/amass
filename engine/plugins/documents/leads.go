@@ -163,8 +163,20 @@ func (d *documents) contentLeads(e *et.Event, fent *dbt.Entity, u *oamurl.URL, d
 	for _, link := range content.Links {
 		addURL(support.RawURLToOAM(link))
 	}
+	// a URL written without a scheme ("portal.example.edu/login") is taken
+	// only when in scope: out of scope, the relaxed pattern also matches
+	// abbreviations, file names and noise ("k.bs"), so an out-of-scope URL
+	// must be written as one (http:// or https://)
+	explicit := map[string]bool{}
+	for _, m := range explicitURLRe.FindAllString(content.Text, -1) {
+		if x := support.RawURLToOAM(strings.TrimRight(m, ".,;:")); x != nil && x.Host != "" {
+			explicit[strings.ToLower(x.Host)] = true
+		}
+	}
 	for _, x := range support.ExtractURLsFromString(content.Text) {
-		addURL(x)
+		if explicit[strings.ToLower(x.Host)] || inScope(e, x.Host) {
+			addURL(x)
+		}
 	}
 	for _, x := range urls {
 		if ent := d.linkAsset(e, fent, x); ent != nil {
@@ -241,6 +253,9 @@ func (d *documents) contentLeads(e *et.Event, fent *dbt.Entity, u *oamurl.URL, d
 
 	return docmeta.Usernames(content.Text)
 }
+
+// explicitURLRe finds URLs written with their web scheme.
+var explicitURLRe = regexp.MustCompile(`(?i)\bhttps?://[^\s<>"'()\[\]{}]+`)
 
 // isDomainName reports whether name ends in a public suffix ICANN manages
 // and has a label in front of it.

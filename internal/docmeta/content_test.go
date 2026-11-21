@@ -86,3 +86,28 @@ func TestContentRejectsOtherData(t *testing.T) {
 		t.Errorf("unknown format err = %v", err)
 	}
 }
+
+// Binary data holding "BT" and "ET" by chance is not read as text.
+func TestPDFTextSkipsBinary(t *testing.T) {
+	noise := []byte("%PDF-1.4\n3 0 obj\n<< /Subtype /Image /Length 64 >>\nstream\n")
+	noise = append(noise, []byte("BT\xc3\xa9\x00\x01(k.bs)\x8f\x90\xff (n.it) Tj\xfe\xfd\xfc\xfb\xfa\xf9\xf8 ET")...)
+	noise = append(noise, []byte("\nendstream\nendobj\n%%EOF\n")...)
+	noise = append(noise, []byte("BT (no operator here) ET")...)
+
+	c, err := ExtractContent(FormatPDF, noise)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(c.Text, "k.bs") || strings.Contains(c.Text, "n.it") || strings.Contains(c.Text, "no operator") {
+		t.Errorf("noise read as text: %q", c.Text)
+	}
+}
+
+func TestIsTextObject(t *testing.T) {
+	if !isTextObject([]byte(" /F1 12 Tf 72 700 Td (Hello) Tj ")) || !isTextObject([]byte(" [(A)-250(B)] TJ ")) {
+		t.Error("real text objects rejected")
+	}
+	if isTextObject([]byte(" (Hello) ")) || isTextObject([]byte(" (\xff\xfe\xfd\xfc\xfb\xfa) Tj ")) {
+		t.Error("an object without an operator, or of binary bytes, accepted")
+	}
+}

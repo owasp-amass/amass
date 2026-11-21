@@ -207,3 +207,31 @@ func TestRegionOf(t *testing.T) {
 		}
 	}
 }
+
+// Out of scope, only URLs written with their scheme are taken from the text;
+// scheme-less look-alikes ("k.bs", "report.final") are not leads.
+func TestSchemelessOutOfScopeIgnored(t *testing.T) {
+	doc := ooxmlDoc(t, "", "", "", "",
+		"see k.bs and n.it, or portal.example.com/login and https://partner.other.org/x")
+	f := newFixture(t, http.StatusOK, doc)
+	raw := "https://www.example.com/a.docx"
+	if err := f.d.check(f.event(t, raw)); err != nil {
+		t.Fatal(err)
+	}
+	fent := f.file(t, raw)
+	if fent == nil {
+		t.Fatal("no File stored")
+	}
+
+	got := neighbors(t, f, fent, "contains")
+	for _, want := range []string{"http://portal.example.com/login", "https://partner.other.org/x"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("contains %v, missing %s", got, want)
+		}
+	}
+	for _, not := range []string{"k.bs", "n.it", "http://k.bs", "http://n.it"} {
+		if slices.Contains(got, not) {
+			t.Errorf("noise %s was linked", not)
+		}
+	}
+}
