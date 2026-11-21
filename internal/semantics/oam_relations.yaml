@@ -158,18 +158,54 @@ relations:
   - {source: FQDN, label: verified_for, relation_type: SimpleRelation, destination: Service,
      attribution: third_party, purpose: dns,
      note: "A TXT verification record shows the domain was verified for this service."}
+  - {source: File, label: author, relation_type: SimpleRelation, destination: Organization,
+     attribution: attribute, purpose: web,
+     note: "Who the document's metadata names as its author or last editor. A stronger claim than a mention, but a document can be written for or about another party, so ownership does not pass through."}
+  - {source: File, label: author, relation_type: SimpleRelation, destination: Person,
+     attribution: attribute, purpose: web,
+     note: "Who the document's metadata names as its author or last editor. A stronger claim than a mention, but a document can be written for or about another party, so ownership does not pass through."}
   - {source: File, label: contains, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: attribute, purpose: web,
-     note: "Data found inside the file."}
+     note: "A block of contact details inside the document, such as a signature; not used for a lone address or number."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: FQDN,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: File,
+     attribution: attribute, purpose: web,
+     note: "A file embedded in the document, such as an attachment or an image."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: IPAddress,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Location,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Netblock,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Organization,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Person,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: contains, relation_type: SimpleRelation, destination: Phone,
+     attribution: attribute, purpose: web,
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
   - {source: File, label: contains, relation_type: SimpleRelation, destination: URL,
      attribution: attribute, purpose: web,
-     note: "Data found inside the file."}
+     note: "Mentioned in the document's content. A mention does not confer ownership."}
+  - {source: File, label: created_with, relation_type: SimpleRelation, destination: Product,
+     attribution: third_party, purpose: product,
+     note: "Software that produced the document, as its metadata names it; points to the vendor's product, not the document's owner."}
+  - {source: File, label: created_with, relation_type: SimpleRelation, destination: ProductRelease,
+     attribution: third_party, purpose: product,
+     note: "Software that produced the document, as its metadata names it; points to the vendor's product, not the document's owner."}
   - {source: File, label: fingerprint, relation_type: SimpleRelation, destination: Identifier,
      attribution: attribute, purpose: web,
      note: "The file's content hash as a shared Identifier (id_type file_sha256), so the same document found at several URLs or published by several parties is one hop apart; see the Service fingerprint relation. Identical files can be shared by unrelated parties (a vendor's brochure), so ownership does not pass through."}
-  - {source: File, label: url, relation_type: SimpleRelation, destination: URL,
-     attribution: attribute, purpose: web,
-     note: "Where the file was retrieved."}
   - {source: FundsTransfer, label: id, relation_type: SimpleRelation, destination: Identifier,
      attribution: attribute, purpose: financial,
      note: "Transfer identifier."}
