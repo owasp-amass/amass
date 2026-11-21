@@ -108,7 +108,13 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 		netSemaphore: NewSessSemaphore(sessionConnLimit(numOfSessions)),
 	}
 	s.scope = scope.CreateFromConfigScope(s)
-	s.log = slog.New(slog.NewJSONHandler(s.ps, nil)).With("session", s.id)
+	// the session's log goes to its subscribers and to the engine's log, so
+	// a session started without a client still leaves its record there
+	var engineLog slog.Handler
+	if reg != nil && reg.Log() != nil {
+		engineLog = reg.Log().Handler()
+	}
+	s.log = slog.New(newTeeHandler(slog.NewJSONHandler(s.ps, nil), engineLog)).With("session", s.id)
 
 	err = s.setupDB()
 	if err != nil {

@@ -117,6 +117,7 @@ func (c *commonCrawl) check(e *et.Event) error {
 	support.MarkAssetMonitored(e.Session, e.Entity, c.source)
 
 	names, urls := harvest(e, c.source, c.name, rows)
+	logAnswer(e, c.name, fqdn.Name, len(rows), len(names), len(urls))
 	if len(names) > 0 {
 		support.ProcessFQDNsWithSource(e, names, c.source)
 	}

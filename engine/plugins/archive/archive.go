@@ -200,3 +200,11 @@ func logRefusal(e *et.Event, pname, domain string, resp *amasshttp.Response, err
 	attrs = append(attrs, slog.Group("plugin", "name", pname, "handler", pname+"-Handler"))
 	e.Session.Log().Info("archive did not answer", attrs...)
 }
+
+// logAnswer records what an archive's answer for a domain held: the captures
+// read, the in-scope names found in them and the URLs kept, so an answer
+// that keeps nothing is told apart from no answer at all.
+func logAnswer(e *et.Event, pname, domain string, captures, names, urls int) {
+	e.Session.Log().Info("archive answered", "domain", domain, "captures", captures, "names", names,
+		"urls", urls, slog.Group("plugin", "name", pname, "handler", pname+"-Handler"))
+}

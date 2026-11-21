@@ -94,10 +94,14 @@ func (w *wayback) check(e *et.Event) error {
 		return nil
 	}
 
-	rows := w.query(e, fqdn.Name)
+	rows, answered := w.query(e, fqdn.Name)
 	support.MarkAssetMonitored(e.Session, e.Entity, w.source)
+	if !answered {
+		return nil
+	}
 
 	names, urls := harvest(e, w.source, w.name, rows)
+	logAnswer(e, w.name, fqdn.Name, len(rows), len(names), len(urls))
 	if len(names) > 0 {
 		support.ProcessFQDNsWithSource(e, names, w.source)
 	}
@@ -119,14 +123,16 @@ const waybackPageTimeout = 3 * time.Minute
 // query returns the captures the Wayback Machine holds under the domain, read
 // a page at a time with the server's resume key, up to five times the URLs
 // kept per domain. A refused or failed page ends the reading, and the pages
-// already read are kept.
-func (w *wayback) query(e *et.Event, name string) []archiveRow {
+// already read are kept. answered is false when the first page was refused.
+func (w *wayback) query(e *et.Event, name string) (rows []archiveRow, answered bool) {
 	limit := 5 * semantics.ArchiveURLs().MaxURLsPerDomain
 
-	var rows []archiveRow
 	var key string
 	for pages := 0; len(rows) < limit && pages < limit/waybackPageRows+1; pages++ {
 		page, next, ok := w.page(e, name, key)
+		if pages == 0 {
+			answered = ok
+		}
 		rows = append(rows, page...)
 		if !ok || next == "" || len(page) == 0 {
 			break
@@ -137,7 +143,7 @@ func (w *wayback) query(e *et.Event, name string) []archiveRow {
 	if len(rows) > limit {
 		rows = rows[:limit]
 	}
-	return rows
+	return rows, answered
 }
 
 // page asks for one page of captures, after the resume key when there is one.
