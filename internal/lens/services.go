@@ -81,12 +81,15 @@ type ExposedService struct {
 
 // ServicesReport is the result of the services lens.
 type ServicesReport struct {
-	Root      graph.Asset      `json:"root"`
-	Owners    []string         `json:"owners,omitempty"`
-	Footprint int              `json:"footprint"`
-	Hosts     int              `json:"hosts"`
-	Services  []ExposedService `json:"services"`
-	ByType    map[string]int   `json:"by_type"`
+	Root      graph.Asset `json:"root"`
+	Owners    []string    `json:"owners,omitempty"`
+	Footprint int         `json:"footprint"`
+	// SummarizedAddresses counts held-netblock addresses with no stored name
+	// or service, summarized rather than counted in Footprint.
+	SummarizedAddresses int              `json:"summarized_addresses,omitempty"`
+	Hosts               int              `json:"hosts"`
+	Services            []ExposedService `json:"services"`
+	ByType              map[string]int   `json:"by_type"`
 	// ByProduct counts the services each identified product and version
 	// runs on ("nginx 1.18.0").
 	ByProduct map[string]int `json:"by_product"`
@@ -131,6 +134,9 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	report := ThirdPartyReport{Root: root, FootprintTypes: map[string]int{}}
 	w := newLensWalker(ctx, g, bounded, meaning, schema.Relations(), root, &report)
 	w.maxAssets, w.maxReads = limits.assets(), limits.reads()
+	// The services lens reports what is hosted, so it summarizes a held
+	// netblock's empty addresses like the scoped lenses (see newScope).
+	w.summarizeBareAddrs = summarizeBareAddrLenses[LensServices]
 	roots := []graph.Asset{root}
 	owners, err := w.owningOrganizations(root)
 	if err != nil {
@@ -268,6 +274,7 @@ func FindServices(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 
 	out.Applications = identifyWebApplications(assets)
 	out.Hosts = len(hosts)
+	out.SummarizedAddresses = report.SummarizedAddresses
 	out.Reads = report.Reads
 	out.Truncated, out.Reason = report.Truncated, report.Reason
 	return out, nil
@@ -395,6 +402,7 @@ func FormatServicesReport(r ServicesReport) string {
 
 	fmt.Fprintf(&b, "Services exposed by %s: %d service(s) on %d host(s), from %d controlled asset(s) (%d reads).\n",
 		scope, len(r.Services), r.Hosts, r.Footprint, r.Reads)
+	b.WriteString(summarizedNote(r.SummarizedAddresses))
 	if len(r.Services) == 0 {
 		b.WriteString("No service is stored for its names, addresses or URLs. Services are stored by the HTTP and " +
 			"SSH probes during an active enumeration.\n")

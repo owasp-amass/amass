@@ -130,3 +130,76 @@ func stripReadCounts(text string) string {
 }
 
 func onlyFootprintDiffers(a, b string) bool { return stripReadCounts(a) == stripReadCounts(b) }
+
+// The summarizing lenses (cloud, services, ...) skip a held netblock's member
+// addresses that host nothing, count them, and say so in their header; the
+// address-space lenses (network) still keep every member address.
+func TestSummarizeBareNetblockAddresses(t *testing.T) {
+	g := graphtest.ServicesFixture()
+	const bare = 20
+	for i := 0; i < bare; i++ {
+		ip := fmt.Sprintf("149.43.200.%d", i)
+		g.Assets[ip] = graph.Asset{ID: ip, Type: "IPAddress", Key: ip, Content: map[string]any{"address": ip}}
+		g.Links = append(g.Links, graph.Relation{ID: "nb-own-contains-" + ip, FromID: "nb-own", ToID: ip,
+			Label: "contains", Type: "SimpleRelation"})
+	}
+	root := g.Assets["colgate.edu"]
+
+	addresses := func(owned map[string]graph.Asset) (bareKept int, hostKept bool) {
+		for id, a := range owned {
+			if a.Type != "IPAddress" {
+				continue
+			}
+			if strings.HasPrefix(id, "149.43.200.") {
+				bareKept++
+			}
+			if id == "ip-own" {
+				hostKept = true
+			}
+		}
+		return bareKept, hostKept
+	}
+
+	cloud, err := newScope(context.Background(), g, postureCatalog(), root, LensLimits{}, LensCloud)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, host := addresses(cloud.owned); n != 0 || !host {
+		t.Errorf("cloud footprint kept %d bare addresses (want 0) and the hosting address: %v", n, host)
+	}
+	if got := cloud.base().SummarizedAddresses; got != bare {
+		t.Errorf("cloud summarized %d addresses, want %d", got, bare)
+	}
+	if note := cloud.base().summarizedNote(); !strings.HasPrefix(note, "20 address(es) in held netblocks") {
+		t.Errorf("cloud summarized note = %q", note)
+	}
+
+	network, err := newScope(context.Background(), g, postureCatalog(), root, LensLimits{}, "network")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := addresses(network.owned); n != bare {
+		t.Errorf("network footprint kept %d bare addresses, want all %d", n, bare)
+	}
+	if network.base().summarizedNote() != "" {
+		t.Errorf("network reported summarized addresses: %d", network.base().SummarizedAddresses)
+	}
+
+	services, err := FindServices(context.Background(), g, postureCatalog(), root, LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if services.SummarizedAddresses != bare ||
+		!strings.Contains(services.Text(), "20 address(es) in held netblocks host no stored name or service") {
+		t.Errorf("services summarized %d addresses; report:\n%s", services.SummarizedAddresses, services.Text())
+	}
+}
+
+func TestSummarizedNote(t *testing.T) {
+	if summarizedNote(0) != "" {
+		t.Error("no summarized addresses should add no line")
+	}
+	if got := summarizedNote(2168); !strings.HasPrefix(got, "2168 address(es)") || !strings.HasSuffix(got, "\n") {
+		t.Errorf("summarizedNote(2168) = %q", got)
+	}
+}

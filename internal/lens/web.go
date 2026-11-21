@@ -211,6 +211,7 @@ func (r WebReport) Text() string {
 
 	fmt.Fprintf(&b, "Web presence of %s: %d URL(s) — %d on its own domains, %d off-domain (%d reads).\n",
 		subject, r.Total, len(r.Endpoints), len(r.External), r.Reads)
+	b.WriteString(r.summarizedNote())
 
 	if r.Total == 0 {
 		b.WriteString("\nNo stored URL is controlled by the subject.\n")

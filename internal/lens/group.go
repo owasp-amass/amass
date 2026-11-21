@@ -100,9 +100,7 @@ func (s *groupSearch) spend() bool {
 }
 
 func (s *groupSearch) truncate(reason string) {
-	if !s.report.Truncated {
-		s.report.Truncated, s.report.Reason = true, reason
-	}
+	truncateOnce(&s.report.Truncated, &s.report.Reason, reason)
 }
 
 func (s *groupSearch) asset(id string) (graph.Asset, error) {

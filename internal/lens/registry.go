@@ -7,6 +7,7 @@ package lens
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -249,6 +250,19 @@ func (s *scope) base() lensBase {
 
 // Partial implements Report.
 func (b lensBase) Partial() (bool, string) { return b.Truncated, b.Reason }
+
+// summarizedNote is the header line saying how many held-netblock addresses
+// the footprint walk summarized instead of listing, or "" when none were.
+func (b lensBase) summarizedNote() string { return summarizedNote(b.SummarizedAddresses) }
+
+func summarizedNote(n int) string {
+	if n == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%d address(es) in held netblocks host no stored name or service and were summarized "+
+		"rather than counted in the footprint.\n", n)
+}
 
 // partialNote ends a report's text with the limit that cut it short.
 func (b lensBase) partialNote() string {

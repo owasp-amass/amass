@@ -209,6 +209,7 @@ func (r DisclosureReport) Text() string {
 
 	fmt.Fprintf(&b, "Vulnerability-disclosure posture of %s, from %d controlled asset(s) (%d reads).\n",
 		subject, r.Footprint, r.Reads)
+	b.WriteString(r.summarizedNote())
 	if len(r.Files) == 0 {
 		b.WriteString("\nNo security.txt is stored for its services.\n")
 		return b.String()

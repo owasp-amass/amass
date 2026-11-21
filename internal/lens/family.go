@@ -205,9 +205,7 @@ func (s *familySearch) finish() FamilyReport {
 }
 
 func (s *familySearch) truncate(reason string) {
-	if !s.report.Truncated {
-		s.report.Truncated, s.report.Reason = true, reason
-	}
+	truncateOnce(&s.report.Truncated, &s.report.Reason, reason)
 }
 
 // The search reads outward from the domain: its registration contacts,
@@ -426,7 +424,7 @@ func (s *familySearch) sampleDomain(root graph.Asset) error {
 		if err := s.discoverCertificates(id); err != nil {
 			return err
 		}
-		if err := s.resolveName(id, s.netNames); err != nil {
+		if err := s.countNameNetblocks(id, s.netNames); err != nil {
 			return err
 		}
 
@@ -447,9 +445,11 @@ func (s *familySearch) sampleDomain(root graph.Asset) error {
 	return nil
 }
 
-// resolveName adds one to counts for each netblock the name's addresses
-// are in.
-func (s *familySearch) resolveName(id string, counts map[string]int) error {
+// countNameNetblocks adds one to counts for each netblock the name's
+// addresses are in, and records the name under each block's holders. (Not to
+// be confused with the package-level resolveName, which follows a name's DNS
+// alias chain.)
+func (s *familySearch) countNameNetblocks(id string, counts map[string]int) error {
 	recs, err := s.dup.edges(id, "out", "dns_record")
 	if err != nil {
 		return err

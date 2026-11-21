@@ -237,9 +237,14 @@ func newLensWalker(ctx context.Context, g graph.Graph, bounded graph.BoundedGrap
 }
 
 func (w *lensWalker) truncate(reason string) {
-	if !w.report.Truncated {
-		w.report.Truncated = true
-		w.report.Reason = reason
+	truncateOnce(&w.report.Truncated, &w.report.Reason, reason)
+}
+
+// truncateOnce marks a report partial with the first reason it was cut
+// short; later reasons are ignored. Every search's truncate method uses it.
+func truncateOnce(truncated *bool, reason *string, why string) {
+	if !*truncated {
+		*truncated, *reason = true, why
 	}
 }
 
@@ -817,10 +822,15 @@ func (w *lensWalker) viaNetblock(parentID string) bool {
 	return p.Type == "Netblock" || p.Type == "IPNetRecord"
 }
 
-// ipHosts reports whether addr has a controlled name or service on it. The
-// summarizing lenses keep such addresses and summarize the rest, so a held
-// netblock's empty address space does not crowd names and services out of the
-// footprint before the asset limit is reached.
+// ipHosts reports whether addr hosts anything: a name, service, URL or
+// certificate on any edge. The summarizing lenses keep such addresses and
+// summarize the rest, so a held netblock's empty address space does not crowd
+// names and services out of the footprint before the asset limit is reached.
+// It matches on the neighbor's type, not footprintPass: the hosting edges
+// (FQDN dns_record, port, ptr_record) are infrastructure-attributed and fail
+// footprintPass, so gating on it would summarize away the very addresses that
+// lead to names. Whether a kept address's neighbors join the footprint is
+// still decided by normal expansion.
 func (w *lensWalker) ipHosts(addr graph.Asset) (bool, error) {
 	steps, err := w.steps(addr)
 	if err != nil {
@@ -828,7 +838,8 @@ func (w *lensWalker) ipHosts(addr graph.Asset) (bool, error) {
 	}
 
 	for _, s := range steps {
-		if footprintPass(s) && (s.other.Type == "FQDN" || s.other.Type == "Service") {
+		switch s.other.Type {
+		case "FQDN", "Service", "URL", "TLSCertificate":
 			return true, nil
 		}
 	}

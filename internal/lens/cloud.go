@@ -219,6 +219,7 @@ func (r CloudReport) Text() string {
 
 	fmt.Fprintf(&b, "Cloud and CDN hosting of %s: %d of %d name(s) on a recognized provider "+
 		"(%d resolving, %d reads).\n", subject, r.OnCloud, r.Names, r.Resolving, r.Reads)
+	b.WriteString(r.summarizedNote())
 
 	if len(r.Providers) == 0 {
 		b.WriteString("\nNo name resolves into a recognized cloud or CDN provider's published range.\n")

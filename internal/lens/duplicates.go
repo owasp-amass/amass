@@ -493,9 +493,7 @@ func hasStrength(signals []GapSignal, strength string) bool {
 }
 
 func (s *dupSearch) truncate(reason string) {
-	if !s.report.Truncated {
-		s.report.Truncated, s.report.Reason = true, reason
-	}
+	truncateOnce(&s.report.Truncated, &s.report.Reason, reason)
 }
 
 // edges reads an asset's edges completely, a page at a time, within the

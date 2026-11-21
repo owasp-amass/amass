@@ -223,6 +223,7 @@ func (r HeadersReport) Text() string {
 
 	fmt.Fprintf(&b, "HTTP security headers of %s, from %d controlled asset(s) (%d reads).\n",
 		subject, r.Footprint, r.Reads)
+	b.WriteString(r.summarizedNote())
 	if len(r.Services) == 0 {
 		b.WriteString("\nNo web service with stored response headers.\n")
 		return b.String()

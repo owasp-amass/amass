@@ -193,9 +193,7 @@ func FindGroupVendors(ctx context.Context, gr graph.Graph, schema graph.SchemaCa
 }
 
 func (r *GroupVendorReport) truncate(reason string) {
-	if !r.Truncated {
-		r.Truncated, r.Reason = true, reason
-	}
+	truncateOnce(&r.Truncated, &r.Reason, reason)
 }
 
 // FormatGroupVendorReport renders the group vendor rollup for a terminal.

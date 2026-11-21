@@ -194,9 +194,7 @@ func FindGroupFunding(ctx context.Context, g graph.Graph, schema graph.SchemaCat
 
 // truncate records the first reason the rollup was cut short.
 func (r *GroupFundingReport) truncate(reason string) {
-	if !r.Truncated {
-		r.Truncated, r.Reason = true, reason
-	}
+	truncateOnce(&r.Truncated, &r.Reason, reason)
 }
 
 // groupTotal sums the round amounts when every round with an amount shares a

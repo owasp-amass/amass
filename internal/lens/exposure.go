@@ -352,6 +352,7 @@ func (r ExposureReport) Text() string {
 
 	fmt.Fprintf(&b, "Exposure of %s: %d service(s) and %d URL(s) from %d controlled asset(s).\n", subject,
 		r.Services, r.URLs, r.Footprint)
+	b.WriteString(r.summarizedNote())
 	if len(r.Classes) == 0 {
 		b.WriteString("Nothing stored falls in a class that deserves attention.\n")
 	}
