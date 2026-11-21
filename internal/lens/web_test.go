@@ -109,3 +109,61 @@ func TestFindWebEmpty(t *testing.T) {
 		t.Errorf("unexpected text:\n%s", r.Text())
 	}
 }
+
+// An archived URL is marked with its first capture; one on an owned name
+// with no stored address is a historical endpoint, while one whose host
+// still resolves is not.
+func TestFindWebMarksArchivedAndHistoricalEndpoints(t *testing.T) {
+	g := graphtest.VendorFixture()
+	if g.EvidenceByID == nil {
+		g.EvidenceByID = map[string][]graph.Evidence{}
+	}
+	url := func(id, raw, host, firstSeen string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "URL", Key: raw, Content: map[string]any{"url": raw}}
+		g.Links = append(g.Links, graph.Relation{ID: id + "-domain", FromID: id, ToID: host, Label: "domain",
+			Type: "SimpleRelation"})
+		if firstSeen != "" {
+			g.EvidenceByID[id] = []graph.Evidence{graphtest.SimpleProp(propArchiveFirstSeen, firstSeen)}
+		}
+	}
+
+	// old.colgate.edu is an owned name with no stored address.
+	g.Assets["old.colgate.edu"] = graph.Asset{ID: "old.colgate.edu", Type: "FQDN", Key: "old.colgate.edu",
+		Content: map[string]any{"name": "old.colgate.edu"}}
+	g.Links = append(g.Links, graph.Relation{ID: "colgate.edu-node-old", FromID: "colgate.edu",
+		ToID: "old.colgate.edu", Label: "node", Type: "SimpleRelation"})
+
+	url("u-old", "https://old.colgate.edu/login.php?next=/admin", "old.colgate.edu", "2014-05-06T07:08:09Z")
+	url("u-arch", "https://www.colgate.edu/about", "www.colgate.edu", "2019-03-04T05:06:07Z")
+	url("u-live", "https://www.colgate.edu/", "www.colgate.edu", "")
+
+	r, err := FindWeb(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+		g.Assets["colgate.edu"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if r.Archived != 2 {
+		t.Errorf("archived = %d, want 2", r.Archived)
+	}
+	if len(r.Historical) != 1 || r.Historical[0].URL != "https://old.colgate.edu/login.php?next=/admin" ||
+		r.Historical[0].ArchivedSince != "2014-05-06T07:08:09Z" {
+		t.Errorf("historical = %+v", r.Historical)
+	}
+	if e, ok := webEndpointByURL(r.Endpoints, "https://www.colgate.edu/about"); !ok || e.ArchivedSince == "" ||
+		e.Historical {
+		t.Errorf("archived endpoint on a resolving host = %+v (found %v)", e, ok)
+	}
+	if e, ok := webEndpointByURL(r.Endpoints, "https://www.colgate.edu/"); !ok || e.ArchivedSince != "" {
+		t.Errorf("live endpoint = %+v (found %v)", e, ok)
+	}
+
+	text := r.Text()
+	for _, want := range []string{"2 of them were captured by web archives",
+		"Archived endpoints whose host has no stored address",
+		"https://old.colgate.edu/login.php?next=/admin (archived since 2014-05-06)"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("report lacks %q:\n%s", want, text)
+		}
+	}
+}

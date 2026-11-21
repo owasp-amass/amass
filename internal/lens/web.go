@@ -46,6 +46,15 @@ type WebEndpoint struct {
 	// "host:port" of a service stored on it, when either is recorded.
 	Addresses []string `json:"addresses,omitempty"`
 	Service   string   `json:"service,omitempty"`
+	// ArchivedSince is when a web archive (Wayback, Common Crawl) first
+	// captured the URL, for a URL the archive collectors stored.
+	ArchivedSince string `json:"archived_since,omitempty"`
+	// Historical marks an archived URL whose host has no stored address: a
+	// likely decommissioned endpoint that old links and bookmarks may still
+	// reach.
+	Historical bool `json:"historical,omitempty"`
+	// host is the URL's stored host name, when it is linked to one.
+	host graph.Asset
 }
 
 // WebReport is the result of the web lens.
@@ -60,6 +69,11 @@ type WebReport struct {
 	// from the stored URLs.
 	Applications []WebApplication `json:"applications,omitempty"`
 	Total        int              `json:"total"`
+	// Archived counts the URLs a web archive captured; Historical lists the
+	// archived URLs on the subject's own domains whose host has no stored
+	// address.
+	Archived   int           `json:"archived,omitempty"`
+	Historical []WebEndpoint `json:"historical,omitempty"`
 }
 
 // FindWeb lists the URLs a domain or organization controls, where each
@@ -83,9 +97,19 @@ func FindWeb(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, roo
 			return out, err
 		}
 		out.Total++
+		own := ep.Host != "" && s.ownDomains[graph.RegisteredDomain(ep.Host)]
+		if err := s.archivedState(u, own, &ep); err != nil {
+			return out, err
+		}
+		if ep.ArchivedSince != "" {
+			out.Archived++
+		}
+		if ep.Historical {
+			out.Historical = append(out.Historical, ep)
+		}
 		// A URL on one of the subject's own registered domains is its own web
 		// surface; one on another domain is an off-domain presence.
-		if ep.Host != "" && s.ownDomains[graph.RegisteredDomain(ep.Host)] {
+		if own {
 			out.Endpoints = append(out.Endpoints, ep)
 		} else {
 			out.External = append(out.External, ep)
@@ -95,6 +119,7 @@ func FindWeb(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, roo
 	out.Applications = identifyWebApplications(ordered)
 	sortEndpoints(out.Endpoints)
 	sortEndpoints(out.External)
+	sortEndpoints(out.Historical)
 	sort.Slice(out.Applications, func(i, j int) bool {
 		if out.Applications[i].Site != out.Applications[j].Site {
 			return out.Applications[i].Site < out.Applications[j].Site
@@ -106,6 +131,9 @@ func FindWeb(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, roo
 	}
 	if len(out.External) > webExamples {
 		out.External = out.External[:webExamples]
+	}
+	if len(out.Historical) > webExamples {
+		out.Historical = out.Historical[:webExamples]
 	}
 	out.lensBase = s.base()
 	return out, nil
@@ -183,11 +211,52 @@ func (s *scope) webEndpoint(u graph.Asset) (WebEndpoint, error) {
 			if ep.Service == "" {
 				ep.Service = graph.AssetLabel(st.other)
 			}
+		case "FQDN":
+			if st.edge.Label == "domain" {
+				ep.host = st.other
+			}
 		}
 	}
 	sort.Strings(ep.Addresses)
 	return ep, nil
 }
+
+// archivedState reads whether a web archive captured the URL, and for an
+// archived URL on the subject's own domains, whether its host still has a
+// stored address. Without one the endpoint is historical: Amass knows only
+// stored DNS records, so this says "no stored address", not that the name
+// is gone.
+func (s *scope) archivedState(u graph.Asset, own bool, ep *WebEndpoint) error {
+	if s.spent() {
+		return nil
+	}
+
+	ev, err := s.w.graph.Evidence(s.w.ctx, u.ID, 50)
+	if err != nil {
+		return nil
+	}
+	first := propertyValues(ev, propArchiveFirstSeen)
+	if len(first) == 0 {
+		return nil
+	}
+
+	sort.Strings(first)
+	ep.ArchivedSince = first[0]
+	if !own || ep.host.ID == "" {
+		return nil
+	}
+
+	res, err := resolveName(s.w, ep.host)
+	if err != nil {
+		return err
+	}
+	ep.Historical = len(res.Addresses) == 0
+	return nil
+}
+
+// propArchiveFirstSeen is the property the archive collectors write on a URL
+// (engine/plugins/archive): the date an archive first captured it.
+const propArchiveFirstSeen = "archive_first_seen"
 
 // urlRaw returns a URL asset's stored string, falling back to its key.
 func urlRaw(u graph.Asset) string {
@@ -212,6 +281,9 @@ func (r WebReport) Text() string {
 	fmt.Fprintf(&b, "Web presence of %s: %d URL(s) — %d on its own domains, %d off-domain (%d reads).\n",
 		subject, r.Total, len(r.Endpoints), len(r.External), r.Reads)
 	b.WriteString(r.summarizedNote())
+	if r.Archived > 0 {
+		fmt.Fprintf(&b, "%d of them were captured by web archives (Wayback Machine, Common Crawl).\n", r.Archived)
+	}
 
 	if r.Total == 0 {
 		b.WriteString("\nNo stored URL is controlled by the subject.\n")
@@ -227,6 +299,13 @@ func (r WebReport) Text() string {
 	if len(r.External) > 0 {
 		b.WriteString("\nOff-domain URLs (social profiles, third-party pages):\n")
 		for _, e := range r.External {
+			writeEndpoint(&b, e)
+		}
+	}
+	if len(r.Historical) > 0 {
+		b.WriteString("\nArchived endpoints whose host has no stored address (likely decommissioned; old links " +
+			"may still point at them):\n")
+		for _, e := range r.Historical {
 			writeEndpoint(&b, e)
 		}
 	}
@@ -261,6 +340,10 @@ func writeEndpoint(b *strings.Builder, e WebEndpoint) {
 	if e.Service != "" {
 		fmt.Fprintf(b, " [%s]", e.Service)
 	}
+	if e.ArchivedSince != "" {
+		day, _, _ := strings.Cut(e.ArchivedSince, "T")
+		fmt.Fprintf(b, " (archived since %s)", day)
+	}
 	b.WriteString("\n")
 }
 
@@ -272,6 +355,9 @@ func (r WebReport) Facts() []string {
 	}
 	for _, a := range r.Applications {
 		out = append(out, a.Product+" on "+a.Site)
+	}
+	for _, e := range r.Historical {
+		out = append(out, "historical endpoint "+e.URL)
 	}
 	return out
 }
