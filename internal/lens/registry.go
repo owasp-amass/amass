@@ -61,6 +61,7 @@ func SubjectLenses() []SubjectLens {
 		networkLens,
 		cloudLens,
 		webLens,
+		documentsLens,
 		danglingLens,
 		changesLens,
 		vulnerableLens,
@@ -122,6 +123,7 @@ type scope struct {
 var summarizeBareAddrLenses = map[string]bool{
 	LensCloud:      true,
 	LensWeb:        true,
+	LensDocuments:  true,
 	LensServices:   true,
 	LensExposure:   true,
 	LensHeaders:    true,
