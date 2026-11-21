@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	amassdb "github.com/owasp-amass/amass/v5/internal/db"
+	"html"
 	"net"
 	"net/netip"
 	"regexp"
@@ -19,6 +19,7 @@ import (
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/sessions"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -92,6 +93,9 @@ func webURL(match string) *url.URL {
 	if match == "" {
 		return nil
 	}
+	// a link read from HTML carries its character references ("&amp;"
+	// between query parameters); the URL is the unescaped text
+	match = html.UnescapeString(match)
 
 	lower := strings.ToLower(match)
 	switch {

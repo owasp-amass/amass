@@ -118,3 +118,17 @@ func TestExtractEmailsFromString(t *testing.T) {
 		t.Errorf("emails = %v, want %v", got, want)
 	}
 }
+
+// A link read from HTML is stored unescaped: "&amp;" between query
+// parameters is "&" in the URL.
+func TestExtractURLsUnescapesHTML(t *testing.T) {
+	body := `<a href="http://ezproxy.example.edu/login?url=https://search.example.com/x?a=1&amp;b=2&amp;c=3">db</a>`
+
+	urls := ExtractURLsFromString(body)
+	if len(urls) != 1 {
+		t.Fatalf("URLs = %v", urls)
+	}
+	if got := urls[0].Raw; strings.Contains(got, "&amp;") || !strings.Contains(got, "a=1&b=2&c=3") {
+		t.Errorf("URL %q, want the query unescaped", got)
+	}
+}
