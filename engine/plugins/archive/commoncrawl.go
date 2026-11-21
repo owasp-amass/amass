@@ -137,6 +137,8 @@ func (c *commonCrawl) latestIndex(e *et.Event) string {
 
 	body, ok := c.get(e, c.IndexURL)
 	if !ok {
+		e.Session.Log().Info("archive crawl list unavailable", "url", c.IndexURL,
+			slog.Group("plugin", "name", c.name, "handler", c.name+"-Handler"))
 		return c.api
 	}
 
@@ -174,6 +176,8 @@ func (c *commonCrawl) query(e *et.Event, api, name string) ([]archiveRow, bool) 
 	case status == http.StatusNotFound:
 		return nil, true
 	case status != http.StatusOK:
+		e.Session.Log().Info("archive did not answer", "domain", name, "status", status,
+			slog.Group("plugin", "name", c.name, "handler", c.name+"-Handler"))
 		return nil, false
 	}
 

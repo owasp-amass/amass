@@ -23,6 +23,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -184,4 +185,18 @@ func storeURLs(e *et.Event, src *et.Source, pname string, urls []archivedURL) {
 
 	e.Session.Log().Info("archived URLs stored", "count", len(urls),
 		slog.Group("plugin", "name", pname, "handler", pname+"-Handler"))
+}
+
+// logRefusal records why an archive gave no usable answer for a domain: the
+// HTTP status, or the error when the request or the reply failed.
+func logRefusal(e *et.Event, pname, domain string, resp *amasshttp.Response, err error) {
+	attrs := []any{"domain", domain}
+	if resp != nil {
+		attrs = append(attrs, "status", resp.StatusCode)
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+	}
+	attrs = append(attrs, slog.Group("plugin", "name", pname, "handler", pname+"-Handler"))
+	e.Session.Log().Info("archive did not answer", attrs...)
 }

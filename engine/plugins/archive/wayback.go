@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"golang.org/x/time/rate"
@@ -111,20 +113,26 @@ func (w *wayback) query(e *et.Event, name string) []archiveRow {
 	_ = support.WaitLimit(e.Session.Ctx(), w.rlimit)
 	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 90*time.Second)
 	defer cancel()
 
-	end := fmt.Sprintf("*.%s/*", name)
-	resp, err := amasshttp.RequestWebPage(ctx,
-		e.Session.Clients().General, &amasshttp.Request{URL: w.URL + end})
+	// matchType=domain covers the name and every name below it; the limit
+	// bounds the answer, which for a large site is otherwise too big to
+	// return before the timeout
+	limit := 5 * semantics.ArchiveURLs().MaxURLsPerDomain
+	u := fmt.Sprintf("%s%s&limit=%d", w.URL, url.QueryEscape(name), limit)
+	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u})
 	e.Session.NetSem().Release()
-	// a refusal or rate limit is not read as an answer
+	// a refusal or rate limit is not read as an answer, but is logged so a
+	// run that stores nothing can be told from one the archive refused
 	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
+		logRefusal(e, w.name, name, resp, err)
 		return nil
 	}
 
 	var raw [][]string
 	if err := json.Unmarshal([]byte(resp.Body), &raw); err != nil {
+		logRefusal(e, w.name, name, resp, err)
 		return nil
 	}
 
