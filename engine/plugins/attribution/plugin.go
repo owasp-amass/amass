@@ -302,7 +302,11 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 			return
 		}
 
-		org, err := adapter.GetAsset(ctx, o.ID)
+		// each organization's reads are counted on their own, for the log
+		counted := adapter
+		counted.Stats = &oamrepo.ReadStats{}
+		start := time.Now()
+		org, err := counted.GetAsset(ctx, o.ID)
 		if err != nil {
 			continue
 		}
@@ -312,10 +316,15 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 			policy.Model = ai.OwnershipModel{LinearModel: t.model}
 		}
 
-		res, err := review.AttributeOwnership(ctx, adapter, oamrepo.Catalog{}, org, adapter, t.journal, policy)
+		res, err := review.AttributeOwnership(ctx, counted, oamrepo.Catalog{}, org, counted, t.journal, policy)
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", graph.AssetLabel(org), err))
 		}
+		reads, took, byMethod := counted.Stats.Summary()
+		t.sess.Log().Info("AI attribution pass", "organization", graph.AssetLabel(org),
+			"footprint", res.Report.Footprint, "candidates", len(res.Report.Candidates),
+			"lens_reads", res.Report.Reads, "db_reads", reads, "db_took", took.Round(time.Millisecond).String(),
+			"db_reads_by_method", byMethod, "took", time.Since(start).Round(time.Millisecond).String())
 		if res.Unanchored {
 			continue
 		}

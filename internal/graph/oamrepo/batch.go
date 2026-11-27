@@ -11,6 +11,7 @@ import (
 	"io"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,39 @@ func (s *ReadStats) record(method string, start time.Time) {
 	s.took[method] += d
 }
 
+// methods returns the methods with recorded reads, sorted; the caller holds
+// s.mu.
+func (s *ReadStats) methods() []string {
+	methods := make([]string, 0, len(s.calls))
+	for m := range s.calls {
+		methods = append(methods, m)
+	}
+
+	sort.Strings(methods)
+	return methods
+}
+
+// Summary returns the reads recorded so far, their total time, and each
+// method's reads as "method=n" in method order.
+func (s *ReadStats) Summary() (int, time.Duration, string) {
+	if s == nil {
+		return 0, 0, ""
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	methods := s.methods()
+	var calls int
+	var took time.Duration
+	parts := make([]string, 0, len(methods))
+	for _, m := range methods {
+		calls, took = calls+s.calls[m], took+s.took[m]
+		parts = append(parts, fmt.Sprintf("%s=%d", m, s.calls[m]))
+	}
+
+	return calls, took, strings.Join(parts, " ")
+}
+
 // Write prints each method's reads, total and mean time.
 func (s *ReadStats) Write(w io.Writer) {
 	if s == nil {
@@ -58,15 +92,9 @@ func (s *ReadStats) Write(w io.Writer) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	methods := make([]string, 0, len(s.calls))
-	for m := range s.calls {
-		methods = append(methods, m)
-	}
-
-	sort.Strings(methods)
 	var calls int
 	var took time.Duration
-	for _, m := range methods {
+	for _, m := range s.methods() {
 		n, d := s.calls[m], s.took[m]
 		calls, took = calls+n, took+d
 		_, _ = fmt.Fprintf(w, "%-14s %7d reads %10s total %10s mean\n", m, n, d.Round(time.Millisecond),

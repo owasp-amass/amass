@@ -8,10 +8,13 @@ import (
 	"context"
 	"net/netip"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/fingerprint"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 	"github.com/owasp-amass/amass/v5/internal/review"
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
@@ -141,5 +144,24 @@ func checkServiceSignals(t *testing.T, db repository.Repository) {
 		if !slices.Contains(got[asset], want) {
 			t.Errorf("%s signals = %v, want %s (all: %v)", asset, got[asset], want, got)
 		}
+	}
+
+	// The search answered from a cache finds the same, with fewer reads.
+	plain, cached := Adapter{Repo: db, Stats: &ReadStats{}}, Adapter{Repo: db, Stats: &ReadStats{}}
+	want, err := lens.SearchOwnershipGaps(ctx, plain, Catalog{}, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromCache, err := lens.SearchOwnershipGaps(ctx, graph.Cached(cached), Catalog{}, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(want, fromCache) {
+		t.Errorf("cached search differs:\n%+v\nwant\n%+v", fromCache, want)
+	}
+	plainReads, _, plainBy := plain.Stats.Summary()
+	cachedReads, _, cachedBy := cached.Stats.Summary()
+	if cachedReads >= plainReads {
+		t.Errorf("cached search read %d times (%s), uncached %d (%s)", cachedReads, cachedBy, plainReads, plainBy)
 	}
 }

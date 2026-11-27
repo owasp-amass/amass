@@ -117,7 +117,10 @@ func AttributeOwnership(ctx context.Context, g graph.Graph, schema graph.SchemaC
 		return res, fmt.Errorf("attribution starts from an Organization, not %s", org.Type)
 	}
 
-	report, err := lens.SearchOwnershipGaps(ctx, g, schema, org)
+	// the search only reads, and it reads the same footprint more than once,
+	// so its reads are answered from a cache that lives only as long as the
+	// search; the writes below go straight to w
+	report, err := lens.SearchOwnershipGaps(ctx, graph.Cached(g), schema, org)
 	res.Report = report
 	if err != nil {
 		return res, err

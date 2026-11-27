@@ -122,11 +122,15 @@ func (a Adapter) FindAssets(ctx context.Context, t string, since time.Time, limi
 }
 
 func (a Adapter) Edges(ctx context.Context, id, direction, label string, since time.Time) ([]graph.Relation, error) {
-	ent, err := a.Repo.FindEntityById(ctx, id)
-	if err != nil {
-		return nil, err
+	if a.Repo == nil {
+		return nil, errors.New("missing OAM repository")
 	}
 
+	defer a.Stats.record("Edges", time.Now())
+
+	// The edge readers use only the entity's ID, so the entity is not
+	// fetched first; an ID with no entity has no edges.
+	ent := &dbt.Entity{ID: id}
 	labels := storedLabels(label)
 	var found []graph.Relation
 	convertEdges := func(edges []*dbt.Edge, dir string) error {
@@ -169,6 +173,8 @@ func (a Adapter) Edges(ctx context.Context, id, direction, label string, since t
 }
 
 func (a Adapter) Evidence(ctx context.Context, id string, limit int) ([]graph.Evidence, error) {
+	defer a.Stats.record("Evidence", time.Now())
+
 	if ent, err := a.Repo.FindEntityById(ctx, id); err == nil {
 		tags, err := a.Repo.FindEntityTags(ctx, ent, time.Time{})
 		if emptyTagLookup(err) {

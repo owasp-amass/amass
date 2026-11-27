@@ -30,8 +30,9 @@ type ValueSearcher interface {
 }
 
 // ErrValueSearchUnsupported reports a repository without value searches;
-// the signals that need them are skipped.
-var ErrValueSearchUnsupported = errors.New("the repository does not support value searches")
+// the signals that need them are skipped. It is graph.ErrUnsupported, which
+// a cached graph returns when the graph it wraps has no value searches.
+var ErrValueSearchUnsupported = graph.ErrUnsupported
 
 const (
 	RRTypeNS = 2

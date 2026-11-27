@@ -198,6 +198,32 @@ func (c *cachedGraph) StepsFrom(ctx context.Context, ids []string, steps []Step)
 	return nil, ErrStepsUnsupported
 }
 
+// valueSearcher is the value search a lens finds on its graph (its
+// ValueSearcher), declared here by its methods.
+type valueSearcher interface {
+	FindByTagValue(ctx context.Context, assetType, name, value string, contains bool, limit int) ([]Asset, bool, error)
+	FindByAttribute(ctx context.Context, assetType, key, value string, contains bool, limit int) ([]Asset, bool, error)
+}
+
+// FindByTagValue passes a value search to the inner graph, uncached, so
+// wrapping a graph never hides its value searches.
+func (c *cachedGraph) FindByTagValue(ctx context.Context, assetType, name, value string, contains bool,
+	limit int) ([]Asset, bool, error) {
+	if vs, ok := c.inner.(valueSearcher); ok {
+		return vs.FindByTagValue(ctx, assetType, name, value, contains, limit)
+	}
+	return nil, false, ErrUnsupported
+}
+
+// FindByAttribute passes an attribute search to the inner graph, uncached.
+func (c *cachedGraph) FindByAttribute(ctx context.Context, assetType, key, value string, contains bool,
+	limit int) ([]Asset, bool, error) {
+	if vs, ok := c.inner.(valueSearcher); ok {
+		return vs.FindByAttribute(ctx, assetType, key, value, contains, limit)
+	}
+	return nil, false, ErrUnsupported
+}
+
 func (c *cachedGraph) GetAssets(ctx context.Context, ids []string) (map[string]Asset, error) {
 	out := make(map[string]Asset, len(ids))
 	var missing []string
