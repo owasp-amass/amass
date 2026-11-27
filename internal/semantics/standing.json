@@ -1,0 +1,46 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the expansion policy judges an asset the scope cannot judge by itself. The scope matches FQDNs, IP addresses, netblocks, autonomous systems, organizations, street addresses, phones (the session's seeds), registration records, certificates (by common name), URLs (by host) and email identifiers (by domain). An asset the scope does not take in, or cannot judge, takes the best standing of the assets it hangs off, through the relations listed here: an IP address the standing of the names that resolve to it, directly or through aliases (through); a certificate that of the service presenting it; a Service the standing of the name, address or URL it runs on; a File that of its URL; a ContactRecord that of the record or page it belongs to, or of the organization it names (outgoing: the relation runs from the asset to the one it takes standing from); a phone or street address that of the organization, contact record or person holding it. Inheritance follows these rules up to max_depth steps, so a Phone on a domain's registrant contact takes the domain's standing. Only relations by which the asset is the parent's own are listed: a registrar's or an issuer's contact is a third party's and passes no standing. A type with no rule here is not governed by reach: its handlers run under every policy. Add types and relations here, not in Go code.",
+  "max_depth": 4,
+  "inherit": {
+    "IPAddress": [
+      {"labels": ["dns_record"], "from": ["FQDN"], "through": ["dns_record"]}
+    ],
+    "TLSCertificate": [
+      {"labels": ["certificate"], "from": ["Service"]}
+    ],
+    "Service": [
+      {"labels": ["port"], "from": ["FQDN", "IPAddress", "URL"]}
+    ],
+    "File": [
+      {"labels": ["file"], "from": ["URL"]},
+      {"labels": ["terms_of_service"], "from": ["Service"]}
+    ],
+    "ContactRecord": [
+      {"labels": ["registrant_contact", "admin_contact", "technical_contact", "billing_contact"], "from": ["DomainRecord"]},
+      {"labels": ["registrant", "admin_contact"], "from": ["IPNetRecord", "AutnumRecord"]},
+      {"labels": ["subject_contact"], "from": ["TLSCertificate"]},
+      {"labels": ["contact"], "from": ["URL", "Account"]},
+      {"labels": ["organization"], "from": ["Organization"], "outgoing": true}
+    ],
+    "Phone": [
+      {"labels": ["phone"], "from": ["ContactRecord", "Person"]}
+    ],
+    "Identifier": [
+      {"labels": ["id"], "from": ["ContactRecord", "Organization", "Person", "Account"]},
+      {"labels": ["fingerprint"], "from": ["Service", "URL"]},
+      {"labels": ["soa_rname", "identity_tenant"], "from": ["FQDN"]}
+    ],
+    "Person": [
+      {"labels": ["person"], "from": ["ContactRecord"]},
+      {"labels": ["member"], "from": ["Organization"]}
+    ],
+    "Account": [
+      {"labels": ["account"], "from": ["Organization", "Person"]}
+    ],
+    "StreetAddress": [
+      {"labels": ["legal_address", "hq_address", "street_address"], "from": ["Organization"]},
+      {"labels": ["street_address"], "from": ["ContactRecord", "Person"]}
+    ]
+  }
+}

@@ -5,22 +5,27 @@
 package sessions
 
 import (
+	"context"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
 
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net/pacer"
 )
 
-// Clients bundles the three clients + transports so you can close idle conns.
+// Clients bundles the clients + transports so you can close idle conns.
 type Clients struct {
 	General *http.Client
 	Probe   *http.Client
 	Crawl   *http.Client
+	Bulk    *http.Client
 	genTr   *http.Transport
 	probTr  *http.Transport
 	crwlTr  *http.Transport
+	bulkTr  *http.Transport
 }
 
 // CloseIdleConnections is useful on session/engine shutdown.
@@ -35,13 +40,30 @@ func (c *Clients) CloseIdleConnections() {
 	if c.crwlTr != nil {
 		c.crwlTr.CloseIdleConnections()
 	}
+	if c.bulkTr != nil {
+		c.bulkTr.CloseIdleConnections()
+	}
 }
 
-// NewClients returns three tuned clients: API, Probe, Crawl.
-func NewClients(perHost int) (*Clients, error) {
-	genTr := newGeneralTransport()
-	probTr := newProbeTransport(perHost)
-	crwlTr := newCrawlTransport()
+// bulkHeaderTimeout and bulkTimeout bound the Bulk client: a web archive's
+// index for a whole domain often takes well over a minute to send its first
+// byte, longer than the General client waits for a reply.
+const (
+	bulkHeaderTimeout = 3 * time.Minute
+	bulkTimeout       = 4 * time.Minute
+)
+
+// NewClients returns four tuned clients: API, Probe, Crawl and Bulk. They
+// send from the local addresses whatever context a request carries; with the
+// zero LocalAddrs, from the engine's (see amassnet.LocalAddrsFrom). The Probe
+// client reaches the target's hosts, so it takes the active route, with its
+// timeouts lengthened through a proxy; the zero Route sends it like the rest.
+func NewClients(perHost int, local amassnet.LocalAddrs, active amassnet.Route) (*Clients, error) {
+	genTr := newGeneralTransport(local)
+	probTr := newProbeTransport(perHost, local, active)
+	crwlTr := newCrawlTransport(local)
+	bulkTr := newGeneralTransport(local)
+	bulkTr.ResponseHeaderTimeout = bulkHeaderTimeout
 
 	gjar, err := cookiejar.New(nil)
 	if err != nil {
@@ -54,30 +76,53 @@ func NewClients(perHost int) (*Clients, error) {
 	}
 
 	return &Clients{
+		// data source queries are paced per host, adaptively; the probe
+		// client is not (active probes have their own per-host pacer, and a
+		// target's 503 is evidence, not a reason to slow down)
 		General: &http.Client{
-			Transport: genTr,
+			Transport: pacer.Default.Transport(genTr),
 			Timeout:   1 * time.Minute,
 			Jar:       gjar,
 		},
 		Probe: &http.Client{
 			Transport: probTr,
-			Timeout:   30 * time.Second,
+			Timeout:   activeTimeout(active, 30*time.Second),
 		},
 		Crawl: &http.Client{
-			Transport: crwlTr,
+			Transport: pacer.Default.Transport(crwlTr),
 			Timeout:   2 * time.Minute,
 			Jar:       cjar,
+		},
+		// paced on the same per-host pacer as General
+		Bulk: &http.Client{
+			Transport: pacer.Default.Transport(bulkTr),
+			Timeout:   bulkTimeout,
 		},
 		genTr:  genTr,
 		probTr: probTr,
 		crwlTr: crwlTr,
+		bulkTr: bulkTr,
 	}, nil
 }
 
-func newGeneralTransport() *http.Transport {
+// boundDial returns a dial function for the timeout that sends from the
+// local addresses, whatever context it is given; with the zero LocalAddrs,
+// the context decides.
+func boundDial(timeout time.Duration, local amassnet.LocalAddrs) amassnet.DialContext {
+	dial := amassnet.NewDialContext(timeout)
+	if local.IsZero() {
+		return dial
+	}
+
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dial(amassnet.WithLocalAddrs(ctx, local), network, addr)
+	}
+}
+
+func newGeneralTransport(local amassnet.LocalAddrs) *http.Transport {
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           amassnet.NewDialContext(8 * time.Second),
+		DialContext:           boundDial(8*time.Second, local),
 		ForceAttemptHTTP2:     false,
 		MaxIdleConns:          200,
 		MaxIdleConnsPerHost:   20,
@@ -93,26 +138,42 @@ func newGeneralTransport() *http.Transport {
 	}
 }
 
-func newProbeTransport(perHost int) *http.Transport {
+// activeTimeout lengthens d for the active route (see amassnet.ActiveTimeout).
+func activeTimeout(active amassnet.Route, d time.Duration) time.Duration {
+	return amassnet.ActiveTimeout(amassnet.WithActiveRoute(context.Background(), active), d)
+}
+
+func newProbeTransport(perHost int, local amassnet.LocalAddrs, active amassnet.Route) *http.Transport {
+	proxy, dial := http.ProxyFromEnvironment, boundDial(5*time.Second, local)
+	if !active.IsZero() {
+		// the active route replaces any proxy from the environment, and its
+		// own proxy is reached from the session's addresses
+		proxy = nil
+		routed := active.DialContext(5 * time.Second)
+		dial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return routed(amassnet.WithLocalAddrs(ctx, local), network, addr)
+		}
+	}
+
 	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           amassnet.NewDialContext(5 * time.Second),
+		Proxy:                 proxy,
+		DialContext:           dial,
 		ForceAttemptHTTP2:     false,
 		MaxIdleConns:          64,
 		MaxIdleConnsPerHost:   perHost,
 		IdleConnTimeout:       15 * time.Second,
-		TLSHandshakeTimeout:   6 * time.Second,
+		TLSHandshakeTimeout:   activeTimeout(active, 6*time.Second),
 		ExpectContinueTimeout: 0,
-		ResponseHeaderTimeout: 8 * time.Second,
+		ResponseHeaderTimeout: activeTimeout(active, 8*time.Second),
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		DisableCompression:    true,
 	}
 }
 
-func newCrawlTransport() *http.Transport {
+func newCrawlTransport(local amassnet.LocalAddrs) *http.Transport {
 	return &http.Transport{
 		Proxy:             http.ProxyFromEnvironment,
-		DialContext:       amassnet.NewDialContext(8 * time.Second),
+		DialContext:       boundDial(8*time.Second, local),
 		ForceAttemptHTTP2: true,
 		// crawling usually hits same hosts repeatedly; keep-alives pay off
 		MaxIdleConns:          256,

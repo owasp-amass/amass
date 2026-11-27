@@ -1,0 +1,34 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How an organization's country is inferred from stored evidence, as data rather than Go code. Each signal names a path of steps from the organization to the asset that carries a country, the field to read, how to read it (form), a confidence (0-100) with its rationale (why), and the standard the value follows (source). A step is a direction (in or out) and a relation label, as in the geography lens's party_location_paths; an empty path reads the organization asset itself. form is 'jurisdiction' (an ISO 3166 country, optionally with a subdivision after a hyphen, of which only the country part is kept) or 'iso2' (an ISO 3166-1 alpha-2 code taken as-is); both keep only a valid two-letter code, so a full country name a geocoder may emit is ignored rather than mismatched. A country found by several signals is more credible, so agreement raises confidence. The helper is read-only and computes a conclusion; nothing here is written to the database (ai-design-principles.md, principles 2, 8, 10). Add signals here, not in Go code; a matching organization name is never a signal (principle 8). Confidence ordering reflects how directly each signal states the organization's own country: its legal jurisdiction is authoritative; a postal address on its registration/contact record places it; a registrant phone's country is weaker because a company may publish a foreign contact number.",
+  "agreement_boost": 5,
+  "signals": [
+    {
+      "name": "jurisdiction",
+      "path": [],
+      "field": "jurisdiction",
+      "form": "jurisdiction",
+      "confidence": 95,
+      "why": "The organization's legal jurisdiction is the authoritative statement of its country of registration.",
+      "source": "ISO 3166 (country, optionally a 3166-2 subdivision)"
+    },
+    {
+      "name": "registration_location",
+      "path": ["in organization", "out street_address"],
+      "field": "country",
+      "form": "iso2",
+      "confidence": 75,
+      "why": "A postal address on a registration or contact record for the organization places it in a country.",
+      "source": "ISO 3166-1 alpha-2 (RDAP/WHOIS vCard ADR country)"
+    },
+    {
+      "name": "registrant_phone",
+      "path": ["in organization", "out phone"],
+      "field": "country_abbrev",
+      "form": "iso2",
+      "confidence": 55,
+      "why": "A registrant phone's country is a weaker locator: a company may publish a contact number in another country.",
+      "source": "ITU-T E.164 country calling code, mapped to ISO 3166-1 alpha-2"
+    }
+  ]
+}

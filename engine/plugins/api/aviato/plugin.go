@@ -6,14 +6,13 @@ package aviato
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	"golang.org/x/time/rate"
 )
 
@@ -22,6 +21,7 @@ func NewAviato() et.Plugin {
 
 	return &aviato{
 		name:   "Aviato",
+		api:    "https://data.api.aviato.co",
 		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Aviato",
@@ -121,21 +121,19 @@ func (a *aviato) Stop() {
 	a.log.Info("Plugin stopped")
 }
 
-func (a *aviato) createRelation(ctx context.Context, session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, conf int) error {
-	edge, err := session.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   rel,
-		FromEntity: obj,
-		ToEntity:   subject,
-	})
-	if err != nil {
-		return err
-	} else if edge == nil {
-		return errors.New("failed to create the edge")
-	}
+// identOrg returns the organization that links to the Aviato identifier.
+func (a *aviato) identOrg(e *et.Event, ident *dbt.Entity) *dbt.Entity {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	defer cancel()
 
-	_, err = session.DB().CreateEdgeProperty(ctx, edge, &oamgen.SourceProperty{
-		Source:     a.source.Name,
-		Confidence: conf,
-	})
-	return err
+	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
+		for _, edge := range edges {
+			if ent, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && ent != nil {
+				if _, ok := ent.Asset.(*oamorg.Organization); ok {
+					return ent
+				}
+			}
+		}
+	}
+	return nil
 }

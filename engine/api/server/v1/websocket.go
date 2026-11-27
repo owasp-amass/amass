@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
@@ -34,19 +32,8 @@ var upgrader = websocket.Upgrader{
 // @Header  	 101  {string}  Upgrade     "websocket"
 // @Header  	 101  {string}  Connection  "Upgrade"
 func (v *V1Handlers) WSLogsHandler(w http.ResponseWriter, r *http.Request) {
-	sid := mux.Vars(r)["session_token"]
-
-	// Check if the session token is valid
-	token, err := uuid.Parse(sid)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid session token", err)
-		return
-	}
-	// Check if the session exists
-	// and if the session is not already terminated
-	sess := v.mgr.GetSession(token)
-	if sess == nil {
-		writeError(w, http.StatusNotFound, "session not found", ErrNotFound)
+	sess, ok := v.session(w, r)
+	if !ok {
 		return
 	}
 

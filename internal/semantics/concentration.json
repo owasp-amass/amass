@@ -1,0 +1,11 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the concentration lens judges reliance on a single provider. It reads the DNS providers and registrars of the domains lens, the certificate authorities of the certificates lens, the hosting parties of the network lens and the mail providers of the email lens. The subject's own infrastructure is never a concern, so shares are of what outside providers serve. A category with at least min_items served by outside providers is a single point of failure when one provider serves all of it, and concentrated when the largest serves at least dominant_share. Add values here, not in Go code.",
+  "dominant_share": 0.8,
+  "min_items": 2,
+  "own_labels": [
+    "own",
+    "own name servers",
+    "own mail servers"
+  ]
+}

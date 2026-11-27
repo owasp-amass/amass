@@ -6,6 +6,7 @@ package scope
 
 import (
 	"sync"
+	"sync/atomic"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -16,6 +17,9 @@ type Scope struct {
 
 	orgLock sync.Mutex
 	orgs    map[string]oam.Asset
+	// orgClaims caches the names stored organizations claim (orgs.go), by
+	// organization ID
+	orgClaims sync.Map
 
 	domLock sync.Mutex
 	domains map[string]oam.Asset
@@ -29,27 +33,30 @@ type Scope struct {
 	asLock     sync.Mutex
 	autsystems map[int]oam.Asset
 
-	locLock   sync.Mutex
-	locations map[string]oam.Asset
+	streetLock      sync.Mutex
+	streetAddresses map[string]oam.Asset
 
 	blLock    sync.Mutex
 	blacklist map[string]bool
 
-	//finLock      sync.Mutex
-	fingerprints map[string]map[string]*Fingerprint
+	// adm decides admission into scope (admission.go)
+	adm admissions
+	// st caches standings and holds what the gate kept back (scope_standing.go)
+	st standings
+	// rep shares the scope with the job's other workers (replica.go)
+	rep atomic.Pointer[replica]
 }
 
 func New(sess et.Session) et.Scope {
 	return &Scope{
-		Session:      sess,
-		orgs:         make(map[string]oam.Asset),
-		domains:      make(map[string]oam.Asset),
-		addresses:    make(map[string]oam.Asset),
-		networks:     make(map[string]oam.Asset),
-		autsystems:   make(map[int]oam.Asset),
-		locations:    make(map[string]oam.Asset),
-		blacklist:    make(map[string]bool),
-		fingerprints: make(map[string]map[string]*Fingerprint),
+		Session:         sess,
+		orgs:            make(map[string]oam.Asset),
+		domains:         make(map[string]oam.Asset),
+		addresses:       make(map[string]oam.Asset),
+		networks:        make(map[string]oam.Asset),
+		autsystems:      make(map[int]oam.Asset),
+		streetAddresses: make(map[string]oam.Asset),
+		blacklist:       make(map[string]bool),
 	}
 }
 

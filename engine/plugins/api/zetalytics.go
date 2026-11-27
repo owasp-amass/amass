@@ -119,7 +119,7 @@ func (z *zetalytics) query(e *et.Event, name string, keys []string) []*dbt.Entit
 		url := "https://zonecruncher.com/api/v1/subdomains?q=" + name +
 			"&token=" + key + "&tsfield=last_seen&start=" + strconv.FormatInt(start, 10)
 
-		_ = z.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), z.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

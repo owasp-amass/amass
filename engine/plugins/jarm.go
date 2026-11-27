@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -91,8 +93,9 @@ func (j *jarmPlugin) hasCertificate(e *et.Event, since time.Time) bool {
 	defer cancel()
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, e.Entity, since, "certificate"); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, e.Session.DB(), edges, false)
 		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
+			if a, ok := ends[edge.ToEntity.ID]; ok {
 				if a.Asset.AssetType() == oam.TLSCertificate {
 					return true
 				}
@@ -108,6 +111,10 @@ type fingerprint struct {
 	hash  string
 }
 
+// maxJARMTargets bounds the hosts probed for one service; each target
+// costs ten TLS connections.
+const maxJARMTargets = 4
+
 func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	var targets []*fingerprint
 
@@ -115,35 +122,32 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	defer cancel()
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, e.Entity, since); err == nil && len(edges) > 0 {
+		ends := amassdb.EdgeEnds(ctx, e.Session.DB(), edges, true)
 		for _, edge := range edges {
-			portrel, ok := edge.Relation.(*oamgen.PortRelation)
-			if !ok {
-				continue
-			}
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				switch a.Asset.(type) {
-				case *oamdns.FQDN:
-					if portrel.Protocol == "TCP" {
-						t := &fingerprint{
-							asset: e.Entity,
-							port:  edge,
-						}
+			if a, ok := ends[edge.FromEntity.ID]; ok {
+				if t := jarmTarget(a, edge); t != nil {
+					if _, isName := a.Asset.(*oamdns.FQDN); isName {
+						// Names first: the probes then carry the server name.
 						targets = append([]*fingerprint{t}, targets...)
-					}
-				case *oamnet.IPAddress:
-					if portrel.Protocol == "TCP" {
-						targets = append(targets, &fingerprint{
-							asset: e.Entity,
-							port:  edge,
-						})
+					} else {
+						targets = append(targets, t)
 					}
 				}
 			}
 		}
 	}
+	if len(targets) > maxJARMTargets {
+		targets = targets[:maxJARMTargets]
+	}
 
 	var results []*fingerprint
 	for _, target := range targets {
+		// Space this host's fingerprints; each opens several TLS connections,
+		// and a stopped session ends the loop.
+		if err := support.PaceProbe(e, target.asset.Asset.Key()); err != nil {
+			break
+		}
+
 		portrel := target.port.Relation.(*oamgen.PortRelation)
 		if fp, err := support.JARMFingerprint(e.Session, target.asset.Asset, portrel); err == nil && fp != "" {
 			results = append(results, &fingerprint{
@@ -159,14 +163,33 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 	}
 }
 
-func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
-	defer cancel()
+// jarmTarget returns the host behind a TCP port relation to a service as a
+// fingerprint target, or nil. The target is the host (an FQDN or IP
+// address), which is what the probes connect to, not the service.
+func jarmTarget(host *dbt.Entity, edge *dbt.Edge) *fingerprint {
+	portrel, ok := edge.Relation.(*oamgen.PortRelation)
+	if !ok || !strings.EqualFold(portrel.Protocol, "tcp") || host == nil || host.Asset == nil {
+		return nil
+	}
 
+	switch host.Asset.(type) {
+	case *oamdns.FQDN, *oamnet.IPAddress:
+		return &fingerprint{asset: host, port: edge}
+	}
+
+	return nil
+}
+
+// store records each JARM hash as a shared Identifier{JARM:hash} linked from
+// the service by a "fingerprint" edge, so services sharing a TLS stack can be
+// found by value.
+func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
+	seen := map[string]bool{}
 	for _, fp := range fps {
-		_, _ = e.Session.DB().CreateEdgeProperty(ctx, fp.port, &oamgen.SimpleProperty{
-			PropertyName:  "JARM",
-			PropertyValue: fp.hash,
-		})
+		if seen[fp.hash] {
+			continue
+		}
+		seen[fp.hash] = true
+		support.StoreFingerprint(e, e.Entity, j.source, "JARM", fp.hash)
 	}
 }

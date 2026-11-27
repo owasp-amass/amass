@@ -1,0 +1,91 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package ai
+
+import (
+	"sort"
+	"strings"
+
+	"github.com/owasp-amass/amass/v5/internal/graph"
+)
+
+func normalizeIntentTerm(raw string) string {
+	raw = strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(raw)), " "))
+	raw = strings.TrimSuffix(raw, " assets")
+	raw = strings.TrimSuffix(raw, " asset")
+	return strings.TrimSpace(raw)
+}
+
+// intentTypeCandidates resolves all linguistic meanings before choosing one.
+// Unknown/ambiguous words remain unresolved; the active catalog alone decides
+// which resulting types are valid and which transitions are possible.
+func intentTypeCandidates(raw string, selectors []graph.AssetSearchSchema, relations []graph.RelationshipSchema) []string {
+	term := normalizeIntentTerm(raw)
+	if term == "" {
+		return nil
+	}
+
+	registered := map[string]bool{}
+	for _, s := range selectors {
+		registered[s.Type] = true
+	}
+	for _, r := range relations {
+		registered[r.SourceType] = true
+		registered[r.DestinationType] = true
+	}
+
+	var matches []string
+	for typ := range registered {
+		for _, alias := range intentAssetAliases(typ) {
+			if term == alias {
+				matches = append(matches, typ)
+				break
+			}
+		}
+	}
+
+	sort.Strings(matches)
+	return matches
+}
+
+// compactIntentVocabulary gives the model semantic examples, not permission
+// to invent types, selector fields, graph edges or legal ownership.
+func compactIntentVocabulary(selectors []graph.AssetSearchSchema, relations []graph.RelationshipSchema) string {
+	registered := map[string]bool{}
+	for _, s := range selectors {
+		registered[s.Type] = true
+	}
+	for _, r := range relations {
+		registered[r.SourceType] = true
+		registered[r.DestinationType] = true
+	}
+
+	types := make([]string, 0, len(registered))
+	for typ := range registered {
+		types = append(types, typ)
+	}
+
+	sort.Strings(types)
+	var rows []string
+	for _, typ := range types {
+		aliases := intentVocabulary[typ]
+		if len(aliases) == 0 {
+			continue
+		}
+
+		rows = append(rows, typ+": "+strings.Join(aliases, ", "))
+	}
+
+	return strings.Join(rows, "\n")
+}
+
+func subdomainTerm(raw string) bool {
+	switch normalizeIntentTerm(raw) {
+	case "subdomain", "subdomains", "subdomain name", "subdomain names":
+		return true
+	default:
+		return false
+	}
+}

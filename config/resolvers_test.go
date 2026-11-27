@@ -119,3 +119,60 @@ func TestLoadResolversFromFile(t *testing.T) {
 	}
 	_ = os.Remove("validResolvers.txt")
 }
+
+func TestSetTrustedResolversKeepsTheUntrusted(t *testing.T) {
+	c := NewConfig()
+	c.SetResolvers("192.0.2.1")
+	c.SetTrustedResolvers("192.0.2.53", " ", "192.0.2.53")
+
+	if !reflect.DeepEqual(c.TrustedResolvers, []string{"192.0.2.53"}) {
+		t.Errorf("trusted resolvers = %v", c.TrustedResolvers)
+	}
+	if !reflect.DeepEqual(c.Resolvers, []string{"192.0.2.1"}) {
+		t.Errorf("setting the trusted resolvers changed the untrusted ones to %v", c.Resolvers)
+	}
+
+	c.SetTrustedResolvers("192.0.2.54")
+	if !reflect.DeepEqual(c.TrustedResolvers, []string{"192.0.2.54"}) {
+		t.Errorf("trusted resolvers were not replaced: %v", c.TrustedResolvers)
+	}
+}
+
+func TestLoadTrustedResolverSettings(t *testing.T) {
+	c := NewConfig()
+	c.Options = map[string]interface{}{
+		"resolvers":         []interface{}{"192.0.2.1"},
+		"trusted_resolvers": []interface{}{"192.0.2.53:5353", "[2001:db8::53]:53"},
+	}
+	if err := c.loadResolverSettings(c); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c.Resolvers, []string{"192.0.2.1"}) {
+		t.Errorf("resolvers = %v", c.Resolvers)
+	}
+	sort.Strings(c.TrustedResolvers)
+	if !reflect.DeepEqual(c.TrustedResolvers, []string{"192.0.2.53:5353", "[2001:db8::53]:53"}) {
+		t.Errorf("trusted resolvers = %v", c.TrustedResolvers)
+	}
+
+	c.Options = map[string]interface{}{"trusted_resolvers": "192.0.2.53"}
+	if err := c.loadResolverSettings(c); err == nil {
+		t.Error("trusted resolvers that are not a list were accepted")
+	}
+}
+
+func TestIsResolverAddress(t *testing.T) {
+	for s, want := range map[string]bool{
+		"192.0.2.1":        true,
+		"192.0.2.1:5353":   true,
+		"2001:db8::1":      true,
+		"[2001:db8::1]:53": true,
+		"dns.example.com":  false,
+		"resolvers.txt":    false,
+		"":                 false,
+	} {
+		if got := IsResolverAddress(s); got != want {
+			t.Errorf("IsResolverAddress(%q) = %t, want %t", s, got, want)
+		}
+	}
+}

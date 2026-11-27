@@ -5,13 +5,10 @@
 package horizontals
 
 import (
-	"context"
 	"errors"
-	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
@@ -31,8 +28,8 @@ func (h *horTlsCert) check(e *et.Event) error {
 		return errors.New("failed to cast the TLSCertificate asset")
 	}
 
-	// check if scope expansion is allowed
-	if e.Session.Config().Rigid {
+	// the expansion policy may admit nothing at all
+	if !e.Session.Config().Widens() {
 		return nil
 	}
 
@@ -57,6 +54,10 @@ func (h *horTlsCert) lookup(sess et.Session, tlsent *dbt.Entity) ([]*dbt.Entity,
 }
 
 func (h *horTlsCert) process(e *et.Event, c *oamcert.TLSCertificate, orgs []*dbt.Entity) {
+	// a certificate may name its subject only in its alternative names
+	if c.SubjectCommonName == "" {
+		return
+	}
 	// check if the TLS certificate subject common name is in scope
 	if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: c.SubjectCommonName}, 0); conf > 0 {
 		return
@@ -71,51 +72,18 @@ func (h *horTlsCert) process(e *et.Event, c *oamcert.TLSCertificate, orgs []*dbt
 	}
 
 	if found {
-		// the TLS certificate subject common name and related
-		// organizations should be added to the scope and reviewed
-		if fqdn := h.registeredFQDN(e.Session, c); fqdn != nil {
-			h.plugin.enqueueIfOutOfScope(e.Session, fqdn)
-		}
+		// The certificate's apex domains are added through the scored
+		// horizontal expansion for each in-scope subject organization (which
+		// includes them via the certificate-subject signal), rather than a
+		// direct single-signal enqueue, so the scope change is scored and
+		// journaled.
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
-		}
-	}
-}
-
-func (h *horTlsCert) registeredFQDN(sess et.Session, c *oamcert.TLSCertificate) *dbt.Entity {
-	ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
-	defer cancel()
-
-	ents, err := sess.DB().FindEntitiesByContent(ctx, oam.FQDN, time.Time{}, 1, dbt.ContentFilters{
-		"name": c.SubjectCommonName,
-	})
-	if err != nil || len(ents) != 1 {
-		return nil
-	}
-	domain := ents[0]
-
-	// follow the node relations back to the registered domain name
-	for {
-		apex := h.getZoneApexFQDN(sess, domain)
-		if apex == nil || apex.ID == domain.ID {
-			break
-		}
-		domain = apex
-	}
-
-	return domain
-}
-
-func (h *horTlsCert) getZoneApexFQDN(sess et.Session, fqdn *dbt.Entity) *dbt.Entity {
-	ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
-	defer cancel()
-
-	if edges, err := sess.DB().IncomingEdges(ctx, fqdn, time.Time{}, "node"); err == nil && len(edges) > 0 {
-		for _, edge := range edges {
-			if from, err := sess.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil {
-				return from
+			if h.plugin.isEntityInScope(e.Session, o) {
+				h.plugin.expandRelatedDomains(e, o)
 			}
 		}
+		for _, o := range orgs {
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
+		}
 	}
-	return nil
 }

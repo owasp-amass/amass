@@ -1,5 +1,20 @@
 basePath: /api/v1
 definitions:
+  types.WorkerStats:
+    properties:
+      background:
+        type: integer
+      done:
+        type: integer
+      leased:
+        type: integer
+      live:
+        type: boolean
+      modelCalls:
+        type: integer
+      worker:
+        type: string
+    type: object
   config.Credentials:
     properties:
       apikey:
@@ -141,9 +156,6 @@ definitions:
         items:
           type: string
         type: array
-      rigid_boundaries:
-        description: Determines rigidness of the enumeration
-        type: boolean
       scope:
         allOf:
         - $ref: '#/definitions/config.Scope'
@@ -210,6 +222,10 @@ definitions:
     type: object
   v1.CreateSessionResponse:
     properties:
+      jobId:
+        type: string
+      joined:
+        type: boolean
       sessionToken:
         type: string
     type: object
@@ -242,6 +258,13 @@ definitions:
             format: int32
             type: integer
           type: array
+        type: array
+    type: object
+  v1.WorkersResponse:
+    properties:
+      workers:
+        items:
+          $ref: '#/definitions/types.WorkerStats'
         type: array
     type: object
   v1.SessionStatsResponse:
@@ -348,7 +371,7 @@ paths:
         required: true
         type: string
       - description: Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock,
-          location, organization)
+          streetaddress, organization)
         in: path
         name: asset_type
         required: true
@@ -398,7 +421,7 @@ paths:
         required: true
         type: string
       - description: Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock,
-          location, organization)
+          streetaddress, organization)
         in: path
         name: asset_type
         required: true
@@ -447,7 +470,7 @@ paths:
         required: true
         type: string
       - description: Asset type (e.g., autonomoussystem, fqdn, ipaddress, netblock,
-          location, organization)
+          streetaddress, organization)
         in: path
         name: asset_type
         required: true
@@ -497,6 +520,33 @@ paths:
       summary: Get session statistics
       tags:
       - sessions
+  /sessions/{session_token}/workers:
+    get:
+      description: 'Returns the engine sessions working on the session''s job, on a database the engines share work through: whether each is still there, its background work, and the items it holds and did.'
+      parameters:
+      - description: Session token (UUID)
+        in: path
+        name: session_token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.WorkersResponse'
+        "400":
+          description: Invalid session token
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Get the workers of a session's job
+      tags:
+      - sessions
   /sessions/{session_token}/ws/logs:
     get:
       description: |-
@@ -539,10 +589,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.ListSessionsResponse'
-        "404":
-          description: Zero sessions found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
       summary: List active sessions
       tags:
       - sessions

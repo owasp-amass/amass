@@ -5,6 +5,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -20,15 +21,22 @@ type Transformation struct {
 	Confidence int      `yaml:"confidence,omitempty" json:"confidence,omitempty"`
 	Exclude    []string `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	TTL        int      `yaml:"ttl,omitempty" json:"ttl,omitempty"`
+	// Reach and Hops are the transformation's expansion policy (reach.go):
+	// where an asset must stand for the transformation to run on it.
+	Reach string `yaml:"reach,omitempty" json:"reach,omitempty"`
+	Hops  int    `yaml:"hops,omitempty" json:"hops,omitempty"`
 }
 
 // Matches represents a collection of transform matches.
 type Matches struct {
 	lock sync.Mutex
-	to   map[string]struct {
-		ttl        int
-		confidence int
-	}
+	to   map[string]match
+}
+
+// match is what a transformation match carries.
+type match struct {
+	ttl        int
+	confidence int
 }
 
 // loadTransformSettings processes the Transformations map from the configuration,
@@ -36,11 +44,13 @@ type Matches struct {
 // Each key is parsed into 'From' and 'To' segments, representing the origin and target
 // of the transformation, respectively, which are then stored in the corresponding Transformation struct.
 func (c *Config) loadTransformSettings(cfg *Config) error {
-	// Retrieve the global options from the Options, if it's set.
-	if err := c.loadGlobalTransformSettings(); err != nil {
+	// The defaults first, so no other transformation is read as one.
+	if err := c.loadDefaultTransformation(); err != nil {
 		return err
 	}
-	// Iterate through each transformation rule defined in the configuration.
+	// Split every key into its 'From' and 'To' first, so each type's ALL
+	// transformation is known before the others take its values.
+	alls := map[string]*Transformation{}
 	for key, transformation := range c.Transformations {
 		// Initialize transformation if nil
 		if transformation == nil {
@@ -51,16 +61,28 @@ func (c *Config) loadTransformSettings(cfg *Config) error {
 		if err := transformation.Split(key); err != nil {
 			return fmt.Errorf("error when splitting the key: %w", err)
 		}
-		// Apply the global confidence if no specific confidence is set for this transformation.
-		if transformation.Confidence == 0 {
-			transformation.Confidence = c.DefaultTransformations.Confidence
+		if transformation.To == "all" {
+			alls[transformation.From] = transformation
 		}
-		if transformation.TTL == 0 {
-			transformation.TTL = c.DefaultTransformations.TTL
+	}
+	// An ALL transformation's unset ttl and confidence are the defaults'.
+	for _, all := range alls {
+		all.fill(c.DefaultTransformations)
+	}
+	// Iterate through each transformation rule defined in the configuration.
+	for key, transformation := range c.Transformations {
+		// A transformation's unset ttl and confidence are its ALL
+		// transformation's, then the defaults'.
+		if all, ok := alls[transformation.From]; ok && transformation != all {
+			transformation.fill(all)
 		}
+		transformation.fill(c.DefaultTransformations)
 
 		err := transformation.Validate(c)
 		if err != nil {
+			return err
+		}
+		if err := transformation.validateReach(key); err != nil {
 			return err
 		}
 	}
@@ -68,31 +90,63 @@ func (c *Config) loadTransformSettings(cfg *Config) error {
 	return nil
 }
 
-func (c *Config) loadGlobalTransformSettings() error {
-	// get the default_transfom_values in the config yaml
-	if dtv, ok := c.Options["default_transform_values"]; ok {
-		// Assert the type to map[interface{}]interface{}
-		dtvMap, ok := dtv.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("invalid type for default_transform_values")
+// fill sets the transformation's unset ttl and confidence from from's.
+func (t *Transformation) fill(from *Transformation) {
+	if from == nil {
+		return
+	}
+	if t.Confidence == 0 {
+		t.Confidence = from.Confidence
+	}
+	if t.TTL == 0 {
+		t.TTL = from.TTL
+	}
+}
+
+// DefaultTransformationKey is the transformations entry whose values every
+// transformation that does not set its own takes: ttl, confidence, priority,
+// and the expansion policy's reach and hops.
+const DefaultTransformationKey = "default"
+
+// loadDefaultTransformation takes transformations.default out of the
+// transformations, into DefaultTransformations. The values once set under
+// options are refused, so a policy is never silently lost.
+func (c *Config) loadDefaultTransformation() error {
+	if _, ok := c.Options["default_transform_values"]; ok {
+		return errors.New("options.default_transform_values moved to transformations.default: move it there")
+	}
+
+	for key, t := range c.Transformations {
+		if !strings.EqualFold(key, DefaultTransformationKey) {
+			continue
 		}
-		// Convert the map to the Transformation struct
-		if ttl, ok := dtvMap["ttl"].(int); ok {
-			c.DefaultTransformations.TTL = ttl
-		} else if !ok && dtvMap["ttl"] != nil {
-			return fmt.Errorf("invalid type for ttl in default_transform_values")
+		delete(c.Transformations, key)
+		if t == nil {
+			continue
 		}
-		if confidence, ok := dtvMap["confidence"].(int); ok {
-			c.DefaultTransformations.Confidence = confidence
-		} else if !ok && dtvMap["confidence"] != nil {
-			return fmt.Errorf("invalid type for confidence in default_transform_values")
-		}
-		if priority, ok := dtvMap["priority"].(int); ok {
-			c.DefaultTransformations.Priority = priority
-		} else if !ok && dtvMap["priority"] != nil {
-			return fmt.Errorf("invalid type for priority in default_transform_values")
+		if len(t.Exclude) > 0 {
+			return errors.New("transformations.default: exclude applies to a FROM->ALL transformation")
 		}
 
+		if c.DefaultTransformations == nil {
+			c.DefaultTransformations = &Transformation{}
+		}
+		d := c.DefaultTransformations
+		if t.TTL != 0 {
+			d.TTL = t.TTL
+		}
+		if t.Confidence != 0 {
+			d.Confidence = t.Confidence
+		}
+		if t.Priority != 0 {
+			d.Priority = t.Priority
+		}
+		if t.Reach != "" {
+			d.Reach, d.Hops = t.Reach, t.Hops
+		}
+		if err := d.validateReach("transformations." + DefaultTransformationKey); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -167,64 +221,48 @@ func (t *Transformation) Validate(c *Config) error {
 }
 
 // CheckTransformations checks if the given 'From' type has a valid transformation to any of the given 'To' types.
+// A transformation naming a 'To' type (or a data source) applies to it, even one the ALL transformation
+// excludes; otherwise ALL applies unless it excludes the 'To'. A named transformation's unset ttl or
+// confidence is its ALL transformation's, so the result is the same whatever order the transformations
+// are read in.
 func (c *Config) CheckTransformations(from string, tos ...string) (*Matches, error) {
 	lower := strings.ToLower(from)
-	tomap := make(map[string]struct{})
-	results := &Matches{to: make(map[string]struct {
-		ttl        int
-		confidence int
-	})}
-
-	for _, v := range tos {
-		t := strings.ToLower(v)
-		tomap[t] = struct{}{}
+	var all *Transformation
+	named := map[string]*Transformation{}
+	for _, transform := range c.Transformations {
+		if transform == nil || lower != transform.From {
+			continue
+		}
+		if transform.To == "all" {
+			all = transform
+		} else {
+			named[transform.To] = transform
+		}
 	}
 
-	for _, transform := range c.Transformations {
-		if lower == transform.From {
-			if transform.To == "all" {
-				excludes := make(map[string]struct{})
-				for _, e := range transform.Exclude {
-					excludes[strings.ToLower(e)] = struct{}{}
+	excludes := make(map[string]bool)
+	if all != nil {
+		for _, e := range all.Exclude {
+			excludes[strings.ToLower(e)] = true
+		}
+	}
+
+	results := &Matches{to: make(map[string]match)}
+	for _, v := range tos {
+		to := strings.ToLower(v)
+		if t, ok := named[to]; ok {
+			m := match{ttl: t.checkTTL(to, c), confidence: t.Confidence}
+			if all != nil {
+				if m.ttl == 0 {
+					m.ttl = all.checkTTL(to, c)
 				}
-
-				for k := range tomap {
-					if _, ok := results.to[k]; !ok {
-						if _, found := excludes[k]; !found {
-							results.to[k] = struct {
-								ttl        int
-								confidence int
-							}{ttl: transform.checkTTL(k, c), confidence: transform.Confidence}
-						}
-					}
-				}
-				continue
-			} else if _, found := tomap[transform.To]; found {
-				// this only occurs if an ALL is specified
-				if old, ok := results.to[transform.To]; ok {
-					confidence := transform.Confidence
-					ttl := transform.checkTTL(transform.To, c)
-
-					if confidence == 0 { // if confidence is not set, use the ALL confidence
-						confidence = old.confidence
-					}
-
-					if ttl == 0 { // if ttl is not set, use the ALL ttl
-						ttl = old.ttl
-					}
-
-					results.to[transform.To] = struct {
-						ttl        int
-						confidence int
-					}{ttl: ttl, confidence: confidence}
-
-				} else {
-					results.to[transform.To] = struct {
-						ttl        int
-						confidence int
-					}{ttl: transform.checkTTL(transform.To, c), confidence: transform.Confidence}
+				if m.confidence == 0 {
+					m.confidence = all.Confidence
 				}
 			}
+			results.to[to] = m
+		} else if all != nil && !excludes[to] {
+			results.to[to] = match{ttl: all.checkTTL(to, c), confidence: all.Confidence}
 		}
 	}
 

@@ -1,0 +1,20 @@
+# Expansion policy: broad passive
+#
+# Learn as much as the passive sources know about everything the run meets,
+# while active work (fingerprinting TLS, fetching and reading documents) stays
+# on the organization's own footprint. The port, banner and SSH probes need
+# no entry: under every policy they reach only addresses and names the scope
+# takes in by themselves.
+#
+# To use it, merge these transformations into your config.yaml: they
+# replace entries of yours with the same key, default included.
+
+transformations:
+  default:
+    reach: any
+  Service->JARM-Fingerprint:
+    reach: footprint
+  FQDN->Documents:
+    reach: footprint
+  URL->Documents:
+    reach: footprint

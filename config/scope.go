@@ -8,41 +8,140 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/caffix/stringset"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	"golang.org/x/net/publicsuffix"
 )
 
 func (c *Config) loadSeedandScopeSettings() error {
-	if c.Seed == nil || c.Seed.isScopeEmpty(false) {
-		if c.Scope == nil {
-			return fmt.Errorf("config seed and scope are not initialized")
-		} else {
-			if err := c.Scope.populate(); err != nil {
-				return err
-			}
-			c.Seed = c.Scope
-			return nil
-		}
-	} else if err := c.Seed.populate(); err != nil {
+	// A scope section with every entry commented out decodes as null: it
+	// restricts nothing, and the default ports apply.
+	if c.Scope == nil {
+		c.Scope = &Scope{Ports: slices.Clone(DefaultPorts)}
+	}
+	if err := c.Scope.populate(); err != nil {
 		return err
 	}
+	// Seed DNS names (leads) may be listed inline and in a file; load the
+	// file into the inline list before deciding whether the seed is empty.
+	if c.Seed != nil && c.Seed.NamesFile != "" {
+		list, err := GetListFromFile(c.Seed.NamesFile)
+		if err != nil {
+			return fmt.Errorf("failed to read the seed names file %q: %v", c.Seed.NamesFile, err)
+		}
 
-	if c.Scope == nil || !c.Scope.isScopeEmpty(true) {
+		c.Seed.Names = append(c.Seed.Names, list...)
+	}
+
+	if c.Seed == nil || c.Seed.isScopeEmpty(false) {
+		// Without a seed, the whole scope is where the enumeration starts.
+		c.Seed = c.Scope
+	} else {
 		if err := c.Seed.populate(); err != nil {
 			return err
 		}
-		c.Scope = c.Seed
-		c.Scope.Ports = []int{80, 443}
-		return nil
-	} else if err := c.Scope.populate(); err != nil {
-		return err
+
+		// The seed is where the enumeration starts, and it is in scope as
+		// well: the scope boundary is the scope section's entries and the
+		// seed's, with the scope section's ports (the default ports when it
+		// lists none).
+		c.Scope.merge(c.Seed)
 	}
 
+	// Seed names are leads the enumeration starts from, so they join the
+	// provided names and their registered domains join the scope boundary.
+	c.AddSeedNames(c.Seed.Names...)
 	return nil
+}
+
+// HasSeed reports whether the enumeration has at least one starting point:
+// a seed (or scope, when no seed was given) entry of any kind, or a
+// provided name. A run with none has nothing to begin from.
+func (c *Config) HasSeed() bool {
+	return len(c.ProvidedNames) > 0 || !c.SeedScope().isScopeEmpty(false)
+}
+
+// SeedScope returns where the enumeration starts: the seed when one was
+// given, otherwise the whole scope. It is resolved at seed time so that
+// command-line targets, which populate the scope, are the start when no
+// explicit seed was configured.
+func (c *Config) SeedScope() *Scope {
+	if c.Seed != nil && !c.Seed.isScopeEmpty(false) {
+		return c.Seed
+	}
+
+	return c.Scope
+}
+
+// AddSeedNames records known DNS names as leads the enumeration starts from:
+// each is added to the provided names submitted to the engine, and its
+// registered domain is added to the scope boundary so the lead is never
+// dropped as out of scope. It does not make the registered domain a seed on
+// its own. A name whose registered domain cannot be determined is still
+// submitted as a provided name.
+func (c *Config) AddSeedNames(names ...string) {
+	for _, n := range names {
+		name := strings.ToLower(strings.TrimSpace(n))
+		if name == "" {
+			continue
+		}
+		if !slices.Contains(c.ProvidedNames, name) {
+			c.ProvidedNames = append(c.ProvidedNames, name)
+		}
+		if dom, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && dom != "" {
+			c.AddDomain(dom)
+		}
+	}
+}
+
+// merge adds the names, addresses, networks, autonomous systems and
+// blacklisted names of o that s does not already have.
+func (s *Scope) merge(o *Scope) {
+	for _, d := range o.Domains {
+		if !slices.ContainsFunc(s.Domains, func(x string) bool { return strings.EqualFold(x, d) }) {
+			s.Domains = append(s.Domains, d)
+		}
+	}
+	for _, ip := range o.IP {
+		if !slices.Contains(s.IP, ip) {
+			s.IP = append(s.IP, ip)
+		}
+	}
+	for _, a := range o.Addresses {
+		if !slices.ContainsFunc(s.Addresses, a.Equal) {
+			s.Addresses = append(s.Addresses, a)
+		}
+	}
+	for _, cidr := range o.CIDRStrings {
+		if !slices.Contains(s.CIDRStrings, cidr) {
+			s.CIDRStrings = append(s.CIDRStrings, cidr)
+		}
+	}
+	for _, n := range o.CIDRs {
+		if !slices.ContainsFunc(s.CIDRs, func(x *net.IPNet) bool { return x.String() == n.String() }) {
+			s.CIDRs = append(s.CIDRs, n)
+		}
+	}
+	for _, asn := range o.ASNs {
+		if !slices.Contains(s.ASNs, asn) {
+			s.ASNs = append(s.ASNs, asn)
+		}
+	}
+	for _, org := range o.Organizations {
+		if !slices.ContainsFunc(s.Organizations, func(x string) bool { return strings.EqualFold(x, org) }) {
+			s.Organizations = append(s.Organizations, org)
+		}
+	}
+	for _, b := range o.Blacklist {
+		if !slices.Contains(s.Blacklist, b) {
+			s.Blacklist = append(s.Blacklist, b)
+		}
+	}
 }
 
 func (s *Scope) isScopeEmpty(scopeSwitch bool) bool {
@@ -59,6 +158,15 @@ func (s *Scope) isScopeEmpty(scopeSwitch bool) bool {
 		return false
 	}
 	if len(s.IP) > 0 {
+		return false
+	}
+	if len(s.Organizations) > 0 {
+		return false
+	}
+	if len(s.Phones) > 0 || len(s.StreetAddresses) > 0 {
+		return false
+	}
+	if len(s.Names) > 0 || s.NamesFile != "" {
 		return false
 	}
 	if scopeSwitch && portCheck(s.Ports) {
@@ -152,9 +260,9 @@ func convertPortRangeToSlice(portRange string) ([]int, error) {
 	return ports, nil
 }
 
-// returns true is ports match default ports (80,443), otherwise return false
+// portCheck reports whether ports are the default ports, DefaultPorts.
 func portCheck(ports []int) bool {
-	defaultPorts := []int{80, 443}
+	defaultPorts := DefaultPorts
 
 	portSet := make(map[int]struct{}, len(ports))
 	for _, v := range ports {
@@ -187,6 +295,32 @@ func (c *Config) AddDomains(domains ...string) {
 	for _, d := range domains {
 		c.AddDomain(d)
 	}
+}
+
+// AddPhone records a phone number as a seed the enumeration pivots from: the
+// engine resolves the organizations tied to the number and their domains.
+func (c *Config) AddPhone(phone string) {
+	c.Lock()
+	defer c.Unlock()
+
+	p := strings.TrimSpace(phone)
+	if p == "" || slices.Contains(c.Scope.Phones, p) {
+		return
+	}
+	c.Scope.Phones = append(c.Scope.Phones, p)
+}
+
+// AddStreetAddress records a street address as a seed the enumeration pivots from:
+// the engine resolves the organizations at the address and their domains.
+func (c *Config) AddStreetAddress(address string) {
+	c.Lock()
+	defer c.Unlock()
+
+	a := strings.TrimSpace(address)
+	if a == "" || slices.Contains(c.Scope.StreetAddresses, a) {
+		return
+	}
+	c.Scope.StreetAddresses = append(c.Scope.StreetAddresses, a)
 }
 
 // AddDomain appends the domain name provided in the parameter to the list in the configuration.
@@ -293,6 +427,33 @@ func (c *Config) IsAddressInScope(addr string) bool {
 		}
 	}
 	return false
+}
+
+// IsPhoneInScope reports whether the phone number is one of the scope's phone
+// seeds, compared by digits, so a number matches however it is written.
+func (c *Config) IsPhoneInScope(phone string) bool {
+	want := phoneDigits(phone)
+	if want == "" || c.Scope == nil {
+		return false
+	}
+
+	c.Lock()
+	defer c.Unlock()
+	for _, p := range c.Scope.Phones {
+		if phoneDigits(p) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func phoneDigits(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, s)
 }
 
 // BlacklistSubdomain adds a subdomain name to the config blacklist.

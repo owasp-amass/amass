@@ -9,14 +9,15 @@ import (
 	"errors"
 	"log/slog"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
@@ -50,7 +51,7 @@ func (bu *bannerURLs) Start(r et.Registry) error {
 		Name:         bu.name + "-Handler",
 		Position:     10,
 		MaxInstances: support.MidHandlerInstances,
-		Transforms:   []string{string(oam.URL)},
+		Transforms:   []string{string(oam.URL), string(oam.Identifier)},
 		EventType:    oam.Service,
 		Callback:     bu.check,
 	}); err != nil {
@@ -96,11 +97,16 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 		return nil
 	}
 
+	bu.emails(e, serv.Output)
+
 	var results []*oamurl.URL
+	static := semantics.ArchiveURLs()
 	// TODO: in the future, further investigation of out of scope URLs may be needed
 	if urls := support.ExtractURLsFromString(serv.Output); len(urls) > 0 {
 		for _, u := range urls {
-			if u.Host == "" {
+			// images, stylesheets, fonts and media say nothing about the
+			// attack surface (the same list the archive collectors skip)
+			if u.Host == "" || static.IsStaticPath(u.Path) {
 				continue
 			} else if addr, err := netip.ParseAddr(u.Host); err == nil {
 				if _, conf := e.Session.Scope().IsAssetInScope(&oamnet.IPAddress{Address: addr}, 0); conf > 0 {
@@ -115,6 +121,28 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 	return bu.store(e, results)
 }
 
+// emails stores the in-scope email addresses a response names (mailto: links
+// and bare addresses) as email Identifiers, so the breach and account lenses
+// see them; they are never made into URLs.
+func (bu *bannerURLs) emails(e *et.Event, body string) {
+	var inscope []string
+	for _, addr := range support.ExtractEmailsFromString(body) {
+		_, domain, ok := strings.Cut(addr, "@")
+		if !ok {
+			continue
+		}
+		if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: domain}, 0); conf > 0 {
+			inscope = append(inscope, addr)
+		}
+	}
+	if len(inscope) == 0 {
+		return
+	}
+
+	ents := support.StoreEmailsWithSource(e.Session, inscope, bu.source, bu.name, bu.name+"-Handler")
+	support.ProcessEmailsWithSource(e, ents, bu.source)
+}
+
 func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {
 	var assets []*dbt.Entity
 
@@ -124,10 +152,7 @@ func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {
 	for _, u := range urls {
 		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
 			assets = append(assets, a)
-			_, _ = e.Session.DB().CreateEntityProperty(ctx, a, &general.SourceProperty{
-				Source:     bu.source.Name,
-				Confidence: bu.source.Confidence,
-			})
+			support.AddSource(ctx, e.Session, a, bu.source)
 		}
 	}
 

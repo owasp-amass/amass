@@ -16,12 +16,13 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/registrant"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
-	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -52,74 +53,19 @@ func (r *domrec) check(e *et.Event) error {
 	if record, ok := e.Meta.(*whoisparser.WhoisInfo); ok && record != nil {
 		r.store(e, record, e.Entity, matches)
 	} else {
-		findings = append(findings, r.lookup(e, e.Entity, src, matches)...)
+		dr := e.Entity.Asset.(*oamreg.DomainRecord)
+		findings = support.StoredFindings(e, e.Entity, "DomainRecord: "+dr.Domain, r.plugin.name, matches,
+			map[string][]string{
+				string(oam.FQDN): {"name_server", "whois_server"},
+				string(oam.ContactRecord): {"registrar_contact", "registrant_contact", "admin_contact",
+					"technical_contact", "billing_contact"},
+			}, src)
 	}
 
 	if len(findings) > 0 {
 		r.process(e, findings, src)
 	}
 	return nil
-}
-
-func (r *domrec) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
-	var findings []*support.Finding
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 2*time.Minute)
-	defer cancel()
-
-	for _, atype := range r.transforms {
-		if !m.IsMatch(atype) {
-			continue
-		}
-
-		since, err := support.TTLStartTime(e.Session.Config(), string(oam.DomainRecord), atype, r.plugin.name)
-		if err != nil {
-			continue
-		}
-
-		var rtypes []string
-		switch atype {
-		case string(oam.FQDN):
-			rtypes = append(rtypes, "name_server", "whois_server")
-		case string(oam.ContactRecord):
-			rtypes = append(rtypes, "registrar_contact", "registrant_contact", "admin_contact", "technical_contact", "billing_contact")
-		}
-
-		if edges, err := e.Session.DB().OutgoingEdges(ctx, asset, since, rtypes...); err == nil && len(edges) > 0 {
-			for _, edge := range edges {
-				to, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
-				if err != nil {
-					continue
-				}
-
-				if !r.oneOfSources(ctx, e, to, src, since) {
-					continue
-				}
-
-				dr := asset.Asset.(*oamreg.DomainRecord)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: "DomainRecord: " + dr.Domain,
-					To:       to,
-					ToName:   to.Asset.Key(),
-					Rel:      edge.Relation,
-				})
-			}
-		}
-	}
-
-	return findings
-}
-
-func (r *domrec) oneOfSources(ctx context.Context, e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) bool {
-	if tags, err := e.Session.DB().FindEntityTags(ctx, asset, since, src.Name); err == nil && len(tags) > 0 {
-		for _, tag := range tags {
-			if _, ok := tag.Property.(*general.SourceProperty); ok {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, m *config.Matches) {
@@ -181,6 +127,34 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 	}
 }
 
+// contactOrganization decides which WHOIS contact field names the
+// organization, and returns it with the street address to store and whether
+// the contact's name is a separate person. Some registries put the first
+// line of the street address in the organization field; the address parser
+// shows that when the organization is not the building it parses. Only then
+// is the contact's name taken as the organization. When the address cannot
+// be parsed, including when the parser is unavailable, the organization is
+// kept as the record gives it: replacing it with the contact's name would
+// record a person (an EDUCAUSE admin contact) as an organization.
+func contactOrganization(wc *whoisparser.Contact, parse func(string) *contact.StreetAddress) (string, string, bool) {
+	orgName := strings.TrimSpace(wc.Organization)
+	rest := fmt.Sprintf("%s %s %s %s %s", wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
+	if orgName == "" {
+		return "", rest, true
+	}
+
+	loc := parse(orgName + " " + rest)
+	switch {
+	case loc == nil:
+		return orgName, rest, true
+	case strings.HasPrefix(loc.Building, strings.ToLower(orgName)):
+		return orgName, rest, true
+	default:
+		// the organization field begins the street address
+		return wc.Name, orgName + " " + rest, false
+	}
+}
+
 type domrecContact struct {
 	WhoisContact *whoisparser.Contact
 	RelationName string
@@ -196,110 +170,59 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 		return
 	}
 
-	var found bool
 	wc := c.WhoisContact
-	// test if the address begins in the organization field
-	addr := fmt.Sprintf("%s %s %s %s %s %s",
-		wc.Organization, wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
-	if loc := support.StreetAddressToLocation(addr); loc != nil &&
-		strings.HasPrefix(loc.Building, strings.ToLower(wc.Organization)) {
-		found = true
-		addr = fmt.Sprintf("%s %s %s %s %s",
-			wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
-	} else {
-		wc.Organization = wc.Name
+	orgName, addr, found := contactOrganization(wc, support.ParseStreetAddress)
+	// what the contact's name names: when the organization field begins the
+	// street address, the name is the only organization name there may be
+	var orgs []string
+	if found && orgName != "" {
+		orgs = []string{orgName}
 	}
+	kind, why, p := support.NameKind(e.Session, wc.Name, orgs, []string{wc.Email})
+	switch kind {
+	case semantics.NameKindPerson:
+		if m.IsMatch(string(oam.Person)) {
+			support.LinkContactPerson(e, cr, p, r.plugin.source)
+		}
+	case semantics.NameKindOrganization:
+		if found && m.IsMatch(string(oam.Organization)) {
+			org.LinkContactOrg(e, cr, wc.Name, r.plugin.source)
+		}
+	case semantics.NameKindUncertain:
+		support.KeepUncertainName(ctx, e.Session, cr, "person", wc.Name, why, r.plugin.source)
+	}
+	if !found && kind != semantics.NameKindOrganization {
+		// the name is not an organization's
+		orgName = ""
+	}
+	support.StoreContact(ctx, e.Session, cr, support.Contact{
+		Address:  addr,
+		Email:    wc.Email,
+		Phone:    wc.Phone,
+		PhoneExt: wc.PhoneExt,
+		Fax:      wc.Fax,
+		FaxExt:   wc.FaxExt,
+		Country:  wc.Country,
+		URL:      wc.ReferralURL,
+	}, r.plugin.source, m)
 
-	if found {
-		if p := support.FullNameToPerson(wc.Name); p != nil && m.IsMatch(string(oam.Person)) {
-			if a, err := e.Session.DB().CreateAsset(ctx, p); err == nil && a != nil {
-				r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "person"}, cr, a)
-			}
-		}
-	}
-
-	if loc := support.StreetAddressToLocation(addr); loc != nil {
-		if a, err := e.Session.DB().CreateAsset(ctx, loc); err == nil && a != nil {
-			r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "location"}, cr, a)
-		}
-	}
-	if email := strings.ToLower(wc.Email); m.IsMatch(string(oam.Identifier)) && email != "" {
-		if a, err := e.Session.DB().CreateAsset(ctx, &general.Identifier{
-			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
-			ID:       email,
-			Type:     general.EmailAddress,
-		}); err == nil && a != nil {
-			r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "id"}, cr, a)
-		}
-	}
-	if m.IsMatch(string(oam.Phone)) {
-		if phone := support.PhoneToOAMPhone(wc.Phone, wc.PhoneExt, wc.Country); phone != nil {
-			phone.Type = contact.PhoneTypeRegular
-			if a, err := e.Session.DB().CreateAsset(ctx, phone); err == nil && a != nil {
-				r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "phone"}, cr, a)
-			}
-		}
-		if fax := support.PhoneToOAMPhone(wc.Fax, wc.FaxExt, wc.Country); fax != nil {
-			fax.Type = contact.PhoneTypeFax
-			if a, err := e.Session.DB().CreateAsset(ctx, fax); err == nil && a != nil {
-				r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "phone"}, cr, a)
-			}
-		}
-	}
-	if u := support.RawURLToOAM(wc.ReferralURL); u != nil && m.IsMatch(string(oam.URL)) {
-		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
-			r.createSimpleEdge(e.Session, &general.SimpleRelation{Name: "url"}, cr, a)
-		}
-	}
-
-	var findings []*support.Finding
 	record := dr.Asset.(*oamreg.DomainRecord)
-	findings = append(findings, &support.Finding{
+	// process the contact record relation immediately
+	support.ProcessAssetsWithSource(e, []*support.Finding{{
 		From:     dr,
 		FromName: "DomainRecord: " + record.Domain,
 		To:       cr,
 		ToName:   "ContactRecord: " + c.DiscoveredAt,
 		Rel:      &general.SimpleRelation{Name: c.RelationName},
-	})
-	// process the contact record relation immediately
-	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+	}}, r.plugin.source, r.plugin.name, r.name)
 
-	// the organization must come last due to a potential chicken-and-egg problem
-	if m.IsMatch(string(oam.Organization)) {
-		orgent, err := org.CreateOrgAsset(e.Session, cr,
-			&general.SimpleRelation{Name: "organization"},
-			&oamorg.Organization{Name: wc.Organization}, r.plugin.source)
-
-		if err == nil && orgent != nil {
-			o := orgent.Asset.(*oamorg.Organization)
-
-			_ = e.Dispatcher.DispatchEvent(&et.Event{
-				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
-				Entity:  orgent,
-				Session: e.Session,
-			})
-		}
+	if orgName != "" && m.IsMatch(string(oam.Organization)) {
+		org.LinkContactOrg(e, cr, orgName, r.plugin.source)
 	}
 }
 
 func (r *domrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
-}
-
-func (r *domrec) createSimpleEdge(sess et.Session, rel oam.Relation, from, to *dbt.Entity) {
-	ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
-	defer cancel()
-
-	if edge, err := sess.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   rel,
-		FromEntity: from,
-		ToEntity:   to,
-	}); err == nil && edge != nil {
-		_, _ = sess.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-			Source:     r.plugin.source.Name,
-			Confidence: r.plugin.source.Confidence,
-		})
-	}
 }
 
 func (r *domrec) hasPlaceholders(contact *whoisparser.Contact) bool {
@@ -315,7 +238,7 @@ func (r *domrec) hasPlaceholders(contact *whoisparser.Contact) bool {
 	}
 
 	for _, field := range fields {
-		if d := DetectRegistrantPlaceholder(field); d.IsPlaceholder {
+		if d := registrant.DetectRegistrantPlaceholder(field); d.IsPlaceholder {
 			return true
 		}
 	}

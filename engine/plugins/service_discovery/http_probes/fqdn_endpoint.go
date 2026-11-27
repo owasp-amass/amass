@@ -29,8 +29,7 @@ func (fe *fqdnEndpoint) Name() string {
 }
 
 func (fe *fqdnEndpoint) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
-	if !ok {
+	if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
@@ -40,9 +39,6 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if !support.HasDNSRecordType(e, int(dns.TypeCNAME)) &&
 		!support.HasDNSRecordType(e, int(dns.TypeA)) &&
 		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) {
-		return nil
-	}
-	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {
 		return nil
 	}
 
@@ -74,7 +70,8 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) [
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, host, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, fe.plugin.source.Name); err != nil {
+			// only the services this plugin found count
+			if !support.Sourced(ctx, e.Session, edge, since, fe.plugin.source) {
 				continue
 			}
 			if _, ok := edge.Relation.(*oamgen.PortRelation); ok {
@@ -98,8 +95,9 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 	var findings []*support.Finding
 
 	var count int
-	fch := make(chan []*support.Finding, len(e.Session.Config().Scope.Ports))
-	for _, port := range e.Session.Config().Scope.Ports {
+	ports := support.ShufflePorts(support.HTTPPorts(e.Session.Config()))
+	fch := make(chan []*support.Finding, len(ports))
+	for _, port := range ports {
 		count++
 		go fe.probeOnePort(e, host, port, fch)
 	}
@@ -115,6 +113,14 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 
 func (fe *fqdnEndpoint) probeOnePort(e *et.Event, host *dbt.Entity, port int, ch chan []*support.Finding) {
 	fqdn := host.Asset.(*oamdns.FQDN)
+
+	// Space this host's probes so its ports are not all reached at once; a
+	// stopped session returns no finding for this port.
+	if err := support.PaceProbe(e, fqdn.Name); err != nil {
+		ch <- nil
+		return
+	}
+
 	addr := fqdn.Name + ":" + strconv.Itoa(port)
 
 	proto := "https"

@@ -18,7 +18,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
@@ -32,6 +31,12 @@ type dnsIP struct {
 type relIP struct {
 	rtype string
 	ip    *dbt.Entity
+}
+
+func newIP(p *dnsPlugin) *dnsIP {
+	name := p.name + "-IP"
+	return &dnsIP{name: name, queries: []uint16{dns.TypeA, dns.TypeAAAA}, plugin: p,
+		source: &et.Source{Name: name, Confidence: 100}}
 }
 
 func (d *dnsIP) check(e *et.Event) error {
@@ -85,7 +90,7 @@ func (d *dnsIP) check(e *et.Event) error {
 func (d *dnsIP) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relIP {
 	var ips []*relIP
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.IPAddress, since, oam.BasicDNSRelation, 1, 28); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.IPAddress, since, d.source, oam.BasicDNSRelation, 1, 28); len(assets) > 0 {
 		for _, a := range assets {
 			ips = append(ips, &relIP{rtype: "dns_record", ip: a})
 		}
@@ -102,8 +107,12 @@ func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 		return ips
 	}
 
+	qfn := support.PerformQuery
+	if fm, ok := e.Meta.(*support.FQDNMeta); ok && fm.FromRecord {
+		qfn = support.PerformQueryNoWildcard
+	}
 	for _, qtype := range d.queries {
-		if rr, err := support.PerformQuery(e.Session.Ctx(), fqdn.Name, qtype); err == nil {
+		if rr, err := qfn(e.Session.Ctx(), fqdn.Name, qtype); err == nil {
 			if records := d.store(e, name, rr); len(records) > 0 {
 				ips = append(ips, records...)
 				support.MarkAssetMonitored(e.Session, name, d.source)
@@ -142,33 +151,37 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 		if !valid {
 			continue
 		}
+		// a name answered with 0.0.0.0 or :: (blocked or parked) names no
+		// host, and the Asset Database refuses the address
+		if addr.IsUnspecified() {
+			e.Session.Log().Debug("unspecified address in a DNS answer", "fqdn", fqdn.Asset.Key(),
+				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			continue
+		}
 
 		ipaddr, err := e.Session.DB().CreateAsset(ctx, &oamnet.IPAddress{
 			Address: addr,
 			Type:    ipType,
 		})
 		if err != nil || ipaddr == nil {
-			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			msg := "the IP address was not stored"
+			if err != nil {
+				msg = err.Error()
+			}
+			e.Session.Log().Error(msg, "address", addr.String(),
+				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			continue
 		}
 
-		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-			Relation: &oamdns.BasicDNSRelation{
-				Name: "dns_record",
-				Header: oamdns.RRHeader{
-					RRType: int(record.Header().Rrtype),
-					Class:  int(record.Header().Class),
-					TTL:    int(record.Header().Ttl),
-				},
+		if _, err := support.Relate(ctx, e.Session, fqdn, &oamdns.BasicDNSRelation{
+			Name: "dns_record",
+			Header: oamdns.RRHeader{
+				RRType: int(record.Header().Rrtype),
+				Class:  int(record.Header().Class),
+				TTL:    int(record.Header().Ttl),
 			},
-			FromEntity: fqdn,
-			ToEntity:   ipaddr,
-		}); err == nil && edge != nil {
+		}, ipaddr, d.source); err == nil {
 			ips = append(ips, &relIP{rtype: "dns_record", ip: ipaddr})
-			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-				Source:     d.source.Name,
-				Confidence: d.source.Confidence,
-			})
 		}
 	}
 

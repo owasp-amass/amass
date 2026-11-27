@@ -98,7 +98,7 @@ func (ht *hackerTarget) check(e *et.Event) error {
 }
 
 func (ht *hackerTarget) query(e *et.Event, name string) []*dbt.Entity {
-	_ = ht.rlimit.Wait(e.Session.Ctx())
+	_ = support.WaitLimit(e.Session.Ctx(), ht.rlimit)
 	e.Session.NetSem().Acquire()
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

@@ -1,0 +1,9 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass tells whether a name found in a person's field (a registration contact's name, a document's author, a photo's artist) names a person, an organization or a role. A legal form (org_names.json) or an institution word (the entity_forms of document_leads.json) makes it an organization, except the institution words listed in surname_forms, which are also family names ('Sarah Church') and only make the name uncertain. person_titles before a name and a middle initial are evidence of a person. A name holding one of role_words names a job or a mailbox ('Domain Administrator', 'Hostmaster'), not anyone. Words are compared lower-cased, without surrounding punctuation.",
+  "person_titles": ["mr", "mrs", "ms", "miss", "mx", "dr", "prof", "professor", "sir", "dame", "rev", "fr"],
+  "surname_forms": ["bank", "church", "trust", "fund", "board", "union", "group", "partners", "society"],
+  "role_words": ["administrator", "admin", "hostmaster", "webmaster", "postmaster", "registrar", "domains",
+    "dns", "noc", "abuse", "helpdesk", "support", "operations", "privacy", "proxy", "redacted", "technical",
+    "billing", "registrant"]
+}

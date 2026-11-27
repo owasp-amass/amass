@@ -8,12 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -26,7 +26,9 @@ import (
 
 type bgpTools struct {
 	name     string
+	addrLock sync.Mutex
 	addr     string
+	retry    time.Time
 	port     int
 	log      *slog.Logger
 	autsys   *autsys
@@ -56,26 +58,8 @@ func (bt *bgpTools) Name() string {
 func (bt *bgpTools) Start(r et.Registry) error {
 	bt.log = r.Log().WithGroup("plugin").With("name", bt.name)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	rr, err := support.PerformQuery(ctx, "bgp.tools", dns.TypeA)
-	if err != nil {
-		return fmt.Errorf("failed to obtain the BGPTools IP address: %v", err)
-	} else if len(rr) == 0 {
-		return errors.New("failed to obtain the BGPTools IP address")
-	}
-
-	for _, record := range rr {
-		if record.Header().Rrtype == dns.TypeA {
-			bt.addr = strings.TrimSpace((record.(*dns.A)).A.String())
-			break
-		}
-	}
-	if bt.addr == "" {
-		return errors.New("failed to obtain the BGPTools IP address")
-	}
-
+	// bgp.tools is found when it is first asked, so the engine starts even
+	// when the name cannot be resolved yet
 	bt.netblock = &netblock{
 		name:   bt.name + "-IP-Handler",
 		plugin: bt,
@@ -128,72 +112,87 @@ type bgpToolsRecord struct {
 	ASName        string
 }
 
-func (bt *bgpTools) whois(ctx context.Context, ipstr string) (*bgpToolsRecord, error) {
-	dial := amassnet.NewDialContext(3 * time.Second)
-	addr := net.JoinHostPort(bt.addr, strconv.Itoa(bt.port))
+// serverAddr returns bgp.tools' address, looking it up the first time and
+// again at most once a minute after a lookup fails.
+func (bt *bgpTools) serverAddr(ctx context.Context) (string, error) {
+	bt.addrLock.Lock()
+	defer bt.addrLock.Unlock()
 
-	_ = bt.rlimit.Wait(ctx)
+	if bt.addr != "" {
+		return bt.addr, nil
+	}
+	if time.Now().Before(bt.retry) {
+		return "", errors.New("the BGPTools IP address is not known yet")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if rr, err := support.PerformQuery(ctx, "bgp.tools", dns.TypeA); err == nil {
+		for _, record := range rr {
+			if a, ok := record.(*dns.A); ok {
+				bt.addr = strings.TrimSpace(a.A.String())
+				return bt.addr, nil
+			}
+		}
+	}
+
+	bt.retry = time.Now().Add(time.Minute)
+	return "", errors.New("failed to obtain the BGPTools IP address")
+}
+
+func (bt *bgpTools) whois(ctx context.Context, ipstr string) (*bgpToolsRecord, error) {
+	host, err := bt.serverAddr(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = support.WaitLimit(ctx, bt.rlimit)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	conn, err := dial(ctx, "tcp", addr)
+	data, err := amassnet.WhoisQuery(ctx, net.JoinHostPort(host, strconv.Itoa(bt.port)),
+		fmt.Sprintf("begin\n%s\nend", ipstr), 3*time.Second, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to establish a connection with the WHOIS server: %v", err)
+		return nil, err
 	}
-	defer func() { _ = conn.Close() }()
+	return parseRecord(data)
+}
 
-	n, err := io.WriteString(conn, fmt.Sprintf("begin\n%s\nend", ipstr))
-	if err != nil || n == 0 {
-		return nil, fmt.Errorf("failed to send the request to the WHOIS server: %v", err)
-	}
-
-	data, err := io.ReadAll(conn)
-	if err != nil {
-		return nil, fmt.Errorf("error reading the response from the WHOIS server: %v", err)
-	}
-
-	record := strings.Split(string(data), "|")
-	// Ensure the record contains the necessary details (AutonomousSystem and Netblock)
-	if len(record) < 7 {
-		return nil, errors.New("received insufficient data from the WHOIS server")
-	}
-
-	var r bgpToolsRecord
-	for i, f := range record {
-		field := strings.TrimSpace(f)
-
-		switch i {
-		case 0:
-			num, err := strconv.Atoi(field)
-			if err != nil {
-				return nil, err
-			}
-			r.ASN = num
-		case 1:
-			ip, err := netip.ParseAddr(field)
-			if err != nil {
-				return nil, err
-			}
-			r.IP = ip
-		case 2:
-			prefix, err := netip.ParsePrefix(field)
-			if err != nil {
-				return nil, err
-			}
-			r.Prefix = prefix
-		case 3:
-			r.CC = field
-		case 4:
-			r.Registry = field
-		case 5:
-			t, err := time.Parse("2006-01-02", field)
-			if err != nil {
-				return nil, err
-			}
-			r.AllocatedDate = t
-		case 6:
-			r.ASName = field
+// parseRecord reads the first line of a bgp.tools WHOIS answer that starts
+// with an AS number: AS | IP | prefix | country | registry | allocated |
+// AS name. The AS number, address and prefix are required; the other
+// fields are kept when they can be read.
+func parseRecord(data string) (*bgpToolsRecord, error) {
+	for _, line := range strings.Split(data, "\n") {
+		fields := strings.Split(line, "|")
+		if len(fields) < 7 {
+			continue
 		}
+		for i := range fields {
+			fields[i] = strings.TrimSpace(fields[i])
+		}
+
+		asn, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		ip, err := netip.ParseAddr(fields[1])
+		if err != nil {
+			return nil, err
+		}
+		prefix, err := netip.ParsePrefix(fields[2])
+		if err != nil {
+			return nil, err
+		}
+
+		r := &bgpToolsRecord{ASN: asn, IP: ip, Prefix: prefix, CC: fields[3], Registry: fields[4],
+			ASName: strings.Join(fields[6:], "|")}
+		if t, err := time.Parse("2006-01-02", fields[5]); err == nil {
+			r.AllocatedDate = t
+		}
+		return r, nil
 	}
-	return &r, nil
+
+	return nil, errors.New("received insufficient data from the WHOIS server")
 }

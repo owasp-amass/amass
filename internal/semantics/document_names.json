@@ -1,0 +1,10 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Names a document gives as an Organization or a Person that name something else: a building, a law, a course or a job title. The document model's statements are checked against these rules, and one naming such a thing as an Organization or a Person is rejected. Words are compared lower-cased, without surrounding punctuation. building_words and law_words end an Organization's name ('Boyd Hall', 'Clery Act'); they are not applied to people, since Hall and Law are also family names. law_patterns match a whole Organization name ('Title IX'). course_pattern matches the start of either name ('CS 101', 'BIO 210L Lab'). A Person's name is a job title when it ends with one of title_endings ('Chief Information Officer', 'Vice President'), or when one of title_words is followed by of or for ('Dean of Students', 'Director for Admissions'); Dean alone ('Dean Smith', 'John Dean') is a name.",
+  "building_words": ["hall", "building", "auditorium", "gymnasium", "gym", "stadium", "arena", "pavilion", "annex", "dormitory", "dorm", "fieldhouse", "natatorium", "quadrangle", "quad", "garage"],
+  "law_words": ["act", "statute", "regulation", "regulations", "amendment", "ordinance", "directive"],
+  "law_patterns": ["^title [ivxlc]+$"],
+  "course_pattern": "^[a-z]{2,5} ?[0-9]{3,4}[a-z]?($|[^a-z0-9])",
+  "title_endings": ["officer", "director", "president", "coordinator", "manager", "administrator", "assistant", "specialist", "analyst", "advisor", "adviser", "counselor", "supervisor", "secretary", "treasurer", "registrar", "chairperson", "chairman", "chairwoman", "superintendent", "technician", "librarian", "professor", "provost", "chancellor"],
+  "title_words": ["director", "dean", "president", "provost", "chair", "chancellor", "coordinator", "manager", "officer", "secretary", "head", "vice", "assistant", "associate", "professor"]
+}

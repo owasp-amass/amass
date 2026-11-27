@@ -1,0 +1,51 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "What the document model may say a document states. Each predicate is a kind of statement from the kinds below (each naming the inference families that consume it and the vocabulary term it follows), the OAM asset types its subject and object may be, and, when the statement is the same fact as an OAM relation, that relation's label and direction (forward: subject --label--> object; inverse: object --label--> subject). A test checks every OAM mapping against the OAM relationship table. detail is the extra text a predicate carries, such as the title of a role. categories are what a document may be (a File is_a statement). The model's statements are validated against this file and quote a stored passage exactly; a statement is evidence for inference, never a fact on its own. Add predicates and categories here, not in Go code.",
+  "kinds": {
+    "org_structure": {"families": ["ownership", "org_unit", "family"], "basis": "https://www.w3.org/TR/vocab-org/#org:subOrganizationOf"},
+    "role": {"families": ["people", "identity"], "basis": "https://www.w3.org/TR/vocab-org/#org:Post"},
+    "membership": {"families": ["people", "affiliation"], "basis": "https://www.w3.org/TR/vocab-org/#org:memberOf"},
+    "funding": {"families": ["funding", "affiliation"], "basis": "https://schema.org/funder"},
+    "partnership": {"families": ["affiliation"], "basis": "https://schema.org/member"},
+    "supplier": {"families": ["vendors", "services"], "basis": "https://schema.org/provider"},
+    "product_use": {"families": ["services", "vulnerable_software"], "basis": "https://schema.org/instrument"},
+    "change": {"families": ["identity", "duplicates", "family"], "basis": "https://www.w3.org/TR/vocab-org/#org:ChangeEvent"},
+    "location": {"families": ["geography", "contacts"], "basis": "https://schema.org/location"}
+  },
+  "predicates": [
+    {"name": "subsidiary_of", "kind": "org_structure", "subject_types": ["Organization"], "object_types": ["Organization"],
+     "oam": {"label": "subsidiary", "direction": "inverse"}, "description": "The subject is a subsidiary company of the object."},
+    {"name": "unit_of", "kind": "org_structure", "subject_types": ["Organization"], "object_types": ["Organization"],
+     "oam": {"label": "org_unit", "direction": "inverse"}, "description": "The subject is a division, department, campus, branch or other unit of the object."},
+    {"name": "owned_by", "kind": "org_structure", "subject_types": ["Organization"], "object_types": ["Organization", "Person"], "description": "The subject is owned by the object."},
+    {"name": "operated_by", "kind": "supplier", "subject_types": ["Organization", "Service", "FQDN", "URL"], "object_types": ["Organization"], "description": "The subject is run or managed by the object on its behalf."},
+    {"name": "member_of", "kind": "membership", "subject_types": ["Person", "Organization"], "object_types": ["Organization"], "description": "The subject is a member of the object (a person on its staff or board, an organization in a consortium)."},
+    {"name": "holds_role", "kind": "role", "subject_types": ["Person"], "object_types": ["Organization"], "detail": "the title of the role, as written",
+     "oam": {"label": "member", "direction": "inverse"}, "description": "The subject holds a named role (title) at the object."},
+    {"name": "funded_by", "kind": "funding", "subject_types": ["Organization"], "object_types": ["Organization", "Person"],
+     "oam": {"label": "funding_source", "direction": "forward"}, "description": "The subject receives funding, a grant or sponsorship from the object."},
+    {"name": "partner_of", "kind": "partnership", "subject_types": ["Organization"], "object_types": ["Organization"], "description": "The subject works in partnership or collaboration with the object."},
+    {"name": "supplied_by", "kind": "supplier", "subject_types": ["Organization", "Service", "Product"], "object_types": ["Organization"], "description": "The subject gets a product or service from the object (a vendor, contractor or provider)."},
+    {"name": "uses_product", "kind": "product_use", "subject_types": ["Organization", "Service"], "object_types": ["Product"], "detail": "the version, when the passage gives one", "description": "The subject uses the named product or platform."},
+    {"name": "formerly_known_as", "kind": "change", "subject_types": ["Organization"], "object_types": ["Organization"], "description": "The subject was previously named as the object."},
+    {"name": "acquired_by", "kind": "change", "subject_types": ["Organization"], "object_types": ["Organization"], "description": "The subject was acquired by the object."},
+    {"name": "merged_with", "kind": "change", "subject_types": ["Organization"], "object_types": ["Organization"], "description": "The subject merged with the object."},
+    {"name": "located_at", "kind": "location", "subject_types": ["Organization", "Person"], "object_types": ["StreetAddress"],
+     "oam": {"label": "street_address", "direction": "forward"}, "description": "The subject is at the object's street address."},
+    {"name": "headquartered_at", "kind": "location", "subject_types": ["Organization"], "object_types": ["StreetAddress"],
+     "oam": {"label": "hq_address", "direction": "forward"}, "description": "The subject's headquarters are at the object's street address."}
+  ],
+  "categories": [
+    {"name": "annual_report", "description": "An annual, financial or performance report."},
+    {"name": "policy", "description": "A policy, procedure, standard or guideline."},
+    {"name": "staff_directory", "description": "A list of people with their roles or contact details."},
+    {"name": "org_chart", "description": "A chart or description of how the organization is structured."},
+    {"name": "contract", "description": "A contract, agreement, purchase order or bid."},
+    {"name": "meeting_record", "description": "Minutes, an agenda or a board resolution."},
+    {"name": "catalog", "description": "A course, product or service catalog."},
+    {"name": "form", "description": "A form to fill in or an application."},
+    {"name": "technical_document", "description": "A technical guide, manual, specification or IT instructions."},
+    {"name": "marketing", "description": "A brochure, newsletter, press release or event program."},
+    {"name": "other", "description": "None of the above."}
+  ]
+}

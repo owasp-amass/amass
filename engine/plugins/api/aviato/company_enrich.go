@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -77,7 +78,7 @@ func (ce *companyEnrich) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ce.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, ce.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
@@ -105,13 +106,13 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		headers := amasshttp.Header{"Content-Type": []string{"application/json"}}
 		headers["Authorization"] = []string{"Bearer " + key}
 
-		_ = ce.plugin.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), ce.plugin.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 		defer cancel()
 
-		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", url.QueryEscape(oamid.ID))
+		u := fmt.Sprintf("%s/company/enrich?id=%s", ce.plugin.api, url.QueryEscape(oamid.ID))
 		resp, err := amasshttp.RequestWebPage(ctx,
 			e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
 		e.Session.NetSem().Release()
@@ -127,7 +128,7 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: empty body", oamid.ID)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
-		} else if strings.Contains(resp.Body, "error") {
+		} else if strings.Contains(resp.Body, `"error"`) {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, resp.Body)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
@@ -179,18 +180,9 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 			return
 		}
 
-		_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &oamgen.SourceProperty{
-			Source:     ce.name,
-			Confidence: ce.plugin.source.Confidence,
-		})
-		if err != nil {
-			msg := fmt.Sprintf("failed to create the SourceProperty for %s: %s", o.LegalName, err)
-			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
-			_ = e.Session.DB().DeleteEntity(ctx, ident.ID)
-			return
-		}
+		support.AddSource(ctx, e.Session, ident, ce.plugin.source)
 
-		err = ce.plugin.createRelation(ctx, e.Session, orgent, oamgen.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
+		_, err = support.Relate(ctx, e.Session, orgent, oamgen.SimpleRelation{Name: "id"}, ident, ce.plugin.source)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the relation for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
@@ -209,12 +201,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
 	o := orgent.Asset.(*oamorg.Organization)
-
-	_ = e.Dispatcher.DispatchEvent(&et.Event{
-		Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
-		Entity:  orgent,
-		Session: e.Session,
-	})
+	org.DispatchOrg(e, orgent)
 
 	id := ident.Asset.(*oamgen.Identifier)
 	e.Session.Log().Info("relationship discovered", "from", id.UniqueID, "relation", "id",

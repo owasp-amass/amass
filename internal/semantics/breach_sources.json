@@ -1,0 +1,14 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Defensive sources that report, for an email address or a domain, which known data breaches it appears in — breach name, date and the categories of data exposed. This is breach-exposure metadata only: Amass records that an address was exposed, never the leaked secret itself. Sources that return actual credentials are excluded. Each source lists its email and domain endpoints ({email} and {domain} are substituted, the email URL-encoded), the format naming the parser that reads its published response, whether it is free and whether it needs an API key (keys are entered through the data-source credential system and never pass through a model, ai-design-principles.md principle 13), and the source's own API documentation in source (principle 11). An empty format marks an endpoint whose response shape is not parsed yet (wired during integration against the live API). Add sources here, not in Go code; a genuinely new response shape needs a parser keyed by format.",
+  "sources": [
+    {"key": "xposedornot", "name": "XposedOrNot", "free": true, "requires_key": false,
+      "email_url": "https://api.xposedornot.com/v1/breach-analytics?email={email}", "email_format": "xon_analytics",
+      "domain_url": "https://api.xposedornot.com/v1/breaches?domain={domain}", "domain_format": "",
+      "source": "https://xposedornot.com/api_doc"},
+    {"key": "hibp", "name": "Have I Been Pwned", "free": false, "requires_key": true,
+      "email_url": "https://haveibeenpwned.com/api/v3/breachedaccount/{email}?truncateResponse=false", "email_format": "hibp_account",
+      "domain_url": "https://haveibeenpwned.com/api/v3/breacheddomain/{domain}", "domain_format": "",
+      "source": "https://haveibeenpwned.com/API/v3"}
+  ]
+}

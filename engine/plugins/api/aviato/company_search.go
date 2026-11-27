@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
-	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -73,8 +73,7 @@ func (cs *companySearch) lookup(e *et.Event, orgent *dbt.Entity, since time.Time
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge,
-				since, cs.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, cs.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
@@ -89,7 +88,7 @@ func (cs *companySearch) lookup(e *et.Event, orgent *dbt.Entity, since time.Time
 
 func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string) *dbt.Entity {
 	o := orgent.Asset.(*oamorg.Organization)
-	brand := org.ExtractBrandName(o.Name)
+	brand := semantics.OrgNameKey(o.Name)
 
 	var body string
 	success := false
@@ -117,14 +116,14 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 			return nil
 		}
 
-		_ = cs.plugin.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), cs.plugin.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 		defer cancel()
 
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
-			URL:    "https://data.api.aviato.co/company/search",
+			URL:    cs.plugin.api + "/company/search",
 			Method: "POST",
 			Header: headers,
 			Body:   `{"dsl": ` + string(dslJSON) + `}`,
@@ -178,18 +177,10 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 		return nil
 	}
 
-	_, err = e.Session.DB().CreateEntityProperty(ctx, ident, &oamgen.SourceProperty{
-		Source:     cs.name,
-		Confidence: cs.plugin.source.Confidence,
-	})
-	if err != nil {
-		msg := fmt.Sprintf("failed to create the identifier source property for %s: %s", companyID, err)
-		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
-		return nil
-	}
+	support.AddSource(ctx, e.Session, ident, cs.plugin.source)
 
-	if err := cs.plugin.createRelation(ctx, e.Session, orgent,
-		oamgen.SimpleRelation{Name: "id"}, ident, cs.plugin.source.Confidence); err != nil {
+	if _, err := support.Relate(ctx, e.Session, orgent,
+		oamgen.SimpleRelation{Name: "id"}, ident, cs.plugin.source); err != nil {
 		msg := fmt.Sprintf("failed to create the identifier relation for %s: %s", companyID, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 		_ = e.Session.DB().DeleteEntity(ctx, ident.ID)

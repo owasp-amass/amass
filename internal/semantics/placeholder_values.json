@@ -1,0 +1,21 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Attribute values that identify no one: registration redaction and privacy-service placeholders. An ownership identity signal never passes through a phone, address, email or other attribute value whose name contains one of these phrases (case-insensitive). Add phrases here, not in Go code.",
+  "phrases": [
+    "redacted",
+    "privacy",
+    "private registration",
+    "withheld",
+    "not disclosed",
+    "non-public",
+    "data protected",
+    "gdpr",
+    "statutory masking",
+    "proxy",
+    "whoisguard",
+    "identity protect",
+    "domain protection",
+    "please query",
+    "registration private"
+  ]
+}

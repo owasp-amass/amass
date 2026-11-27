@@ -105,12 +105,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/v1.ListSessionsResponse"
                         }
-                    },
-                    "404": {
-                        "description": "Zero sessions found",
-                        "schema": {
-                            "$ref": "#/definitions/v1.ErrorResponse"
-                        }
                     }
                 }
             }
@@ -173,7 +167,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock, location, organization)",
+                        "description": "Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock, streetaddress, organization)",
                         "name": "asset_type",
                         "in": "path",
                         "required": true
@@ -243,7 +237,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock, location, organization)",
+                        "description": "Asset type (e.g., autonomous_system, fqdn, ipaddress, netblock, streetaddress, organization)",
                         "name": "asset_type",
                         "in": "path",
                         "required": true
@@ -312,7 +306,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Asset type (e.g., autonomoussystem, fqdn, ipaddress, netblock, location, organization)",
+                        "description": "Asset type (e.g., autonomoussystem, fqdn, ipaddress, netblock, streetaddress, organization)",
                         "name": "asset_type",
                         "in": "path",
                         "required": true
@@ -381,6 +375,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/sessions/{session_token}/workers": {
+            "get": {
+                "description": "Returns the engine sessions working on the session's job, on a database the engines share work through: whether each is still there, its background work, and the items it holds and did.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get the workers of a session's job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session token (UUID)",
+                        "name": "session_token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.WorkersResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid session token",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/sessions/{session_token}/ws/logs": {
             "get": {
                 "description": "Upgrades the HTTP connection to a WebSocket and streams session log lines as UTF-8 text frames.\nThe server sends periodic ping frames (~30s) and expects pong responses; idle connections may be closed.",
@@ -428,6 +463,29 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "types.WorkerStats": {
+            "type": "object",
+            "properties": {
+                "background": {
+                    "type": "integer"
+                },
+                "done": {
+                    "type": "integer"
+                },
+                "leased": {
+                    "type": "integer"
+                },
+                "live": {
+                    "type": "boolean"
+                },
+                "modelCalls": {
+                    "type": "integer"
+                },
+                "worker": {
+                    "type": "string"
+                }
+            }
+        },
         "config.Credentials": {
             "type": "object",
             "properties": {
@@ -634,10 +692,6 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "rigid_boundaries": {
-                    "description": "Determines rigidness of the enumeration",
-                    "type": "boolean"
-                },
                 "scope": {
                     "description": "Scope struct that contains ASN, CIDR, Domain, IP, and ports in scope",
                     "allOf": [
@@ -737,6 +791,12 @@ const docTemplate = `{
         "v1.CreateSessionResponse": {
             "type": "object",
             "properties": {
+                "jobId": {
+                    "type": "string"
+                },
+                "joined": {
+                    "type": "boolean"
+                },
                 "sessionToken": {
                     "type": "string"
                 }
@@ -786,6 +846,17 @@ const docTemplate = `{
                             "type": "integer",
                             "format": "int32"
                         }
+                    }
+                }
+            }
+        },
+        "v1.WorkersResponse": {
+            "type": "object",
+            "properties": {
+                "workers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.WorkerStats"
                     }
                 }
             }

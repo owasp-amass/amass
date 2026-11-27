@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	oam "github.com/owasp-amass/open-asset-model"
@@ -17,11 +18,6 @@ import (
 var (
 	ErrEmptyEntityID = errors.New("backlog: empty entity id")
 )
-
-// Claim represents a leased backlog item.
-type Claim struct {
-	EntityID string
-}
 
 // Has reports whether entity_id exists in the backlog (any state).
 func (b *BacklogDB) Has(ctx context.Context, entityID string) (bool, error) {
@@ -47,7 +43,8 @@ func (b *BacklogDB) Has(ctx context.Context, entityID string) (bool, error) {
 }
 
 // Enqueue inserts a new queued item if it does not already exist.
-// If entity_id already exists, it sets the state to queued.
+// If entity_id already exists and is done, it sets the state back to queued;
+// an item queued or leased is left as it is, so it is never worked twice at once.
 func (b *BacklogDB) Enqueue(ctx context.Context, atype oam.AssetType, entityID string) error {
 	b.Lock()
 	defer b.Unlock()
@@ -63,42 +60,25 @@ func (b *BacklogDB) Enqueue(ctx context.Context, atype oam.AssetType, entityID s
 			updated_at  = excluded.updated_at,
 			state       = ?,
 			lease_owner = NULL,
-			lease_until = 0`,
-		t, t, string(atype), entityID, StateQueued, StateQueued,
+			lease_until = 0
+		WHERE backlog_items.state = ?`,
+		t, t, string(atype), entityID, StateQueued, StateQueued, StateDone,
 	)
 	return err
 }
 
-// EnqueueDone inserts an item and marks it done (or updates existing row to done).
-func (b *BacklogDB) EnqueueDone(ctx context.Context, atype oam.AssetType, entityID string) error {
-	b.Lock()
-	defer b.Unlock()
-
-	if entityID == "" {
-		return ErrEmptyEntityID
-	}
-	t := nowUnix()
-	_, err := b.db.ExecContext(ctx, `
-		INSERT INTO backlog_items(created_at, updated_at, etype, entity_id, state, lease_until)
-		VALUES(?, ?, ?, ?, ?, 0)
-		ON CONFLICT(entity_id) DO UPDATE SET
-			updated_at  = excluded.updated_at,
-			state       = ?,
-			lease_owner = NULL,
-			lease_until = 0`,
-		t, t, string(atype), entityID, StateDone, StateDone,
-	)
-	return err
-}
-
-// ClaimNext leases up to n eligible items for an asset type.
+// ClaimNext leases up to n eligible items for an asset type, oldest first.
 // Eligibility:
 // - state=queued
 // - OR state=leased AND lease_until <= now (expired lease)
 //
+// A positive ttl lets the lease expire after that long, rounded up to the
+// next second. A ttl of zero or less leases the items until they are acked
+// or released.
+//
 // The claim is atomic: it runs in a single transaction with BEGIN IMMEDIATE
-// and updates selected rows to (state=leased, lease_owner=owner, lease_until=now+ttl).
-func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner string, n int, ttl time.Duration) ([]Claim, error) {
+// and updates selected rows to (state=leased, lease_owner=owner, lease_until).
+func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner string, n int, ttl time.Duration) ([]string, error) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -111,10 +91,9 @@ func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner st
 
 	now := nowUnix()
 	key := string(atype)
-	leaseUntil := now + int64(ttl.Seconds())
-	if ttl <= 0 {
-		ttl := 30 * time.Second
-		leaseUntil = now + int64(ttl.Seconds())
+	leaseUntil := int64(math.MaxInt64)
+	if ttl > 0 {
+		leaseUntil = now + int64(math.Ceil(ttl.Seconds()))
 	}
 
 	// IMPORTANT: Use a single connection + explicit BEGIN IMMEDIATE to avoid
@@ -137,38 +116,25 @@ func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner st
 		}
 	}()
 
-	var rows *sql.Rows
-	if ttl <= 0 {
-		rows, err = conn.QueryContext(ctx, `
-			SELECT id, entity_id
-			FROM backlog_items
-			WHERE etype = ?
-			AND state = ?
-			ORDER BY created_at ASC
-			LIMIT ?`,
-			key, StateQueued, n,
-		)
-	} else {
-		rows, err = conn.QueryContext(ctx, `
-			SELECT id, entity_id
-			FROM backlog_items
-			WHERE etype = ?
-			AND (
-					state = ?
-					OR (state = ? AND lease_until <= ?)
-				)
-			ORDER BY created_at ASC
-			LIMIT ?`,
-			key, StateQueued, StateLeased, now, n,
-		)
-	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT id, entity_id
+		FROM backlog_items
+		WHERE etype = ?
+		AND (
+				state = ?
+				OR (state = ? AND lease_until <= ?)
+			)
+		ORDER BY created_at ASC, id ASC
+		LIMIT ?`,
+		key, StateQueued, StateLeased, now, n,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
 	var ids []int64
-	var out []Claim
+	var out []string
 	for rows.Next() {
 		var id int64
 		var eid string
@@ -176,7 +142,7 @@ func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner st
 			return nil, err
 		}
 		ids = append(ids, id)
-		out = append(out, Claim{EntityID: eid})
+		out = append(out, eid)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -285,22 +251,6 @@ func (b *BacklogDB) Release(ctx context.Context, entityID string, owner string) 
 		SET state = ?, lease_owner = NULL, lease_until = 0, updated_at = ?
 		WHERE entity_id = ? AND state = ?`,
 		StateQueued, now, entityID, StateLeased,
-	)
-	return err
-}
-
-// RequeueExpired is optional; ClaimNext already treats expired leases as eligible.
-// This can be useful if you want to periodically normalize state.
-func (b *BacklogDB) RequeueExpired(ctx context.Context) error {
-	b.Lock()
-	defer b.Unlock()
-
-	now := nowUnix()
-	_, err := b.db.ExecContext(ctx, `
-		UPDATE backlog_items
-		SET state = ?, lease_owner = NULL, lease_until = 0, updated_at = ?
-		WHERE state = ? AND lease_until <= ?`,
-		StateQueued, now, StateLeased, now,
 	)
 	return err
 }

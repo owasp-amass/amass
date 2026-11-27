@@ -20,45 +20,47 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
+// Add adds the scope entry the asset gives, if any: a domain name, address,
+// netblock, autonomous system, organization or street address.
 func (s *Scope) Add(a oam.Asset) bool {
-	var newentry bool
+	if e := entryOf(a); e != nil {
+		return s.addEntry(e, false, true)
+	}
+	return false
+}
 
+// entryOf is the scope entry an asset gives, or nil.
+func entryOf(a oam.Asset) oam.Asset {
 	switch v := a.(type) {
-	case *oamdns.FQDN:
-		newentry = s.AddFQDN(v)
+	case *oamdns.FQDN, *oamnet.IPAddress, *oamnet.Netblock, *oamnet.AutonomousSystem, *oamorg.Organization,
+		*oamcon.StreetAddress:
+		return v
 	case *oamgen.Identifier:
 		if domain, found := getEmailDomain(v); found {
-			newentry = s.AddFQDN(&oamdns.FQDN{Name: domain})
+			return &oamdns.FQDN{Name: domain}
 		}
-	case *oamnet.IPAddress:
-		newentry = s.AddIPAddress(v)
-	case *oamnet.Netblock:
-		newentry = s.AddNetblock(v)
-	case *oamnet.AutonomousSystem:
-		newentry = s.AddAutonomousSystem(v)
 	case *oamreg.DomainRecord:
-		newentry = s.AddDomain(v.Domain)
+		return &oamdns.FQDN{Name: v.Domain}
 	case *oamreg.IPNetRecord:
-		newentry = s.AddCIDR(v.CIDR.String())
+		if nb := cidrEntry(v.CIDR.String()); nb != nil {
+			return nb
+		}
 	case *oamreg.AutnumRecord:
-		newentry = s.AddASN(v.Number)
+		return &oamnet.AutonomousSystem{Number: v.Number}
 	case *oamcert.TLSCertificate:
 		if re := amassdns.AnySubdomainRegex(); re.MatchString(v.SubjectCommonName) {
-			newentry = s.AddDomain(v.SubjectCommonName)
+			return &oamdns.FQDN{Name: v.SubjectCommonName}
 		}
 	case *oamurl.URL:
 		if ip, err := netip.ParseAddr(v.Host); err == nil {
-			newentry = s.AddAddress(ip.String())
+			if e := addressEntry(ip.String()); e != nil {
+				return e
+			}
 		} else {
-			newentry = s.AddDomain(v.Host)
+			return &oamdns.FQDN{Name: v.Host}
 		}
-	case *oamorg.Organization:
-		newentry = s.AddOrganization(v)
-	case *oamcon.Location:
-		newentry = s.AddLocation(v)
 	}
-
-	return newentry
+	return nil
 }
 
 func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
@@ -103,8 +105,10 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 		match, accuracy = s.matchesDomain(&oamdns.FQDN{Name: v.Host})
 	case *oamorg.Organization:
 		match, accuracy = s.matchesOrg(v, conf)
-	case *oamcon.Location:
-		match, accuracy = s.matchesLocation(v, conf)
+	case *oamcon.StreetAddress:
+		match, accuracy = s.matchesStreetAddress(v, conf)
+	case *oamcon.Phone:
+		match, accuracy = s.matchesPhone(v)
 	}
 
 	return match, accuracy

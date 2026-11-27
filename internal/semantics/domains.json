@@ -1,0 +1,18 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the domains lens reads a footprint's registered domains. Each registered domain of a controlled name is looked up as a name and its registration record read: an asset of record_types reached by a relation whose purpose is registration_purpose. registrar_labels are the record's relations to its registrar, and name_server_labels to its name servers. fields names the record's content fields. A domain is reported when its registration expired or expires within expiry_warning_days, when no registration is stored for it, when its status lacks every one of transfer_lock_statuses (compared without case, spaces or underscores; EPP and RDAP status codes as ICANN documents them), and, for review, when its record says it is not signed with DNSSEC (a record that does not say is reported as not stated, not as unsigned: OAM omits a false value and RDAP records are stored without it). Add values here, not in Go code.",
+  "registration_purpose": "registration",
+  "record_types": ["DomainRecord"],
+  "registrar_labels": ["registrar_contact"],
+  "name_server_labels": ["name_server"],
+  "fields": {
+    "domain": "domain",
+    "created": "created_date",
+    "expires": "expiration_date",
+    "status": "status",
+    "dnssec": "dnssec"
+  },
+  "expiry_warning_days": 60,
+  "transfer_lock_statuses": ["clientTransferProhibited", "serverTransferProhibited"],
+  "status_source": "https://www.icann.org/resources/pages/epp-status-codes-2014-06-16-en"
+}

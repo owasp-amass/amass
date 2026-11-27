@@ -1,0 +1,129 @@
+name: ai-integration-checks
+
+on:
+  push:
+    branches:
+      - feature/ai-investigation-inference
+  pull_request:
+    paths:
+      - 'internal/ai/**'
+      - 'internal/graph/**'
+      - 'internal/lens/**'
+      - 'internal/review/**'
+      - 'internal/semantics/**'
+      - 'engine/plugins/attribution/**'
+      - 'internal/enum/**'
+      - 'cmd/amass-mcp/**'
+      - 'cmd/amass-mcp-http/**'
+      - 'cmd/amass-classifier/**'
+      - 'cmd/amass-classifier-train/**'
+      - 'cmd/amass-llm-provider-health/**'
+      - 'cmd/amass/main.go'
+      - 'Dockerfile'
+      - '.github/workflows/ai-integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check gofmt on AI, lens and review packages
+        run: |
+          unformatted=$(gofmt -l internal/ai internal/graph internal/lens internal/review internal/semantics config cmd/amass-*)
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt -w on:"; echo "$unformatted"; exit 1
+          fi
+      - name: Check the Amass copyright header on AI, lens and review Go files
+        run: |
+          missing=$(for f in $(git ls-files 'internal/ai/*.go' 'internal/graph/*.go' 'internal/lens/*.go' 'internal/review/*.go' 'internal/semantics/*.go' 'config/ai*.go' 'cmd/amass-*/*.go'); do
+            head -1 "$f" | grep -q '^// Copyright © by Jeff Foley' || echo "$f"; done)
+          if [ -n "$missing" ]; then
+            echo "Add the standard Amass header to:"; echo "$missing"; exit 1
+          fi
+      - name: AI, lens, review, configuration and CLI tests
+        run: go test -race ./config ./internal/ai/... ./internal/graph/... ./internal/lens/... ./internal/review/... ./internal/semantics/... ./engine/plugins/attribution ./cmd/amass ./cmd/amass-mcp
+      - name: Default evidence-first classifier regression
+        run: go test ./internal/ai ./internal/ai/classify ./internal/ai/cli -run "TestDefaultEvidenceClassifier|TestHTTPClassifier|TestClassifierServiceEndpointGuard|TestTrainer" -count=1
+      - name: FQDN inventory regressions
+        run: go test ./internal/ai -run "TestFQDNInventory" -count=1
+      - name: Question evaluation set (every reported question)
+        run: go test ./internal/ai -run "TestQuestionEvaluationSet|TestNewOAMRelationshipsJoinLensesWithoutCode" -count=1 -v
+      - name: Schema-grounded typed intent and language-alias regressions
+        run: go test ./internal/ai -run "TestTypedRelationIntent|TestOAMIntent|TestSubdomainIntent|TestRelationAlias|TestRelationshipAndFieldVocabulary" -count=1
+      - name: Build all Amass executables
+        # Amass uses libpostal behind CGO; production Docker builds disable CGO.
+        # Race-enabled AI tests above intentionally continue to use CGO.
+        env:
+          CGO_ENABLED: "0"
+        run: go build ./...
+      - name: Vet AI, lens and review packages
+        run: go vet ./internal/ai/... ./internal/graph/... ./internal/lens/... ./internal/review/... ./internal/semantics/... ./engine/plugins/attribution ./cmd/amass ./cmd/amass-mcp
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build development image (no publish)
+        run: docker build -t amass-ai:ci .
+      - name: Verify expected binaries
+        run: |
+          docker run --rm --entrypoint /bin/sh amass-ai:ci -c 'test -x /bin/amass && test -x /bin/amass-mcp'
+
+  paired-assetdb:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: owasp-amass/asset-db
+          ref: feature/ai-investigation-inference
+          path: asset-db
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify against bounded-query Asset Database branch
+        run: |
+          go mod edit -replace=github.com/owasp-amass/asset-db=./asset-db
+          go test -v ./internal/graph/oamrepo -run '^TestAdapterBoundedTraversalOnSQLite$' -count=1
+          go test ./config ./internal/ai/...
+
+  neo4j-adapter:
+    # The Neo4j bounded and paged readers live in the Amass adapter. This job
+    # runs them, and every lens, review and adapter check the SQLite tests
+    # run, against a disposable Neo4j database with the asset-db go.mod pins.
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      AMASS_TEST_NEO4J_DSN: bolt://localhost:7687/neo4j
+    services:
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: none
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Lenses, review and bounded traversal on Neo4j through the AI adapter
+        run: go test -v ./internal/graph/oamrepo -run 'Neo4j' -count=1

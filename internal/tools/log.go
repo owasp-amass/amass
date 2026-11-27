@@ -39,7 +39,7 @@ func NewFileLogger(dir, logfile string) (*slog.Logger, error) {
 	}
 
 	if dir != "" {
-		if err := os.MkdirAll(dir, 0640); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			return nil, fmt.Errorf("failed to create the log directory: %v", err)
 		}
 	}

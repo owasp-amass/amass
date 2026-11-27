@@ -1,0 +1,148 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+// Package mcp serves the read-only Amass AI tools over the Model Context
+// Protocol using the official MCP Go SDK: over stdio (Server) and over
+// Streamable HTTP behind Amass's own authentication and session limits
+// (HTTPServer).
+package mcp
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"sync"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/llm"
+)
+
+// serverVersion is reported to MCP clients.
+const serverVersion = "0.3.0"
+
+// Server serves MCP over stdio. Model is optional: without it the
+// investigate tool answers every kind except paths. Evidence keeps recent
+// investigations for verify_citations; a nil store is created on Serve.
+type Server struct {
+	Runner   ai.ToolRunner
+	Model    llm.Model
+	Evidence *ai.EvidenceStore
+	// Operator, when set, adds the tools that start enumerations, review
+	// proposals and manage data sources.
+	Operator *Operator
+	// ConfigFile is the Amass configuration file the config assistant reads
+	// and, in operator mode, writes; empty leaves apply_config disabled and
+	// the describe/validate tools working from the schema alone.
+	ConfigFile string
+}
+
+// Serve runs one MCP session over in and out until the client disconnects
+// or ctx ends.
+func (s Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	if s.Evidence == nil {
+		s.Evidence = ai.NewEvidenceStore()
+	}
+
+	server := newSDKServer(s.Runner, s.Model, s.Evidence, s.Operator, nil, s.ConfigFile)
+	reader := &eofReader{Reader: in}
+	err := server.Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(reader), Writer: nopWriteCloser{out}})
+	if err != nil && reader.closed() && ctx.Err() == nil {
+		// The client closed stdin: the session ended normally. The SDK
+		// reports this as its own closing error rather than io.EOF.
+		return nil
+	}
+
+	return err
+}
+
+// eofReader records whether the client closed its end of the stream.
+type eofReader struct {
+	io.Reader
+	mu  sync.Mutex
+	eof bool
+}
+
+func (r *eofReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if errors.Is(err, io.EOF) {
+		r.mu.Lock()
+		r.eof = true
+		r.mu.Unlock()
+	}
+
+	return n, err
+}
+
+func (r *eofReader) closed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.eof
+}
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
+
+// newSDKServer builds an MCP server with every read-only tool: the graph
+// tools and the investigation tools.
+func newSDKServer(runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, op *Operator,
+	links *VizLinks, configFile string) *mcp.Server {
+	instructions := serverInstructions + readOnlyInstructions
+	if op != nil {
+		instructions = serverInstructions + operatorInstructions
+	}
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "amass-ai", Version: serverVersion},
+		&mcp.ServerOptions{GetSessionID: newSessionID, Instructions: instructions})
+	// Model-facing tools are declared as capabilities and registered through
+	// one path; the tier decides who may call each (operator tools require
+	// operator mode).
+	caps := readCapabilities(runner, model, store)
+	if runner.Catalog != nil {
+		caps = append(caps, visualizeCapability(runner, links))
+	}
+	caps = append(caps, configAssistCapabilities(configFile)...)
+	if op != nil {
+		caps = append(caps, operatorCapabilities(op, runner)...)
+	}
+
+	registerCapabilities(server, caps, op)
+
+	if runner.Catalog != nil {
+		// The prompts ask for the investigate tool, which needs the catalog.
+		addPrompts(server)
+	}
+
+	return server
+}
+
+// toolSpecs lists the graph tools and the investigation tools.
+func toolSpecs(runner ai.ToolRunner) []llm.ToolSpec {
+	return append(llm.Specs(), ai.InvestigationSpecs(runner.Catalog)...)
+}
+
+// runTool dispatches a tool call to the investigation tools or the runner.
+func runTool(ctx context.Context, runner ai.ToolRunner, model llm.Model, store *ai.EvidenceStore, name string, args json.RawMessage) (json.RawMessage, error) {
+	if ai.IsInvestigationTool(name) {
+		return ai.RunInvestigationTool(ctx, runner, model, store, name, args)
+	}
+
+	return runner.Run(ctx, name, args)
+}
+
+// newSessionID returns 192 random bits, hex encoded, for HTTP sessions.
+func newSessionID() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		// An empty ID makes the SDK refuse the session rather than reuse one.
+		return ""
+	}
+
+	return hex.EncodeToString(b)
+}

@@ -42,16 +42,15 @@ func processInputFiles(args *Args) error {
 			}
 		}
 	}
-	if !args.Options.NoAlts {
-		if len(args.Filepaths.AltWordlist) > 0 {
-			if err := getList(args.Filepaths.AltWordlist, "alterations wordlist", args.AltWordList); err != nil {
-				return err
-			}
-		} else {
-			if f, err := resources.GetResourceFile("alterations.txt"); err == nil {
-				if list, err := config.GetWordList(f); err == nil {
-					args.AltWordList.InsertMany(list...)
-				}
+	// The alterations wordlist is loaded whether or not -alts is given.
+	if len(args.Filepaths.AltWordlist) > 0 {
+		if err := getList(args.Filepaths.AltWordlist, "alterations wordlist", args.AltWordList); err != nil {
+			return err
+		}
+	} else {
+		if f, err := resources.GetResourceFile("alterations.txt"); err == nil {
+			if list, err := config.GetWordList(f); err == nil {
+				args.AltWordList.InsertMany(list...)
 			}
 		}
 	}

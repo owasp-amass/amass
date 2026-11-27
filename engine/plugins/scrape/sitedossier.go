@@ -5,17 +5,13 @@
 package scrape
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -100,33 +96,9 @@ func (sd *siteDossier) check(e *et.Event) error {
 }
 
 func (sd *siteDossier) query(e *et.Event, name string) []*dbt.Entity {
-	subs := stringset.New()
-	defer subs.Close()
-
-	for i := 1; i < 20; i++ {
-		_ = sd.rlimit.Wait(e.Session.Ctx())
-		e.Session.NetSem().Acquire()
-
-		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
-		resp, err := amasshttp.RequestWebPage(ctx,
-			e.Session.Clients().General, &amasshttp.Request{URL: fmt.Sprintf(sd.fmtstr, name, i)})
-		e.Session.NetSem().Release()
-		if err != nil || resp.Body == "" {
-			break
-		}
-
-		for _, n := range support.ScrapeSubdomainNames(resp.Body) {
-			nstr := strings.ToLower(strings.TrimSpace(n))
-			// if the subdomain is not in scope, skip it
-			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: nstr}, 0); conf > 0 {
-				subs.Insert(nstr)
-			}
-		}
-	}
-
-	return sd.store(e, subs.Slice())
+	return sd.store(e, scrapePages(e, sd.rlimit, 19, func(i int) string {
+		return fmt.Sprintf(sd.fmtstr, name, i)
+	}))
 }
 
 func (sd *siteDossier) store(e *et.Event, names []string) []*dbt.Entity {

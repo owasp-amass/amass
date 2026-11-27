@@ -79,10 +79,16 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 	oame := asset.Asset.(*general.Identifier)
 
 	parts := strings.Split(oame.ID, "@")
-	if len(parts) != 2 {
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 		return findings
 	}
-	domain := parts[1]
+	// A domain name is case-insensitive. Stored lowercase, it is the same
+	// FQDN on every database: Neo4j compares names with their case, and
+	// SQLite would keep the first spelling it saw as the name.
+	domain := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(parts[1]), "."))
+	if domain == "" {
+		return findings
+	}
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
 	defer cancel()
@@ -115,15 +121,6 @@ func (ee *emailexpand) process(e *et.Event, findings []*support.Finding) {
 	defer cancel()
 
 	for _, f := range findings {
-		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-			Relation:   f.Rel,
-			FromEntity: f.From,
-			ToEntity:   f.To,
-		}); err == nil && edge != nil {
-			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-				Source:     ee.source.Name,
-				Confidence: ee.source.Confidence,
-			})
-		}
+		_, _ = support.Relate(ctx, e.Session, f.From, f.Rel, f.To, ee.source)
 	}
 }

@@ -5,7 +5,9 @@
 package support
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
@@ -15,8 +17,8 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/purell"
-	fnparser "github.com/caffix/fullname_parser"
 	"github.com/nyaruka/phonenumbers"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oampeop "github.com/owasp-amass/open-asset-model/people"
@@ -25,37 +27,14 @@ import (
 )
 
 func FullNameToPerson(raw string) *oampeop.Person {
-	if raw == "" {
+	name, ok := semantics.ParsePersonName(raw)
+	if !ok {
 		return nil
-	}
-
-	if parts := strings.Split(raw, " "); len(parts) == 1 {
-		return nil
-	}
-
-	name := fnparser.ParseFullname(raw)
-	if name.First == "" || name.Last == "" {
-		return nil
-	}
-
-	var fullname string
-	if name.Title != "" {
-		fullname += name.Title + " "
-	}
-	fullname += name.First + " "
-
-	if name.Middle != "" {
-		fullname += name.Middle + " "
-	}
-	fullname += name.Last
-
-	if name.Suffix != "" {
-		fullname += ", " + name.Suffix
 	}
 
 	return &oampeop.Person{
-		ID:         fullname,
-		FullName:   fullname,
+		ID:         name.Full,
+		FullName:   name.Full,
 		FirstName:  name.First,
 		MiddleName: name.Middle,
 		FamilyName: name.Last,
@@ -217,6 +196,46 @@ func Hash64Hex(s string) string {
 	return hex.EncodeToString(b[:]) // 16 hex chars
 }
 
+// KeyIDString formats a certificate key identifier as colon-separated
+// uppercase hex, as OpenSSL prints it. Storing the raw bytes is lossy: JSON
+// replaces bytes that are not valid UTF-8.
+func KeyIDString(id []byte) string {
+	if len(id) == 0 {
+		return ""
+	}
+
+	parts := make([]string, len(id))
+	for i, b := range id {
+		parts[i] = fmt.Sprintf("%02X", b)
+	}
+
+	return strings.Join(parts, ":")
+}
+
+// publicKeySHA256 is the lower-case hex SHA-256 of a certificate's DER
+// SubjectPublicKeyInfo: a stable identifier for the public key itself, so two
+// certificates built from the same key pair share it.
+func publicKeySHA256(cert *x509.Certificate) string {
+	if len(cert.RawSubjectPublicKeyInfo) == 0 {
+		return ""
+	}
+
+	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return hex.EncodeToString(sum[:])
+}
+
+// OIDBIMIKeyUsage is the extended key usage of a mark certificate for Brand
+// Indicators for Message Identification (the BIMI Group's Verified Mark
+// Certificate Requirements, section 7.1.2.3).
+var OIDBIMIKeyUsage = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 31}
+
+// X509ContactKey is the key of the ContactRecord holding a certificate's
+// subject or issuer (role "Subject" or "Issuer"), so every collector that
+// adds to it reaches the same record.
+func X509ContactKey(cert *x509.Certificate, role string) string {
+	return "x509 Certificate: " + cert.SerialNumber.String() + ", " + role
+}
+
 func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 	if cert == nil {
 		return nil
@@ -233,8 +252,9 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 		PublicKeyAlgorithm:    cert.PublicKeyAlgorithm.String(),
 		IsCA:                  cert.IsCA,
 		CRLDistributionPoints: cert.CRLDistributionPoints,
-		SubjectKeyID:          string(cert.SubjectKeyId),
-		AuthorityKeyID:        string(cert.AuthorityKeyId),
+		SubjectKeyID:          KeyIDString(cert.SubjectKeyId),
+		AuthorityKeyID:        KeyIDString(cert.AuthorityKeyId),
+		PublicKeySHA256:       publicKeySHA256(cert),
 	}
 
 	if cert.KeyUsage&x509.KeyUsageDigitalSignature > 0 {
@@ -299,5 +319,44 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 			c.ExtKeyUsage = append(c.ExtKeyUsage, "Unknown")
 		}
 	}
+	for _, oid := range cert.UnknownExtKeyUsage {
+		if oid.Equal(OIDBIMIKeyUsage) {
+			c.ExtKeyUsage = append(c.ExtKeyUsage, oamcert.ExtKeyUsageBIMI)
+		}
+	}
 	return c
+}
+
+// transferDateLayouts are the date forms funding sources give, from the most
+// to the least precise.
+var transferDateLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+	"01/02/2006",
+	"2006-01",
+	"2006",
+}
+
+// TransferDate returns a funds transfer's exchange date in RFC 3339, the form
+// the Asset Database accepts, from the date forms funding sources give: a
+// timestamp, a date ("2009-09-18", "09/18/2009", or "2009-09-18+01:00" with a
+// zone offset, kept as that calendar day), a month ("2009-09") or a year
+// ("2019", for a fiscal or tax year), the last two as their first day.
+// A value in no known form is returned as given.
+func TransferDate(raw string) string {
+	s := strings.TrimSpace(raw)
+	for _, layout := range transferDateLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC().Format(time.RFC3339)
+		}
+	}
+	// A date with a zone offset (TED's "2024-03-01+01:00") names a calendar
+	// day, which converting to UTC would move, so the day is kept.
+	if t, err := time.Parse("2006-01-02Z07:00", s); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	}
+	return raw
 }

@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/resolve/utils"
 	"golang.org/x/net/publicsuffix"
 )
@@ -32,6 +31,8 @@ type subsQtypes struct {
 type subsSession struct {
 	session et.Session
 	strset  *stringset.Set
+	// failures counts, by apex, the probes below it that failed outright
+	failures map[string]int
 }
 
 type dnsSubs struct {
@@ -55,7 +56,7 @@ func NewSubs(p *dnsPlugin) *dnsSubs {
 		types: []subsQtypes{
 			{Qtype: dns.TypeNS, Rtype: "ns_record"},
 			{Qtype: dns.TypeMX, Rtype: "mx_record"},
-			//{Qtype: dns.TypeSOA, Rtype: "soa_record"},
+			// the SOA record is asked for once per apex (querySOA)
 			//{Qtype: dns.TypeSPF, Rtype: "spf_record"},
 		},
 		done:      make(chan struct{}),
@@ -173,13 +174,13 @@ func (d *dnsSubs) lookup(e *et.Event, subdomain string, since time.Time) []*relS
 	fqdn := ents[0]
 
 	// Check for NS records within the since period
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.BasicDNSRelation, 2); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, d.plugin.source, oam.BasicDNSRelation, 2); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
 		}
 	}
 	// Check for MX records within the since period
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.PrefDNSRelation, 15); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, d.plugin.source, oam.PrefDNSRelation, 15); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
 		}
@@ -212,30 +213,27 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 		return alias
 	}
 
+	// Names asked for below the apex are linked to it, as the apex handler
+	// links names that resolve, so that they are found from the domain.
+	apexEnt := d.plugin.getApex(subdomain)
+	d.queryPolicies(e, apexEnt, subdomain)
+	d.queryCAA(e, apexEnt, subdomain)
+	d.querySOA(e, apexEnt, subdomain)
+	d.queryAXFR(e, apexEnt, subdomain)
+
 	srvs := NamesByTier(Tier3)
-	rch := make(chan []*relSubs, len(srvs))
-	defer close(rch)
-
-	for _, name := range srvs {
-		go func(label, sub string, ch chan []*relSubs) {
-			n := name + "." + subdomain
-
-			var results []*relSubs
-			if rr, err := support.PerformQuery(e.Session.Ctx(), n, dns.TypeSRV); err == nil && len(rr) > 0 {
-				if records := d.store(e, n, rr); len(records) > 0 {
-					results = append(results, records...)
-				}
-			} else if err == support.ErrFailedMaxDNSAttempts {
-				e.Session.Log().Warn(err.Error(), "fqdn", n,
-					slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-			}
-			ch <- results
-		}(name, subdomain, rch)
+	names := make([]string, len(srvs))
+	for i, name := range srvs {
+		names[i] = name + "." + subdomain
 	}
-
-	for range len(srvs) {
-		answers := <-rch
-		alias = append(alias, answers...)
+	for i, rr := range d.probeAll(e, subdomain, names, dns.TypeSRV) {
+		if len(rr) == 0 {
+			continue
+		}
+		if records := d.store(e, names[i], rr); len(records) > 0 {
+			d.linkBelow(e, apexEnt, records[0].alias)
+			alias = append(alias, records...)
+		}
 	}
 
 	return alias
@@ -247,68 +245,90 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 5*time.Second)
 	defer cancel()
 
-	fqdn, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name})
-	if err != nil || fqdn == nil {
-		return alias
-	}
-
+	// The name is stored only with a record that names another host, so an
+	// SRV name whose answer cannot be kept leaves no FQDN without edges.
+	var fqdn *dbt.Entity
+	var apex bool
 	for _, record := range rr {
 		var a *dbt.Entity
 		var edge *dbt.Edge
+		var err error
+
+		switch record.Header().Rrtype {
+		case dns.TypeNS, dns.TypeMX:
+			apex = true
+		case dns.TypeSRV:
+			// A target of "." says the service is not offered at this name (RFC 2782).
+			if utils.RemoveLastDot((record.(*dns.SRV)).Target) == "" {
+				continue
+			}
+		default:
+			continue
+		}
+		if fqdn == nil {
+			if fqdn, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err != nil || fqdn == nil {
+				return alias
+			}
+		}
 
 		if record.Header().Rrtype == dns.TypeNS {
 			data := utils.RemoveLastDot((record.(*dns.NS)).Ns)
 
 			a, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: data})
 			if err == nil && a != nil {
-				edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-					Relation: &oamdns.BasicDNSRelation{
-						Name: "dns_record",
-						Header: oamdns.RRHeader{
-							RRType: int(record.Header().Rrtype),
-							Class:  int(record.Header().Class),
-							TTL:    int(record.Header().Ttl),
-						},
+				edge, err = support.Relate(ctx, e.Session, fqdn, &oamdns.BasicDNSRelation{
+					Name: "dns_record",
+					Header: oamdns.RRHeader{
+						RRType: int(record.Header().Rrtype),
+						Class:  int(record.Header().Class),
+						TTL:    int(record.Header().Ttl),
 					},
-					FromEntity: fqdn,
-					ToEntity:   a,
-				})
+				}, a, d.plugin.source)
 			}
 		} else if record.Header().Rrtype == dns.TypeMX {
 			data := utils.RemoveLastDot((record.(*dns.MX)).Mx)
 
 			a, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: data})
 			if err == nil && a != nil {
-				edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-					Relation: &oamdns.PrefDNSRelation{
-						Name: "dns_record",
-						Header: oamdns.RRHeader{
-							RRType: int(record.Header().Rrtype),
-							Class:  int(record.Header().Class),
-							TTL:    int(record.Header().Ttl),
-						},
-						Preference: int((record.(*dns.MX)).Preference),
+				edge, err = support.Relate(ctx, e.Session, fqdn, &oamdns.PrefDNSRelation{
+					Name: "dns_record",
+					Header: oamdns.RRHeader{
+						RRType: int(record.Header().Rrtype),
+						Class:  int(record.Header().Class),
+						TTL:    int(record.Header().Ttl),
 					},
-					FromEntity: fqdn,
-					ToEntity:   a,
-				})
+					Preference: int((record.(*dns.MX)).Preference),
+				}, a, d.plugin.source)
 			}
-		} else {
-			continue
+		} else if srv, ok := record.(*dns.SRV); ok {
+			data := utils.RemoveLastDot(srv.Target)
+
+			a, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: data})
+			if err == nil && a != nil {
+				edge, err = support.Relate(ctx, e.Session, fqdn, &oamdns.SRVDNSRelation{
+					Name: "dns_record",
+					Header: oamdns.RRHeader{
+						RRType: int(record.Header().Rrtype),
+						Class:  int(record.Header().Class),
+						TTL:    int(record.Header().Ttl),
+					},
+					Priority: int(srv.Priority),
+					Weight:   int(srv.Weight),
+					Port:     int(srv.Port),
+				}, a, d.plugin.source)
+			}
 		}
 
 		if err == nil && edge != nil {
 			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
-			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-				Source:     d.plugin.source.Name,
-				Confidence: d.plugin.source.Confidence,
-			})
-		} else {
+		} else if err != nil {
 			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
 	}
 
-	if len(alias) > 0 {
+	// Only a name with its own NS or MX records is a zone apex; an SRV
+	// name is not.
+	if apex && len(alias) > 0 {
 		d.plugin.addApex(name, fqdn)
 	}
 	return alias
@@ -343,24 +363,29 @@ func (d *dnsSubs) process(e *et.Event, results []*relSubs) {
 	}
 }
 
+// sessionState returns the event's session state, creating it on first use.
+// The caller holds the lock.
+func (d *dnsSubs) sessionState(e *et.Event) *subsSession {
+	id := e.Session.ID().String()
+	s, found := d.sessNames[id]
+	if !found {
+		s = &subsSession{session: e.Session, strset: stringset.New(), failures: make(map[string]int)}
+		d.sessNames[id] = s
+	}
+	return s
+}
+
 func (d *dnsSubs) fqdnAvailable(e *et.Event, fqdn string) bool {
 	d.Lock()
 	defer d.Unlock()
 
-	id := e.Session.ID().String()
-	if _, found := d.sessNames[id]; !found {
-		d.sessNames[id] = &subsSession{
-			session: e.Session,
-			strset:  stringset.New(),
-		}
+	s := d.sessionState(e)
+	if s.strset.Has(fqdn) {
+		return false
 	}
 
-	var avail bool
-	if !d.sessNames[id].strset.Has(fqdn) {
-		avail = true
-		d.sessNames[id].strset.Insert(fqdn)
-	}
-	return avail
+	s.strset.Insert(fqdn)
+	return true
 }
 
 func (d *dnsSubs) releaseSessions() {

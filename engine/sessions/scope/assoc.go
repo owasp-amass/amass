@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/strutil"
-	"github.com/adrg/strutil/metrics"
 	"github.com/caffix/stringset"
+	"github.com/owasp-amass/amass/v5/config"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -26,6 +26,11 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+// IsAssociated reports the in-scope assets the submission is associated with
+// (through a registrant, a certificate subject or a location), best match
+// first among each association's evidence. It never changes the scope: a
+// caller that wants the submission in scope sends the association to Admit
+// as evidence (et.SignalAssociation).
 func (s *Scope) IsAssociated(req *et.Association) ([]*et.Association, error) {
 	if req == nil || req.Submission == nil || req.Submission.Asset == nil {
 		return nil, errors.New("invalid request")
@@ -35,38 +40,10 @@ func (s *Scope) IsAssociated(req *et.Association) ([]*et.Association, error) {
 	assocs := s.AssetsWithAssociation(req.Submission)
 	// are any of these assets in the current session scope?
 	results := s.checkRelatedAssetsforAssoc(req, assocs)
-
-	if req.ScopeChange && !s.Session.Config().Rigid {
-		var conf int
-		var best *et.Association
-
-		for _, result := range results {
-			if result.BestMatch != nil && result.Confidence > conf {
-				best = result
-				conf = result.Confidence
-			}
-		}
-
-		if best != nil && s.Add(req.Submission.Asset) {
-			best.ScopeChange = true
-			s.addScopeChangesToRationale(best)
-		}
-	}
-
 	if len(results) == 0 {
 		return nil, errors.New("the submission is not associated with assets in the session scope")
 	}
 	return results, nil
-}
-
-func (s *Scope) addScopeChangesToRationale(result *et.Association) {
-	var changes []string
-
-	for _, match := range []*dbt.Entity{result.BestMatch} {
-		changes = append(changes, fmt.Sprintf("[%s: %s]", match.Asset.AssetType(), match.Asset.Key()))
-	}
-
-	result.Rationale += ". The following assets were added to the session scope: " + strings.Join(changes, ", ")
 }
 
 func (s *Scope) checkRelatedAssetsforAssoc(req *et.Association, assocs []*dbt.Entity) []*et.Association {
@@ -123,7 +100,7 @@ func (s *Scope) getMatchEntity(masset oam.Asset) (*dbt.Entity, error) {
 	switch masset.AssetType() {
 	case oam.FQDN:
 		filters["name"] = masset.Key()
-	case oam.Location:
+	case oam.StreetAddress:
 		filters["address"] = masset.Key()
 	case oam.Organization:
 		filters["unique_id"] = masset.Key()
@@ -157,7 +134,7 @@ func (s *Scope) assetsRelatedToAssetWithAssoc(assoc *dbt.Entity) []*dbt.Entity {
 				if cert, found := assoc.Asset.(*oamcert.TLSCertificate); !found || s.orgNameSimilarToCommon(v, cert) {
 					results = append(results, a)
 				}
-			case *oamcon.Location:
+			case *oamcon.StreetAddress:
 				found = true
 				results = append(results, a)
 			}
@@ -255,9 +232,9 @@ func (s *Scope) awayFromAssetsWithAssociation(assoc *dbt.Entity) ([]*dbt.Entity,
 		}
 	case oam.ContactRecord:
 		out = true
-		outRels = append(outRels, "organization", "location")
+		outRels = append(outRels, "organization", "street_address")
 		since1 := s.ttlStartTime(oam.ContactRecord, oam.Organization)
-		outSince = s.ttlStartTime(oam.ContactRecord, oam.Location)
+		outSince = s.ttlStartTime(oam.ContactRecord, oam.StreetAddress)
 		if !since1.IsZero() && since1.Before(outSince) {
 			outSince = since1
 		}
@@ -330,10 +307,10 @@ func (s *Scope) towardsAssetsWithAssociation(asset *dbt.Entity) ([]*dbt.Entity, 
 		in = true
 		inRels = append(inRels, "organization")
 		inSince = s.ttlStartTime(oam.Organization, oam.ContactRecord)
-	case oam.Location:
+	case oam.StreetAddress:
 		in = true
-		inRels = append(inRels, "location")
-		inSince = s.ttlStartTime(oam.Location, oam.ContactRecord)
+		inRels = append(inRels, "street_address")
+		inSince = s.ttlStartTime(oam.StreetAddress, oam.ContactRecord)
 	case oam.ContactRecord:
 		in = true
 		inRels = append(inRels, "registrant", "registrant_contact")
@@ -393,38 +370,30 @@ func (s *Scope) ttlStartTime(from, to oam.AssetType) time.Time {
 func (s *Scope) confidence(from, to oam.AssetType) int {
 	if matches, err := s.Session.Config().CheckTransformations(string(from), string(to)); err == nil && matches != nil {
 		if conf := matches.Confidence(string(to)); conf >= 0 {
-			return conf
+			return config.MatchConfidence(conf)
 		}
 	}
 	return -1
 }
 
+// orgNameSimilarToCommon reports whether the certificate's subject domain is
+// named for the organization: its registered domain's label spells one of
+// the organization's names (semantics.OrgNameMatchesLabel).
 func (s *Scope) orgNameSimilarToCommon(o *oamorg.Organization, cert *oamcert.TLSCertificate) bool {
-	swg := metrics.NewSmithWatermanGotoh()
-	swg.CaseSensitive = false
-	swg.GapPenalty = -0.1
-	swg.Substitution = metrics.MatchMismatch{
-		Match:    1,
-		Mismatch: -0.5,
-	}
-
 	if re := amassdns.AnySubdomainRegex(); !re.MatchString(cert.SubjectCommonName) {
 		return false
 	}
 
-	dom, err := publicsuffix.EffectiveTLDPlusOne(cert.SubjectCommonName)
+	dom, err := publicsuffix.EffectiveTLDPlusOne(strings.ToLower(cert.SubjectCommonName))
 	if err != nil {
 		return false
 	}
 
-	labels := strings.Split(dom, ".")
-	if len(labels) < 2 {
-		return false
-	}
-
-	common := labels[0]
-	if sim := strutil.Similarity(o.Name, common, swg); sim >= 0.5 {
-		return true
+	label, _, _ := strings.Cut(dom, ".")
+	for _, key := range orgNameKeys(o) {
+		if semantics.OrgNameMatchesLabel(strings.Fields(key), label) {
+			return true
+		}
 	}
 	return false
 }

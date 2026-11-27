@@ -1,0 +1,105 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Public cloud and CDN providers that publish the IP ranges they operate, so an address can be attributed to the provider, and often its region and service, from the provider's own authoritative feed rather than from registration records alone. This is a hosting observation, never ownership: an address being in a provider's range means the provider operates that network, not that the provider owns the customer's assets, and two parties sharing a provider are not related (see ai-design-principles.md, principle 8). organization is the canonical Organization name stored for the provider. Each feed has a url, a format naming the parser that reads the provider's published schema, and the vendor's own documentation in source; a provider whose ranges cannot be confirmed from its own published feed does not belong here. asn_hints are autonomous systems the provider is known to announce, used only to cross-check an attribution, never as the sole basis for one. region_label and service_label name, in the provider's own words, what the feed's region and service fields mean, for display. A feed with no region or service (a plain CDN range list) sets has_region or has_service to false. names are alias spellings of the provider's stored hosting-organization label, so a host already attributed by registration (for example an Organization named 'amazon.com' or 'microsoft corporation') is recognized as this provider without re-fetching the ranges; keep them specific enough not to catch unrelated organizations. domains are the provider-operated CNAME/alias domains a customer name points at when the provider fronts it (for example azurefd.net or cloudfront.net), so edge and CDN hosting is recognized from an alias alone even when the final address was never resolved. Both are provider-operated identifiers documented at the provider's own site in source. A feed whose url is a page linking to a file renamed with each release sets link_pattern, a regular expression matching the file's link on that page. exclude_services lists services a feed names that run on another provider's network (GitHub's hosted Actions runners and Codespaces run in Azure), whose ranges are that provider's. Add providers here, not in Go code; a genuinely new feed shape needs a parser keyed by format.",
+  "providers": [
+    {
+      "key": "aws",
+      "organization": "Amazon Web Services",
+      "region_label": "region",
+      "service_label": "service",
+      "asn_hints": ["AS16509", "AS14618", "AS8987", "AS38895"],
+      "names": ["amazon", "aws", "amazon web services", "amazon data services", "amazon technologies", "a100 row"],
+      "domains": ["amazonaws.com", "cloudfront.net", "awsglobalaccelerator.com", "elasticbeanstalk.com", "awsapps.com", "on.aws", "awsapprunner.com", "amplifyapp.com"],
+      "feeds": [
+        {"url": "https://ip-ranges.amazonaws.com/ip-ranges.json", "format": "aws", "has_region": true, "has_service": true}
+      ],
+      "source": "https://docs.aws.amazon.com/vpc/latest/userguide/aws-ip-ranges.html"
+    },
+    {
+      "key": "gcp",
+      "organization": "Google Cloud",
+      "region_label": "scope",
+      "service_label": "service",
+      "asn_hints": ["AS15169", "AS396982", "AS139070", "AS139190"],
+      "names": ["google", "google cloud", "google llc"],
+      "domains": ["googleusercontent.com", "googleapis.com", "googlehosted.com", "appspot.com", "firebaseapp.com", "web.app", "run.app", "cloudfunctions.net"],
+      "feeds": [
+        {"url": "https://www.gstatic.com/ipranges/cloud.json", "format": "gcp", "has_region": true, "has_service": true}
+      ],
+      "source": "https://cloud.google.com/vpc/docs/subnets#cloud-and-internet-ip-addresses"
+    },
+    {
+      "key": "azure",
+      "organization": "Microsoft Azure",
+      "region_label": "region",
+      "service_label": "system service",
+      "asn_hints": ["AS8075", "AS8068", "AS8069", "AS12076"],
+      "names": ["azure", "microsoft azure", "microsoft"],
+      "domains": ["azurefd.net", "azureedge.net", "azurewebsites.net", "trafficmanager.net", "cloudapp.azure.com", "cloudapp.net", "windows.net", "onmicrosoft.com", "azure.com", "azurecontainer.io", "azurecontainerapps.io", "azurestaticapps.net"],
+      "feeds": [
+        {"url": "https://www.microsoft.com/en-us/download/details.aspx?id=56519", "format": "azure", "has_region": true, "has_service": true, "link_pattern": "https://download\\.microsoft\\.com/download/[^\"\\s]+/ServiceTags_Public_\\d+\\.json"}
+      ],
+      "source": "https://www.microsoft.com/en-us/download/details.aspx?id=56519"
+    },
+    {
+      "key": "cloudflare",
+      "organization": "Cloudflare",
+      "asn_hints": ["AS13335", "AS209242"],
+      "names": ["cloudflare"],
+      "domains": ["cloudflare.net", "cloudflare.com", "cloudflaressl.com", "cdn.cloudflare.net", "pages.dev", "workers.dev"],
+      "feeds": [
+        {"url": "https://www.cloudflare.com/ips-v4/", "format": "text", "has_region": false, "has_service": false},
+        {"url": "https://www.cloudflare.com/ips-v6/", "format": "text", "has_region": false, "has_service": false}
+      ],
+      "source": "https://www.cloudflare.com/ips/"
+    },
+    {
+      "key": "oracle",
+      "organization": "Oracle Cloud Infrastructure",
+      "region_label": "region",
+      "service_label": "tag",
+      "asn_hints": ["AS31898", "AS7160"],
+      "names": ["oracle", "oracle cloud"],
+      "domains": ["oraclecloud.com", "oraclecloud.net", "oraclecloudapps.com"],
+      "feeds": [
+        {"url": "https://docs.oracle.com/iaas/tools/public_ip_ranges.json", "format": "oracle", "has_region": true, "has_service": true}
+      ],
+      "source": "https://docs.oracle.com/en-us/iaas/Content/General/Concepts/addressranges.htm"
+    },
+    {
+      "key": "fastly",
+      "organization": "Fastly",
+      "asn_hints": ["AS54113"],
+      "names": ["fastly"],
+      "domains": ["fastly.net", "fastlylb.net", "fastly.com"],
+      "feeds": [
+        {"url": "https://api.fastly.com/public-ip-list", "format": "fastly", "has_region": false, "has_service": false}
+      ],
+      "source": "https://developer.fastly.com/reference/api/utils/public-ip-list/"
+    },
+    {
+      "key": "digitalocean",
+      "organization": "DigitalOcean",
+      "region_label": "region",
+      "asn_hints": ["AS14061"],
+      "names": ["digitalocean", "digital ocean"],
+      "domains": ["digitaloceanspaces.com", "ondigitalocean.app"],
+      "feeds": [
+        {"url": "https://www.digitalocean.com/geo/google.csv", "format": "digitalocean_csv", "has_region": true, "has_service": false}
+      ],
+      "source": "https://docs.digitalocean.com/products/platform/"
+    },
+    {
+      "key": "github",
+      "organization": "GitHub",
+      "service_label": "service",
+      "asn_hints": ["AS36459"],
+      "names": ["github"],
+      "domains": ["github.io", "githubusercontent.com", "github.com"],
+      "feeds": [
+        {"url": "https://api.github.com/meta", "format": "github", "has_region": false, "has_service": true, "exclude_services": ["actions", "actions_macos", "codespaces"]}
+      ],
+      "source": "https://docs.github.com/en/rest/meta/meta#get-github-meta-information"
+    }
+  ]
+}

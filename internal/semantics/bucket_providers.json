@@ -1,0 +1,47 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Public object-storage (bucket) providers, for Unit 4 bucket discovery. Each provider has host patterns that identify a bucket endpoint and capture the bucket or storage-account name (the named group 'bucket' or 'account'), the short service name that prefixes the stored StorageBucket's unique_id (service, e.g. s3:<bucket>), the probe endpoint template to check existence (placeholders {host} and {bucket}), the HTTP method, the response signature of a missing bucket (not_found: a deleted or never-claimed bucket, the subdomain-takeover case) and of a world-readable listing (public_listing), and the vendor's own documentation in source. This drives observed-name mining (CNAME and cert-SAN hosts already stored), a light active existence + listing probe (active mode only, paced, in-scope, never listing or fetching objects), and the dangling lens's bucket-takeover confirmation. Attribution is ownership-gated: a bucket is surfaced only when it is reached from an in-scope asset, never from a guessed name. Add providers here, not in Go code. A genuinely new response shape may need the probe parser extended.",
+  "providers": [
+    {
+      "key": "aws_s3",
+      "organization": "Amazon Web Services",
+      "service": "s3",
+      "patterns": [
+        "^(?P<bucket>.+)\\.s3[.-]([a-z0-9-]+\\.)?amazonaws\\.com$",
+        "^(?P<bucket>.+)\\.s3-website[.-][a-z0-9-]+\\.amazonaws\\.com$"
+      ],
+      "endpoint": "https://{host}/",
+      "method": "GET",
+      "not_found": {"status": [404], "body_contains": ["NoSuchBucket"]},
+      "public_listing": {"status": [200], "body_contains": ["<ListBucketResult"]},
+      "source": "https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html"
+    },
+    {
+      "key": "gcs",
+      "organization": "Google Cloud",
+      "service": "gcs",
+      "patterns": [
+        "^(?P<bucket>.+)\\.storage\\.googleapis\\.com$",
+        "^(?P<bucket>.+)\\.storage\\.cloud\\.google\\.com$"
+      ],
+      "endpoint": "https://storage.googleapis.com/{bucket}/",
+      "method": "GET",
+      "not_found": {"status": [404], "body_contains": ["NoSuchBucket", "The specified bucket does not exist"]},
+      "public_listing": {"status": [200], "body_contains": ["<ListBucketResult"]},
+      "source": "https://cloud.google.com/storage/docs/xml-api/reference-status"
+    },
+    {
+      "key": "azure_blob",
+      "organization": "Microsoft Azure",
+      "service": "azure-blob",
+      "patterns": [
+        "^(?P<account>[a-z0-9]{3,24})\\.blob\\.core\\.windows\\.net$"
+      ],
+      "endpoint": "https://{host}/?comp=list",
+      "method": "GET",
+      "not_found": {"status": [404], "body_contains": ["BlobNotFound", "ContainerNotFound", "The specified container does not exist", "The specified resource does not exist"]},
+      "public_listing": {"status": [200], "body_contains": ["<EnumerationResults"]},
+      "source": "https://learn.microsoft.com/rest/api/storageservices/status-and-error-codes2"
+    }
+  ]
+}

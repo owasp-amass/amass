@@ -1,0 +1,34 @@
+# Expansion policy: footprint (recommended)
+#
+# Investigate the organization's footprint: the scope the enumeration was
+# given and everything admitted into it on the evidence. An asset merely
+# linked to the footprint (a name the target's mail points at, a host on a
+# provider's network) is resolved once to see whether it ties back, and is
+# otherwise only recorded.
+#
+# To use it, merge these transformations into your config.yaml: they
+# replace entries of yours with the same key, default included.
+
+transformations:
+  default:
+    reach: footprint        # the given scope and what was admitted into it
+    confidence: 80          # evidence needed before an asset is admitted
+  # Resolve a name one relation away from the footprint: its addresses may
+  # tie it to an in-scope network.
+  FQDN->DNS:
+    reach: connected
+    hops: 1
+  # Identify every organization the run meets; collect more only for the
+  # target's own.
+  Organization->GLEIF:
+    reach: any
+  # Look up every network's registration, so the target's own netblocks and
+  # autonomous systems can be attributed to it.
+  Netblock->RDAP:
+    reach: any
+  AutonomousSystem->RDAP:
+    reach: any
+  IPNetRecord->RDAP:
+    reach: any
+  AutnumRecord->RDAP:
+    reach: any

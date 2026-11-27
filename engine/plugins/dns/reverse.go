@@ -107,7 +107,7 @@ func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*r
 		return rev
 	}
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.BasicDNSRelation, 12); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, d.plugin.source, oam.BasicDNSRelation, 12); len(assets) > 0 {
 		for _, a := range assets {
 			rev = append(rev, &relRev{ipFQDN: fqdn, target: a})
 		}
@@ -151,23 +151,15 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev 
 		}
 
 		if t, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
-			if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-				Relation: &oamdns.BasicDNSRelation{
-					Name: "dns_record",
-					Header: oamdns.RRHeader{
-						RRType: int(record.Header().Rrtype),
-						Class:  int(record.Header().Class),
-						TTL:    int(record.Header().Ttl),
-					},
+			if _, err := support.Relate(ctx, e.Session, ptr, &oamdns.BasicDNSRelation{
+				Name: "dns_record",
+				Header: oamdns.RRHeader{
+					RRType: int(record.Header().Rrtype),
+					Class:  int(record.Header().Class),
+					TTL:    int(record.Header().Ttl),
 				},
-				FromEntity: ptr,
-				ToEntity:   t,
-			}); err == nil && edge != nil {
+			}, t, d.plugin.source); err == nil {
 				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
-				_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-					Source:     d.plugin.source.Name,
-					Confidence: d.plugin.source.Confidence,
-				})
 			}
 		} else {
 			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
@@ -198,16 +190,7 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *d
 	if err != nil || ptr == nil {
 		return nil
 	}
-	if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "ptr_record"},
-		FromEntity: ip,
-		ToEntity:   ptr,
-	}); err == nil && edge != nil {
-		_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-			Source:     d.plugin.source.Name,
-			Confidence: d.plugin.source.Confidence,
-		})
-	}
+	_, _ = support.Relate(ctx, e.Session, ip, &general.SimpleRelation{Name: "ptr_record"}, ptr, d.plugin.source)
 
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    ptr.Asset.Key(),

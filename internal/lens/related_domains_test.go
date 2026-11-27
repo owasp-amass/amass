@@ -1,0 +1,419 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package lens
+
+import (
+	"context"
+	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+)
+
+func relatedDomainsGraph() graphtest.FakeGraph {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}}
+	org := func(id, name string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "Organization", Key: name + ":1",
+			Content: map[string]any{"name": name}}
+	}
+	contact := func(id string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "ContactRecord", Key: id, Content: map[string]any{}}
+	}
+	domainRec := func(id, domain string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "DomainRecord", Key: domain, Content: map[string]any{"domain": domain}}
+	}
+	fqdn := func(id, name string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "FQDN", Key: name, Content: map[string]any{"name": name}}
+	}
+	cert := func(id string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "TLSCertificate", Key: id, Content: map[string]any{}}
+	}
+	link := func(from, to, label string) {
+		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+
+	// A real organization. Registrant signal: two apex domains registered
+	// through one contact.
+	org("acme", "Acme Corporation")
+	contact("cr1")
+	link("cr1", "acme", "organization")
+	domainRec("dr1", "acme.com")
+	domainRec("dr2", "acme.net")
+	link("dr1", "cr1", "registrant_contact")
+	link("dr2", "cr1", "registrant_contact")
+
+	// Certificate signal: a cert whose subject contact names the org, covering
+	// acme.com (also found via registrant) and a new apex acme.io.
+	cert("cert1")
+	link("cert1", "cr1", "subject_contact")
+	fqdn("fq_www_acme_com", "www.acme.com")
+	fqdn("fq_acme_io", "acme.io")
+	link("cert1", "fq_www_acme_com", "common_name")
+	link("cert1", "fq_acme_io", "san_dns_name")
+
+	// Name-server signal: acme.com's own name server also serves acme-labs.org,
+	// a domain not otherwise tied to the org.
+	fqdn("ns_acme", "ns1.acme-dns.com")
+	link("dr1", "ns_acme", "name_server")
+	domainRec("dr4", "acme-labs.org")
+	link("dr4", "ns_acme", "name_server")
+
+	// Official-website signal: the org publishes acme.org as its website
+	// (Organization --website--> URL --domain--> FQDN).
+	g.Assets["url_acme_org"] = graph.Asset{ID: "url_acme_org", Type: "URL", Key: "https://acme.org",
+		Content: map[string]any{"url": "https://acme.org"}}
+	link("acme", "url_acme_org", "website")
+	fqdn("fq_acme_org", "acme.org")
+	link("url_acme_org", "fq_acme_org", "domain")
+
+	// A privacy-proxy "organization" shared by an unrelated domain: never
+	// correlated on.
+	org("proxy", "Domains By Proxy, LLC")
+	contact("cr2")
+	link("cr2", "proxy", "organization")
+	domainRec("dr3", "stranger.com")
+	link("dr3", "cr2", "registrant_contact")
+
+	// DNS-record signals: acme.net's apex FQDN (registration --> dr2) shares its
+	// resolved mail exchanger with acme-mail.org and its DNS name server with
+	// acme-dns.net, neither otherwise tied to the org. An NS record and an MX
+	// record are the same shape in OAM, found by the one shared-DNS-host pivot.
+	dnsLink := func(from, to string, rrType int) {
+		g.Links = append(g.Links, graph.Relation{ID: "dnsrec" + from + to, FromID: from, ToID: to,
+			Label: "dns_record", Type: "BasicDNSRelation",
+			Content: map[string]any{"header": map[string]any{"rr_type": rrType}}})
+	}
+	fqdn("fq_acme_net", "acme.net")
+	link("fq_acme_net", "dr2", "registration")
+	fqdn("mx_host", "mail.acme-mx.example")
+	dnsLink("fq_acme_net", "mx_host", rrTypeMX)
+	fqdn("fq_acme_mail", "acme-mail.org")
+	dnsLink("fq_acme_mail", "mx_host", rrTypeMX)
+	fqdn("dns_ns_host", "dns1.acme-ns.example")
+	dnsLink("fq_acme_net", "dns_ns_host", RRTypeNS)
+	fqdn("fq_acme_dns", "acme-dns.net")
+	dnsLink("fq_acme_dns", "dns_ns_host", RRTypeNS)
+
+	// Provider guard: acme.net also points its mail at a known mail provider
+	// (Google Workspace, an alt*.aspmx host) and its DNS at a known managed-DNS
+	// provider (Cloudflare). An unrelated domain sharing those provider hosts
+	// must never be surfaced, even though few of each provider's tenants are in
+	// this graph, so the apex-count cap alone would not catch them.
+	fqdn("prov_mx", "alt1.aspmx.l.google.com")
+	dnsLink("fq_acme_net", "prov_mx", rrTypeMX)
+	fqdn("fq_stranger_mail", "stranger-mail.com")
+	dnsLink("fq_stranger_mail", "prov_mx", rrTypeMX)
+	fqdn("prov_ns", "quip.ns.cloudflare.com")
+	dnsLink("fq_acme_net", "prov_ns", RRTypeNS)
+	fqdn("fq_stranger_dns", "stranger-dns.com")
+	dnsLink("fq_stranger_dns", "prov_ns", RRTypeNS)
+
+	// Mail-policy references: two unrelated apexes point their published mail
+	// policy at acme.net (an org apex). dmarc-pub.example sends its DMARC reports
+	// there (strong); spf-pub.example authorizes it in SPF (supporting). The edge
+	// runs from the publishing apex to the referenced org domain.
+	fqdn("fq_dmarc_pub", "dmarc-pub.example")
+	link("fq_dmarc_pub", "fq_acme_net", "dmarc_reports_to")
+	fqdn("fq_spf_pub", "spf-pub.example")
+	link("fq_spf_pub", "fq_acme_net", "spf_authorizes")
+	// spf-pub.example also sends through an outside mailer, so it does not
+	// send only through the organization
+	fqdn("fq_spf_mailer", "_spf.mailer.example")
+	link("fq_spf_pub", "fq_spf_mailer", "spf_authorizes")
+
+	return g
+}
+
+func TestFindRelatedDomainsSignals(t *testing.T) {
+	g := relatedDomainsGraph()
+
+	r, err := FindRelatedDomains(context.Background(), g, nil, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]HorizontalDomain{}
+	for _, d := range r.Domains {
+		got[d.Domain] = d
+	}
+	for _, want := range []string{"acme.com", "acme.net", "acme.io", "acme-labs.org", "acme.org",
+		"acme-mail.org", "acme-dns.net", "dmarc-pub.example", "spf-pub.example"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("missing related domain %q; got %+v", want, r.Domains)
+		}
+	}
+	// acme.org comes only from the official-website signal.
+	if d := got["acme.org"]; d.Confidence != relatedWebsiteConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme.org should come from the official-website signal: %+v", d)
+	}
+	// acme.io comes only from the certificate signal.
+	if d := got["acme.io"]; len(d.Witness) == 0 || d.Confidence != relatedCertConfidence {
+		t.Errorf("acme.io should carry the cert signal: %+v", d)
+	}
+	// acme-labs.org comes only from the shared-name-server signal.
+	if d := got["acme-labs.org"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme-labs.org should come from the name-server signal: %+v", d)
+	}
+	// acme-mail.org comes only from the shared mail-exchanger (MX) signal.
+	if d := got["acme-mail.org"]; d.Confidence != relatedMXConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme-mail.org should come from the shared-MX signal: %+v", d)
+	}
+	// acme-dns.net comes only from the shared-name-server signal, via its DNS record.
+	if d := got["acme-dns.net"]; d.Confidence != relatedNSConfidence || len(d.Signals) != 1 {
+		t.Errorf("acme-dns.net should come from the DNS name-server signal: %+v", d)
+	}
+	// dmarc-pub.example points its DMARC reporting at an org domain (strong).
+	if d := got["dmarc-pub.example"]; d.Confidence != relatedDMARCConfidence || len(d.Signals) != 1 {
+		t.Errorf("dmarc-pub.example should come from the DMARC-reporting signal: %+v", d)
+	}
+	// spf-pub.example authorizes an org domain in its SPF record (supporting).
+	if d := got["spf-pub.example"]; d.Confidence != relatedSPFConfidence || len(d.Signals) != 1 {
+		t.Errorf("spf-pub.example should come from the SPF-authorization signal: %+v", d)
+	}
+	// A domain sharing only a known provider's mail exchanger or name server is
+	// never surfaced: the provider guard skips the host whatever the coverage.
+	if _, ok := got["stranger-mail.com"]; ok {
+		t.Error("a domain sharing a known mail provider (Google Workspace) must not be correlated on")
+	}
+	if _, ok := got["stranger-dns.com"]; ok {
+		t.Error("a domain sharing a known managed-DNS provider (Cloudflare) must not be correlated on")
+	}
+	// acme.com is found by all three signals, and corroboration ranks it above
+	// any single signal (noisy-OR of the catalog weights).
+	if d := got["acme.com"]; len(d.Signals) != 3 || len(d.SignalIDs) != 3 {
+		t.Errorf("acme.com should have registrant, cert and name-server signals: %+v", d)
+	}
+	if d := got["acme.com"]; d.Confidence <= relatedCertConfidence {
+		t.Errorf("acme.com confidence %d should exceed any single signal", d.Confidence)
+	}
+}
+
+func TestHorizontalExpansionPartition(t *testing.T) {
+	g := relatedDomainsGraph()
+
+	r, err := FindRelatedDomains(context.Background(), g, nil, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expand, review := HorizontalExpansion(r)
+	in := func(ds []HorizontalDomain, name string) bool {
+		for _, d := range ds {
+			if d.Domain == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Every domain with a strong signal (registrant, cert, official website or
+	// DMARC reporting to an org domain) is in the expand set.
+	for _, name := range []string{"acme.com", "acme.net", "acme.io", "acme.org", "dmarc-pub.example"} {
+		if !in(expand, name) {
+			t.Errorf("%s has a strong signal and should be in the expand set", name)
+		}
+	}
+	// spf-pub.example is tied only by SPF authorization (supporting), so it needs
+	// review rather than auto-expanding.
+	if !in(review, "spf-pub.example") {
+		t.Errorf("spf-pub.example (SPF only) should need review, got expand=%v review=%v", expand, review)
+	}
+	if in(expand, "spf-pub.example") {
+		t.Error("a lone SPF-authorization match must not auto-expand scope")
+	}
+	// acme-labs.org is tied only by a shared name server (supporting), so it
+	// needs review rather than auto-expanding.
+	if !in(review, "acme-labs.org") {
+		t.Errorf("acme-labs.org (name server only) should need review, got expand=%v review=%v", expand, review)
+	}
+	if in(expand, "acme-labs.org") {
+		t.Error("a lone shared-name-server match must not auto-expand scope")
+	}
+}
+
+func TestFindRelatedDomainsSkipsPrivacyProxy(t *testing.T) {
+	g := relatedDomainsGraph()
+
+	r, err := FindRelatedDomains(context.Background(), g, nil, "proxy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Domains) != 0 {
+		t.Errorf("a privacy-proxy organization must not be correlated on, got %+v", r.Domains)
+	}
+}
+
+// fingerprintRelatedGraph models an organization (acme) that owns www.acme.com,
+// reached org <- contact <- domain record <- apex FQDN, whose web service
+// carries a distinctive analytics identifier and a JARM. An unrelated apex
+// twin.org shares the analytics identifier; jarm-twin.org shares only the JARM.
+func fingerprintRelatedGraph() graphtest.FakeGraph {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}}
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	link := func(from, to, label, rt string) {
+		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to, Label: label, Type: rt})
+	}
+	svc := func(id string) {
+		add(id, "Service", id, map[string]any{"unique_id": id, "service_type": "web-service"})
+	}
+
+	add("acme", "Organization", "Acme Corporation:1", map[string]any{"name": "Acme Corporation"})
+	add("cr1", "ContactRecord", "cr1", map[string]any{})
+	link("cr1", "acme", "organization", "SimpleRelation")
+	add("dr1", "DomainRecord", "acme.com", map[string]any{"domain": "acme.com"})
+	link("dr1", "cr1", "registrant_contact", "SimpleRelation")
+	add("fq_acme", "FQDN", "www.acme.com", map[string]any{"name": "www.acme.com"})
+	link("fq_acme", "dr1", "registration", "SimpleRelation")
+
+	svc("svc_acme")
+	link("fq_acme", "svc_acme", "port", "PortRelation")
+	add("id_ga", "Identifier", "analytics_id:UA-ACME-1", map[string]any{"id_type": "analytics_id", "id": "UA-ACME-1"})
+	link("svc_acme", "id_ga", "fingerprint", "SimpleRelation")
+	add("id_jarm", "Identifier", "JARM:2ad2ad", map[string]any{"id_type": "JARM", "id": "2ad2ad"})
+	link("svc_acme", "id_jarm", "fingerprint", "SimpleRelation")
+
+	// twin.org shares the analytics identifier (a strong horizontal signal).
+	svc("svc_twin")
+	add("fq_twin", "FQDN", "www.twin.org", map[string]any{"name": "www.twin.org"})
+	link("fq_twin", "svc_twin", "port", "PortRelation")
+	link("svc_twin", "id_ga", "fingerprint", "SimpleRelation")
+
+	// jarm-twin.org shares only the JARM, which is not horizontal evidence.
+	svc("svc_jarm_twin")
+	add("fq_jarm_twin", "FQDN", "www.jarm-twin.org", map[string]any{"name": "www.jarm-twin.org"})
+	link("fq_jarm_twin", "svc_jarm_twin", "port", "PortRelation")
+	link("svc_jarm_twin", "id_jarm", "fingerprint", "SimpleRelation")
+
+	return g
+}
+
+func TestFindRelatedDomainsFingerprint(t *testing.T) {
+	g := fingerprintRelatedGraph()
+	schema := graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog}
+
+	r, err := FindRelatedDomains(context.Background(), g, schema, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]HorizontalDomain{}
+	for _, d := range r.Domains {
+		got[d.Domain] = d
+	}
+
+	// twin.org shares Acme's analytics identifier: a strong signal.
+	d, ok := got["twin.org"]
+	if !ok {
+		t.Fatalf("twin.org should be tied by the shared analytics id; got %+v", r.Domains)
+	}
+	hasSig := false
+	for _, id := range d.SignalIDs {
+		if id == SigSharedAnalyticsID {
+			hasSig = true
+		}
+	}
+	if !hasSig || d.Confidence != HorizontalConfidence(SigSharedAnalyticsID) {
+		t.Errorf("twin.org should carry only the shared-analytics-id signal: %+v", d)
+	}
+
+	// A strong signal auto-expands scope.
+	expand, _ := HorizontalExpansion(r)
+	inExpand := false
+	for _, e := range expand {
+		if e.Domain == "twin.org" {
+			inExpand = true
+		}
+	}
+	if !inExpand {
+		t.Errorf("a shared analytics id is strong and should auto-expand; expand=%+v", expand)
+	}
+
+	// A shared JARM is a TLS-stack fingerprint, not horizontal evidence.
+	if _, ok := got["jarm-twin.org"]; ok {
+		t.Errorf("a shared JARM must not tie a related domain: %+v", got["jarm-twin.org"])
+	}
+}
+
+// A domain delegated to exactly the same full Route 53 delegation set as one
+// of the organization's own domains is related on the strong delegation-set
+// signal; one sharing only part of the set is not, though each server alone
+// serves both.
+func TestRelatedDomainsDelegationSet(t *testing.T) {
+	g := relatedDomainsGraph()
+	add := func(id, typ, key string, content map[string]any) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: content}
+	}
+	link := func(from, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: "ns" + from + to, FromID: from, ToID: to, Label: "name_server",
+			Type: "SimpleRelation"})
+	}
+	servers := []string{"ns-12.awsdns-01.com", "ns-1500.awsdns-58.org", "ns-700.awsdns-23.net",
+		"ns-1999.awsdns-12.co.uk"}
+	add("dr5", "DomainRecord", "acme-cloud.com", map[string]any{"domain": "acme-cloud.com"})
+	add("dr6", "DomainRecord", "partial-set.com", map[string]any{"domain": "partial-set.com"})
+	for i, ns := range servers {
+		add("r53-"+ns, "FQDN", ns, map[string]any{"name": ns})
+		link("dr2", "r53-"+ns)
+		link("dr5", "r53-"+ns)
+		if i < 3 {
+			link("dr6", "r53-"+ns)
+		}
+	}
+
+	r, err := FindRelatedDomains(context.Background(), g, nil, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]HorizontalDomain{}
+	for _, d := range r.Domains {
+		got[d.Domain] = d
+	}
+	d, ok := got["acme-cloud.com"]
+	if !ok || d.Confidence != HorizontalConfidence(SigDNSDelegationSet) || len(d.SignalIDs) != 1 ||
+		d.SignalIDs[0] != SigDNSDelegationSet {
+		t.Errorf("acme-cloud.com %+v: want the delegation-set signal alone", d)
+	}
+	if _, ok := got["partial-set.com"]; ok {
+		t.Error("a domain sharing only part of the delegation set was related")
+	}
+}
+
+// A domain a web service on one of the organization's hosts lets call or embed
+// it (CORS, frame-ancestors) is related on the supporting allowed-origin signal.
+func TestRelatedDomainsAllowedOrigin(t *testing.T) {
+	g := relatedDomainsGraph()
+	add := func(id, typ, key string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: typ, Key: key, Content: map[string]any{"name": key}}
+	}
+	link := func(from, to, label string) {
+		g.Links = append(g.Links, graph.Relation{ID: label + from + to, FromID: from, ToID: to, Label: label,
+			Type: "SimpleRelation"})
+	}
+	add("fq_www_acme_net", "FQDN", "www.acme.net")
+	link("fq_acme_net", "fq_www_acme_net", "node")
+	add("svc_www", "Service", "svc_www")
+	link("fq_www_acme_net", "svc_www", "port")
+	add("fq_partner_app", "FQDN", "app.acme-partner.com")
+	link("svc_www", "fq_partner_app", "allowed_origin")
+
+	r, err := FindRelatedDomains(context.Background(), g, nil, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range r.Domains {
+		if d.Domain == "acme-partner.com" {
+			if len(d.SignalIDs) != 1 || d.SignalIDs[0] != SigAllowedOrigin ||
+				d.Confidence != HorizontalConfidence(SigAllowedOrigin) {
+				t.Errorf("acme-partner.com %+v: want the allowed-origin signal alone", d)
+			}
+			if _, strong := HorizontalScore(d.SignalIDs, nil); strong {
+				t.Error("an allowed origin alone would expand scope")
+			}
+			return
+		}
+	}
+	t.Errorf("the allowed origin is not related: %+v", r.Domains)
+}

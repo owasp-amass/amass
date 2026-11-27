@@ -1,0 +1,32 @@
+# Expansion policy: third-party mapping
+#
+# Map who the organization depends on, without investigating them: every
+# vendor, provider and registrar the run meets is identified (who it is,
+# which network an address belongs to and who announces it), while
+# collection stays on the organization's own footprint.
+#
+# To use it, merge these transformations into your config.yaml: they
+# replace entries of yours with the same key, default included.
+
+transformations:
+  default:
+    reach: footprint
+  # Identify every organization, and the network and registration of every
+  # address, whoever runs it.
+  Organization->GLEIF:
+    reach: any
+  Organization->Wikidata:
+    reach: any
+  IPAddress->Team-Cymru:
+    reach: any
+  Netblock->RDAP:
+    reach: any
+  AutonomousSystem->RDAP:
+    reach: any
+  IPNetRecord->RDAP:
+    reach: any
+  AutnumRecord->RDAP:
+    reach: any
+  FQDN->DNS:
+    reach: connected
+    hops: 1

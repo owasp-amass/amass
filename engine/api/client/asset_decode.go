@@ -7,7 +7,9 @@ package client
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 
 	oam "github.com/owasp-amass/open-asset-model"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
@@ -25,222 +27,93 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-func DecodeAssetsForScopeEndpoint(atype oam.AssetType, data io.ReadCloser) ([]oam.Asset, error) {
-	var results []oam.Asset
-
+// NewAsset returns a new, empty asset of the type, ready to be decoded into,
+// or ok=false for a type the Open Asset Model does not define.
+func NewAsset(atype oam.AssetType) (oam.Asset, bool) {
 	switch atype {
 	case oam.Account:
-		var scope struct {
-			Data []oamacct.Account `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamacct.Account{}, true
 	case oam.AutnumRecord:
-		var scope struct {
-			Data []oamreg.AutnumRecord `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamreg.AutnumRecord{}, true
 	case oam.AutonomousSystem:
-		var scope struct {
-			Data []oamnet.AutonomousSystem `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamnet.AutonomousSystem{}, true
 	case oam.ContactRecord:
-		var scope struct {
-			Data []oamcon.ContactRecord `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamcon.ContactRecord{}, true
 	case oam.DomainRecord:
-		var scope struct {
-			Data []oamreg.DomainRecord `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamreg.DomainRecord{}, true
 	case oam.File:
-		var scope struct {
-			Data []oamfile.File `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamfile.File{}, true
 	case oam.FQDN:
-		var scope struct {
-			Data []oamdns.FQDN `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamdns.FQDN{}, true
 	case oam.FundsTransfer:
-		var scope struct {
-			Data []oamfin.FundsTransfer `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamfin.FundsTransfer{}, true
+	case oam.GeoLocation:
+		return &oamcon.GeoLocation{}, true
 	case oam.Identifier:
-		var scope struct {
-			Data []oamgen.Identifier `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamgen.Identifier{}, true
 	case oam.IPAddress:
-		var scope struct {
-			Data []oamnet.IPAddress `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamnet.IPAddress{}, true
 	case oam.IPNetRecord:
-		var scope struct {
-			Data []oamreg.IPNetRecord `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
-	case oam.Location:
-		var scope struct {
-			Data []oamcon.Location `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamreg.IPNetRecord{}, true
 	case oam.Netblock:
-		var scope struct {
-			Data []oamnet.Netblock `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamnet.Netblock{}, true
 	case oam.Organization:
-		var scope struct {
-			Data []oamorg.Organization `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
-	case oam.Phone:
-		var scope struct {
-			Data []oamcon.Phone `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamorg.Organization{}, true
 	case oam.Person:
-		var scope struct {
-			Data []oampeop.Person `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oampeop.Person{}, true
+	case oam.Phone:
+		return &oamcon.Phone{}, true
 	case oam.Product:
-		var scope struct {
-			Data []oamplat.Product `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamplat.Product{}, true
 	case oam.ProductRelease:
-		var scope struct {
-			Data []oamplat.ProductRelease `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamplat.ProductRelease{}, true
 	case oam.Service:
-		var scope struct {
-			Data []oamplat.Service `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamplat.Service{}, true
+	case oam.StorageBucket:
+		return &oamplat.StorageBucket{}, true
+	case oam.StreetAddress:
+		return &oamcon.StreetAddress{}, true
 	case oam.TLSCertificate:
-		var scope struct {
-			Data []oamcert.TLSCertificate `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
-		}
+		return &oamcert.TLSCertificate{}, true
 	case oam.URL:
-		var scope struct {
-			Data []oamurl.URL `json:"data"`
-		}
-		if err := json.NewDecoder(data).Decode(&scope); err != nil {
-			return nil, err
-		}
-		for _, a := range scope.Data {
-			results = append(results, &a)
+		return &oamurl.URL{}, true
+	}
+	return nil, false
+}
+
+// ParseAsset decodes one asset of the type named by atype, compared without
+// regard to case, from its JSON.
+func ParseAsset(atype string, raw json.RawMessage) (oam.Asset, error) {
+	for _, t := range oam.AssetList {
+		if strings.EqualFold(atype, string(t)) {
+			a, _ := NewAsset(t)
+			if err := json.Unmarshal(raw, a); err != nil {
+				return nil, err
+			}
+			return a, nil
 		}
 	}
+	return nil, fmt.Errorf("unknown asset type: %s", atype)
+}
 
+// DecodeAssetsForScopeEndpoint decodes the assets of one type that the scope
+// endpoint returns, {"data": [...]}.
+func DecodeAssetsForScopeEndpoint(atype oam.AssetType, data io.ReadCloser) ([]oam.Asset, error) {
+	var scope struct {
+		Data []json.RawMessage `json:"data"`
+	}
+	if err := json.NewDecoder(data).Decode(&scope); err != nil {
+		return nil, err
+	}
+
+	var results []oam.Asset
+	for _, raw := range scope.Data {
+		a, err := ParseAsset(string(atype), raw)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, a)
+	}
 	if len(results) == 0 {
 		return nil, errors.New("zero decoded assets")
 	}

@@ -1,0 +1,44 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Public bug-bounty and vulnerability disclosure platforms whose program scopes Amass reads. A program's in-scope list is the organization declaring assets it is responsible for, so once a program is tied to an organization by first-party evidence the listed assets are strong, review-only ownership evidence (signals.json bug-bounty-scope, for both its uses). Each platform has a key (the prefix of the program Account's unique_id, <key>:<handle>), a title, the keyless feed that publishes every public program with its scope (feed, a JSON array of programs), the fields of a program record that name its handle in priority order (handle_fields; when company_field is set the handle is <company>/<handle>), the template of a program page when the record gives none (page, placeholder {handle}), the hosts program pages live on (hosts, which a security.txt link must point to for the link to tie a program to an organization), the DNS TXT record prefix the platform has customers publish to verify a domain (txt_prefix, optional; such a record on a domain a program lists ties the program to the domain's owner), and documentation of the feed in source. The feeds are a community mirror updated many times a day; Amass downloads each at most once a day and keeps it on disk.",
+  "platforms": [
+    {
+      "key": "hackerone",
+      "title": "HackerOne",
+      "feed": "https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/HEAD/data/hackerone_data.json",
+      "handle_fields": ["handle"],
+      "page": "https://hackerone.com/{handle}",
+      "hosts": ["hackerone.com"],
+      "source": "https://github.com/arkadiyt/bounty-targets-data"
+    },
+    {
+      "key": "bugcrowd",
+      "title": "Bugcrowd",
+      "feed": "https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/HEAD/data/bugcrowd_data.json",
+      "handle_fields": ["handle", "code"],
+      "page": "https://bugcrowd.com/{handle}",
+      "hosts": ["bugcrowd.com"],
+      "txt_prefix": "bugcrowd-verification=",
+      "source": "https://github.com/arkadiyt/bounty-targets-data"
+    },
+    {
+      "key": "intigriti",
+      "title": "Intigriti",
+      "feed": "https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/HEAD/data/intigriti_data.json",
+      "handle_fields": ["handle"],
+      "company_field": "company_handle",
+      "page": "https://app.intigriti.com/programs/{handle}/detail",
+      "hosts": ["intigriti.com"],
+      "source": "https://github.com/arkadiyt/bounty-targets-data"
+    },
+    {
+      "key": "yeswehack",
+      "title": "YesWeHack",
+      "feed": "https://raw.githubusercontent.com/arkadiyt/bounty-targets-data/HEAD/data/yeswehack_data.json",
+      "handle_fields": ["slug", "handle", "id"],
+      "page": "https://yeswehack.com/programs/{handle}",
+      "hosts": ["yeswehack.com"],
+      "source": "https://github.com/arkadiyt/bounty-targets-data"
+    }
+  ]
+}

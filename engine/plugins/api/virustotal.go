@@ -116,7 +116,7 @@ func (vt *virusTotal) query(e *et.Event, name string, keys []string) []*dbt.Enti
 	var names []string
 
 	for _, key := range keys {
-		_ = vt.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), vt.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

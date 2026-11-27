@@ -1,0 +1,38 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass compares street addresses written by different sources. Two addresses match when their street number, street name and the first three characters of their postal code agree after these spellings are made the same: '5801 Smith Avenue, Baltimore, MD 21209' matches '5801 Smith Ave, Davis Bldg., Suite 3110B, Baltimore, MD 21209-1234'. Room, suite and building details are ignored. An address without a street number and a recognized street type, such as a PO box, never matches. Add spellings here, not in Go code.",
+  "street_types": {
+    "avenue": "ave", "av": "ave", "ave": "ave",
+    "street": "st", "st": "st", "str": "st",
+    "road": "rd", "rd": "rd",
+    "boulevard": "blvd", "blvd": "blvd",
+    "drive": "dr", "dr": "dr",
+    "lane": "ln", "ln": "ln",
+    "place": "pl", "pl": "pl",
+    "court": "ct", "ct": "ct",
+    "way": "way",
+    "parkway": "pkwy", "pkwy": "pkwy",
+    "highway": "hwy", "hwy": "hwy",
+    "circle": "cir", "cir": "cir",
+    "square": "sq", "sq": "sq",
+    "terrace": "ter", "ter": "ter",
+    "plaza": "plz", "plz": "plz",
+    "mall": "mall",
+    "pike": "pike",
+    "turnpike": "tpke", "tpke": "tpke",
+    "row": "row",
+    "alley": "aly", "aly": "aly",
+    "expressway": "expy", "expy": "expy"
+  },
+  "directions": {
+    "north": "n", "n": "n",
+    "south": "s", "s": "s",
+    "east": "e", "e": "e",
+    "west": "w", "w": "w",
+    "northeast": "ne", "ne": "ne",
+    "northwest": "nw", "nw": "nw",
+    "southeast": "se", "se": "se",
+    "southwest": "sw", "sw": "sw"
+  },
+  "max_street_words": 5
+}

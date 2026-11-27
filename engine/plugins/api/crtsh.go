@@ -36,7 +36,7 @@ func NewCrtsh() et.Plugin {
 		name:   "crt.sh",
 		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
-			Name:       "HackerTarget",
+			Name:       "crt.sh",
 			Confidence: 100,
 		},
 	}
@@ -97,7 +97,7 @@ func (c *crtsh) check(e *et.Event) error {
 }
 
 func (c *crtsh) query(e *et.Event, name string) []*dbt.Entity {
-	_ = c.rlimit.Wait(e.Session.Ctx())
+	_ = support.WaitLimit(e.Session.Ctx(), c.rlimit)
 	e.Session.NetSem().Acquire()
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

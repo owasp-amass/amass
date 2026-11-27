@@ -1,0 +1,157 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package ai
+
+import (
+	"fmt"
+	"path/filepath"
+	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/ai/classify"
+	"github.com/owasp-amass/amass/v5/internal/review"
+)
+
+func TestOwnershipFeaturesFromSignals(t *testing.T) {
+	p := review.OwnershipProposals(gapReport(t))[0]
+	f := OwnershipFeatures(p)
+	want := map[string]float64{"identity": 1, "identity:Phone": 1, "identity:StreetAddress": 1, "kinds": 1.0 / 3,
+		"gains": 0.2}
+	for k, v := range want {
+		if f[k] != v {
+			t.Errorf("feature %s = %v, want %v (all: %v)", k, f[k], v, f)
+		}
+	}
+}
+
+func TestOwnershipLabelsComeFromPeopleOnly(t *testing.T) {
+	cases := []struct {
+		status, reviewer, label string
+		ok                      bool
+	}{
+		{review.ProposalApplied, "jeff", "potential_relation", true},
+		{review.ProposalApplied, review.AutomaticReviewer, "", false},
+		{review.ProposalRejected, "jeff", "unrelated", true},
+		{review.ProposalRetracted, "jeff", "unrelated", true},
+		{review.ProposalPending, "", "", false},
+	}
+	for _, c := range cases {
+		e := review.OwnershipEntry{Status: c.status}
+		if c.reviewer != "" {
+			e.Outcome = &review.OwnershipOutcome{Status: c.status, Reviewer: c.reviewer}
+		}
+
+		label, ok := OwnershipLabel(e)
+		if label != c.label || ok != c.ok {
+			t.Errorf("%s by %q = %q, %v", c.status, c.reviewer, label, ok)
+		}
+	}
+}
+
+// reviewedJournal returns entries a reviewer decided: shared registrant
+// details approved, hosting or co-listing alone rejected.
+func reviewedJournal(n int) []review.OwnershipEntry {
+	var out []review.OwnershipEntry
+	for i := 0; i < n; i++ {
+		p := review.OwnershipProposal{ID: fmt.Sprintf("own-%04d", i)}
+		status := review.ProposalApplied
+		switch i % 3 {
+		case 0:
+			p.Signals = []string{"identity via ContactRecord phone Phone",
+				"identity via ContactRecord street_address StreetAddress"}
+		case 1:
+			p.Signals = []string{"identity via ContactRecord phone Phone", "hosting via FQDN dns_record IPAddress"}
+		default:
+			p.Signals = []string{"hosting via FQDN dns_record IPAddress", "colisting via TLSCertificate san_dns_name"}
+			status = review.ProposalRejected
+		}
+
+		out = append(out, review.OwnershipEntry{Proposal: p, Status: status,
+			Outcome: &review.OwnershipOutcome{Status: status, Reviewer: "jeff"}})
+	}
+
+	return out
+}
+
+func trainedOwnershipModel(t *testing.T) *classify.LinearModel {
+	t.Helper()
+
+	rows, spec := OwnershipTrainingSet(reviewedJournal(90))
+	m, metrics, err := TrainOwnershipModel(rows, spec, "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.HoldoutAccuracy < 0.95 {
+		t.Fatalf("holdout accuracy %.2f", metrics.HoldoutAccuracy)
+	}
+
+	return m
+}
+
+func TestOwnershipModelLearnsFromReviews(t *testing.T) {
+	m := trainedOwnershipModel(t)
+	strong := review.OwnershipProposal{Signals: []string{"identity via ContactRecord phone Phone",
+		"identity via ContactRecord street_address StreetAddress"}}
+	weak := review.OwnershipProposal{Signals: []string{"hosting via FQDN dns_record IPAddress"}}
+
+	ps, err := ownershipProbability(m, strong)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pw, err := ownershipProbability(m, weak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("strong %.3f, weak %.3f, threshold %.3f", ps, pw, m.ReviewThreshold)
+	if m.ReviewThreshold < minOwnershipThreshold || ps < m.ReviewThreshold || pw >= m.ReviewThreshold {
+		t.Errorf("strong %.3f, weak %.3f against threshold %.3f", ps, pw, m.ReviewThreshold)
+	}
+}
+
+func TestAttributeOwnershipDecidesWithTheModel(t *testing.T) {
+	m := trainedOwnershipModel(t)
+	j := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	w := &recordingWriter{}
+	res := attributeWith(t, w, j, review.AttributionPolicy{Mode: "auto", Model: OwnershipModel{m}})
+	if len(res.Applied) != 1 || res.Applied[0].Proposal.ModelID != "test-model" {
+		t.Fatalf("applied = %+v", res.Applied)
+	}
+	if c := review.ProposalConfidence(res.Applied[0].Proposal); c != int(res.Applied[0].Proposal.ModelScore*100+0.5) {
+		t.Errorf("confidence %d does not come from the model score %.3f", c, res.Applied[0].Proposal.ModelScore)
+	}
+
+	// A model that has learned to distrust everything writes nothing.
+	m.ReviewThreshold = 1
+	j2 := &review.Journal{Path: filepath.Join(t.TempDir(), "review.jsonl")}
+	if res := attributeWith(t, &recordingWriter{}, j2, review.AttributionPolicy{Mode: "auto", Model: OwnershipModel{m}}); len(res.Applied) != 0 ||
+		len(res.Queued) != 1 {
+		t.Errorf("with an unreachable threshold: applied %d, queued %d", len(res.Applied), len(res.Queued))
+	}
+}
+
+func TestOwnershipModelRefusesIndistinctReviews(t *testing.T) {
+	entries := reviewedJournal(90)
+	for i := range entries {
+		// The same evidence approved and rejected: nothing to learn.
+		entries[i].Proposal.Signals = []string{"identity via ContactRecord phone Phone"}
+	}
+
+	rows, spec := OwnershipTrainingSet(entries)
+	if _, _, err := TrainOwnershipModel(rows, spec, "confused"); err == nil {
+		t.Error("a model was trained from contradictory reviews")
+	}
+}
+
+// Department (org_unit) decisions are made on other evidence than
+// ownership signals, so they never become training rows.
+func TestOwnershipTrainingSetSkipsDepartments(t *testing.T) {
+	entries := reviewedJournal(3)
+	for i := range entries {
+		entries[i].Proposal.Kind = review.ProposalKindOrgUnit
+	}
+	if rows, _ := OwnershipTrainingSet(entries); len(rows) != 0 {
+		t.Errorf("department decisions became %d training row(s)", len(rows))
+	}
+}

@@ -1,0 +1,12 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass reads advertising seller accounts. A publisher lists, in /ads.txt on its domain (and /app-ads.txt for its apps), every ad system account authorized to sell its inventory, one per line: the ad system's domain, the account ID, and DIRECT when the publisher controls the account itself or RESELLER when another company sells on its behalf (IAB Tech Lab ads.txt specification, source). Only DIRECT accounts are kept: they are the publisher's own, paid out to it, so the same DIRECT account on another domain ties that domain to the same publisher, as a shared analytics property does. Each ad system publishes /sellers.json on its domain naming each account's seller: its name, its domain and whether it is a PUBLISHER, an INTERMEDIARY or BOTH (IAB Tech Lab sellers.json specification, sellers_source). An INTERMEDIARY account belongs to a sales house, not the publisher, so it gives no horizontal evidence. sellers.json files are downloaded at most once per sellers_ttl_hours and kept on disk; a file larger than max_sellers_bytes (Google's, for one) is skipped, and its accounts get no seller details. A file's OWNERDOMAIN variable (ads.txt 1.1), the business domain of the site's owner, and its contact variables are stored as the file's ContactRecord (URL --contact--> ContactRecord, with fqdn, id, url and phone relations). At most max_accounts DIRECT accounts are read from one file of at most max_file_bytes.",
+  "files": ["/ads.txt", "/app-ads.txt"],
+  "sellers_path": "/sellers.json",
+  "source": "https://iabtechlab.com/ads-txt/",
+  "sellers_source": "https://iabtechlab.com/sellers-json/",
+  "max_file_bytes": 1048576,
+  "max_accounts": 500,
+  "max_sellers_bytes": 26214400,
+  "sellers_ttl_hours": 24
+}

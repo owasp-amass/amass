@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/caffix/stringset"
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
 	ini "gopkg.in/ini.v1"
 )
@@ -153,7 +153,8 @@ func (c *Config) LoadSettings(path string) error {
 func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 	sec, err := cfg.GetSection("data_sources")
 	if err != nil {
-		return err
+		// a configuration without data sources is still converted
+		return nil
 	}
 
 	if sec.HasKey("minimum_ttl") {
@@ -220,7 +221,7 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 		return nil
 	}
 
-	c.Resolvers = stringset.Deduplicate(sec.Key("resolver").ValueWithShadows())
+	c.Resolvers = unique(sec.Key("resolver").ValueWithShadows())
 	if len(c.Resolvers) == 0 {
 		return errors.New("no resolver keys were found in the resolvers section")
 	}
@@ -229,6 +230,18 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 }
 
 func (c *Config) loadScopeSettings(cfg *ini.File) error {
+	// Load up all the DNS domain names
+	if domains, err := cfg.GetSection("scope.domains"); err == nil {
+		for _, domain := range domains.Key("domain").ValueWithShadows() {
+			c.AddDomain(domain)
+		}
+	}
+
+	// Load up all the blacklisted subdomain names
+	if blacklisted, err := cfg.GetSection("scope.blacklisted"); err == nil {
+		c.Blacklist = unique(blacklisted.Key("subdomain").ValueWithShadows())
+	}
+
 	scope, err := cfg.GetSection("scope")
 	if err != nil {
 		return nil
@@ -258,18 +271,6 @@ func (c *Config) loadScopeSettings(cfg *ini.File) error {
 		for _, port := range scope.Key("port").ValueWithShadows() {
 			c.Ports = uniqueIntAppend(c.Ports, port)
 		}
-	}
-
-	// Load up all the DNS domain names
-	if domains, err := cfg.GetSection("scope.domains"); err == nil {
-		for _, domain := range domains.Key("domain").ValueWithShadows() {
-			c.AddDomain(domain)
-		}
-	}
-
-	// Load up all the blacklisted subdomain names
-	if blacklisted, err := cfg.GetSection("scope.blacklisted"); err == nil {
-		c.Blacklist = stringset.Deduplicate(blacklisted.Key("subdomain").ValueWithShadows())
 	}
 
 	return nil
@@ -369,11 +370,17 @@ func (c *Config) AddDomain(domain string) {
 	// Create the regular expression for this domain
 	c.regexps[d] = dns.SubdomainRegex(d)
 	if c.regexps[d] != nil {
-		// Add the domain string to the list
-		c.domains = append(c.domains, d)
+		graph.AddUnique(&c.domains, d)
 	}
+}
 
-	c.domains = stringset.Deduplicate(c.domains)
+// unique returns the values once each, in the order first given.
+func unique(values []string) []string {
+	var out []string
+	for _, v := range values {
+		graph.AddUnique(&out, v)
+	}
+	return out
 }
 
 func uniqueIntAppend(s []int, e string) []int {

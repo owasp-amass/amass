@@ -113,18 +113,7 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time) (*dbt.En
 		}
 		if tmp, ok := entity.Asset.(*oamnet.Netblock); ok && tmp.CIDR.Contains(addr.Address) {
 			if s := tmp.CIDR.Masked().Bits(); s > size {
-				var found bool
-
-				if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, r.plugin.source.Name); err == nil && len(tags) > 0 {
-					for _, tag := range tags {
-						if _, ok := tag.Property.(*general.SourceProperty); ok {
-							found = true
-							break
-						}
-					}
-				}
-
-				if found {
+				if support.Sourced(ctx, e.Session, edge, since, r.plugin.source) {
 					size = s
 					nb = entity
 				}
@@ -185,48 +174,22 @@ func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, asn int
 		return nil, nil
 	}
 
-	_, _ = e.Session.DB().CreateEntityProperty(ctx, nb, &general.SourceProperty{
-		Source:     r.plugin.source.Name,
-		Confidence: r.plugin.source.Confidence,
-	})
+	support.AddSource(ctx, e.Session, nb, r.plugin.source)
 
-	edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "contains"},
-		FromEntity: nb,
-		ToEntity:   ip,
-	})
-	if err != nil || edge == nil {
+	if _, err := support.Relate(ctx, e.Session, nb, &general.SimpleRelation{Name: "contains"}, ip, r.plugin.source); err != nil {
 		return nil, nil
 	}
-
-	_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-		Source:     r.plugin.source.Name,
-		Confidence: r.plugin.source.Confidence,
-	})
 
 	as, err := e.Session.DB().CreateAsset(ctx, &oamnet.AutonomousSystem{Number: asn})
 	if err != nil || as == nil {
 		return nil, nil
 	}
 
-	_, _ = e.Session.DB().CreateEntityProperty(ctx, as, &general.SourceProperty{
-		Source:     r.plugin.source.Name,
-		Confidence: r.plugin.source.Confidence,
-	})
+	support.AddSource(ctx, e.Session, as, r.plugin.source)
 
-	edge, err = e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "announces"},
-		FromEntity: as,
-		ToEntity:   nb,
-	})
-	if err != nil || edge == nil {
+	if _, err := support.Relate(ctx, e.Session, as, &general.SimpleRelation{Name: "announces"}, nb, r.plugin.source); err != nil {
 		return nil, nil
 	}
-
-	_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-		Source:     r.plugin.source.Name,
-		Confidence: r.plugin.source.Confidence,
-	})
 
 	return nb, as
 }

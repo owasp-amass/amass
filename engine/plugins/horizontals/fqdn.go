@@ -8,7 +8,6 @@ import (
 	"errors"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
@@ -27,8 +26,8 @@ func (h *horfqdn) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	// check if scope expansion is allowed
-	if e.Session.Config().Rigid {
+	// the expansion policy may admit nothing at all
+	if !e.Session.Config().Widens() {
 		return nil
 	}
 
@@ -36,22 +35,6 @@ func (h *horfqdn) check(e *et.Event) error {
 		return nil
 	}
 
-	if assocs := h.lookup(e, e.Entity); len(assocs) > 0 {
-		for _, assoc := range assocs {
-			if assoc.ScopeChange {
-				e.Session.Log().Info(assoc.Rationale)
-			}
-		}
-	}
-	return nil
-}
-
-func (h *horfqdn) lookup(e *et.Event, asset *dbt.Entity) []*et.Association {
-	if assocs, err := e.Session.Scope().IsAssociated(&et.Association{
-		Submission:  asset,
-		ScopeChange: true,
-	}); err == nil {
-		return assocs
-	}
+	h.plugin.admitAssociated(e)
 	return nil
 }

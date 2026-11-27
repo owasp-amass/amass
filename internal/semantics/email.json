@@ -1,0 +1,86 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the email lens reads a footprint's mail records. For each registered domain it reads the mail servers (dns.json mail_rr_types), the SPF policy (a TXT record of the domain starting with spf_prefix, RFC 7208), the DMARC policy (a TXT record of the dmarc_label name below the domain starting with dmarc_prefix, RFC 7489) and the DKIM keys stored for names below the dkim_label name (RFC 6376). SPF ending in one of permissive_all lets anyone send as the domain; softfail_all only marks such mail. A DMARC policy in monitor_policies asks receivers to deliver spoofed mail anyway. A domain that receives no mail should still publish an SPF policy of none_spf and a DMARC policy of reject so that it cannot be spoofed. Records are only as complete as the enumeration: a DMARC name that was never queried reads as none stored. Add values here, not in Go code. mail_providers name who receives a domain's mail from its MX hosts: pattern is a regular expression matched, ignoring case, against the whole MX host name, and source is the provider's own documentation of the MX hosts its customers use. A host no pattern matches is named by its registrable domain. Add providers here, not in Go code, and only with such a source. policy_providers name the shared mail-policy providers whose own domains appear in many unrelated domains' SPF includes or DMARC reporting addresses; the horizontal spf-authorizes and dmarc-reports-to signals skip one so a provider's domain is not read as common ownership. pattern is a regular expression matched, ignoring case, against the referenced domain; source is the provider's own documentation. This is secondary to the per-target fanout cap, which already skips a domain referenced by many apexes; add providers here, not in Go code, and only with such a source.",
+  "spf_prefix": "v=spf1",
+  "dmarc_prefix": "v=DMARC1",
+  "dkim_prefix": "v=DKIM1",
+  "dmarc_label": "_dmarc",
+  "dkim_label": "_domainkey",
+  "permissive_all": [
+    "+all",
+    "all",
+    "?all"
+  ],
+  "softfail_all": [
+    "~all"
+  ],
+  "monitor_policies": [
+    "none"
+  ],
+  "none_spf": "v=spf1 -all",
+  "sources": {
+    "spf": "https://www.rfc-editor.org/rfc/rfc7208",
+    "dmarc": "https://www.rfc-editor.org/rfc/rfc7489",
+    "dkim": "https://www.rfc-editor.org/rfc/rfc6376",
+    "mta_sts": "https://www.rfc-editor.org/rfc/rfc8461"
+  },
+  "mail_providers": [
+    {
+      "provider": "Google Workspace",
+      "pattern": "^(smtp\\.google\\.com|(alt[0-9]+\\.)?aspmx[0-9]*\\.l\\.google\\.com)$",
+      "source": "https://knowledge.workspace.google.com/kb/how-to-update-your-mx-records-to-work-with-gmail-000005563"
+    },
+    {
+      "provider": "Microsoft 365",
+      "pattern": "^[a-z0-9-]+\\.mail\\.protection\\.outlook\\.com$",
+      "source": "https://learn.microsoft.com/en-us/microsoft-365/enterprise/external-domain-name-system-records"
+    },
+    {
+      "provider": "Proofpoint Essentials",
+      "pattern": "^mx[0-9]+\\.[a-z0-9]+\\.ppe-hosted\\.com$",
+      "source": "https://www.proofpoint.com/sites/default/files/getting_started_guide_us2.pdf"
+    },
+    {
+      "provider": "Mimecast",
+      "pattern": "^[a-z]+-smtp-inbound-[0-9]+\\.mimecast\\.com$",
+      "source": "https://mimecastsupport.zendesk.com/hc/en-us/articles/34000417366675"
+    },
+    {
+      "provider": "Barracuda Email Security Service",
+      "pattern": "^[a-z0-9]+\\.ess\\.barracudanetworks\\.com$",
+      "source": "https://campus.barracuda.com/doc/3211289"
+    },
+    {
+      "provider": "Cisco Secure Email Cloud Gateway",
+      "pattern": "^mx[0-9]+\\.[a-z0-9-]+(\\.[a-z0-9-]+)?\\.iphmx\\.com$",
+      "source": "https://docs.ces.cisco.com/docs/hostnames"
+    }
+  ],
+  "policy_providers": [
+    {
+      "provider": "Google Workspace",
+      "pattern": "(^|\\.)google\\.com$",
+      "source": "https://knowledge.workspace.google.com/kb/how-to-update-your-mx-records-to-work-with-gmail-000005563"
+    },
+    {
+      "provider": "Microsoft 365",
+      "pattern": "(^|\\.)(outlook|microsoft|microsoftonline)\\.com$",
+      "source": "https://learn.microsoft.com/en-us/microsoft-365/enterprise/external-domain-name-system-records"
+    },
+    {
+      "provider": "dmarcian",
+      "pattern": "(^|\\.)dmarcian\\.(com|eu)$",
+      "source": "https://dmarcian.com/getting-started-with-dmarcian/"
+    },
+    {
+      "provider": "Valimail",
+      "pattern": "(^|\\.)vali\\.email$",
+      "source": "https://support.valimail.com/en/support/solutions/articles/48001225072"
+    },
+    {
+      "provider": "Red Sift OnDMARC",
+      "pattern": "(^|\\.)ondmarc\\.com$",
+      "source": "https://redsift.com/guides/email-protocol-configuration-guide/learn-more-about-dmarc"
+    }
+  ]
+}

@@ -9,13 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
-	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
-	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/contact"
 	"golang.org/x/time/rate"
 )
 
@@ -27,47 +27,98 @@ func init() {
 	gleifLimit = rate.NewLimiter(limit, 1)
 }
 
-// GLEIFSearchFuzzyCompletions performs the fuzzy completion search for the given name.
-func GLEIFSearchFuzzyCompletions(ctx context.Context, name string) (*FuzzyCompletionsResponse, error) {
-	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
+// errNoResults is a search that found no LEI record, which is an answer and
+// not a failure.
+var errNoResults = errors.New("no results found")
 
-	_ = gleifLimit.Wait(ctx)
+// gleifGet fetches the GLEIF API URL within the rate limit and returns the
+// body, or an error that says why there is none: the request failed, or the
+// API answered with another status than 200 or with nothing.
+func gleifGet(ctx context.Context, client *http.Client, u string) (string, error) {
+	_ = support.WaitLimit(ctx, gleifLimit)
 	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	resp, err := amasshttp.RequestWebPage(wctx, amasshttp.DefaultClient, &amasshttp.Request{URL: u})
-	if err != nil || resp.Body == "" {
-		msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", name, err)
-		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
+	resp, err := amasshttp.RequestWebPage(wctx, client, &amasshttp.Request{URL: u})
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+	if resp.Body == "" {
+		return "", errors.New("empty answer")
+	}
+	return resp.Body, nil
+}
+
+// GLEIFSearchFuzzyCompletions performs the fuzzy completion search for the given name.
+func GLEIFSearchFuzzyCompletions(ctx context.Context, client *http.Client, name string) (*FuzzyCompletionsResponse, error) {
+	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
+
+	body, err := gleifGet(ctx, client, u)
+	if err != nil {
+		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: failed to search for %s: %w", name, err)
 	}
 
 	var result FuzzyCompletionsResponse
-	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
 		msg := fmt.Sprintf("Failed to unmarshal the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
 	} else if len(result.Data) == 0 {
-		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: no results found")
+		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %w", errNoResults)
 	}
 
 	return &result, nil
 }
 
+// GLEIFSearchByAddress finds LEI records that mention the street and city,
+// with a legal address in the country, so an address can be resolved to the
+// organizations registered there. The register filters addresses only by
+// country; the street and city go to its full-text search, which also matches
+// other fields, so the caller confirms the street, number and city itself.
+// The result is bounded to one page, and a country, street and city are all
+// required so the search is never a whole country.
+func GLEIFSearchByAddress(ctx context.Context, client *http.Client, street, city, country string) ([]*LEIRecord, error) {
+	street, city, country = strings.TrimSpace(street), strings.TrimSpace(city), strings.TrimSpace(country)
+	if street == "" || city == "" || country == "" {
+		return nil, errors.New("GLEIFSearchByAddress: a street, city and country are required")
+	}
+
+	v := url.Values{}
+	v.Set("filter[entity.legalAddress.country]", country)
+	v.Set("filter[fulltext]", street+" "+city)
+	v.Set("page[size]", "50")
+	u := "https://api.gleif.org/api/v1/lei-records?" + v.Encode()
+
+	body, err := gleifGet(ctx, client, u)
+	if err != nil {
+		return nil, fmt.Errorf("GLEIFSearchByAddress: failed to query the register: %w", err)
+	}
+
+	var result MultipleResponse
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		return nil, fmt.Errorf("GLEIFSearchByAddress: %v", err)
+	}
+
+	out := make([]*LEIRecord, 0, len(result.Data))
+	for i := range result.Data {
+		out = append(out, &result.Data[i])
+	}
+	return out, nil
+}
+
 // GLEIFGetLEIRecord retrieves the LEI record for the given identifier.
-func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
+func GLEIFGetLEIRecord(ctx context.Context, client *http.Client, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id
 
-	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	resp, err := amasshttp.RequestWebPage(wctx,
-		amasshttp.DefaultClient, &amasshttp.Request{URL: u})
-	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+	body, err := gleifGet(ctx, client, u)
+	if err != nil {
 		return nil, err
 	}
 
 	var result SingleResponse
-	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
 		return nil, err
 	} else if result.Data.Type != "lei-records" || result.Data.ID != id {
 		return nil, errors.New("failed to find the LEI record")
@@ -76,21 +127,16 @@ func GLEIFGetLEIRecord(ctx context.Context, id string) (*LEIRecord, error) {
 }
 
 // GLEIFGetDirectParentRecord retrieves the direct parent LEI record for the given identifier.
-func GLEIFGetDirectParentRecord(ctx context.Context, id string) (*LEIRecord, error) {
+func GLEIFGetDirectParentRecord(ctx context.Context, client *http.Client, id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-parent"
 
-	_ = gleifLimit.Wait(ctx)
-	wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	resp, err := amasshttp.RequestWebPage(wctx,
-		amasshttp.DefaultClient, &amasshttp.Request{URL: u})
-	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+	body, err := gleifGet(ctx, client, u)
+	if err != nil {
 		return nil, err
 	}
 
 	var result SingleResponse
-	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
 		return nil, err
 	} else if result.Data.Type != "lei-records" {
 		return nil, errors.New("failed to find the LEI record")
@@ -99,24 +145,19 @@ func GLEIFGetDirectParentRecord(ctx context.Context, id string) (*LEIRecord, err
 }
 
 // GLEIFGetDirectChildrenRecords retrieves the direct children LEI records for the given identifier.
-func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord, error) {
+func GLEIFGetDirectChildrenRecords(ctx context.Context, client *http.Client, id string) ([]*LEIRecord, error) {
 	var children []*LEIRecord
 
 	last := 1
 	link := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
-		_ = gleifLimit.Wait(ctx)
-		wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
-
-		resp, err := amasshttp.RequestWebPage(wctx,
-			amasshttp.DefaultClient, &amasshttp.Request{URL: link})
-		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+		body, err := gleifGet(ctx, client, link)
+		if err != nil {
 			return nil, err
 		}
 
 		var result MultipleResponse
-		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+		if err := json.Unmarshal([]byte(body), &result); err != nil {
 			return nil, err
 		}
 
@@ -129,59 +170,4 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 	}
 
 	return children, nil
-}
-
-// LocMatch checks if the LEI record matches the location of the organization entity.
-func LocMatch(e *et.Event, orgent *dbt.Entity, rec *LEIRecord) bool {
-	if rec == nil {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 2*time.Minute)
-	defer cancel()
-
-	legal_addr := rec.Attributes.Entity.LegalAddress
-	hq_addr := rec.Attributes.Entity.HeadquartersAddress
-	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent,
-		time.Time{}, "legal_address", "hq_address", "location"); err == nil {
-		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-				if loc, ok := a.Asset.(*contact.Location); ok {
-					for _, p := range append([]LEIAddress{legal_addr, hq_addr}, rec.Attributes.Entity.OtherAddresses...) {
-						if loc.PostalCode == p.PostalCode {
-							return true
-						}
-					}
-				}
-			}
-		}
-	}
-
-	var crs []*dbt.Entity
-	if edges, err := e.Session.DB().IncomingEdges(ctx, orgent, time.Time{}, "organization"); err == nil {
-		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*contact.ContactRecord); ok {
-					crs = append(crs, a)
-				}
-			}
-		}
-	}
-
-	for _, cr := range crs {
-		if edges, err := e.Session.DB().OutgoingEdges(ctx, cr, time.Time{}, "location"); err == nil {
-			for _, edge := range edges {
-				if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-					if loc, ok := a.Asset.(*contact.Location); ok {
-						for _, p := range append([]LEIAddress{legal_addr, hq_addr}, rec.Attributes.Entity.OtherAddresses...) {
-							if loc.PostalCode == p.PostalCode {
-								return true
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	return false
 }

@@ -1,0 +1,791 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package collect
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/owasp-amass/amass/v5/config"
+	client "github.com/owasp-amass/amass/v5/engine/api/client/v1"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	oam "github.com/owasp-amass/open-asset-model"
+	oamcontact "github.com/owasp-amass/open-asset-model/contact"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+)
+
+func TestPlansBindScopeAndMode(t *testing.T) {
+	sel := graph.AssetSelector{Type: "FQDN", Field: "name", Value: "Example.ORG."}
+	p, a := NewPlan(sel, Passive), NewPlan(sel, Active)
+	if p.Status != StatusApprovalRequired || a.Status != StatusApprovalRequired || p.ScopeValue != "example.org" {
+		t.Fatalf("plans = %+v %+v", p, a)
+	}
+	if p.ID == a.ID || p.ID != PlanID("domain", "example.org", Passive) {
+		t.Errorf("passive and active must have different IDs: %s %s", p.ID, a.ID)
+	}
+	if len(a.Methods) < 2 || a.Effects == "" {
+		t.Errorf("active plan must say what it does: %+v", a)
+	}
+	if bad := NewPlan(sel, "loud"); bad.Status != StatusUnsupported {
+		t.Errorf("unknown mode planned: %+v", bad)
+	}
+
+	wide := graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.0.0.0/8"}
+	if NewPlan(wide, Active).Status != StatusUnsupported || NewPlan(wide, Passive).Status != StatusApprovalRequired {
+		t.Error("active collection of a /8 must be refused, passive allowed")
+	}
+	for _, s := range []graph.AssetSelector{
+		{Type: "IPAddress", Field: "address", Value: "10.0.0.1"},
+		{Type: "Organization", Field: "name", Value: "Acme"},
+		{Type: "FQDN", Field: "name", Value: "bad..example.org"},
+	} {
+		if NewPlan(s, Passive).Status != StatusUnsupported {
+			t.Errorf("unsafe plan for %+v", s)
+		}
+	}
+}
+
+func TestNormalizePhoneToE164(t *testing.T) {
+	// A formatted number with a country code normalizes to E.164.
+	for _, in := range []string{"+1 315-228-1000", "+1 (315) 228-1000", "+13152281000"} {
+		if got := NormalizePhone(in); got != "+13152281000" {
+			t.Errorf("NormalizePhone(%q) = %q, want +13152281000", in, got)
+		}
+	}
+	// A number that cannot be parsed to E.164 is returned trimmed, unchanged,
+	// so an exact stored value can still match.
+	if got := NormalizePhone("  3152281000  "); got != "3152281000" {
+		t.Errorf("NormalizePhone of a bare national number = %q, want 3152281000", got)
+	}
+}
+
+func TestPhoneSeedScopeValueIsNormalized(t *testing.T) {
+	p := NewPlan(graph.AssetSelector{Type: "Phone", Field: "e164", Value: "+1 315-228-1000"}, Passive)
+	if p.Status != StatusApprovalRequired || p.ScopeValue != "+13152281000" {
+		t.Errorf("phone plan scope value = %q (status %s), want normalized E.164", p.ScopeValue, p.Status)
+	}
+}
+
+func TestPhoneAndStreetAddressSeedsArePassiveOnly(t *testing.T) {
+	phone := graph.AssetSelector{Type: "Phone", Field: "e164", Value: "+1 315 228 1000"}
+	addr := graph.AssetSelector{Type: "StreetAddress", Field: "address", Value: "1 Campus Road, Utica NY"}
+
+	// Passive resolves the organizations tied to the seed; the plan is
+	// approvable and keeps the phone/location scope type.
+	if p := NewPlan(phone, Passive); p.Status != StatusApprovalRequired || p.ScopeType != "phone" ||
+		p.Mode != Passive {
+		t.Errorf("phone passive plan = %+v", p)
+	}
+	if p := NewPlan(addr, Passive); p.Status != StatusApprovalRequired || p.ScopeType != "street_address" {
+		t.Errorf("address passive plan = %+v", p)
+	}
+
+	// Active is refused: a phone or address probes no hosts.
+	if NewPlan(phone, Active).Status != StatusUnsupported || NewPlan(addr, Active).Status != StatusUnsupported {
+		t.Error("a phone or address was accepted as an active target")
+	}
+
+	// A number without enough digits is not a phone.
+	if NewPlan(graph.AssetSelector{Type: "Phone", Field: "e164", Value: "12"}, Passive).Status != StatusUnsupported {
+		t.Error("a too-short number was accepted as a phone seed")
+	}
+
+	// Configure seeds the Phone asset and records it in the scope.
+	cfg := config.NewConfig()
+	asset, err := Configure(cfg, NewPlan(phone, Passive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := asset.(oamcontact.Phone); !ok {
+		t.Errorf("seed asset = %T, want a Phone", asset)
+	}
+	if !cfg.Passive || cfg.Active || len(cfg.Scope.Phones) != 1 {
+		t.Errorf("phone config = passive %v active %v phones %v", cfg.Passive, cfg.Active, cfg.Scope.Phones)
+	}
+}
+
+func TestConfigureNarrowsScope(t *testing.T) {
+	cfg := config.NewConfig()
+	cfg.Scope.Ports = []int{22, 443, 8443}
+	cfg.ProvidedNames = []string{"other.example"}
+	plan := NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}, Active)
+	if _, err := Configure(cfg, plan); err != nil {
+		t.Fatal(err)
+	}
+	// Active mode alone must NOT turn on brute forcing or alterations.
+	if !cfg.Active || cfg.BruteForcing || cfg.Alterations || cfg.Passive || cfg.Widens() ||
+		len(cfg.ProvidedNames) != 0 || len(cfg.Scope.Domains) != 1 || len(cfg.Scope.Ports) != 3 {
+		t.Errorf("active config = %+v scope %+v", cfg, cfg.Scope)
+	}
+
+	// Brute forcing and alterations turn on only when the plan requested them.
+	cfg = config.NewConfig()
+	brute := NewPlanWith(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}, Active,
+		Options{BruteForce: true, Alterations: true})
+	if _, err := Configure(cfg, brute); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.BruteForcing || !cfg.Alterations {
+		t.Errorf("requested brute/alts not applied: %+v", cfg)
+	}
+	if !slices.Contains(brute.Methods, "dns-brute-force") || !slices.Contains(brute.Methods, "name-alterations") {
+		t.Errorf("requested brute/alts not in methods: %+v", brute.Methods)
+	}
+	// A passive plan can never brute force, even if asked.
+	passiveBrute := NewPlanWith(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}, Passive,
+		Options{BruteForce: true})
+	if passiveBrute.BruteForce || slices.Contains(passiveBrute.Methods, "dns-brute-force") {
+		t.Errorf("passive plan must not brute force: %+v", passiveBrute)
+	}
+
+	cfg = config.NewConfig()
+	cfg.Scope.Ports = []int{22}
+	plan = NewPlan(graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.8.8.0/24"}, Passive)
+	asset, err := Configure(cfg, plan)
+	if err != nil || asset == nil || cfg.Active || !cfg.Passive || len(cfg.Scope.CIDRs) != 1 ||
+		len(cfg.Scope.Ports) != len(config.DefaultPorts) {
+		t.Errorf("passive config = %+v, %v", cfg.Scope, err)
+	}
+
+	tampered := plan
+	tampered.ScopeValue = "1.1.1.0/24"
+	if _, err := Configure(config.NewConfig(), tampered); err == nil {
+		t.Error("a plan whose scope does not match its ID was configured")
+	}
+}
+
+type fakeEngine struct {
+	mu         sync.Mutex
+	sessions   map[uuid.UUID]*et.SessionStats
+	seeded     []oam.Asset
+	terminated []uuid.UUID
+	seedErr    error
+	listErr    error
+	// reuse, when set, is the session NewSession gives, as the engine does
+	// when one of its sessions already works on the scope's job
+	reuse uuid.UUID
+}
+
+func newFake() *fakeEngine { return &fakeEngine{sessions: map[uuid.UUID]*et.SessionStats{}} }
+
+func (f *fakeEngine) NewSession(context.Context, *config.Config) (*client.CreateSessionResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.reuse != uuid.Nil {
+		return &client.CreateSessionResponse{SessionToken: f.reuse.String(), JobID: f.reuse.String(), Joined: true},
+			nil
+	}
+	id := uuid.New()
+	f.sessions[id] = &et.SessionStats{}
+	return &client.CreateSessionResponse{SessionToken: id.String(), JobID: id.String()}, nil
+}
+
+func (f *fakeEngine) SessionWorkers(_ context.Context, token uuid.UUID) ([]et.WorkerStats, error) {
+	return []et.WorkerStats{{Worker: token.String(), Live: true, Leased: 2, Done: 5}}, nil
+}
+
+func (f *fakeEngine) CreateAsset(_ context.Context, _ uuid.UUID, a oam.Asset) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.seedErr != nil {
+		return "", f.seedErr
+	}
+
+	f.seeded = append(f.seeded, a)
+	return "1", nil
+}
+
+func (f *fakeEngine) SessionStats(_ context.Context, id uuid.UUID) (*et.SessionStats, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	s, ok := f.sessions[id]
+	if !ok {
+		return nil, errors.New("no session")
+	}
+
+	return &et.SessionStats{WorkItemsCompleted: s.WorkItemsCompleted, WorkItemsTotal: s.WorkItemsTotal}, nil
+}
+
+func (f *fakeEngine) TerminateSession(_ context.Context, id uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sessions, id)
+	f.terminated = append(f.terminated, id)
+	return nil
+}
+
+func (f *fakeEngine) ListSessions(context.Context) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	var out []uuid.UUID
+	for id := range f.sessions {
+		out = append(out, id)
+	}
+
+	return out, nil
+}
+
+func (f *fakeEngine) progress(id string, done, total int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	s := f.sessions[uuid.MustParse(id)]
+	s.WorkItemsCompleted, s.WorkItemsTotal = done, total
+}
+
+func waitState(t *testing.T, m *Manager, id, state string) Run {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if r, _ := m.Get(id); r.State == state {
+			return r
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	r, _ := m.Get(id)
+	t.Fatalf("run %s is %s, want %s", id, r.State, state)
+	return r
+}
+
+func newManager(f *fakeEngine, journal string) *Manager {
+	return &Manager{Engine: f, Config: func() (*config.Config, error) { return config.NewConfig(), nil },
+		Journal: journal, PollInterval: time.Millisecond, IdleTimeout: time.Hour}
+}
+
+func TestManagerRunsFinishAndStop(t *testing.T) {
+	f := newFake()
+	journal := filepath.Join(t.TempDir(), "runs.jsonl")
+	m := newManager(f, journal)
+	defer m.Close()
+	ctx := context.Background()
+
+	a := NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "a.example"}, Passive)
+	run, err := m.Start(ctx, a, "tester")
+	if err != nil || run.State != StateRunning || len(f.seeded) != 1 {
+		t.Fatalf("start = %+v, %v", run, err)
+	}
+	if _, err := m.Start(ctx, a, "tester"); err == nil {
+		t.Error("the same scope was started twice")
+	}
+	if run.Job != run.ID {
+		t.Errorf("the run's job = %q", run.Job)
+	}
+	if ws, err := m.Workers(ctx, run.ID); err != nil || len(ws) != 1 || ws[0].Done != 5 {
+		t.Errorf("a running run's workers = %+v, %v", ws, err)
+	}
+
+	f.progress(run.ID, 10, 10)
+	done := waitState(t, m, run.ID, StateFinished)
+	if done.Completed != 10 || done.EndedAt.IsZero() {
+		t.Errorf("finished run = %+v", done)
+	}
+	if ws, err := m.Workers(ctx, run.ID); err != nil || ws != nil {
+		t.Errorf("a finished run's workers = %+v, %v", ws, err)
+	}
+
+	b := NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "b.example"}, Active)
+	run, err = m.Start(ctx, b, "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.progress(run.ID, 1, 50)
+	if stopped, err := m.Stop(ctx, run.ID); err != nil || stopped.State != StateStopped {
+		t.Errorf("stop = %+v, %v", stopped, err)
+	}
+	if len(f.terminated) != 2 {
+		t.Errorf("terminated = %v", f.terminated)
+	}
+
+	// A new manager reads the journal.
+	again := newManager(f, journal)
+	defer again.Close()
+	if runs := again.Runs(); len(runs) != 2 || runs[0].State != StateStopped || runs[1].State != StateFinished {
+		t.Errorf("journal runs = %+v", runs)
+	}
+}
+
+func TestManagerLimitsTimeoutsAndResume(t *testing.T) {
+	f := newFake()
+	journal := filepath.Join(t.TempDir(), "runs.jsonl")
+	m := newManager(f, journal)
+	m.IdleTimeout = 20 * time.Millisecond
+	ctx := context.Background()
+
+	run, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: "64500"},
+		Passive), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// any number of runs may run at once, but one scope only once
+	other, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "c.example"},
+		Passive), "")
+	if err != nil {
+		t.Errorf("a second run was refused: %v", err)
+	}
+	if _, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: "64500"},
+		Passive), ""); err == nil {
+		t.Error("a scope already being collected was started again")
+	}
+
+	waitState(t, m, run.ID, StateTimedOut)
+	waitState(t, m, other.ID, StateTimedOut)
+	m.Close()
+
+	// A run recorded as running is resumed when the engine still has it and
+	// marked lost when it does not.
+	f2 := newFake()
+	m2 := newManager(f2, journal)
+	live, _ := m2.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "d.example"}, Passive), "")
+	m2.Close()
+	f2.mu.Lock()
+	delete(f2.sessions, uuid.MustParse(live.ID))
+	f2.mu.Unlock()
+	m3 := newManager(f2, journal)
+	defer m3.Close()
+	if err := m3.Resume(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := m3.Get(live.ID); r.State != StateLost {
+		t.Errorf("a vanished session = %+v", r)
+	}
+
+	f2.seedErr = errors.New("boom")
+	m4 := newManager(f2, "")
+	defer m4.Close()
+	if _, err := m4.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "e.example"},
+		Passive), ""); err == nil || len(f2.sessions) != 0 {
+		t.Errorf("a failed seed left a session: %v %v", err, f2.sessions)
+	}
+}
+
+func TestPlanWithMoreTargets(t *testing.T) {
+	sel := graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}
+	asn := graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: "64500"}
+	cidr := graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "198.51.100.7/24"}
+
+	// one exact target keeps the ID earlier releases gave it
+	if p := NewPlanWith(sel, Passive, Options{}); p.ID != PlanID("domain", "example.org", Passive) {
+		t.Errorf("a one-target plan's ID changed: %s", p.ID)
+	}
+
+	p := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{cidr, asn, asn, sel}})
+	if p.Status != StatusApprovalRequired || len(p.Also) != 2 || p.Also[0] != (ScopeEntry{"asn", "64500"}) ||
+		p.Also[1] != (ScopeEntry{"cidr", "198.51.100.0/24"}) || p.Expand {
+		t.Fatalf("plan = %+v", p)
+	}
+
+	// the order of the added targets does not matter; their set and
+	// expansion do
+	if q := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{asn, cidr}}); q.ID != p.ID {
+		t.Error("the same targets in another order gave another ID")
+	}
+
+	e := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{asn, cidr}, Expand: true})
+	if e.ID == p.ID || p.ID == NewPlan(sel, Active).ID || !e.Expand || !strings.Contains(e.Effects, "in scope itself or admitted") {
+		t.Errorf("expansion or added targets did not change the ID, or the effects: %+v", e)
+	}
+
+	// an added target meets the target's rules
+	wide := graph.AssetSelector{Type: "Netblock", Field: "cidr", Value: "8.0.0.0/8"}
+	if bad := NewPlanWith(sel, Active, Options{Also: []graph.AssetSelector{wide}}); bad.Status != StatusUnsupported ||
+		!strings.Contains(bad.Reason, "8.0.0.0/8") {
+		t.Errorf("a /8 was added to an active plan: %+v", bad)
+	}
+
+	private := graph.AssetSelector{Type: "IPAddress", Field: "address", Value: "10.0.0.1"}
+	if NewPlanWith(sel, Passive, Options{Also: []graph.AssetSelector{private}}).Status != StatusUnsupported {
+		t.Error("a private address was added")
+	}
+
+	many := make([]graph.AssetSelector, MaxAlso+1)
+	for i := range many {
+		many[i] = graph.AssetSelector{Type: "AutonomousSystem", Field: "number", Value: strconv.Itoa(64500 + i)}
+	}
+	if NewPlanWith(sel, Passive, Options{Also: many}).Status != StatusUnsupported {
+		t.Error("more than MaxAlso targets were added")
+	}
+
+	// configuring sets every target in scope, expansion as planned, and
+	// refuses a plan whose added targets were changed after it was shown
+	cfg := config.NewConfig()
+	assets, err := configure(cfg, e)
+	if err != nil || len(assets) != 3 || !cfg.Widens() || len(cfg.Scope.Domains) != 1 || len(cfg.Scope.ASNs) != 1 ||
+		len(cfg.Scope.CIDRs) != 1 {
+		t.Fatalf("configure: %v, %d assets, scope %+v, widens %v", err, len(assets), cfg.Scope, cfg.Widens())
+	}
+	if _, ok := assets[0].(oamdns.FQDN); !ok {
+		t.Errorf("the first seed is %T, not the plan's target", assets[0])
+	}
+
+	cfg = config.NewConfig()
+	if _, err := configure(cfg, p); err != nil || cfg.Widens() {
+		t.Errorf("a plan without expansion left the scope able to widen: %v", err)
+	}
+
+	tampered := e
+	tampered.Also = append([]ScopeEntry{}, e.Also...)
+	tampered.Also[1].Value = "203.0.113.0/24"
+	if _, err := configure(config.NewConfig(), tampered); err == nil {
+		t.Error("a plan whose added targets were changed was configured")
+	}
+
+	tampered = e
+	tampered.Expand = false
+	if _, err := configure(config.NewConfig(), tampered); err == nil {
+		t.Error("a plan whose expansion was changed was configured")
+	}
+}
+
+// When the engine cannot list its sessions at resume (it is still starting),
+// recorded runs are supervised anyway: one whose session is gone ends failed
+// instead of staying "running" forever, and one the engine still has goes on.
+func TestResumeSupervisesRunsWhenTheEngineCannotList(t *testing.T) {
+	f := newFake()
+	journal := filepath.Join(t.TempDir(), "runs.jsonl")
+	ctx := context.Background()
+
+	m := newManager(f, journal)
+	gone, _ := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "gone.example"},
+		Passive), "")
+	kept, _ := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "kept.example"},
+		Passive), "")
+	m.Close()
+
+	f.mu.Lock()
+	delete(f.sessions, uuid.MustParse(gone.ID))
+	f.listErr = errors.New("engine starting")
+	f.mu.Unlock()
+
+	m2 := newManager(f, journal)
+	defer m2.Close()
+	if err := m2.Resume(ctx); err == nil {
+		t.Error("an unreadable session list was not reported")
+	}
+
+	if r := waitState(t, m2, gone.ID, StateFailed); r.Error == "" {
+		t.Errorf("the failed run gives no reason: %+v", r)
+	}
+	f.progress(kept.ID, 3, 3)
+	waitState(t, m2, kept.ID, StateFinished)
+}
+
+// A run whose session the engine no longer lists (the engine was restarted)
+// is marked lost at the next poll instead of after the error budget, so its
+// scope can be collected again at once.
+func TestPollMarksVanishedSessionLost(t *testing.T) {
+	f := newFake()
+	m := newManager(f, "")
+	m.PollInterval = 5 * time.Millisecond
+	defer m.Close()
+
+	run, err := m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "f.example"}, Passive), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.mu.Lock()
+	delete(f.sessions, uuid.MustParse(run.ID))
+	f.mu.Unlock()
+
+	if r := waitState(t, m, run.ID, StateLost); r.Error == "" {
+		t.Errorf("lost run without a reason: %+v", r)
+	}
+	if _, err := m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "f.example"}, Passive), ""); err != nil {
+		t.Errorf("the scope stayed blocked: %v", err)
+	}
+}
+
+// testCompanion submits one lead, counts it, and reports work pending until
+// released.
+type testCompanion struct {
+	mu      sync.Mutex
+	pending bool
+	began   chan Run
+}
+
+func (c *testCompanion) Begin(ctx context.Context, run Run, act Activity) func() bool {
+	go func() {
+		if _, err := act.Submit(ctx, oamdns.FQDN{Name: "lead.example"}); err == nil {
+			act.Count("leads", 1)
+		}
+		c.began <- run
+	}()
+	return func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.pending
+	}
+}
+
+func (c *testCompanion) release() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pending = false
+}
+
+// A companion works beside the run: what it submits goes to the run's
+// session, what it counts shows in the run, and its pending work keeps a
+// finished run open until it is done or the hold limit passes.
+func TestCompanionsWorkBesideTheRun(t *testing.T) {
+	f := newFake()
+	m := newManager(f, "")
+	c := &testCompanion{pending: true, began: make(chan Run, 1)}
+	m.Companions = []Companion{c}
+	defer m.Close()
+
+	run, err := m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "a.example"}, Passive), "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if began := <-c.began; began.ID != run.ID {
+		t.Fatalf("companion began for %s, want %s", began.ID, run.ID)
+	}
+
+	f.progress(run.ID, 10, 10)
+	time.Sleep(100 * time.Millisecond)
+	if r, _ := m.Get(run.ID); r.State != StateRunning {
+		t.Fatalf("run ended with companion work pending: %+v", r)
+	}
+
+	c.release()
+	done := waitState(t, m, run.ID, StateFinished)
+	if done.Activity["leads"] != 1 {
+		t.Errorf("activity = %v", done.Activity)
+	}
+	f.mu.Lock()
+	seeded := len(f.seeded)
+	f.mu.Unlock()
+	if seeded != 2 {
+		t.Errorf("seeded %d assets, want the target and the lead", seeded)
+	}
+
+	// pending work never holds a run past the hold limit
+	m.HoldLimit = 20 * time.Millisecond
+	c.mu.Lock()
+	c.pending = true
+	c.mu.Unlock()
+	run, err = m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "b.example"}, Passive), "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-c.began
+	f.progress(run.ID, 5, 5)
+	waitState(t, m, run.ID, StateFinished)
+
+	// a negative hold limit keeps no finished run open
+	m.HoldLimit = -1
+	run, err = m.Start(context.Background(),
+		NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "c.example"}, Passive), "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-c.began
+	f.progress(run.ID, 5, 5)
+	waitState(t, m, run.ID, StateFinished)
+}
+
+// finishingCompanion records the runs it finished.
+type finishingCompanion struct {
+	mu       sync.Mutex
+	finished []Run
+}
+
+func (c *finishingCompanion) Begin(context.Context, Run, Activity) func() bool { return nil }
+
+func (c *finishingCompanion) Finish(_ context.Context, run Run) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.finished = append(c.finished, run)
+}
+
+// A Finisher is called once a run has ended, finished or stopped, with the
+// run's final state; a run still going when the manager closes is not
+// finished, since it is resumed later.
+func TestFinishersRunWhenARunEnds(t *testing.T) {
+	f := newFake()
+	m := newManager(f, "")
+	c := &finishingCompanion{}
+	m.Companions = []Companion{c}
+	ctx := context.Background()
+
+	a, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "a.example"}, Passive), "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.progress(a.ID, 3, 3)
+	waitState(t, m, a.ID, StateFinished)
+
+	b, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "b.example"}, Passive), "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Stop(ctx, b.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	still, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "c.example"}, Passive), "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c.mu.Lock()
+		n := len(c.finished)
+		c.mu.Unlock()
+		if n == 2 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	m.Close()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.finished) != 2 {
+		t.Fatalf("finished %d runs, want 2", len(c.finished))
+	}
+	states := map[string]string{}
+	for _, r := range c.finished {
+		states[r.ID] = r.State
+	}
+	if states[a.ID] != StateFinished || states[b.ID] != StateStopped || states[still.ID] != "" {
+		t.Fatalf("finished states %v", states)
+	}
+}
+
+func TestPlanInterface(t *testing.T) {
+	sel := graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}
+
+	plain := NewPlan(sel, Passive)
+	p := NewPlanWith(sel, Passive, Options{Interface: " eth1 "})
+	if !p.Approvable() || p.Interface != "eth1" {
+		t.Fatalf("plan with an interface: %+v", p)
+	}
+	if p.ID == plain.ID {
+		t.Error("the plan_id does not cover the interface")
+	}
+	if !strings.Contains(p.Summary(), "interface eth1") || !strings.Contains(p.Effects, "eth1") {
+		t.Errorf("the approval text does not name the interface: %q / %q", p.Summary(), p.Effects)
+	}
+
+	for _, spec := range []string{"fe80::1%eth0", "192.0.2.10", "en0"} {
+		if q := NewPlanWith(sel, Active, Options{Interface: spec}); !q.Approvable() {
+			t.Errorf("interface %q was refused: %s", spec, q.Reason)
+		}
+	}
+	for _, spec := range []string{"eth0; rm -rf /", "-iface", strings.Repeat("a", 65)} {
+		if q := NewPlanWith(sel, Passive, Options{Interface: spec}); q.Status != StatusUnsupported {
+			t.Errorf("interface %q was accepted", spec)
+		}
+	}
+
+	cfg := config.NewConfig()
+	cfg.Interface = "eth0"
+	if _, err := configure(cfg, p); err != nil || cfg.Interface != "eth1" {
+		t.Errorf("configure: interface %q, %v; want the plan's eth1", cfg.Interface, err)
+	}
+	cfg.Interface = "eth0"
+	if _, err := configure(cfg, plain); err != nil || cfg.Interface != "eth0" {
+		t.Errorf("configure without a plan interface: %q, %v; want the configuration's eth0", cfg.Interface, err)
+	}
+
+	tampered := p
+	tampered.Interface = "eth2"
+	if tampered.Approvable() {
+		t.Error("a plan whose interface changed after it was shown is still approvable")
+	}
+}
+
+func TestPlanActiveRoute(t *testing.T) {
+	sel := graph.AssetSelector{Type: "FQDN", Field: "name", Value: "example.org"}
+
+	plain := NewPlan(sel, Active)
+	p := NewPlanWith(sel, Active, Options{ActiveRoute: "socks5h://tor:9050", ActiveUDPRoute: "eth1"})
+	if !p.Approvable() || p.ActiveRoute != "socks5h://tor:9050" || p.ActiveUDPRoute != "eth1" {
+		t.Fatalf("plan with an active route: %+v", p)
+	}
+	if p.ID == plain.ID {
+		t.Error("the plan_id does not cover the active route")
+	}
+	if !strings.Contains(p.Summary(), "socks5h://tor:9050") || !strings.Contains(p.Effects, "not sent at all") {
+		t.Errorf("the approval text does not describe the route: %q / %q", p.Summary(), p.Effects)
+	}
+
+	for _, opts := range []Options{
+		{ActiveRoute: "gopher://tor:70"},
+		{ActiveRoute: "socks5h://alice:secret@tor:9050"},
+		{ActiveRoute: "eth1", ActiveUDPRoute: "socks5://proxy:1080"},
+	} {
+		if q := NewPlanWith(sel, Active, opts); q.Status != StatusUnsupported {
+			t.Errorf("%+v was accepted", opts)
+		}
+	}
+	if q := NewPlanWith(sel, Passive, Options{ActiveRoute: "eth1"}); q.Status != StatusUnsupported {
+		t.Error("a passive plan took an active route")
+	}
+
+	cfg := config.NewConfig()
+	if _, err := configure(cfg, p); err != nil || cfg.ActiveRoute != "socks5h://tor:9050" || cfg.ActiveUDPRoute != "eth1" {
+		t.Errorf("configure: %q, %q, %v", cfg.ActiveRoute, cfg.ActiveUDPRoute, err)
+	}
+
+	tampered := p
+	tampered.ActiveRoute = "socks5h://elsewhere:9050"
+	if tampered.Approvable() {
+		t.Error("a plan whose active route changed after it was shown is still approvable")
+	}
+}
+
+// A second run the engine hands the session of a run already going is
+// refused, and the engine's extra client count given back.
+func TestStartKeepsTheRunHoldingTheSession(t *testing.T) {
+	f := newFake()
+	m := newManager(f, filepath.Join(t.TempDir(), "runs.jsonl"))
+	defer m.Close()
+	ctx := context.Background()
+
+	run, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "a.example"},
+		Passive), "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.reuse = uuid.MustParse(run.ID)
+	f.mu.Unlock()
+
+	again, err := m.Start(ctx, NewPlan(graph.AssetSelector{Type: "FQDN", Field: "name", Value: "a.example"},
+		Active), "tester")
+	if err == nil || again.ID != run.ID {
+		t.Fatalf("Start = %+v, %v; want the running run and an error", again, err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.terminated) != 1 || f.terminated[0] != f.reuse {
+		t.Errorf("terminated = %v; want the extra client count given back", f.terminated)
+	}
+	// the fake ends a session on its first terminate, so only the run's plan
+	// is checked
+	if r, _ := m.Get(run.ID); r.Plan.Mode != Passive {
+		t.Errorf("the first run was replaced: %+v", r)
+	}
+}

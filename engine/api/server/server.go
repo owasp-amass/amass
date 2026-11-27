@@ -86,6 +86,10 @@ const uuidRE = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9
 // Asset type route regex (tighten if you have an enum)
 const assetTypeRE = `[a-z0-9][a-z0-9_-]{0,63}`
 
+// maxRequestBody bounds a request body: a bulk request of the most items
+// allowed fits, and no request can exhaust the engine's memory.
+const maxRequestBody = 32 << 20
+
 /*
 Routes (v1)
 
@@ -101,36 +105,67 @@ GET    /api/v1/sessions/{session_token}/ws/logs
 */
 func (s *Server) routes(r *mux.Router) {
 	r.Use(s.loggingMiddleware)
-
-	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "route not found", nil)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+			next.ServeHTTP(w, r)
+		})
 	})
-	r.MethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	notAllowed := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed", nil)
 	})
+	// a path that a route serves with another method is not allowed, rather
+	// than not found: mux reports a method mismatch in a sub-router as 404
+	root := r
+	notFound := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch,
+			http.MethodDelete} {
+			other := req.Clone(req.Context())
+			other.Method = m
+			// Match is true for any path once a NotFoundHandler is set, so
+			// only a matched route counts
+			if rm := (&mux.RouteMatch{}); m != req.Method && root.Match(other, rm) && rm.Route != nil &&
+				rm.MatchErr == nil {
+				notAllowed(w, req)
+				return
+			}
+		}
 
-	v1 := r.PathPrefix("/api/v1").Subrouter()
+		writeError(w, http.StatusNotFound, "route not found", nil)
+	})
+	r.NotFoundHandler, r.MethodNotAllowedHandler = notFound, notAllowed
+
+	// sub-routers answer with their own handlers, so each is given these
+	sub := func(parent *mux.Router, prefix string) *mux.Router {
+		s := parent.PathPrefix(prefix).Subrouter()
+		s.NotFoundHandler, s.MethodNotAllowedHandler = notFound, notAllowed
+		return s
+	}
+
+	v1 := sub(r, "/api/v1")
 	v1.HandleFunc("/health", s.apiV1.HealthCheck).Methods(http.MethodGet)
 
-	sessions := v1.PathPrefix("/sessions").Subrouter()
+	sessions := sub(v1, "/sessions")
 	sessions.HandleFunc("", s.apiV1.CreateSessionHandler).Methods(http.MethodPost)
 	sessions.HandleFunc("/list", s.apiV1.ListSessionsHandler).Methods(http.MethodGet)
 
-	session := sessions.PathPrefix("/{session_token:" + uuidRE + "}").Subrouter()
+	session := sub(sessions, "/{session_token:"+uuidRE+"}")
 	session.HandleFunc("", s.apiV1.TerminateSessionHandler).Methods(http.MethodDelete)
 	session.HandleFunc("/stats", s.apiV1.GetStatsHandler).Methods(http.MethodGet)
+	session.HandleFunc("/workers", s.apiV1.GetWorkersHandler).Methods(http.MethodGet)
 
-	scope := session.PathPrefix("/scope").Subrouter()
+	scope := sub(session, "/scope")
 	scope.HandleFunc("/{asset_type:"+assetTypeRE+"}", s.apiV1.GetScopeHandler).Methods(http.MethodGet)
 
-	assets := session.PathPrefix("/assets").Subrouter()
+	assets := sub(session, "/assets")
 	// Single add: type in path (since OAM payload does not include it)
 	assets.HandleFunc("/{asset_type:"+assetTypeRE+"}", s.apiV1.AddAssetTypedHandler).Methods(http.MethodPost)
 	// Bulk add: :bulk suffix
 	assets.HandleFunc("/{asset_type:"+assetTypeRE+"}:bulk", s.apiV1.AddAssetsBulkHandler).Methods(http.MethodPost)
 
 	// WebSocket logs only
-	ws := session.PathPrefix("/ws").Subrouter()
+	ws := sub(session, "/ws")
 	ws.HandleFunc("/logs", s.apiV1.WSLogsHandler).Methods(http.MethodGet)
 }
 

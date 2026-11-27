@@ -17,7 +17,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/resolve/utils"
 )
 
@@ -30,6 +29,11 @@ type dnsCNAME struct {
 type relAlias struct {
 	alias  *dbt.Entity
 	target *dbt.Entity
+}
+
+func newCNAME(p *dnsPlugin) *dnsCNAME {
+	name := p.name + "-CNAME"
+	return &dnsCNAME{name: name, plugin: p, source: &et.Source{Name: name, Confidence: 100}}
 }
 
 func (d *dnsCNAME) check(e *et.Event) error {
@@ -65,7 +69,7 @@ func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*rel
 		return alias
 	}
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, oam.BasicDNSRelation, 5); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.FQDN, since, d.source, oam.BasicDNSRelation, 5); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relAlias{alias: fqdn, target: a})
 		}
@@ -77,7 +81,11 @@ func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 	var alias []*relAlias
 
 	fqdn := name.Asset.(*oamdns.FQDN)
-	if rr, err := support.PerformQuery(e.Session.Ctx(), fqdn.Name, dns.TypeCNAME); err == nil {
+	qfn := support.PerformQuery
+	if fm, ok := e.Meta.(*support.FQDNMeta); ok && fm.FromRecord {
+		qfn = support.PerformQueryNoWildcard
+	}
+	if rr, err := qfn(e.Session.Ctx(), fqdn.Name, dns.TypeCNAME); err == nil {
 		if records := d.store(e, name, rr); len(records) > 0 {
 			alias = append(alias, records...)
 			support.MarkAssetMonitored(e.Session, name, d.source)
@@ -104,23 +112,15 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias
 		data := strings.ToLower(strings.TrimSpace((record.(*dns.CNAME)).Target))
 		name := utils.RemoveLastDot(data)
 		if cname, err := e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && cname != nil {
-			if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-				Relation: &oamdns.BasicDNSRelation{
-					Name: "dns_record",
-					Header: oamdns.RRHeader{
-						RRType: int(record.Header().Rrtype),
-						Class:  int(record.Header().Class),
-						TTL:    int(record.Header().Ttl),
-					},
+			if _, err := support.Relate(ctx, e.Session, fqdn, &oamdns.BasicDNSRelation{
+				Name: "dns_record",
+				Header: oamdns.RRHeader{
+					RRType: int(record.Header().Rrtype),
+					Class:  int(record.Header().Class),
+					TTL:    int(record.Header().Ttl),
 				},
-				FromEntity: fqdn,
-				ToEntity:   cname,
-			}); err == nil && edge != nil {
+			}, cname, d.source); err == nil {
 				alias = append(alias, &relAlias{alias: fqdn, target: cname})
-				_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-					Source:     d.source.Name,
-					Confidence: d.source.Confidence,
-				})
 			}
 		}
 	}
@@ -135,6 +135,7 @@ func (d *dnsCNAME) process(e *et.Event, alias []*relAlias) {
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,
 			Entity:  a.target,
+			Meta:    &support.FQDNMeta{FromRecord: true},
 			Session: e.Session,
 		})
 

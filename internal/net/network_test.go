@@ -253,3 +253,57 @@ func TestIPDec(t *testing.T) {
 		}
 	}
 }
+
+func TestIsReservedAddress(t *testing.T) {
+	tests := []struct {
+		Address string
+		CIDR    string
+	}{
+		{"10.1.2.3", "10.0.0.0/8"},
+		{"192.0.2.10", "192.0.2.0/24"},
+		{"100.64.0.1", "100.64.0.0/10"},
+		{"8.8.8.8", ""},
+		{"not-an-address", ""},
+	}
+
+	for _, test := range tests {
+		yes, cidr := IsReservedAddress(test.Address)
+		if yes != (test.CIDR != "") || cidr != test.CIDR {
+			t.Errorf("IsReservedAddress(%q) = %t, %q; want the block %q", test.Address, yes, cidr, test.CIDR)
+		}
+	}
+}
+
+func TestIPToAddr(t *testing.T) {
+	for _, s := range []string{"192.0.2.1", "2001:db8::1"} {
+		if addr, ok := IPToAddr(net.ParseIP(s)); !ok || addr.String() != s {
+			t.Errorf("IPToAddr(%s) = %v, %t", s, addr, ok)
+		}
+	}
+	// An IPv4 address is not left in its IPv4-mapped IPv6 form.
+	if addr, ok := IPToAddr(net.ParseIP("192.0.2.1").To16()); !ok || !addr.Is4() {
+		t.Errorf("the 16-byte form became %v", addr)
+	}
+	if _, ok := IPToAddr(nil); ok {
+		t.Error("a nil address converted")
+	}
+}
+
+func TestSemaphoreReleaseKeepsTheCapacity(t *testing.T) {
+	sem := NewSemaphore(2)
+	sem.Acquire()
+	sem.Release()
+	// An extra release does not raise the capacity.
+	sem.Release()
+	if n := len(sem); n != 2 {
+		t.Fatalf("free slots = %d, want 2", n)
+	}
+
+	sem.Acquire()
+	sem.Acquire()
+	select {
+	case <-sem:
+		t.Error("a third acquire succeeded on a semaphore of two")
+	default:
+	}
+}

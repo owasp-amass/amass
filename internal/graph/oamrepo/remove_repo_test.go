@@ -1,0 +1,85 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package oamrepo
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/owasp-amass/amass/v5/internal/lens"
+	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/open-asset-model/contact"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/people"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
+)
+
+// A person-named organization is found, removed with its relationship and
+// source, and restored with them by the retraction.
+func TestRemoveAndRestorePersonNamedOrganization(t *testing.T) {
+	checkPersonNamedRemoval(t, openSQLite(t, "person.db"))
+}
+
+func checkPersonNamedRemoval(t *testing.T, repo repository.Repository) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	f := mergeFixture{t: t, ctx: ctx, repo: repo}
+
+	org := f.asset(&oamorg.Organization{ID: "jane:1", Name: "Jane Doe"})
+	person := f.asset(&people.Person{ID: "jane", FullName: "Jane Doe", FirstName: "Jane",
+		FamilyName: "Doe"})
+	cr := f.asset(&contact.ContactRecord{DiscoveredAt: "whois"})
+	dr := f.asset(&oamreg.DomainRecord{Domain: "doe.example", Name: "doe.example",
+		ID: "doe.example"})
+	f.edge(dr, cr, "registrant_contact", "WHOIS")
+	f.edge(cr, org, "organization", "WHOIS")
+	f.edge(cr, person, "person", "WHOIS")
+
+	adapter := Adapter{Repo: repo}
+	r, err := lens.FindPersonNamedOrganizations(ctx, adapter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Candidates) != 1 || r.Candidates[0].OrgID != org.ID {
+		t.Fatalf("candidates = %+v", r.Candidates)
+	}
+
+	rec, err := adapter.RemoveEntity(ctx, org.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.Edges) != 1 || rec.Edges[0].Outgoing || rec.Edges[0].OtherID != cr.ID {
+		t.Fatalf("removal record edges = %+v", rec.Edges)
+	}
+	if got, err := repo.FindEntityById(ctx, org.ID); err == nil && got != nil {
+		t.Fatal("the organization is still stored")
+	}
+	if left, _ := lens.FindPersonNamedOrganizations(ctx, adapter); len(left.Candidates) != 0 {
+		t.Errorf("still found after removal: %+v", left.Candidates)
+	}
+
+	restored, err := adapter.RestoreEntity(ctx, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := adapter.GetAsset(ctx, restored)
+	if err != nil || back.Type != "Organization" {
+		t.Fatalf("restored %s: %+v, %v", restored, back, err)
+	}
+	in, err := adapter.Edges(ctx, restored, "in", "organization", time.Time{})
+	if err != nil || len(in) != 1 || in[0].FromID != cr.ID {
+		t.Fatalf("restored relationships = %+v, %v", in, err)
+	}
+	e, err := repo.FindEdgeById(ctx, in[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srcs := f.edgeSources(e); len(srcs) != 1 || srcs[0] != "WHOIS" {
+		t.Errorf("restored relationship sources = %v", srcs)
+	}
+}

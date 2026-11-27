@@ -1,0 +1,1466 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "The signal catalog: each kind of evidence that ties an asset to an organization, defined once, with what it means for each question it answers. owned-asset: does the organization own this asset? The ownership-gap lens and automatic attribution use it; strength decides the rules (two strong signals, or one strong signal and another signal, propose an attachable candidate; one strong signal or two signals of any strength need review; a tiebreaker never counts as that other signal; a negative signal lowers the score and prevents an automatic write), weight ranks candidates, and a trained ownership model replaces both with weights learned from review decisions. related-domain: is this other registered (apex) domain the organization's, so the enumeration's scope can be made more complete? Each signal's weight times 100 is the confidence the related-domains lens records for a domain it supports, and a domain found by several keeps the strongest; a WHOIS privacy proxy or placeholder organization, and a certificate or name server shared by more apex domains than the lens's cap, are excluded rather than scored; a name match alone is never sufficient. The runtime scope expansion and the classifier read the same entries. In the ownership-gap lens a hub limit counts only the holders outside the organization's footprint, so its own copies of a value (its URLs, mailboxes, services and certificates) never make the value a hub. A signal's uses hold everything that differs by question: its kind, strength, weight, matcher, what it finds, why it counts, its guards and when it can mislead. docs/ai/SIGNALS.md (owned-asset) and docs/ai/HORIZONTALS.md (related-domain) and `amass review signals` / `amass review horizontal-signals` are generated from this file; edit the rationale here. IDs are hyphenated.",
+  "signals": [
+    {
+      "id": "shared-registrant-details",
+      "title": "Shared registrant details",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.45,
+          "matcher": "shared_attribute",
+          "finds": "A registration contact the organization does not yet own that carries the same phone, postal address, email address or other identifier as a contact the organization controls. Only contact records count: a service's fingerprints are judged by the fingerprint signals.",
+          "rationale": "Registrant details are entered by whoever registers the asset. Two registrations with the same phone and address were almost always made by the same party, and registries verify some of these details. One shared value can be a coincidence or a typo; two different shared values rarely are, which is why one shared value needs review and two may propose.",
+          "guards": [
+            "A third party's contact record never counts on either side: one named only as a domain's registrar, a network's abuse desk or a certificate's issuer (semantics.ThirdPartyContactLabels).",
+            "Redaction and privacy-service placeholders never count (phrases in semantics/placeholder_values.json).",
+            "A value carried by more contact records outside the organization's footprint than the hub limit never counts: it belongs to a registrar, provider or privacy service, not an owner. The hub limit is how many assets may carry a value of its kind before the value is an outlier in the database (a robust z-score above 3.5 on a log scale, never below 5). It is 50 until the database holds 1,000 values of the kind, and for values a search matches by part of their text rather than exactly.",
+            "Assets another organization is documented as controlling are never candidates.",
+            "A phone number that independent sources (registration records, OpenStreetMap, SEC filings) all give for the organization counts twice: it is corroborated as the organization's own."
+          ],
+          "counter_indications": [
+            "Resellers and agencies sometimes register assets for clients with their own details.",
+            "A university or holding company address can be shared by legally separate tenants or affiliates."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-registrant-email-domain",
+      "title": "Shared registrant email domain",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "registrant_email_domain",
+          "params": {
+            "free_mail": [
+              "gmail.com",
+              "googlemail.com",
+              "outlook.com",
+              "hotmail.com",
+              "live.com",
+              "msn.com",
+              "yahoo.com",
+              "ymail.com",
+              "aol.com",
+              "icloud.com",
+              "me.com",
+              "mac.com",
+              "proton.me",
+              "protonmail.com",
+              "pm.me",
+              "gmx.com",
+              "gmx.net",
+              "mail.com",
+              "zoho.com",
+              "yandex.com",
+              "yandex.ru",
+              "fastmail.com",
+              "tutanota.com",
+              "qq.com",
+              "163.com",
+              "126.com"
+            ]
+          },
+          "finds": "A registration contact the organization does not yet own whose email address is at the same custom domain as a contact of a registration the organization controls, such as admin@acme.com and security@acme.com. The controlled registration can be a domain, IP network or autonomous-system record.",
+          "rationale": "A registrant email address is a mailbox at a domain the registrant controls. Two registrations whose contacts use the same custom mail domain were almost always made by the same organization, even when the mailboxes differ, which a match on the exact email address misses. Domain, network and autonomous-system registrations all carry these contacts, so the signal links assets across them. The registered domain is compared, so a mailbox at a subdomain still counts.",
+          "guards": [
+            "Webmail and free-email domains never count (this signal's free_mail).",
+            "A mail domain carried by more than 50 registration contacts never counts: a provider, registrar or free service, not one owner.",
+            "Redaction and privacy-service placeholders never count (the contacts are reached through stored identifiers, which the placeholder guards exclude)."
+          ],
+          "counter_indications": [
+            "A parent company or shared-services provider may register domains for several affiliates from one mailbox domain.",
+            "Resellers and agencies sometimes register client domains using their own email domain."
+          ]
+        }
+      }
+    },
+    {
+      "id": "dkim-key-reuse",
+      "title": "DKIM signing key reuse",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "dkim_key",
+          "finds": "A domain the organization does not yet own that publishes the same DKIM public key as a domain the organization controls.",
+          "rationale": "A DKIM public key in DNS pairs with a private key held by whoever signs the domain's mail. The same public key on two domains means their mail is signed by the same private key, so the same party operates both.",
+          "guards": [
+            "Only DKIM records (v=DKIM1) with a non-empty public key count; a revoked key (empty p=) never counts.",
+            "A key published by more than 50 domains never counts: a mail provider's shared or CNAME-delegated key, not one owner's.",
+            "Only the DKIM selectors the collector probes are seen, so a shared key under an unprobed selector is missed, not miscounted."
+          ],
+          "counter_indications": [
+            "A mail provider or marketing platform may publish one DKIM key, through CNAME delegation, across many customers' domains (the 50-domain limit catches large ones)."
+          ]
+        }
+      }
+    },
+    {
+      "id": "txt-verification-token",
+      "title": "Shared DNS verification token",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.45,
+          "matcher": "txt_token",
+          "params": {
+            "txt_prefixes": [
+              "google-site-verification=",
+              "ms=",
+              "facebook-domain-verification=",
+              "atlassian-domain-verification=",
+              "apple-domain-verification=",
+              "adobe-idp-site-verification=",
+              "docusign=",
+              "zoom-domain-verification=",
+              "slack-domain-verification=",
+              "dropbox-domain-verification=",
+              "stripe-verification=",
+              "hubspot-developer-verification=",
+              "onetrust-domain-verification=",
+              "cisco-ci-domain-verification=",
+              "globalsign-domain-verification=",
+              "_globalsign-domain-verification="
+            ]
+          },
+          "finds": "A domain the organization does not yet own whose DNS TXT records carry the same service verification token as a domain the organization controls.",
+          "rationale": "SaaS providers ask a customer to publish a token in DNS to prove control of a domain, and the token is issued to one customer account. The same token on two domains means one account verified both, so the same administrators control them.",
+          "guards": [
+            "Only TXT records that start with a known verification prefix count.",
+            "A token on more domains than the hub limit for the signal's own tokens never counts."
+          ],
+          "counter_indications": [
+            "A managed-service provider or agency may verify client domains under its own account.",
+            "Tokens copied from documentation or templates appear on unrelated domains (the 50-domain limit catches the common ones)."
+          ]
+        }
+      }
+    },
+    {
+      "id": "certificate-key-reuse",
+      "title": "Certificate key reuse",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.45,
+          "matcher": "shared_certificate_field",
+          "params": {
+            "attribute": "subject_key_id"
+          },
+          "finds": "A certificate whose subject key identifier matches a certificate the organization controls; the candidate is the name that certificate was issued to.",
+          "rationale": "The subject key identifier is derived from the certificate's public key. Two certificates with the same identifier were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.",
+          "guards": [
+            "A certificate a CDN or hosting provider manages for many customers (one covering a name in provider_managed_names in certificates.json, such as cloudflaressl.com or incapsula.com) never counts.",
+            "A key identifier shared by more certificates than the hub limit for key identifiers never counts."
+          ],
+          "counter_indications": [
+            "A hosting or CDN provider that reuses one key across its customers' certificates (the 50-certificate limit catches large providers)."
+          ]
+        }
+      }
+    },
+    {
+      "id": "certificate-public-key-reuse",
+      "title": "Certificate public key reuse",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.45,
+          "matcher": "shared_certificate_field",
+          "params": {
+            "attribute": "public_key_sha256"
+          },
+          "finds": "A certificate whose public key (the SHA-256 of its SubjectPublicKeyInfo) matches a certificate the organization controls; the candidate is the name that certificate was issued to.",
+          "rationale": "The public key hash identifies the key pair itself, whatever the subject key identifier, which some certificates omit or set non-standardly. Two certificates with the same public key were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.",
+          "guards": [
+            "A certificate a CDN or hosting provider manages for many customers (one covering a name in provider_managed_names in certificates.json, such as cloudflaressl.com or incapsula.com) never counts.",
+            "A public key shared by more certificates than the hub limit for public keys never counts."
+          ],
+          "counter_indications": [
+            "A hosting or CDN provider that reuses one key pair across its customers' certificates (the 50-certificate limit catches large providers)."
+          ]
+        }
+      }
+    },
+    {
+      "id": "private-ca-issuance",
+      "title": "Issued by the organization's private CA",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.45,
+          "matcher": "shared_certificate_field",
+          "params": {
+            "attribute": "authority_key_id",
+            "private_issuer": true
+          },
+          "finds": "A certificate signed by the same issuing key as a certificate the organization controls, when that issuer is not a public certificate authority; the candidate is the name that certificate was issued to.",
+          "rationale": "Organizations run private certificate authorities for internal and partner-facing services, and only they can sign with that CA's key. A certificate from the same private issuing key was issued by the same organization.",
+          "guards": [
+            "A certificate a CDN or hosting provider manages for many customers (one covering a name in provider_managed_names in certificates.json, such as cloudflaressl.com or incapsula.com) never counts.",
+            "The issuing certificate must be stored, and no certificate up the chain (to four levels) may name a public certificate authority (the authorities in certificates.json). Public intermediates with short names chain to well-known public roots, so the walk finds them; a certificate whose chain is unknown never counts.",
+            "An issuing key shared by more certificates than the hub limit for issuing keys never counts."
+          ],
+          "counter_indications": [
+            "A managed PKI provider can operate one private CA for several customers.",
+            "A public root missing from the authorities in certificates.json would wrongly count until it is added."
+          ]
+        }
+      }
+    },
+    {
+      "id": "security-txt-reference",
+      "title": "security.txt points to the organization",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "supporting",
+          "weight": 0.25,
+          "matcher": "security_txt_reference",
+          "finds": "A name the organization does not yet own whose security.txt names a security contact at the organization's domain, or gives a canonical or policy URL in the organization's namespace.",
+          "rationale": "A security.txt is published by whoever runs the site, and its contact and canonical URL are normally the operator's own. A file that reports to the organization's mailbox or points to the organization's canonical copy was usually published for the organization.",
+          "guards": [
+            "The contact host or URL host must be one of the organization's apex domains or a name below one; a name that merely contains it never counts.",
+            "A value shared by more than 50 security.txt files never counts.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "A managed security provider or bug-bounty platform may publish one organization's contact across several clients' files.",
+            "A template copied between unrelated sites can carry another organization's canonical URL."
+          ]
+        }
+      }
+    },
+    {
+      "id": "bug-bounty-scope",
+      "title": "Listed in the organization's bug-bounty program",
+      "uses": {
+        "owned-asset": {
+          "kind": "declaration",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "bounty_program_scope",
+          "finds": "A name or address range the organization does not yet own that a public bug-bounty program lists in scope beside one of the organization's names, when the program is tied to the organization: its website is in the organization's namespace, its name is exactly the organization's name, the organization's domain carries the platform's verification TXT record (bugcrowd-verification), or the organization's security.txt links the program's page.",
+          "rationale": "A bug-bounty program's scope is the organization declaring, in public, the assets it is responsible for and invites researchers to test. Once the program is tied to the organization by its own records, the rest of its scope is the organization's own account of what it runs.",
+          "guards": [
+            "Review only: it raises a candidate to review but never causes or helps cause an automatic write.",
+            "A program the organization's records do not tie to it gives no signal; its listing stays an observation.",
+            "Names under cloud providers' hosting domains and the platforms' own sites are skipped.",
+            "Only in-scope entries count; out-of-scope entries are mostly vendors' services."
+          ],
+          "counter_indications": [
+            "Programs sometimes list a vendor-hosted tenant or a partner's system the organization tests but does not own.",
+            "A parent company's program can cover subsidiaries and acquisitions that are separate organizations in the graph.",
+            "Scopes go stale: a divested business can stay listed until the program is updated."
+          ]
+        },
+        "related-domain": {
+          "kind": "declaration",
+          "strength": "supporting",
+          "weight": 0.7,
+          "matcher": "bounty_program_scope",
+          "finds": "Another registered domain that a public bug-bounty program lists in scope beside one of the organization's names, when the program is tied to the organization by its website, its exact name, the platform's verification TXT record on the organization's domain, or a link from the organization's security.txt.",
+          "rationale": "A program's scope is the organization's own public list of the assets it is responsible for, so the other domains it lists are usually the organization's. It is supporting rather than strong because it is review-only evidence: a scope can list a partner's or a vendor's domain, or a subsidiary that is a separate organization.",
+          "guards": [
+            "Only programs tied to the organization count.",
+            "Names under cloud providers' hosting domains and the platforms' own sites are skipped.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "A vendor-hosted tenant or a partner's system can be listed so researchers may test it.",
+            "A parent's program can cover subsidiaries and acquisitions that are separate organizations."
+          ]
+        }
+      }
+    },
+    {
+      "id": "roa-authorizes-own-asn",
+      "title": "RPKI ROA authorizes the organization's AS",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "rpki_own_asn",
+          "finds": "A netblock the organization does not yet own that a valid RPKI Route Origin Authorization (ROA) authorizes one of the organization's autonomous systems to announce.",
+          "rationale": "Only the holder of address space can sign a ROA for it. A ROA naming the organization's AS is the holder's signed statement that the organization's network routes the prefix, so the netblock is operated for the organization.",
+          "guards": [
+            "Only valid ROAs whose prefix and maximum length cover the netblock count."
+          ],
+          "counter_indications": [
+            "A provider can sign a ROA for its own space naming a customer's AS, so the organization operates the netblock without holding it."
+          ]
+        }
+      }
+    },
+    {
+      "id": "self-hosted-dns",
+      "title": "Name or mail servers run by the organization",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "strong",
+          "weight": 0.35,
+          "matcher": "dns_into_footprint",
+          "params": {
+            "rr_types": [
+              2,
+              6,
+              15
+            ],
+            "labels": [
+              "name_server"
+            ]
+          },
+          "finds": "A name or domain registration the organization does not yet own whose NS or MX records, SOA primary name server, or registered name servers are names the organization controls.",
+          "rationale": "Pointing a domain's name servers or mail exchangers at another party's hosts hands that party the domain's DNS or email. Organizations do that for their own domains; DNS and email providers do it for customers, but those providers' names are third parties in the semantics table, not part of the organization's footprint.",
+          "guards": [
+            "Only name servers and mail exchangers in the organization's controlled footprint count; provider hosts never do."
+          ],
+          "counter_indications": [
+            "Universities, ISPs and holding companies sometimes host DNS or mail for affiliates and customers."
+          ]
+        }
+      }
+    },
+    {
+      "id": "spf-authorizes",
+      "title": "Email authentication delegated to the organization",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "strong",
+          "weight": 0.35,
+          "matcher": "txt_reference",
+          "finds": "A domain the organization does not yet own whose SPF record includes or redirects to a domain the organization controls, or whose DMARC record sends aggregate or forensic reports to an address at such a domain.",
+          "rationale": "SPF authorizes the referenced domain's mail servers to send as this domain, and DMARC sends this domain's authentication reports to the referenced mailbox. Both hand email control to the referenced party, which is normally the domain's own owner.",
+          "guards": [
+            "The referenced host must be one of the organization's apex domains or a name below one, parsed from the SPF include:/redirect= terms or the DMARC rua=/ruf= addresses; a name that merely contains it never counts."
+          ],
+          "counter_indications": [
+            "An email service provider's customers include the provider's SPF domain, but a provider is not the organization being investigated.",
+            "Report-processing services receive DMARC reports for their customers."
+          ]
+        },
+        "related-domain": {
+          "kind": "infrastructure",
+          "strength": "supporting",
+          "weight": 0.55,
+          "matcher": "spf_authorizes",
+          "finds": "Another registered domain whose SPF record delegates its sending (include: or redirect=) to a domain the organization owns.",
+          "rationale": "An SPF include or redirect names a domain allowed to send mail as the publishing domain. Delegating to a domain the organization controls means the organization's mail infrastructure sends on the other domain's behalf, which is evidence of common administration. It is supporting rather than strong because a provider's SPF macro is included by many unrelated customers.",
+          "guards": [
+            "A domain that sends all its mail through the organization, when few domains do, gives the strong spf-authorizes-exclusive signal instead.",
+            "An SPF domain referenced by more distinct apex domains than the lens cap is a shared sending provider (a mail provider's SPF macro) and is skipped, not scored.",
+            "An SPF domain a known mail-policy provider operates is skipped regardless of coverage.",
+            "Only the organization's own domains are used as the SPF anchor."
+          ],
+          "counter_indications": [
+            "A hosting or email provider's SPF macro domain is included by all of its customers.",
+            "A domain can keep an include for a service it no longer uses."
+          ]
+        }
+      }
+    },
+    {
+      "id": "hosting-in-footprint",
+      "title": "Hosted on the organization's infrastructure",
+      "uses": {
+        "owned-asset": {
+          "kind": "hosting",
+          "strength": "supporting",
+          "weight": 0.2,
+          "matcher": "infrastructure_into_footprint",
+          "finds": "An asset the organization does not yet own that depends on infrastructure the organization controls, such as a name resolving into its network.",
+          "rationale": "Organizations host their own assets, so dependence on their infrastructure is consistent with ownership. It is only supporting evidence: customers, tenants and vendors are hosted on other parties' networks every day.",
+          "guards": [
+            "Never counts through shared infrastructure: an address in a cloud or CDN provider's published range, a private or reserved address, or a name that resolves only to such addresses.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "Shared hosting, colocation and customers of a network operator.",
+            "A provider's own netblocks: its customers depend on them without being owned by it, which is why provider ranges are skipped."
+          ]
+        }
+      }
+    },
+    {
+      "id": "certificate-colisting",
+      "title": "Listed on the organization's certificate",
+      "uses": {
+        "owned-asset": {
+          "kind": "colisting",
+          "strength": "supporting",
+          "weight": 0.15,
+          "matcher": "colisting",
+          "finds": "A name the organization does not yet own that appears as a subject alternative name on a certificate that also lists a name the organization controls.",
+          "rationale": "One certificate covering several names was usually requested by one party for its own services. Certificates listing many names are often a provider's shared certificate, so this counts only for certificates with few names and only as supporting evidence.",
+          "guards": [
+            "A certificate a CDN or hosting provider manages for many customers (one covering a name in provider_managed_names in certificates.json, such as cloudflaressl.com or incapsula.com) never counts.",
+            "Certificates listing more names than the hub limit never count (10 until the database holds enough certificates).",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "CDN and hosting certificates that cover several customers."
+          ]
+        }
+      }
+    },
+    {
+      "id": "web-redirect-to-organization",
+      "title": "Web redirect to the organization",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "supporting",
+          "weight": 0.3,
+          "matcher": "http_redirect",
+          "params": {
+            "headers": [
+              "location",
+              "content-location",
+              "refresh"
+            ]
+          },
+          "finds": "A name or address the organization does not yet own whose web service redirects to a name in the organization's namespace (its Location, Content-Location or Refresh response header).",
+          "rationale": "Organizations point the domains they hold, such as typo, campaign and legacy domains, at their main site. A redirect into the organization's namespace is set by whoever operates the redirecting service, which is usually the domain's owner.",
+          "guards": [
+            "The redirect target must be one of the organization's apex domains or a name below one; a name that merely contains it never counts.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "Link shorteners, affiliates, news sites and partners also redirect to an organization's pages.",
+            "A squatter can redirect a look-alike domain to the real site."
+          ]
+        }
+      }
+    },
+    {
+      "id": "reverse-dns-in-namespace",
+      "title": "Reverse DNS in the organization's namespace",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "supporting",
+          "weight": 0.25,
+          "matcher": "reverse_dns",
+          "params": {
+            "labels": [
+              "ptr_record"
+            ]
+          },
+          "finds": "An IP address the organization does not yet own whose reverse DNS (PTR) name is a name the organization controls, and the names that resolve to that address.",
+          "rationale": "Reverse DNS is set by whoever controls the address space, so an address that names itself inside the organization's namespace is usually run for the organization. A provider can set PTR names on a customer's request, which is why it only supports other evidence.",
+          "guards": [
+            "Addresses that more names resolve to than the hub limit never pass the signal on to those names.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "Hosting providers set PTR names a customer asks for on addresses the provider still controls.",
+            "Stale PTR records outlive a move to new infrastructure."
+          ]
+        }
+      }
+    },
+    {
+      "id": "dns-provider-delegation-set",
+      "title": "Same DNS provider delegation set",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "provider_nameserver_set",
+          "params": {
+            "min_servers": 4
+          },
+          "finds": "A domain registration the organization does not yet own that lists exactly the same full set of name servers as one of the organization's domain registrations, when the set belongs to a provider that gives each account or hosted zone its own set drawn from a large pool (dns.json assignment unique_set, such as an Amazon Route 53 delegation set of four servers).",
+          "rationale": "Route 53 gives each hosted zone four name servers chosen from thousands, and an account can reuse one delegation set across its zones. Two unrelated zones landing on the identical set of four by chance is vanishingly rare, so a shared full set is strong evidence the domains are in one account.",
+          "guards": [
+            "The whole set must match, at least four servers, all from the one provider.",
+            "None may be the organization's own servers (that is the self-hosted DNS signal).",
+            "A set shared by more registrations than the hub limit never counts.",
+            "Providers whose customers share servers (assignment shared) give no signal, and providers that reuse sets across accounts (assignment account, such as Cloudflare's per-account pairs) give only the supporting same-provider-account signal."
+          ],
+          "counter_indications": [
+            "A reseller, agency or managed-service provider can host many clients' zones in its own account, so the domains share an operator rather than an owner."
+          ]
+        },
+        "related-domain": {
+          "kind": "infrastructure",
+          "strength": "supporting",
+          "weight": 0.7,
+          "matcher": "provider_delegation_set",
+          "finds": "Another registered domain whose registration lists exactly the same full set of at least four name servers as one of the organization's own domains, all from a provider that gives each account or hosted zone its own set drawn from a large pool (dns.json assignment unique_set, such as an Amazon Route 53 delegation set).",
+          "rationale": "Route 53 gives each hosted zone four name servers chosen from thousands, and an account can reuse one delegation set across its zones. An identical full set recurring by chance is vanishingly rare, so two domains sharing it are almost certainly in one provider account. It is supporting rather than strong for scope expansion because one account shows a common operator, not a common owner: agencies, resellers and managed-service providers run many clients' zones from one account. On its own it sends the domain to review; with a strong signal it expands scope. For owned-asset, where nothing is collected, the same evidence is strong.",
+          "guards": [
+            "The whole set must match: every name server, at least four, all from the one unique_set provider.",
+            "Only name servers reached from the organization's own domain records are used as anchors.",
+            "A set listed by more distinct apex domains than the hub limit for name servers is skipped."
+          ],
+          "counter_indications": [
+            "A reseller, agency or managed-service provider can host many clients' zones in its own account, so the domains share an operator rather than an owner."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-nameserver-set",
+      "title": "Same DNS provider account",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "supporting",
+          "weight": 0.25,
+          "matcher": "nameserver_set",
+          "params": {
+            "min_servers": 2
+          },
+          "finds": "A domain registration the organization does not yet own that lists every name server of one of the organization's domain registrations.",
+          "rationale": "Several DNS providers assign each customer account its own pair or set of name servers. A domain served by exactly the same set as the organization's domain was likely set up in the same provider account.",
+          "guards": [
+            "Only sets of at least two name servers count, and none may be the organization's own servers (that is the self-hosted DNS signal).",
+            "A set shared by more registrations than the hub limit never counts.",
+            "A set of a provider whose customers share servers (dns.json assignment shared) never counts; a full set of a provider that gives each account or zone its own set (unique_set) counts as the strong delegation-set signal instead.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "Providers that give every customer the same name servers make unrelated domains share a set; the 50-registration limit catches large ones."
+          ]
+        }
+      }
+    },
+    {
+      "id": "tls-fingerprint-match",
+      "title": "Same TLS server fingerprint",
+      "uses": {
+        "owned-asset": {
+          "kind": "fingerprint",
+          "strength": "supporting",
+          "weight": 0.1,
+          "tiebreaker": true,
+          "matcher": "service_fingerprint",
+          "params": {
+            "property": "JARM",
+            "skip_shared_infrastructure": true
+          },
+          "finds": "A name or address the organization does not yet own whose service has the same JARM TLS fingerprint as a service on a name the organization controls.",
+          "rationale": "A JARM fingerprint summarizes how a TLS server answers ten crafted handshakes, which reflects its software and configuration. A matching fingerprint is consistent with the same team deploying both servers, but many unrelated servers share common configurations, so it is only a tiebreaker.",
+          "guards": [
+            "Never counts from a service on shared infrastructure (a cloud or CDN provider's range, or a private address): behind a CDN the fingerprint is the CDN's, not the site's.",
+            "A fingerprint shared by more services than the hub limit never counts.",
+            "A tiebreaker: it never counts as the second signal that lets a strong signal propose, so it can only rank candidates or send one to review."
+          ],
+          "counter_indications": [
+            "Default configurations of popular servers, load balancers and CDNs produce the same fingerprint for unrelated sites."
+          ]
+        }
+      }
+    },
+    {
+      "id": "name-token",
+      "title": "Organization name in the asset's name",
+      "uses": {
+        "owned-asset": {
+          "kind": "lexical",
+          "strength": "supporting",
+          "weight": 0.1,
+          "tiebreaker": true,
+          "matcher": "name_token",
+          "params": {
+            "min_length": 5,
+            "stop_words": [
+              "university",
+              "college",
+              "school",
+              "institute",
+              "company",
+              "corporation",
+              "incorporated",
+              "limited",
+              "group",
+              "holdings",
+              "international",
+              "global",
+              "services",
+              "solutions",
+              "systems",
+              "technologies",
+              "technology",
+              "foundation",
+              "association",
+              "society",
+              "national",
+              "american",
+              "united",
+              "general",
+              "network",
+              "networks",
+              "online",
+              "digital"
+            ]
+          },
+          "finds": "A candidate that other signals already link to the organization and whose name contains a distinctive word of the organization's name, such as owasp in owasp-events.com.",
+          "rationale": "Organizations name their assets after themselves. The word must be distinctive, so generic words like university or group never count, and it is only ever added to a candidate other evidence already found.",
+          "guards": [
+            "Only words of at least five letters that are not in this signal's stop_words count.",
+            "A tiebreaker: it never counts as the second signal that lets a strong signal propose, so it can only rank candidates or send one to review.",
+            "Never finds candidates by itself."
+          ],
+          "counter_indications": [
+            "Fans, critics, resellers, squatters and unrelated organizations with similar names use the same words."
+          ]
+        }
+      }
+    },
+    {
+      "id": "document-operator",
+      "title": "A document states the organization operates it",
+      "uses": {
+        "owned-asset": {
+          "kind": "document",
+          "strength": "supporting",
+          "weight": 0.25,
+          "matcher": "document_statement",
+          "finds": "A finding the document model read from a stored document that a host name or URL is operated by the subject organization, named exactly by its name or legal name.",
+          "rationale": "Organizations name the systems they run in policies, reports and help pages (the VPN, the student portal), and the quote was checked against the text. It points at assets the network evidence has not yet tied to the organization.",
+          "guards": [
+            "Supporting only: it weighs 0.15, 0.05 more when the document is published on one of the organization's own domains and 0.05 more when two or more distinct document versions state it, never more than 0.25 (see semantics/document_signals.json).",
+            "The organization must be named exactly, and the host or URL must already be stored.",
+            "It never helps an ownership relationship be written automatically: a candidate qualifies for that only on its other evidence."
+          ],
+          "counter_indications": [
+            "A document can name a service a vendor runs for the organization.",
+            "Old documents name systems since retired or handed to someone else."
+          ]
+        }
+      }
+    },
+    {
+      "id": "parked-for-sale",
+      "title": "Parked or for sale",
+      "uses": {
+        "owned-asset": {
+          "kind": "negative",
+          "strength": "negative",
+          "weight": 0.3,
+          "matcher": "parked_page",
+          "params": {
+            "phrases": [
+              "this domain is for sale",
+              "this domain may be for sale",
+              "buy this domain",
+              "domain is parked",
+              "parked free",
+              "parkingcrew",
+              "sedoparking",
+              "bodis.com",
+              "dan.com",
+              "afternic",
+              "hugedomains",
+              "undeveloped.com"
+            ]
+          },
+          "finds": "A candidate name whose web page is a parking or domain-for-sale page.",
+          "rationale": "A parked or for-sale page means a domainer or registrar, not the organization, controls the name today, whatever its other links. It counts against ownership.",
+          "guards": [
+            "A candidate with this signal is never proposed for an automatic write; at most it waits for review."
+          ],
+          "counter_indications": [
+            "Organizations sometimes park defensive registrations with a registrar's default page."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-analytics-id",
+      "title": "Shared analytics or tag identifier",
+      "uses": {
+        "owned-asset": {
+          "kind": "fingerprint",
+          "strength": "supporting",
+          "weight": 0.3,
+          "matcher": "service_fingerprint",
+          "params": {
+            "property": "analytics_id",
+            "asset_types": [
+              "Service",
+              "URL"
+            ],
+            "min_length": 6
+          },
+          "finds": "A name, address or URL the organization does not yet own whose pages carry an analytics or tag-manager identifier (Google Analytics, Google Tag Manager, Google Ads, AdSense, Meta pixel, Hotjar, Clarity) that a page of the organization also carries.",
+          "rationale": "Analytics and tag-manager identifiers are issued to one account, and the account's owner adds them to the sites it runs, so two sites reporting to the same account are usually run by the same team. They are copied along with a page, though, so they only support other evidence.",
+          "guards": [
+            "Identifiers are recognized by provider-specific patterns (internal/fingerprint), not any string that looks like one.",
+            "An identifier on more services or URLs than the hub limit never counts.",
+            "Supporting only: without a strong signal it can at most send a candidate to review."
+          ],
+          "counter_indications": [
+            "A cloned or phishing copy of the organization's site carries the same identifiers; this is why it is never strong evidence.",
+            "Agencies sometimes run one tag-manager container across several clients."
+          ]
+        },
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "shared_service_fingerprint",
+          "finds": "Another registered domain whose web service embeds the same analytics or tag-manager identifier (a Google Analytics or Tag Manager property, a Facebook pixel and the like) as one of the organization's own services.",
+          "rationale": "An analytics or tag-manager property is registered to one account and embedded by that account's own sites to report their traffic together. Two sites carrying the same property identifier are administered by the same account, which is strong evidence of common control. The identifier is a shared Identifier asset, so the match is a one-hop graph pivot, not a value scan.",
+          "guards": [
+            "A default or signal-free identifier value is skipped (internal/semantics/fingerprint_defaults.json).",
+            "An identifier embedded on more distinct apex domains than the hub limit for its fingerprint type is treated as a shared marketing or agency account, not common ownership, and is skipped.",
+            "Only identifiers on the organization's own services are used as anchors."
+          ],
+          "counter_indications": [
+            "A marketing agency can embed one analytics property across several unrelated clients.",
+            "A template or theme can ship a placeholder property identifier that several unrelated sites keep."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-favicon",
+      "title": "Shared favicon",
+      "uses": {
+        "owned-asset": {
+          "kind": "fingerprint",
+          "strength": "supporting",
+          "weight": 0.15,
+          "matcher": "service_fingerprint",
+          "params": {
+            "property": "favicon_mmh3",
+            "asset_types": [
+              "Service",
+              "URL"
+            ],
+            "min_length": 2
+          },
+          "finds": "A name, address or URL the organization does not yet own whose site has the same favicon (by its MurmurHash3, as Shodan computes it) as a site of the organization.",
+          "rationale": "A custom favicon is a brand asset an organization reuses across its own sites, so the same icon suggests the same owner. Default icons of web servers, frameworks and hosting panels are shared by countless unrelated sites, which the hub limit excludes.",
+          "guards": [
+            "A favicon on more services or URLs than the hub limit never counts (default and framework icons).",
+            "Supporting only: without a strong signal it can at most send a candidate to review."
+          ],
+          "counter_indications": [
+            "A cloned or phishing copy of the organization's site carries the same favicon; this is why it is never strong evidence.",
+            "Resellers and partners display the organization's logo as their icon."
+          ]
+        },
+        "related-domain": {
+          "kind": "content",
+          "strength": "supporting",
+          "weight": 0.6,
+          "matcher": "shared_service_fingerprint",
+          "finds": "Another registered domain whose web service serves a favicon with the same hash as one of the organization's own services.",
+          "rationale": "Organizations reuse one brand favicon across their sites, so two services serving a byte-identical favicon are often the same operator's. It is supporting rather than strong because content-management frameworks and hosting panels ship default favicons that many unrelated sites keep unchanged.",
+          "guards": [
+            "A default or framework favicon hash is skipped (fingerprint_defaults.json).",
+            "A favicon served by more distinct apex domains than the hub limit for its fingerprint type is treated as a shared default or CDN asset and is skipped.",
+            "Only favicons on the organization's own services are used as anchors."
+          ],
+          "counter_indications": [
+            "A framework, CMS theme or hosting panel ships a default favicon that unrelated sites keep.",
+            "A hosting provider can serve one favicon across many parked or placeholder sites."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-page-content",
+      "title": "Shared page content",
+      "uses": {
+        "owned-asset": {
+          "kind": "fingerprint",
+          "strength": "supporting",
+          "weight": 0.2,
+          "matcher": "service_fingerprint",
+          "params": {
+            "property": "body_sha256",
+            "asset_types": [
+              "Service",
+              "URL"
+            ],
+            "min_length": 64
+          },
+          "finds": "A name, address or URL the organization does not yet own that serves exactly the same page (by the SHA-256 of its normalized body) as a site of the organization.",
+          "rationale": "Serving byte-for-byte the same page usually means the same deployment behind several names, such as mirrors, aliases and old domains. Pages under 512 bytes are never hashed, because redirects, error stubs and default pages are identical everywhere.",
+          "guards": [
+            "Bodies shorter than 512 bytes are not hashed (internal/fingerprint).",
+            "A hash on more services or URLs than the hub limit never counts.",
+            "Supporting only: without a strong signal it can at most send a candidate to review."
+          ],
+          "counter_indications": [
+            "A cloned or phishing copy of the organization's site carries the same page; this is why it is never strong evidence.",
+            "Parking, maintenance and hosting-provider pages are identical across their customers."
+          ]
+        },
+        "related-domain": {
+          "kind": "content",
+          "strength": "supporting",
+          "weight": 0.6,
+          "matcher": "shared_service_fingerprint",
+          "finds": "Another registered domain whose web service returns a page body with the same hash as one of the organization's own services.",
+          "rationale": "A byte-identical, non-trivial page body served from two domains is usually one deployment answering on both, which is evidence of common control. It is supporting because parked, placeholder and default-install pages are identical across many unrelated domains.",
+          "guards": [
+            "A default, parked or placeholder page hash is skipped (fingerprint_defaults.json), and only normalized bodies above a minimum size are hashed at collection.",
+            "A body served by more distinct apex domains than the hub limit for its fingerprint type is treated as a shared parked or default page and is skipped.",
+            "Only page bodies on the organization's own services are used as anchors."
+          ],
+          "counter_indications": [
+            "Parking services, registrars and hosting providers serve one placeholder body across many unrelated domains.",
+            "A CDN error or maintenance page can be identical across unrelated sites."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-page-title",
+      "title": "Same page title",
+      "uses": {
+        "owned-asset": {
+          "kind": "fingerprint",
+          "strength": "supporting",
+          "weight": 0.1,
+          "tiebreaker": true,
+          "matcher": "service_fingerprint",
+          "params": {
+            "property": "http_title",
+            "asset_types": [
+              "Service",
+              "URL"
+            ],
+            "min_length": 8,
+            "ignore_values": [
+              "403 Forbidden",
+              "404 Not Found",
+              "401 Unauthorized",
+              "500 Internal Server Error",
+              "502 Bad Gateway",
+              "503 Service Unavailable",
+              "Welcome to nginx!",
+              "Apache2 Ubuntu Default Page: It works",
+              "Apache2 Debian Default Page: It works",
+              "IIS Windows Server",
+              "Index of /",
+              "Just a moment...",
+              "Attention Required! | Cloudflare",
+              "Site Not Found",
+              "Domain for sale",
+              "Coming Soon",
+              "Under Construction",
+              "Default Web Site Page",
+              "Sign In",
+              "Log In",
+              "Login",
+              "Home",
+              "Welcome",
+              "Untitled",
+              "Document"
+            ]
+          },
+          "finds": "A name, address or URL the organization does not yet own whose page has the same title as a page of the organization.",
+          "rationale": "A distinctive title, such as one naming the organization or a product of it, is often reused across its sites. Titles are short, chosen freely and copied, so a title only breaks ties between candidates other evidence found.",
+          "guards": [
+            "Titles shorter than 8 characters and generic titles (this signal's ignore_values) never count.",
+            "A title on more services or URLs than the hub limit never counts.",
+            "A tiebreaker: it never counts as the second signal that lets a strong signal propose."
+          ],
+          "counter_indications": [
+            "A cloned or phishing copy of the organization's site carries the same title; this is why it is never strong evidence.",
+            "Products and templates give unrelated sites the same title."
+          ]
+        }
+      }
+    },
+    {
+      "id": "ssh-host-key-reuse",
+      "title": "SSH host key reuse",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "service_fingerprint",
+          "params": {
+            "property": "ssh_host_key",
+            "asset_types": [
+              "Service"
+            ],
+            "min_length": 16
+          },
+          "finds": "An address or name the organization does not yet own whose SSH server presents a host key that an SSH server on an address the organization controls also presents.",
+          "rationale": "An SSH host key is a private key generated on the server. The same key on two servers means they are the same machine reachable at two addresses, or were built from the same image by whoever holds the key, so the same party operates both.",
+          "guards": [
+            "Only addresses inside the organization's controlled footprint (its netblocks) are compared, never hosting it merely resolves to.",
+            "A host key on more services than the hub limit never counts: vendor appliances and cloud images that ship with a baked-in key.",
+            "Collected only in active enumeration, by completing the SSH key exchange; no user name or credential is ever sent."
+          ],
+          "counter_indications": [
+            "Vendor appliances and published VM images that share one default key across customers (the 50-service limit catches widely deployed ones)."
+          ]
+        }
+      }
+    },
+    {
+      "id": "caa-account-binding",
+      "title": "Same certificate account in CAA",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.5,
+          "matcher": "caa_account",
+          "finds": "A domain the organization does not yet own whose CAA record binds certificate issuance to the same ACME account (accounturi, RFC 8657) as a CAA record of a domain the organization controls.",
+          "rationale": "An accounturi parameter lets only one ACME account obtain certificates for the domain. The account belongs to whoever requests the certificates, so two domains bound to the same account have their certificates issued by the same operator.",
+          "guards": [
+            "The account URI must match exactly.",
+            "An account URI published by more than 50 domains never counts: a hosting provider's shared account."
+          ],
+          "counter_indications": [
+            "A managed hosting or certificate service may bind all its customers' domains to its own account."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-private-addresses",
+      "title": "Same internal addresses in public DNS",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "strong",
+          "weight": 0.4,
+          "matcher": "private_address",
+          "params": {
+            "min_shared": 2,
+            "ignore_ranges": [
+              "192.168.0.0/23",
+              "10.0.0.0/24",
+              "172.16.0.0/24"
+            ]
+          },
+          "finds": "Names under a domain the organization does not yet own that resolve to at least two of the same private (RFC 1918) or other reserved addresses as names the organization controls.",
+          "rationale": "A private address only means something inside one network. Public names that resolve to the same internal addresses come from the same internal DNS, which one operator runs; two unrelated organizations rarely publish the same two internal addresses.",
+          "guards": [
+            "At least two distinct addresses must be shared with the same registered domain.",
+            "Addresses in the most common default ranges (192.168.0.0/23, 10.0.0.0/24, 172.16.0.0/24) and addresses ending in .0, .1, .254 or .255 never count.",
+            "An address more names resolve to than the hub limit never counts."
+          ],
+          "counter_indications": [
+            "Two organizations that merged, or that share an outsourced IT provider's internal DNS, can publish the same internal addresses."
+          ]
+        }
+      }
+    },
+    {
+      "id": "mark-certificate-identifier",
+      "title": "Mark certificate for the organization's LEI",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.5,
+          "matcher": "mark_certificate",
+          "finds": "A domain the organization does not yet own with a BIMI mark certificate whose subject carries the same Legal Entity Identifier as the organization.",
+          "rationale": "A certificate authority verifies the organization behind a mark certificate before issuing it, and the LEI it records identifies exactly one legal entity. A domain with a mark certificate for the organization's LEI was certified as the organization's.",
+          "guards": [
+            "The LEI must match exactly.",
+            "Only mark certificates (extended key usage for BIMI) count; an ordinary certificate's subject is not verified the same way."
+          ],
+          "counter_indications": [
+            "A brand licensed to another company can be certified for the licensee, whose LEI is its own."
+          ]
+        }
+      }
+    },
+    {
+      "id": "security-txt-shared-key",
+      "title": "security.txt names the organization's encryption key",
+      "uses": {
+        "owned-asset": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.45,
+          "matcher": "security_txt_key",
+          "finds": "A name the organization does not yet own whose security.txt gives the same Encryption key URL as a security.txt of a domain the organization controls.",
+          "rationale": "The Encryption field names the key reports to the security team should be encrypted with. One security team holds that key, so two files naming the same key report to the same team.",
+          "guards": [
+            "The key URL must match exactly.",
+            "A key URL named by more than 50 security.txt files never counts: a managed provider's or platform's key."
+          ],
+          "counter_indications": [
+            "A managed security provider or bug-bounty platform may publish its own key in several clients' files."
+          ]
+        }
+      }
+    },
+    {
+      "id": "page-names-organization",
+      "title": "Web page names the organization",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "supporting",
+          "weight": 0.3,
+          "matcher": "page_organization",
+          "params": {
+            "min_length": 6
+          },
+          "finds": "A name or address the organization does not yet own whose web page carries a copyright notice for the organization, or describes the organization in its schema.org Organization markup.",
+          "rationale": "A site's footer and its structured data name whoever publishes it. A page that declares itself the organization's was usually published for the organization, though a vendor building a site for a client publishes the client's name too.",
+          "guards": [
+            "The organization's name must follow a copyright marker (©, &copy; or Copyright) or be the name of a schema.org Organization; a mention anywhere else on the page never counts.",
+            "Names shorter than six characters never count.",
+            "A name found on more than 50 services never counts.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "A news site, directory or partner page can carry markup describing the organization.",
+            "A site copied from a template can keep another organization's copyright line."
+          ]
+        }
+      }
+    },
+    {
+      "id": "page-references-bucket",
+      "title": "Organization's pages load from the bucket",
+      "uses": {
+        "owned-asset": {
+          "kind": "operation",
+          "strength": "supporting",
+          "weight": 0.3,
+          "matcher": "page_bucket",
+          "finds": "An object-storage bucket host (Amazon S3, Google Cloud Storage, Azure Blob and the other providers in bucket_providers.json) the organization does not yet own that a web page on a name the organization controls loads from or links to.",
+          "rationale": "Organizations serve their sites' images, documents and scripts from their own buckets, so a bucket their pages load from is usually theirs. It is only supporting evidence: pages also load from vendors' buckets.",
+          "guards": [
+            "The host must match a provider's bucket host pattern; a provider's own hostname without a bucket name never counts.",
+            "Never proposes on its own; it needs a strong signal."
+          ],
+          "counter_indications": [
+            "Widgets, fonts and embedded tools are often served from their vendors' buckets."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-registrant-org",
+      "title": "Shared registrant organization",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "shared_registrant_org",
+          "finds": "Another registered domain whose WHOIS/RDAP registrant contact names the same organization as the target's.",
+          "rationale": "The registrant organization on a domain record is the party that registered the domain, recorded by the registry. When two domains name the same organization as registrant, the same party registered both, which is direct evidence they belong to the same footprint.",
+          "guards": [
+            "A WHOIS privacy or registrar proxy (for example Domains By Proxy, LLC) is never an anchor: thousands of unrelated domains share one, so the match is suppressed (internal/registrant).",
+            "A placeholder or redaction organization value is excluded the same way.",
+            "A matching organization name alone, with no shared registrant record, is never sufficient: unrelated companies share names across jurisdictions."
+          ],
+          "counter_indications": [
+            "Resellers, registrars and agencies sometimes register domains for clients under their own organization.",
+            "A parent holding company can be the registrant of record for legally separate subsidiaries."
+          ]
+        }
+      }
+    },
+    {
+      "id": "cert-subject-org",
+      "title": "Shared certificate subject organization",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.75,
+          "matcher": "certificate_subject_org",
+          "finds": "The apex domains covered by a TLS certificate (its common name and DNS subject-alternative names) whose subject contact names the organization.",
+          "rationale": "An organization-validated certificate carries a subject organization the certificate authority verified against the requesting entity. The apex domains such a certificate covers were presented together by that organization, so they tie to its footprint.",
+          "guards": [
+            "A certificate covering more distinct apex domains than the hub limit for certificate names is treated as shared or CDN infrastructure (many tenants on one certificate), not shared ownership, and is skipped.",
+            "A privacy-proxy or placeholder subject organization is excluded."
+          ],
+          "counter_indications": [
+            "A hosting or SaaS provider can name itself as the subject organization on certificates it issues for customer domains.",
+            "A domain-validated certificate carries no verified organization and does not produce this signal."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-name-server",
+      "title": "Shared name server",
+      "uses": {
+        "related-domain": {
+          "kind": "infrastructure",
+          "strength": "supporting",
+          "weight": 0.65,
+          "matcher": "shared_name_server",
+          "finds": "Another registered domain served by the same authoritative name server as one of the organization's own domains.",
+          "rationale": "A private or vanity name server operated by one organization serves only that organization's domains, so sharing it is evidence of common control. It is supporting rather than strong because a small hosting provider's shared name server can serve unrelated customers.",
+          "guards": [
+            "A name server inside the organization's own domains gives the strong name-server-own-domain signal instead.",
+            "A name server serving more distinct apex domains than the hub limit for name servers is treated as shared or provider infrastructure and is skipped.",
+            "Only name servers reached from the organization's own domain records are used as anchors."
+          ],
+          "counter_indications": [
+            "Managed DNS and small hosting providers run name servers shared by many unrelated customers.",
+            "A registrar's default name servers are shared across its whole customer base."
+          ]
+        }
+      }
+    },
+    {
+      "id": "allowed-origin",
+      "title": "Allowed cross-origin by the organization's site",
+      "uses": {
+        "related-domain": {
+          "kind": "web",
+          "strength": "supporting",
+          "weight": 0.55,
+          "matcher": "allowed_origin",
+          "finds": "Another registered domain that a web service on one of the organization's own hosts names in its CORS Access-Control-Allow-Origin or CSP frame-ancestors header, letting that domain call or embed it.",
+          "rationale": "Sites usually let their own sister sites (an application portal, a student system, a regional site) call their APIs or frame their pages, and they name them one by one. It is supporting rather than strong because partners and vendors are allowed the same way.",
+          "guards": [
+            "Only services on the organization's own hosts are read.",
+            "Only named origins count: a wildcard (*) or 'null' names no domain.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "A partner, payment provider or embedding vendor is allowed exactly like a sister site.",
+            "Some frameworks echo back whatever origin asked, so the header names the prober's origin rather than a chosen one; Amass's probes send no Origin header."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-ads-seller",
+      "title": "Shared DIRECT ad seller account",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "shared_ads_seller",
+          "finds": "Another registered domain whose ads.txt or app-ads.txt lists, as DIRECT, the same advertising seller account (an ad system and account ID, such as a Google AdSense publisher ID) as one of the organization's own domains.",
+          "rationale": "A DIRECT line names an ad account the publisher controls itself and is paid through, so it is as specific to its owner as an analytics property: the domains that list it are run by the same publisher.",
+          "guards": [
+            "Only DIRECT lines count; RESELLER lines name the companies that sell on the publisher's behalf.",
+            "An account the ad system's sellers.json lists as an INTERMEDIARY (a sales house) is skipped.",
+            "An account listed by more than 25 registered domains is treated as a network's, not an owner's, and skipped."
+          ],
+          "counter_indications": [
+            "A sales house or agency can list its own account as DIRECT on the sites it manages.",
+            "A copied ads.txt can keep a former owner's accounts."
+          ]
+        }
+      }
+    },
+    {
+      "id": "ads-seller-domain",
+      "title": "Domain an ad system gives for the organization's seller account",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "supporting",
+          "weight": 0.5,
+          "matcher": "ads_seller_domain",
+          "finds": "The domain an ad system's sellers.json gives as the business domain of the seller behind one of the organization's DIRECT ad accounts, when it is another domain.",
+          "rationale": "sellers.json names the business behind each account, by name and domain, as the ad system knows it from paying it. A different domain there is usually the publisher's corporate site. It is supporting because the seller can be a parent, an agency or a sales house that the ad system lists as a publisher.",
+          "guards": [
+            "Accounts the ad system lists as INTERMEDIARY or keeps confidential are skipped.",
+            "The ad system's own domain is skipped.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "An agency that manages a site's ads can be the seller of record.",
+            "A parent company's domain can be listed for its brands' accounts."
+          ]
+        }
+      }
+    },
+    {
+      "id": "ads-owner-domain",
+      "title": "Owner domain named in the organization's ads.txt",
+      "uses": {
+        "related-domain": {
+          "kind": "declaration",
+          "strength": "supporting",
+          "weight": 0.5,
+          "matcher": "ads_owner_domain",
+          "finds": "The business domain of the site's owner that one of the organization's own ads.txt or app-ads.txt files names in its OWNERDOMAIN variable, when it is another domain.",
+          "rationale": "Only a site's operator can publish its ads.txt, and OWNERDOMAIN is where the operator names the business domain of the company that owns the site, for ad buyers to check the seller's identity. It is supporting because the owner can be a parent or holding company that is a separate organization, and a copied file can keep another owner's value.",
+          "guards": [
+            "Only the organization's own domains' files are read.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "A parent company's domain names the owner of a brand that is run as a separate organization.",
+            "An ads.txt template copied from another site can keep its OWNERDOMAIN."
+          ]
+        }
+      }
+    },
+    {
+      "id": "ads-owned-by",
+      "title": "Names the organization as its owner in ads.txt",
+      "uses": {
+        "related-domain": {
+          "kind": "declaration",
+          "strength": "supporting",
+          "weight": 0.5,
+          "matcher": "ads_owned_by",
+          "finds": "Another registered domain whose ads.txt or app-ads.txt names one of the organization's own domains in its OWNERDOMAIN variable, as the business domain of the company that owns the site.",
+          "rationale": "OWNERDOMAIN is the site operator's own statement of who owns the site, for ad buyers to check. A site that names the organization's domain there is usually one of its brands or properties. It is supporting because any site can write any domain there: ad-fraud sites spoof well-known owners, and nothing but the buyers' own checks against sellers.json holds it to the truth.",
+          "guards": [
+            "Only files Amass has read are seen, so the signal confirms domains found by other evidence more often than it discovers new ones.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "A spoofing site names a well-known owner to sell its ad space at a better price.",
+            "A former brand can keep naming its old owner after a sale."
+          ]
+        }
+      }
+    },
+    {
+      "id": "package-publisher-site",
+      "title": "Publisher site of the organization's verified Maven group",
+      "uses": {
+        "related-domain": {
+          "kind": "declaration",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "package_publisher_site",
+          "finds": "Another registered domain a package in the organization's Maven Central group names as its publisher's organization URL, where the group is the reverse of one of the organization's own domains.",
+          "rationale": "Maven Central lets a publisher use a groupId only after proving, with a DNS TXT record, that it controls the domain the groupId names. A package in that group names its publisher's organization in its POM, so the site it names there is the organization's own declaration of its site.",
+          "guards": [
+            "Only groups named for one of the organization's own domains count.",
+            "Only the POM's organization URL counts; its project and repository URLs are the supporting package-website signal.",
+            "URLs on registries, documentation and code hosts, and cloud providers' hosting domains are never stored."
+          ],
+          "counter_indications": [
+            "A POM copied from a parent project or a template can keep another organization's URL.",
+            "A group handed to a spun-off project can keep naming the former parent."
+          ]
+        }
+      }
+    },
+    {
+      "id": "package-website",
+      "title": "Named by the organization's published packages",
+      "uses": {
+        "related-domain": {
+          "kind": "declaration",
+          "strength": "supporting",
+          "weight": 0.5,
+          "matcher": "package_website",
+          "finds": "Another registered domain one of the organization's packages names as its homepage, project page or repository: a package in a Maven group named for one of the organization's domains, or an npm package maintained from an address at one.",
+          "rationale": "A package's homepage and project pages are usually its publisher's sites. It is supporting because a package can point to a community site, a hosted documentation service or a partner's product page.",
+          "guards": [
+            "Only namespaces tied to one of the organization's domains count: a Maven group named for it, or an npm namespace with a maintainer address at it.",
+            "URLs on registries, documentation and code hosts, and cloud providers' hosting domains are never stored.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "An open-source project can live on its own community domain that no organization owns.",
+            "A maintainer can keep a work address on a personal project."
+          ]
+        }
+      }
+    },
+    {
+      "id": "soa-mailbox-own-domain",
+      "title": "SOA administrator mailbox at the organization's domain",
+      "uses": {
+        "related-domain": {
+          "kind": "dns",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "soa_mailbox_own_domain",
+          "finds": "Another registered domain whose SOA record names, as its zone administrator (RNAME), a mailbox at one of the organization's own domains that one of the organization's zones also names.",
+          "rationale": "A zone's SOA record names the mailbox of the person responsible for it. A zone whose administrator is a mailbox at the organization's own domain, the same one its own zones list, is run by the organization's DNS staff.",
+          "guards": [
+            "The mailbox must be at one of the organization's own registered domains or a name below one.",
+            "A DNS host's default mailbox is skipped: a managed-DNS provider's, or one at the registered domain of a primary name server outside the organization.",
+            "A mailbox that more domains list than the hub limit for SOA mailboxes is skipped."
+          ],
+          "counter_indications": [
+            "A zone copied from the organization's template can keep its mailbox after the domain changes hands.",
+            "An agency running DNS for a client may list the client's mailbox in zones of its own."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-soa-mailbox",
+      "title": "Shared SOA administrator mailbox",
+      "uses": {
+        "related-domain": {
+          "kind": "dns",
+          "strength": "supporting",
+          "weight": 0.5,
+          "matcher": "soa_mailbox",
+          "finds": "Another registered domain whose SOA record names the same zone administrator mailbox (RNAME) as one of the organization's zones, when that mailbox is outside the organization's domains.",
+          "rationale": "The same administrator mailbox in two zones points to one administrator. It is supporting rather than strong for an outside mailbox: a web agency, registrar or IT contractor administers many clients' zones from its own mailbox.",
+          "guards": [
+            "A DNS host's default mailbox is skipped.",
+            "A mailbox that more domains list than the hub limit for SOA mailboxes is skipped.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "An agency or contractor administers unrelated clients' zones from one mailbox."
+          ]
+        }
+      }
+    },
+    {
+      "id": "name-server-own-domain",
+      "title": "Name server run by the organization",
+      "uses": {
+        "related-domain": {
+          "kind": "dns",
+          "strength": "strong",
+          "weight": 0.75,
+          "matcher": "name_server_own_domain",
+          "finds": "Another registered domain served by a name server that is a host inside one of the organization's own domains (ns1.example.com serving example-labs.org), the same server one of the organization's domains uses.",
+          "rationale": "An organization that runs its own name servers hosts its own zones on them. A domain delegated to a name server inside the organization's namespace is served by the organization's DNS, which it rarely does for anyone else.",
+          "guards": [
+            "The name server must be one of the organization's own registered domains or a name below one.",
+            "A name server more domains use than the hub limit for name servers is skipped.",
+            "A managed-DNS provider's name server is never used."
+          ],
+          "counter_indications": [
+            "A university or ISP running DNS for affiliated or customer organizations serves their zones from its own servers.",
+            "A delegation can outlive a domain's sale until the new owner moves it."
+          ]
+        }
+      }
+    },
+    {
+      "id": "mx-own-domain",
+      "title": "Mail exchanger run by the organization",
+      "uses": {
+        "related-domain": {
+          "kind": "dns",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "mx_own_domain",
+          "finds": "Another registered domain whose mail is handled by a mail exchanger that is a host inside one of the organization's own domains, the same one one of the organization's domains uses.",
+          "rationale": "A domain whose mail goes to the organization's own mail server receives its mail at the organization, which an organization does for its own domains and rarely for others.",
+          "guards": [
+            "The mail exchanger must be one of the organization's own registered domains or a name below one.",
+            "A mail exchanger more than 25 domains use is skipped.",
+            "A known mail provider's exchanger is never used."
+          ],
+          "counter_indications": [
+            "An organization can relay mail for affiliated organizations or customers through its own servers."
+          ]
+        }
+      }
+    },
+    {
+      "id": "spf-authorizes-exclusive",
+      "title": "Sends all its mail through the organization",
+      "uses": {
+        "related-domain": {
+          "kind": "dns",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "spf_authorizes_exclusive",
+          "finds": "Another registered domain whose SPF record authorizes only names inside the organization's own domains to send its mail, when at most 5 domains authorize the organization's domain.",
+          "rationale": "A domain that sends all of its mail through the organization, and through no one else, is the organization's: an outside sender would list its own servers or its other providers too.",
+          "guards": [
+            "Every name and address range the domain's SPF record authorizes must be inside the organization's domains.",
+            "At most 5 domains may authorize the organization's domain; an email or IT provider is authorized by many.",
+            "A known mail-policy provider's domain is never used."
+          ],
+          "counter_indications": [
+            "When the organization is itself an email, hosting or IT provider, a small client can send only through it."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-mx",
+      "title": "Shared mail exchanger",
+      "uses": {
+        "related-domain": {
+          "kind": "infrastructure",
+          "strength": "supporting",
+          "weight": 0.6,
+          "matcher": "shared_mx",
+          "finds": "Another registered domain whose mail is handled by the same mail exchanger (MX host) as one of the organization's own domains.",
+          "rationale": "A mail exchanger an organization runs for its own mail serves only that organization's domains, so two apex domains pointing their MX at the same host are evidence of common control. It is supporting rather than strong because a mail provider's exchanger is shared by many unrelated customers; in OAM an MX record is the same shape as a name-server record (an apex FQDN pointing to a server FQDN), so this mirrors the shared-name-server signal.",
+          "guards": [
+            "A mail exchanger inside the organization's own domains gives the strong mx-own-domain signal instead.",
+            "A mail exchanger serving more distinct apex domains than the lens cap is treated as a shared mail provider (Google Workspace, Microsoft 365, Proofpoint and the like) and is skipped, not scored.",
+            "Only mail exchangers reached from the organization's own domains are used as anchors."
+          ],
+          "counter_indications": [
+            "Managed mail providers and SaaS email gateways are the MX for many unrelated customers.",
+            "A parent company can run one mail system for legally separate subsidiaries."
+          ]
+        }
+      }
+    },
+    {
+      "id": "dmarc-reports-to",
+      "title": "DMARC reports to the organization",
+      "uses": {
+        "related-domain": {
+          "kind": "infrastructure",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "dmarc_reports_to",
+          "finds": "Another registered domain whose DMARC record sends its aggregate or forensic reports (rua/ruf) to a domain the organization owns.",
+          "rationale": "A domain's DMARC record names where its mail-authentication reports are sent. Pointing them at a domain the organization controls is a deliberate administrative act: that organization's mail team collects and acts on the reports, so the two domains are administered together. The reporting address is derived from the published DMARC TXT record, which is kept as evidence.",
+          "guards": [
+            "A reporting domain referenced by more distinct apex domains than the lens cap is a shared DMARC processor (dmarcian, Valimail and the like), not common ownership, and is skipped, not scored.",
+            "A reporting domain a known mail-policy provider operates is skipped regardless of how many referencing domains are in the database.",
+            "Only the organization's own domains are used as the reporting anchor."
+          ],
+          "counter_indications": [
+            "A managed DMARC service receives many unrelated customers' reports at its own domain.",
+            "An external reporting destination requires the destination to authorize it, which this signal does not yet verify."
+          ]
+        }
+      }
+    },
+    {
+      "id": "official-website",
+      "title": "Official website",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.8,
+          "matcher": "official_website",
+          "finds": "A domain the organization publishes as its own website (Organization --website--> URL --domain--> FQDN), for example recorded by the Wikidata official-website collector.",
+          "rationale": "An official website recorded for an organization is a curated, third-party-asserted claim that the organization owns that domain, so it is the strongest of the current horizontal signals.",
+          "guards": [
+            "Only a website edge on the subject organization itself is used.",
+            "The apex (registered domain) of the website host is taken, not the full host name."
+          ],
+          "counter_indications": [
+            "A curated source can record a campaign or microsite domain hosted by a third party as an official website.",
+            "An out-of-date record can name a domain the organization no longer controls."
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -18,7 +18,6 @@ import (
 
 type limits struct {
 	MaxQueued    int
-	HighWater    int
 	LowWater     int
 	PerSessBurst int
 }
@@ -54,6 +53,7 @@ func NewDispatcher(l *slog.Logger, r et.Registry, mgr et.SessionManager) et.Disp
 
 	go d.runPump()
 	go d.updateMetaMap()
+	go d.collectCompletedEvents()
 	go d.processCompletedEvents()
 	return d
 }
@@ -102,44 +102,36 @@ func (d *dispatcher) signalScheduling(e *et.Event) error {
 	return nil
 }
 
-func (d *dispatcher) ResubmitEvent(e *et.Event) error {
-	if e == nil || e.Entity == nil || e.Session == nil {
-		return errors.New("the event cannot be nil and must include the entity and session")
+// collectCompletedEvents moves finished events from the channel to the
+// unbounded completion queue as they arrive, so a pipeline handing back an
+// event never waits behind the acks.
+func (d *dispatcher) collectCompletedEvents() {
+	for {
+		select {
+		case <-d.done:
+			return
+		case e := <-d.cchan:
+			d.cqueue.Append(e)
+		}
 	}
-
-	if !e.Session.Backlog().Has(e.Entity) {
-		return errors.New("the event must already be in the backlog")
-	}
-
-	if err := d.meta.InsertEntry(e.Session.ID().String(), e.Entity.ID, e.Meta); err != nil {
-		return err
-	}
-
-	err := e.Session.Backlog().Enqueue(e.Entity)
-	if err != nil {
-		_ = d.meta.DeleteSessionEntry(e.Session.ID().String(), e.Entity.ID)
-		return err
-	}
-
-	return d.signalScheduling(e)
 }
 
+// processCompletedEvents acks the finished events, in the order they came.
 func (d *dispatcher) processCompletedEvents() {
 	for {
 		select {
 		case <-d.done:
 			return
-		default:
+		case <-d.cqueue.Signal():
 		}
 
-		select {
-		case e := <-d.cchan:
-			d.cqueue.Append(e)
-		case <-d.cqueue.Signal():
-			if data, ok := d.cqueue.Next(); ok {
-				if ede, valid := data.(*et.EventDataElement); valid {
-					d.completedCallback(ede)
-				}
+		for {
+			data, ok := d.cqueue.Next()
+			if !ok {
+				break
+			}
+			if ede, valid := data.(*et.EventDataElement); valid {
+				d.completedCallback(ede)
 			}
 		}
 	}
@@ -316,7 +308,6 @@ func limitsByAssetType(atype oam.AssetType) *limits {
 	case oam.IPAddress:
 		return &limits{
 			MaxQueued:    200,
-			HighWater:    175,
 			LowWater:     100,
 			PerSessBurst: 10,
 		}
@@ -327,7 +318,6 @@ func limitsByAssetType(atype oam.AssetType) *limits {
 	case oam.URL:
 		return &limits{
 			MaxQueued:    100,
-			HighWater:    75,
 			LowWater:     25,
 			PerSessBurst: 5,
 		}
@@ -335,7 +325,6 @@ func limitsByAssetType(atype oam.AssetType) *limits {
 
 	return &limits{
 		MaxQueued:    20,
-		HighWater:    15,
 		LowWater:     5,
 		PerSessBurst: 1,
 	}

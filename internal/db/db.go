@@ -27,8 +27,9 @@ func FindByFQDNScope(ctx context.Context, db repository.Repository, entity *dbt.
 
 	results := []*dbt.Entity{entity}
 	if edges, err := db.OutgoingEdges(ctx, entity, since, "node"); err == nil && len(edges) > 0 {
+		ends := EdgeEnds(ctx, db, edges, false)
 		for _, edge := range edges {
-			if to, err := db.FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil && !set.Has(to.Asset.Key()) {
+			if to, ok := ends[edge.ToEntity.ID]; ok && !set.Has(to.Asset.Key()) {
 				if tofqdn, valid := to.Asset.(*oamdns.FQDN); !valid || !strings.HasSuffix(tofqdn.Name, "."+fqdn.Name) {
 					continue
 				}

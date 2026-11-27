@@ -100,14 +100,11 @@ func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time) *dbt.Entit
 	}
 
 	for _, edge := range edges {
-		if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, r.plugin.source.Name); err == nil && len(tags) > 0 {
-			for _, tag := range tags {
-				if _, ok := tag.Property.(*general.SourceProperty); ok {
-					if as, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && as != nil {
-						return as
-					}
-				}
-			}
+		if !support.Sourced(ctx, e.Session, edge, since, r.plugin.source) {
+			continue
+		}
+		if as, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && as != nil {
+			return as
 		}
 	}
 	return nil
@@ -154,21 +151,9 @@ func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity, src *et.Source) *db
 
 	as, err := e.Session.DB().CreateAsset(ctx, &oamnet.AutonomousSystem{Number: asn})
 	if err == nil && as != nil {
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, as, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
+		support.AddSource(ctx, e.Session, as, src)
 
-		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-			Relation:   &general.SimpleRelation{Name: "announces"},
-			FromEntity: as,
-			ToEntity:   nb,
-		}); err == nil && edge != nil {
-			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-				Source:     r.plugin.source.Name,
-				Confidence: r.plugin.source.Confidence,
-			})
-		}
+		_, _ = support.Relate(ctx, e.Session, as, &general.SimpleRelation{Name: "announces"}, nb, r.plugin.source)
 	}
 	return as
 }

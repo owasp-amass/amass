@@ -9,27 +9,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamacct "github.com/owasp-amass/open-asset-model/account"
-	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	oamcon "github.com/owasp-amass/open-asset-model/contact"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oamfile "github.com/owasp-amass/open-asset-model/file"
-	oamfin "github.com/owasp-amass/open-asset-model/financial"
-	oamgen "github.com/owasp-amass/open-asset-model/general"
-	oamnet "github.com/owasp-amass/open-asset-model/network"
-	oamorg "github.com/owasp-amass/open-asset-model/org"
-	oampeop "github.com/owasp-amass/open-asset-model/people"
-	oamplat "github.com/owasp-amass/open-asset-model/platform"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
 type ErrorResponse struct {
@@ -76,20 +63,28 @@ func looksLikeJSONObject(raw json.RawMessage) bool {
 }
 
 func (v *V1Handlers) PutAsset(ctx context.Context, sess et.Session, asset oam.Asset) (string, error) {
-	filter, err := defaultContentFilter(asset)
-	if err != nil {
-		return "", err
-	}
-
 	var entity *dbt.Entity
-	ents, err := sess.DB().FindEntitiesByContent(ctx, asset.AssetType(), time.Time{}, 1, filter)
-	if err == nil {
-		entity = ents[0]
-	} else {
-		entity, err = sess.DB().CreateAsset(ctx, asset)
-		if err != nil {
-			return entity.ID, err
+	if asset.AssetType() == oam.TLSCertificate {
+		// A TLS certificate is identified by its issuer and serial together
+		// (RFC 5280 makes a serial unique per issuer only), which a single
+		// column content filter cannot express; finding by serial alone could
+		// match a different issuer's certificate. CreateAsset upserts by the
+		// full identity, so store it directly.
+		var err error
+		if entity, err = sess.DB().CreateAsset(ctx, asset); err != nil {
+			return "", err
+		} else if entity == nil {
+			return "", errors.New("the asset was not stored")
 		}
+	} else if filter, err := defaultContentFilter(asset); err != nil {
+		return "", err
+	} else if ents, err := sess.DB().FindEntitiesByContent(ctx, asset.AssetType(), time.Time{}, 1,
+		filter); err == nil && len(ents) > 0 && ents[0] != nil {
+		entity = ents[0]
+	} else if entity, err = sess.DB().CreateAsset(ctx, asset); err != nil {
+		return "", err
+	} else if entity == nil {
+		return "", errors.New("the asset was not stored")
 	}
 
 	// Create and schedule new event
@@ -106,118 +101,37 @@ func (v *V1Handlers) PutAsset(ctx context.Context, sess et.Session, asset oam.As
 	return entity.ID, nil
 }
 
+// putWorkers is how many assets of a bulk request are stored at once, so a
+// large request does not take every database connection.
+const putWorkers = 8
+
 func (v *V1Handlers) PutAssets(ctx context.Context, sess et.Session, assets []oam.Asset) (int64, error) {
-	ch := make(chan error, 100)
+	work := make(chan oam.Asset)
+	var failed atomic.Int64
+	var wg sync.WaitGroup
 
-	for _, asset := range assets {
-		go func(a oam.Asset) {
-			_, err := v.PutAsset(ctx, sess, a)
-			ch <- err
-		}(asset)
-	}
+	for range min(putWorkers, len(assets)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-	var failed int64
-	for range assets {
-		if err := <-ch; err != nil {
-			failed++
-		}
+			for a := range work {
+				if _, err := v.PutAsset(ctx, sess, a); err != nil {
+					failed.Add(1)
+				}
+			}
+		}()
 	}
-	close(ch)
+	for _, a := range assets {
+		work <- a
+	}
+	close(work)
+	wg.Wait()
 
-	if failed != 0 {
-		v.log.Warn("some assets failed to ingest", "failed", failed, "total", len(assets))
+	if n := failed.Load(); n != 0 {
+		v.log.Warn("some assets failed to ingest", "failed", n, "total", len(assets))
 	}
-	return int64(len(assets)) - failed, nil
-}
-
-func parseAsset(atype string, raw json.RawMessage) (oam.Asset, error) {
-	switch atype {
-	case strings.ToLower(string(oam.Account)):
-		var a oamacct.Account
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.AutnumRecord)):
-		var a oamreg.AutnumRecord
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.AutonomousSystem)):
-		var a oamnet.AutonomousSystem
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.ContactRecord)):
-		var a oamcon.ContactRecord
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.DomainRecord)):
-		var a oamreg.DomainRecord
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.File)):
-		var a oamfile.File
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.FQDN)):
-		var a oamdns.FQDN
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.FundsTransfer)):
-		var a oamfin.FundsTransfer
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Identifier)):
-		var a oamgen.Identifier
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.IPAddress)):
-		var a oamnet.IPAddress
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.IPNetRecord)):
-		var a oamreg.IPNetRecord
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Location)):
-		var a oamcon.Location
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Netblock)):
-		var a oamnet.Netblock
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Organization)):
-		var a oamorg.Organization
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Phone)):
-		var a oamcon.Phone
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Person)):
-		var a oampeop.Person
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Product)):
-		var a oamplat.Product
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.ProductRelease)):
-		var a oamplat.ProductRelease
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.Service)):
-		var a oamplat.Service
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.TLSCertificate)):
-		var a oamcert.TLSCertificate
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	case strings.ToLower(string(oam.URL)):
-		var a oamurl.URL
-		err := json.Unmarshal(raw, &a)
-		return &a, err
-	}
-	return nil, fmt.Errorf("unknown asset type: %s", atype)
+	return int64(len(assets)) - failed.Load(), nil
 }
 
 func defaultContentFilter(asset oam.Asset) (dbt.ContentFilters, error) {
@@ -238,13 +152,15 @@ func defaultContentFilter(asset oam.Asset) (dbt.ContentFilters, error) {
 		return dbt.ContentFilters{"name": asset.Key()}, nil
 	case oam.FundsTransfer:
 		return dbt.ContentFilters{"unique_id": asset.Key()}, nil
+	case oam.GeoLocation:
+		return dbt.ContentFilters{"unique_id": asset.Key()}, nil
 	case oam.Identifier:
 		return dbt.ContentFilters{"unique_id": asset.Key()}, nil
 	case oam.IPAddress:
 		return dbt.ContentFilters{"address": asset.Key()}, nil
 	case oam.IPNetRecord:
 		return dbt.ContentFilters{"handle": asset.Key()}, nil
-	case oam.Location:
+	case oam.StreetAddress:
 		return dbt.ContentFilters{"address": asset.Key()}, nil
 	case oam.Netblock:
 		return dbt.ContentFilters{"cidr": asset.Key()}, nil
@@ -260,11 +176,14 @@ func defaultContentFilter(asset oam.Asset) (dbt.ContentFilters, error) {
 		return dbt.ContentFilters{"name": asset.Key()}, nil
 	case oam.Service:
 		return dbt.ContentFilters{"unique_id": asset.Key()}, nil
-	case oam.TLSCertificate:
-		return dbt.ContentFilters{"serial_number": asset.Key()}, nil
+	case oam.StorageBucket:
+		return dbt.ContentFilters{"unique_id": asset.Key()}, nil
 	case oam.URL:
 		return dbt.ContentFilters{"url": asset.Key()}, nil
 	}
 
+	// A TLS certificate is identified by issuer and serial together, not by a
+	// single column, so PutAsset stores it with CreateAsset and never asks for
+	// its content filter.
 	return nil, errors.New("invalid asset type")
 }

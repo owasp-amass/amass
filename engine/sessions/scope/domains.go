@@ -12,7 +12,12 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+// AddFQDN adds a registered domain name to the scope.
 func (s *Scope) AddFQDN(fqdn *dns.FQDN) bool {
+	return s.addEntry(fqdn, false, true)
+}
+
+func (s *Scope) addFQDN(fqdn *dns.FQDN) bool {
 	if fqdn.Name == "" {
 		return false
 	}

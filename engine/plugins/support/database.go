@@ -6,8 +6,10 @@ package support
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"log/slog"
 	"strings"
 	"time"
@@ -35,10 +37,7 @@ func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, pl
 	for _, name := range names {
 		if a, err := session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: name}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.DB().CreateEntityProperty(ctx, a, &oamgen.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
-			})
+			AddSource(ctx, session, a, src)
 		} else {
 			session.Log().Error(err.Error(), slog.Group("plugin", "name", plugin, "handler", handler))
 		}
@@ -66,49 +65,13 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 			Type:     oamgen.EmailAddress,
 		}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.DB().CreateEntityProperty(ctx, a, &oamgen.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
-			})
+			AddSource(ctx, session, a, src)
 		} else {
 			session.Log().Error(err.Error(), slog.Group("plugin", "name", plugin, "handler", handler))
 		}
 	}
 
 	return results
-}
-
-func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
-	if asset == nil || src == nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(session.Ctx(), 3*time.Second)
-	defer cancel()
-
-	_, _ = session.DB().CreateEntityProperty(ctx, asset, oamgen.SimpleProperty{
-		PropertyName:  "last_monitored",
-		PropertyValue: src.Name,
-	})
-}
-
-func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Source, since time.Time) bool {
-	if asset == nil || src == nil || since.IsZero() {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(session.Ctx(), 3*time.Second)
-	defer cancel()
-
-	if tags, err := session.DB().FindEntityTags(ctx, asset, since, "last_monitored"); err == nil && len(tags) > 0 {
-		for _, tag := range tags {
-			if tag.Property.Value() == src.Name {
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *oamplat.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
@@ -123,8 +86,9 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		if _, ok := src.Asset.(*oamdns.FQDN); ok {
 			// check for IP assresses associated with the FQDN
 			if edges, err := session.DB().OutgoingEdges(ctx, src, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+				ends := amassdb.EdgeEnds(ctx, session.DB(), edges, false)
 				for _, edge := range edges {
-					if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
+					if to, ok := ends[edge.ToEntity.ID]; ok {
 						if _, ok := to.Asset.(*oamnet.IPAddress); ok {
 							srcs = append(srcs, to)
 						}
@@ -136,13 +100,19 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		// go though the hosts that could have previously associated with the service
 		for _, s := range srcs {
 			if edges, err := session.DB().OutgoingEdges(ctx, s, time.Time{}); err == nil && len(edges) > 0 {
+				var ports []*dbt.Edge
 				for _, edge := range edges {
 					if eport, ok := edge.Relation.(*oamgen.PortRelation); ok &&
 						eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
-						if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
-							if srv, ok := to.Asset.(*oamplat.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
-								srvs = append(srvs, to)
-							}
+						ports = append(ports, edge)
+					}
+				}
+
+				ends := amassdb.EdgeEnds(ctx, session.DB(), ports, false)
+				for _, edge := range ports {
+					if to, ok := ends[edge.ToEntity.ID]; ok {
+						if srv, ok := to.Asset.(*oamplat.Service); ok && srv.OutputLen != 0 && srv.OutputLen == serv.OutputLen {
+							srvs = append(srvs, to)
 						}
 					}
 				}
@@ -159,10 +129,11 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 			continue
 		}
 
-		// compare some of the service attributes to find a match
+		// compare some of the service attributes to find a match; a header
+		// may be stored with no values
 		for _, key := range []string{"Server", "X-Powered-By"} {
-			if server1, ok := serv.Attributes[key]; ok && server1[0] != "" {
-				if server2, ok := s.Attributes[key]; ok && server1[0] == server2[0] {
+			if server1 := serv.Attributes[key]; len(server1) > 0 && server1[0] != "" {
+				if server2 := s.Attributes[key]; len(server2) > 0 && server1[0] == server2[0] {
 					num++
 				} else {
 					num--
@@ -174,9 +145,10 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 			if edges, err := session.DB().OutgoingEdges(ctx, srv, time.Time{}, "certificate"); err == nil && len(edges) > 0 {
 				var found bool
 
+				ends := amassdb.EdgeEnds(ctx, session.DB(), edges, false)
 				for _, edge := range edges {
-					if t, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && t != nil {
-						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && c.SerialNumber == cert.SerialNumber {
+					if t, ok := ends[edge.ToEntity.ID]; ok {
+						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && SameCertificate(c, cert) {
 							found = true
 							break
 						}
@@ -211,4 +183,61 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		ToEntity:   match,
 	})
 	return match, err
+}
+
+// CreateCertificateChain stores the certificates a server presented, leaf
+// first, and returns the leaf's entity and certificate with the findings
+// that link each certificate to its issuer's.
+func CreateCertificateChain(sess et.Session, certs []*x509.Certificate) (*dbt.Entity, *x509.Certificate, []*Finding) {
+	if len(certs) == 0 {
+		return nil, nil, nil
+	}
+
+	dur := time.Duration(len(certs)*3) * time.Second
+	ctx, cancel := context.WithTimeout(sess.Ctx(), dur)
+	defer cancel()
+
+	var findings []*Finding
+	var prev, firstAsset *dbt.Entity
+	var firstCert *x509.Certificate
+	for _, cert := range certs {
+		c := X509ToOAMTLSCertificate(cert)
+		if c == nil {
+			break
+		}
+
+		a, err := sess.DB().CreateAsset(ctx, c)
+		if err != nil {
+			break
+		}
+
+		if prev == nil {
+			firstAsset = a
+			firstCert = cert
+		} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
+			findings = append(findings, &Finding{
+				From:     prev,
+				FromName: tls.SerialNumber,
+				To:       a,
+				ToName:   c.SerialNumber,
+				ToMeta:   cert,
+				Rel:      &oamgen.SimpleRelation{Name: "issuing_certificate"},
+			})
+		}
+		prev = a
+	}
+
+	return firstAsset, firstCert, findings
+}
+
+// SameCertificate reports whether two certificates are one: the same serial
+// number from the same issuer (RFC 5280 makes serial numbers unique per issuer
+// only), with the same key, as the Asset Database identifies a certificate.
+func SameCertificate(a, b *oamcert.TLSCertificate) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return a.SerialNumber == b.SerialNumber && strings.EqualFold(a.IssuerCommonName, b.IssuerCommonName) &&
+		strings.EqualFold(a.AuthorityKeyID, b.AuthorityKeyID) && strings.EqualFold(a.SubjectKeyID, b.SubjectKeyID)
 }

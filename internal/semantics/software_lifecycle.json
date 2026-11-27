@@ -1,0 +1,42 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Release lines of identified software that their makers no longer support with security fixes. product is the name product_fingerprints.json identifies. A version is in a release line when it equals series or begins with it followed by anything other than a digit (OpenSSL 1.1.1k and Apache 2.2.34 are in 1.1.1 and 2.2; 2.4 is not in 2.2). end_of_support, when the cited page gives it, is the date it gives for the end of support; a line is reported once that day has passed, and a line listed without a date is already unsupported. Each product cites the maker's own lifecycle page; a line that page does not name as unsupported does not belong here. Distributions sometimes backport fixes to versions they ship, so a finding is a reason to check, not proof of a vulnerability. Add release lines here, not in Go code.",
+  "products": [
+    {"product": "OpenSSL", "source": "https://openssl-library.org/policies/releasestrat/",
+      "unsupported": [
+        {"series": "3.0"},
+        {"series": "1.1.1"},
+        {"series": "1.1.0"}, {"series": "1.0.2"}, {"series": "1.0.1"}, {"series": "1.0.0"}, {"series": "0.9.8"}
+      ]},
+    {"product": "PHP", "source": "https://www.php.net/eol.php",
+      "unsupported": [
+        {"series": "8.1", "end_of_support": "2025-12-31"},
+        {"series": "8.0", "end_of_support": "2023-11-26"},
+        {"series": "7.4", "end_of_support": "2022-11-28"},
+        {"series": "7.3", "end_of_support": "2021-12-06"},
+        {"series": "7.2", "end_of_support": "2020-11-30"},
+        {"series": "7.1", "end_of_support": "2019-12-01"},
+        {"series": "7.0", "end_of_support": "2019-01-10"},
+        {"series": "5.6", "end_of_support": "2018-12-31"}
+      ]},
+    {"product": "Apache HTTP Server", "source": "https://archive.apache.org/dist/httpd/Announcement2.2.html",
+      "unsupported": [
+        {"series": "2.2", "end_of_support": "2017-12-31"}
+      ]},
+    {"product": "Microsoft IIS", "source": "https://learn.microsoft.com/en-us/lifecycle/products/internet-information-services-iis",
+      "unsupported": [
+        {"series": "8.5", "end_of_support": "2023-10-11"},
+        {"series": "8.0", "end_of_support": "2023-10-11"},
+        {"series": "7.5", "end_of_support": "2020-01-15"},
+        {"series": "7.0", "end_of_support": "2020-01-15"},
+        {"series": "6.0", "end_of_support": "2015-07-15"}
+      ]},
+    {"product": "Drupal", "source": "https://drupal.org/about/core/policies/core-release-cycles/schedule",
+      "unsupported": [
+        {"series": "10", "end_of_support": "2026-12-09"},
+        {"series": "9", "end_of_support": "2023-11-01"},
+        {"series": "8", "end_of_support": "2021-11-17"},
+        {"series": "7", "end_of_support": "2025-01-05"}
+      ]}
+  ]
+}

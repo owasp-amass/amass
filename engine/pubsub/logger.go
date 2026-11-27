@@ -31,7 +31,11 @@ func NewLogger() *Logger {
 
 // Publish sends a log message to the logger.
 func (l *Logger) Publish(msg string) {
-	if len(l.subscribed) > 0 {
+	l.Lock()
+	n := len(l.subscribed)
+	l.Unlock()
+
+	if n > 0 {
 		l.q.Append(msg)
 	}
 }
@@ -99,6 +103,14 @@ func (l *Logger) msgToSubscribers(e any) {
 	}
 }
 
+// send delivers a message to a subscriber whose buffer was full. Close can
+// close the channel while the send waits, so that panic is recovered: the
+// message is dropped with the logger.
 func (l *Logger) send(ch chan *string, msg string) {
-	ch <- &msg
+	defer func() { _ = recover() }()
+
+	select {
+	case <-l.done:
+	case ch <- &msg:
+	}
 }

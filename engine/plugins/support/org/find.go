@@ -157,10 +157,10 @@ func existsAndSharesLocEntity(sess et.Session, obj *dbt.Entity, o *oamorg.Organi
 	ctx, cancel := context.WithTimeout(sess.Ctx(), 30*time.Second)
 	defer cancel()
 
-	if edges, err := sess.DB().OutgoingEdges(ctx, obj, time.Time{}, "legal_address", "hq_address", "location"); err == nil {
+	if edges, err := sess.DB().OutgoingEdges(ctx, obj, time.Time{}, "legal_address", "hq_address", "street_address"); err == nil {
 		for _, edge := range edges {
 			if a, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*oamcon.Location); ok {
+				if _, ok := a.Asset.(*oamcon.StreetAddress); ok {
 					locs = append(locs, a)
 				}
 			}
@@ -168,11 +168,11 @@ func existsAndSharesLocEntity(sess et.Session, obj *dbt.Entity, o *oamorg.Organi
 	}
 
 	// get all locations that match the ones discovered on the graph
-	locs = append(locs, matchingLocations(sess, locs)...)
+	locs = append(locs, matchingStreetAddresses(sess, locs)...)
 
 	var orgents, crecords []*dbt.Entity
 	for _, loc := range locs {
-		if edges, err := sess.DB().IncomingEdges(ctx, loc, time.Time{}, "legal_address", "hq_address", "location"); err == nil {
+		if edges, err := sess.DB().IncomingEdges(ctx, loc, time.Time{}, "legal_address", "hq_address", "street_address"); err == nil {
 			for _, edge := range edges {
 				if a, err := sess.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
 					if _, ok := a.Asset.(*oamcon.ContactRecord); ok && a.ID != obj.ID {
@@ -206,7 +206,7 @@ func existsAndSharesLocEntity(sess et.Session, obj *dbt.Entity, o *oamorg.Organi
 	return nil, errors.New("no matching org found")
 }
 
-func matchingLocations(sess et.Session, locs []*dbt.Entity) []*dbt.Entity {
+func matchingStreetAddresses(sess et.Session, locs []*dbt.Entity) []*dbt.Entity {
 	var newlocs []*dbt.Entity
 
 	set := stringset.New()
@@ -217,7 +217,7 @@ func matchingLocations(sess et.Session, locs []*dbt.Entity) []*dbt.Entity {
 	}
 
 	for _, loc := range locs {
-		lasset, valid := loc.Asset.(*oamcon.Location)
+		lasset, valid := loc.Asset.(*oamcon.StreetAddress)
 		if !valid {
 			continue
 		}
@@ -242,7 +242,7 @@ func matchingLocations(sess et.Session, locs []*dbt.Entity) []*dbt.Entity {
 		ctx, cancel := context.WithTimeout(sess.Ctx(), 10*time.Second)
 		defer cancel()
 
-		ents, err := sess.DB().FindEntitiesByContent(ctx, oam.Location, time.Time{}, 0, cf)
+		ents, err := sess.DB().FindEntitiesByContent(ctx, oam.StreetAddress, time.Time{}, 0, cf)
 		if err != nil || len(ents) == 0 {
 			continue
 		}

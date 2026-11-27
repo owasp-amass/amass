@@ -13,6 +13,8 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/fingerprint"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -61,6 +63,7 @@ func (hp *httpProbing) Start(r et.Registry) error {
 			string(oam.TLSCertificate),
 		},
 		EventType: oam.FQDN,
+		Probes:    true,
 		Callback:  hp.fqdnend.check,
 	}); err != nil {
 		return err
@@ -81,6 +84,7 @@ func (hp *httpProbing) Start(r et.Registry) error {
 			string(oam.TLSCertificate),
 		},
 		EventType: oam.IPAddress,
+		Probes:    true,
 		Callback:  hp.ipaddr.check,
 	}); err != nil {
 		return err
@@ -98,19 +102,44 @@ func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, por
 	var findings []*support.Finding
 	e.Session.NetSem().Acquire()
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), amassnet.ActiveTimeout(e.Session.Ctx(), 15*time.Second))
 	defer cancel()
 
 	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe, &amasshttp.Request{URL: target})
 	e.Session.NetSem().Release()
 
 	if err == nil && resp != nil {
-		findings = append(findings, hp.store(e, resp, entity, port)...)
+		findings = append(findings, hp.store(e, resp, entity, port, hp.faviconHash(e, target))...)
 	}
 	return findings
 }
 
-func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.Entity, port int) []*support.Finding {
+// faviconMaxBytes bounds the favicon body that is hashed; real icons are small,
+// and a larger body is an error or default page rather than an icon.
+const faviconMaxBytes = 1 << 20
+
+// faviconHash fetches the service's /favicon.ico and returns its hash in the
+// convention Shodan and most recon tools use, or "" when there is no usable
+// icon. It is stored like the other fingerprints so that services sharing a
+// favicon can be found by value — the signal used to locate an origin server
+// behind a CDN by its favicon hash.
+func (hp *httpProbing) faviconHash(e *et.Event, target string) string {
+	e.Session.NetSem().Acquire()
+	defer e.Session.NetSem().Release()
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), amassnet.ActiveTimeout(e.Session.Ctx(), 10*time.Second))
+	defer cancel()
+
+	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe,
+		&amasshttp.Request{URL: target + "/favicon.ico"})
+	if err != nil || resp == nil || resp.StatusCode != 200 || len(resp.Body) == 0 || len(resp.Body) > faviconMaxBytes {
+		return ""
+	}
+
+	return fingerprint.FaviconHash([]byte(resp.Body))
+}
+
+func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.Entity, port int, favicon string) []*support.Finding {
 	addr := entity.Asset.Key()
 	serv := support.ServiceWithIdentifier(addr, "tcp", port)
 
@@ -145,6 +174,8 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 		return findings
 	}
 
+	hp.storeFingerprints(e, s, resp, favicon)
+
 	// for adding the source information
 	findings = append(findings, &support.Finding{
 		From:     entity,
@@ -167,52 +198,26 @@ func (hp *httpProbing) store(e *et.Event, resp *amasshttp.Response, entity *dbt.
 	return findings
 }
 
+// storeFingerprints records the page's web fingerprints (title, analytics
+// identifiers, content hash, favicon hash) as shared Identifiers linked from the
+// service by a "fingerprint" edge, under the id_types of the fingerprint package
+// that every collector shares, so services and hosts sharing a value can be
+// found by it.
+func (hp *httpProbing) storeFingerprints(e *et.Event, svc *dbt.Entity, resp *amasshttp.Response, favicon string) {
+	fps := fingerprint.FromHTTP(resp.Header, resp.Body)
+	if favicon != "" {
+		fps = append(fps, fingerprint.Fingerprint{Name: fingerprint.FaviconMMH3, Value: favicon})
+	}
+
+	for _, fp := range fps {
+		support.StoreFingerprint(e, svc, hp.source, fp.Name, fp.Value)
+	}
+}
+
 func (hp *httpProbing) createCertificates(sess et.Session, resp *amasshttp.Response) (*dbt.Entity, *x509.Certificate, []*support.Finding) {
-	var findings []*support.Finding
-
 	if resp.TLS == nil || !resp.TLS.HandshakeComplete {
-		return nil, nil, findings
+		return nil, nil, nil
 	}
 
-	count := len(resp.TLS.PeerCertificates)
-	if count == 0 {
-		return nil, nil, findings
-	}
-
-	dur := time.Duration(count*3) * time.Second
-	ctx, cancel := context.WithTimeout(sess.Ctx(), dur)
-	defer cancel()
-
-	var prev *dbt.Entity
-	var firstAsset *dbt.Entity
-	var firstCert *x509.Certificate
-	// traverse the certificate chain
-	for _, cert := range resp.TLS.PeerCertificates {
-		c := support.X509ToOAMTLSCertificate(cert)
-		if c == nil {
-			break
-		}
-
-		a, err := sess.DB().CreateAsset(ctx, c)
-		if err != nil {
-			break
-		}
-
-		if prev == nil {
-			firstAsset = a
-			firstCert = cert
-		} else if tls, valid := prev.Asset.(*oamcert.TLSCertificate); valid {
-			findings = append(findings, &support.Finding{
-				From:     prev,
-				FromName: tls.SerialNumber,
-				To:       a,
-				ToName:   c.SerialNumber,
-				ToMeta:   cert,
-				Rel:      &oamgen.SimpleRelation{Name: "issuing_certificate"},
-			})
-		}
-		prev = a
-	}
-
-	return firstAsset, firstCert, findings
+	return support.CreateCertificateChain(sess, resp.TLS.PeerCertificates)
 }

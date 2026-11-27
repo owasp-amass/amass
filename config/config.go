@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -59,10 +60,14 @@ type Config struct {
 	Scope *Scope `yaml:"scope,omitempty" json:"scope,omitempty"`
 
 	// Defines options like datasources config path and stuff like that
-	Options map[string]interface{} `yaml:"options,omitempty" json:"-"`
+	Options map[string]interface{} `yaml:"options,omitempty" json:"options,omitempty"`
+
+	// Optional inference and classifier configuration, read from options.ai;
+	// never enables AI by itself.
+	AI *AISettings `yaml:"-" json:"-"`
 
 	// The global transformation settings
-	DefaultTransformations *Transformation `yaml:"-" json:"-"`
+	DefaultTransformations *Transformation `yaml:"-" json:"default_transformation,omitempty"`
 
 	// Filepath of the configuration file. It is needed as a seed incase of relative paths in the config.
 	Filepath string `yaml:"-" json:"-"`
@@ -76,9 +81,6 @@ type Config struct {
 	// The graph databases used by the system / enumerations
 	GraphDBs []*Database `yaml:"-" json:"database,omitempty"`
 
-	// The maximum number of concurrent DNS queries
-	MaxDNSQueries int `yaml:"-" json:"-"`
-
 	// The list of words to use when generating names
 	Wordlist []string `yaml:"-" json:"wordlist,omitempty"`
 
@@ -86,32 +88,33 @@ type Config struct {
 	BruteForcing bool `yaml:"-" json:"brute_force,omitempty"`
 
 	// Will recursive brute forcing be performed?
-	Recursive bool `yaml:"-" json:"-"`
+	Recursive bool `yaml:"-" json:"recursive,omitempty"`
 
 	// Minimum number of subdomain discoveries before performing recursive brute forcing
-	MinForRecursive int `yaml:"-" json:"-"`
+	MinForRecursive int `yaml:"-" json:"min_for_recursive,omitempty"`
 
 	// Maximum depth for bruteforcing
-	MaxDepth int `yaml:"-" json:"-"`
+	MaxDepth int `yaml:"-" json:"max_depth,omitempty"`
 
 	// Will discovered subdomain name alterations be generated?
 	Alterations    bool     `yaml:"-" json:"alterations,omitempty"`
-	FlipWords      bool     `yaml:"-" json:"-"`
-	FlipNumbers    bool     `yaml:"-" json:"-"`
-	AddWords       bool     `yaml:"-" json:"-"`
-	AddNumbers     bool     `yaml:"-" json:"-"`
-	MinForWordFlip int      `yaml:"-" json:"-"`
-	EditDistance   int      `yaml:"-" json:"-"`
+	FlipWords      bool     `yaml:"-" json:"flip_words,omitempty"`
+	FlipNumbers    bool     `yaml:"-" json:"flip_numbers,omitempty"`
+	AddWords       bool     `yaml:"-" json:"add_words,omitempty"`
+	AddNumbers     bool     `yaml:"-" json:"add_numbers,omitempty"`
+	MinForWordFlip int      `yaml:"-" json:"min_for_word_flip,omitempty"`
+	EditDistance   int      `yaml:"-" json:"edit_distance,omitempty"`
 	AltWordlist    []string `yaml:"-" json:"alt_worldlist,omitempty"`
 
 	// Only access the data sources for names and return results?
-	Passive bool `yaml:"-" json:"-"`
+	Passive bool `yaml:"-" json:"passive,omitempty"`
 
 	// Determines if zone transfers will be attempted
 	Active bool `yaml:"active,omitempty" json:"active,omitempty"`
 
-	// Determines rigidness of the enumeration
-	Rigid bool `yaml:"rigid_boundaries" json:"rigid_boundaries"`
+	// BackgroundHold is options.background_hold, nil when not set
+	// (BackgroundHoldDuration).
+	BackgroundHold *time.Duration `yaml:"-" json:"background_hold,omitempty"`
 
 	blacklistLock sync.Mutex `yaml:"-" json:"-"`
 
@@ -122,28 +125,43 @@ type Config struct {
 	} `yaml:"-" json:"-"`
 
 	// The minimum number of minutes that data source responses will be reused
-	MinimumTTL int `yaml:"-" json:"-"`
+	MinimumTTL int `yaml:"-" json:"minimum_ttl,omitempty"`
 
 	// Type of DNS records to query for
-	RecordTypes []string `yaml:"-" json:"-"`
+	RecordTypes []string `yaml:"-" json:"record_types,omitempty"`
 
-	// Resolver settings
+	// Resolver settings: the queries go to the untrusted resolvers when there
+	// are any, and otherwise to the trusted ones; the first trusted resolver
+	// tests for DNS wildcards. Without either, the engine's default resolvers
+	// are used. The engine sets the rate limit for each resolver.
 	Resolvers        []string `yaml:"-" json:"resolvers"`
-	ResolversQPS     int      `yaml:"-" json:"-"`
 	TrustedResolvers []string `yaml:"-" json:"trusted_resolvers,omitempty"`
-	TrustedQPS       int      `yaml:"-" json:"-"`
+
+	// The network interface the enumeration's traffic leaves through: an
+	// interface name, such as eth0, or one of the engine host's IP addresses.
+	// The engine resolves it, and without it the engine's own setting applies.
+	Interface string `yaml:"-" json:"interface,omitempty"`
+
+	// The route the enumeration's active traffic (probes, banners,
+	// certificates, zone transfers) takes: an interface, or a proxy URL
+	// (socks5h://, socks5:// or http:// for CONNECT), such as Tor's. A proxy
+	// carries TCP only, so active UDP leaves from the UDP route's interface
+	// when one is set and is not sent otherwise. Without them, the engine's
+	// own settings apply.
+	ActiveRoute    string `yaml:"-" json:"active_route,omitempty"`
+	ActiveUDPRoute string `yaml:"-" json:"active_udp_route,omitempty"`
 
 	// Option for verbose logging and output
-	Verbose bool `yaml:"-" json:"-"`
+	Verbose bool `yaml:"-" json:"verbose,omitempty"`
 
 	// Names provided to seed the enumeration
-	ProvidedNames []string `yaml:"-" json:"-"`
+	ProvidedNames []string `yaml:"-" json:"provided_names,omitempty"`
 
 	// The regular expressions for the root domains added to the enumeration
 	regexps map[string]*regexp.Regexp `yaml:"-" json:"-"`
 
 	// Mode should be determined based on scripts utilized
-	Mode string `yaml:"-" json:"-"`
+	Mode string `yaml:"-" json:"mode,omitempty"`
 
 	// The data source configurations
 	DataSrcConfigs *DataSourceConfig `yaml:"-" json:"datasource_config"`
@@ -175,6 +193,23 @@ type Scope struct {
 	// ASNs specified as in scope
 	ASNs []int `yaml:"asns,omitempty" json:"asns,omitempty"`
 
+	// Organizations (corporations) in scope: the companies discovered
+	// assets must be attributable to. In the seed, a starting point the
+	// engine resolves to the company's domains, networks and systems.
+	Organizations []string `yaml:"organizations,omitempty" json:"organizations,omitempty"`
+
+	// Phones are phone numbers that seed the enumeration: starting points the
+	// engine resolves to the organizations tied to the number and their
+	// domains. Only meaningful in the seed; a number pivots to organizations,
+	// it does not bound the scope.
+	Phones []string `yaml:"phones,omitempty" json:"phones,omitempty"`
+
+	// StreetAddresses are street addresses that seed the enumeration: starting
+	// points the engine resolves to the organizations at the address and their
+	// domains. Only meaningful in the seed; a shared or registered-agent
+	// address is held for review rather than enumerated.
+	StreetAddresses []string `yaml:"street_addresses,omitempty" json:"street_addresses,omitempty"`
+
 	// CIDR IPNET
 	CIDRs []*net.IPNet `yaml:"-" json:"cidrs,omitempty"`
 
@@ -189,6 +224,48 @@ type Scope struct {
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string `yaml:"blacklist,omitempty" json:"blacklist,omitempty"`
+
+	// Names are known DNS names (leads) that seed the enumeration: usually
+	// subdomains of an in-scope root, supplied from other tooling or past
+	// knowledge so the enumeration does not overlook them. Only meaningful
+	// in the seed section; they are folded into the provided names the run
+	// starts from, so they do not transfer as part of the scope.
+	Names []string `yaml:"names,omitempty" json:"-"`
+
+	// NamesFile is a file of seed DNS names, one per line. Only meaningful
+	// in the seed section; its names are loaded into Names.
+	NamesFile string `yaml:"names_file,omitempty" json:"-"`
+}
+
+// DefaultPorts are the ports active enumeration probes when the
+// configuration lists none: every port the SSH, mail and file greeting, and
+// HTTP probes know a protocol for. The web ports after the common ones are
+// administration consoles and management or data APIs that answer HTTP.
+var DefaultPorts = []int{
+	21,    // FTP
+	22,    // SSH
+	25,    // SMTP
+	80,    // HTTP
+	110,   // POP3
+	143,   // IMAP
+	443,   // HTTPS
+	465,   // SMTP over TLS
+	587,   // SMTP submission
+	993,   // IMAP over TLS
+	995,   // POP3 over TLS
+	2375,  // Docker Engine API (unencrypted)
+	2379,  // etcd client API
+	5984,  // CouchDB
+	6443,  // Kubernetes API server
+	8000,  // HTTP alternate
+	8080,  // HTTP alternate
+	8443,  // HTTPS alternate
+	8500,  // Consul HTTP API
+	8888,  // HTTP alternate
+	9200,  // Elasticsearch / OpenSearch REST API
+	9443,  // web administration consoles
+	10000, // Webmin
+	10250, // Kubernetes kubelet API
 }
 
 // NewConfig returns a default configuration object.
@@ -199,7 +276,7 @@ func NewConfig() *Config {
 		Log:                 log.New(io.Discard, "", 0),
 		CollectionStartTime: time.Now(),
 		Seed:                &Scope{},
-		Scope:               &Scope{Ports: []int{80, 443}},
+		Scope:               &Scope{Ports: slices.Clone(DefaultPorts)},
 		Options:             make(map[string]interface{}),
 		MinForRecursive:     1,
 		FlipWords:           true,
@@ -210,8 +287,6 @@ func NewConfig() *Config {
 		EditDistance:        1,
 		Recursive:           true,
 		MinimumTTL:          1440,
-		ResolversQPS:        DefaultQueriesPerPublicResolver,
-		TrustedQPS:          DefaultQueriesPerBaselineResolver,
 		DataSrcConfigs: &DataSourceConfig{
 			GlobalOptions: make(map[string]int),
 		},
@@ -240,6 +315,11 @@ func (c *Config) CheckSettings() error {
 	}
 	if c.Passive && c.Active {
 		return errors.New("active enumeration cannot be performed without DNS resolution")
+	}
+	if c.AI != nil {
+		if err := c.AI.Documents.Validate(); err != nil {
+			return err
+		}
 	}
 
 	c.Wordlist, err = ExpandMaskWordlist(c.Wordlist)
@@ -279,21 +359,28 @@ func (c *Config) LoadSettings(path string) error {
 		_ = c.LoadEngineEnvSettings()
 		return fmt.Errorf("error mapping configuration settings to internal values: %v", err)
 	}
+	if err := refuseTopLevelAI(data); err != nil {
+		return err
+	}
 
 	if err := c.loadSeedandScopeSettings(); err != nil {
 		return err
 	}
 
 	loads := []func(cfg *Config) error{
+		c.loadAISettings,
 		c.loadAlterationSettings,
 		c.loadBruteForceSettings,
 		c.loadDatabaseSettings,
 		c.loadDataSourceSettings,
 		c.loadResolverSettings,
+		c.loadNetworkSettings,
 		c.loadTransformSettings,
 		c.loadEngineSettings,
 		c.loadActiveSettings,
-		c.loadRigidSettings,
+		c.loadBackgroundSettings,
+		c.loadJobSettings,
+		c.refuseRemovedSettings,
 	}
 	for _, load := range loads {
 		if err := load(c); err != nil {

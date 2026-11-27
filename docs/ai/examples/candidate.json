@@ -1,0 +1,9 @@
+{
+  "subject_id": "REPLACE_WITH_REAL_OAM_ORG_ENTITY_ID",
+  "object_id": "REPLACE_WITH_REAL_OAM_ORG_ENTITY_ID_2",
+  "allowed_labels": ["subsidiary", "org_unit"],
+  "evidence": [
+    {"id": "REPLACE_WITH_EXISTING_ENTITY_TAG_ID_1"},
+    {"id": "REPLACE_WITH_EXISTING_ENTITY_TAG_ID_2"}
+  ]
+}

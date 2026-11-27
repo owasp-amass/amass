@@ -39,3 +39,23 @@ Please do not make pull requests to `main`.
 - no --force onto `develop` (except when reverting a broken commit, which should seldom happen)
 - create a development branch on your fork (using `git add origin`)
 - before submitting a pull request, begin `git rebase` on top of `develop`
+
+### Test Data
+
+Tests must never name the assets of a real organization, including the
+ones seen while testing against live targets: no domains, networks,
+autonomous systems, addresses, phone numbers, identifiers or people taken
+from a real enumeration. When a test needs a realistic subject, use
+OWASP's (`owasp.org`, OWASP Foundation), Utica University's (`utica.edu`)
+or SUNY Poly's (`sunyit.edu`). Name every other party with reserved or
+made-up names (`example.com`, `*.example`, `acme.example`), and use the
+documentation address ranges (`192.0.2.0/24`, `198.51.100.0/24`,
+`203.0.113.0/24`, `2001:db8::/32`) and autonomous system numbers
+(64496–64511). The engine treats `192.0.2.0/24` as reserved, so an
+organization's own network in a test is `198.51.100.0/24` or
+`203.0.113.0/24`.
+
+`internal/testpolicy` checks the domains named in test data. A provider,
+registry or made-up name it rejects goes in
+`internal/testpolicy/testdata/allowed_domains.txt`; a real organization's
+domain is replaced.

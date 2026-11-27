@@ -134,12 +134,12 @@ global_options:
 var validttlYAML = []byte(`
 options:
   confidence: 50 # default confidence level for all transformations unless otherwise specified
-  default_transform_values:
+
+transformations:
+  default:
     ttl: 69 # default is 1440
     confidence: 50 # default is 50
     priority: 5 # default global priority is 5 (assuming its 1-10)
-
-transformations:
   FQDN->IPAddress:
     priority: 1
     confidence: 80
@@ -183,24 +183,24 @@ transformations:
 `)
 
 var nonvalidttlYAML = []byte(`
-options:
-  default_transform_values:
+transformations:
+  default:
     ttl: hello # default is 1440
     confidence: 50 # default is 50
     priority: 5 # default global priority is 5 (assuming its 1-10)
 `)
 
 var nonvalidttlYAML2 = []byte(`
-options:
-  default_transform_values:
+transformations:
+  default:
     ttl: 1440 # default is 1440
     confidence: 50 # default is 50
     priority: hello # default global priority is 5 (assuming its 1-10)
 `)
 
 var nonvalidttlYAML3 = []byte(`
-options:
-  default_transform_values:
+transformations:
+  default:
     ttl: 1440 # default is 1440
     confidence: hello # default is 50
     priority: 5 # default global priority is 5 (assuming its 1-10)
@@ -329,10 +329,7 @@ func TestSplit(t *testing.T) {
 
 func TestIsMatch(t *testing.T) {
 	m := &Matches{
-		to: map[string]struct {
-			ttl        int
-			confidence int
-		}{
+		to: map[string]match{
 			"ipaddress":    {},
 			"domainrecord": {},
 			"rirorg":       {},
@@ -428,10 +425,7 @@ func TestCheckTransformations(t *testing.T) {
 			tos:       []string{"ipaddress"},
 			expectErr: false,
 			expected: &Matches{
-				to: map[string]struct {
-					ttl        int
-					confidence int
-				}{
+				to: map[string]match{
 					"ipaddress": {
 						confidence: 80,
 					},
@@ -444,20 +438,14 @@ func TestCheckTransformations(t *testing.T) {
 			tos:        []string{"rirorg"},
 			expectErr:  true,
 			errMessage: "zero transformation matches in the session config",
-			expected: &Matches{to: make(map[string]struct {
-				ttl        int
-				confidence int
-			})}},
+			expected:   &Matches{to: make(map[string]match)}},
 		{
 			name:      "Transformation to 'all'",
 			from:      "fqdn",
 			tos:       []string{"registrant", "rirorg"},
 			expectErr: false,
 			expected: &Matches{
-				to: map[string]struct {
-					ttl        int
-					confidence int
-				}{
+				to: map[string]match{
 					"registrant": {},
 				},
 			},
@@ -468,40 +456,28 @@ func TestCheckTransformations(t *testing.T) {
 			tos:        []string{"fqdn", "tls"},
 			expectErr:  true,
 			errMessage: "zero transformation matches in the session config",
-			expected: &Matches{to: make(map[string]struct {
-				ttl        int
-				confidence int
-			})}},
+			expected:   &Matches{to: make(map[string]match)}},
 		{
 			name:       "No \"from\" matches with config",
 			from:       "ip",
 			tos:        []string{"tls", "rirorg"},
 			expectErr:  true,
 			errMessage: "zero transformation matches in the session config",
-			expected: &Matches{to: make(map[string]struct {
-				ttl        int
-				confidence int
-			})}},
+			expected:   &Matches{to: make(map[string]match)}},
 		{
 			name:       "No \"to\" matches with config",
 			from:       "domainrecord",
 			tos:        []string{"fqdn"},
 			expectErr:  true,
 			errMessage: "zero transformation matches in the session config",
-			expected: &Matches{to: make(map[string]struct {
-				ttl        int
-				confidence int
-			})}},
+			expected:   &Matches{to: make(map[string]match)}},
 		{
 			name:       "Nil \"to\" matches with config",
 			from:       "fqdn",
 			tos:        []string{"rirorg"},
 			expectErr:  true,
 			errMessage: "zero transformation matches in the session config",
-			expected: &Matches{to: make(map[string]struct {
-				ttl        int
-				confidence int
-			})}},
+			expected:   &Matches{to: make(map[string]match)}},
 	}
 
 	var err error
@@ -604,14 +580,44 @@ func TestMatches(t *testing.T) {
 		nonvalid := [][]byte{nonvalidttlYAML, nonvalidttlYAML2, nonvalidttlYAML3}
 		for _, y := range nonvalid {
 			conf = NewConfig()
-			if err := yaml.Unmarshal(y, conf); err != nil {
-				t.Fatalf("Unexpected error: %v", err)
+			// a value of the wrong type stops the file at decoding
+			err := yaml.Unmarshal(y, conf)
+			if err == nil {
+				err = conf.loadTransformSettings(conf)
 			}
-			err := conf.loadTransformSettings(conf)
 			if err == nil {
 				t.Fatal("Expected error, got nil when using " + string(y))
 			}
 		}
 	})
 
+}
+
+// A named transformation's unset ttl and confidence are its ALL
+// transformation's, not the defaults', and the result does not depend on the
+// order the transformations are read in.
+func TestNamedTransformationsInheritFromALL(t *testing.T) {
+	for range 20 {
+		conf, err := prepareConfig(validttlNoDefaultYAML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := conf.CheckTransformations("FQDN", "IPAddress", "DomainRecord", "Netblock", "Service")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for to, want := range map[string]int{"IPAddress": 770, "DomainRecord": 1000, "Netblock": 1440,
+			"Service": 1000} {
+			if got := m.TTL(to); got != want {
+				t.Fatalf("%s ttl = %d, want %d", to, got, want)
+			}
+		}
+		if got := conf.Transformations["FQDN->DomainRecord"].TTL; got != 1000 {
+			t.Fatalf("the loaded FQDN->DomainRecord ttl = %d, want ALL's 1000", got)
+		}
+		// IPAddress has no ALL: its transformations take the defaults
+		if got := conf.Transformations["IPAddress->FQDN"].TTL; got != 1440 {
+			t.Fatalf("IPAddress->FQDN ttl = %d, want the default 1440", got)
+		}
+	}
 }

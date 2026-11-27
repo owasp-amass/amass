@@ -1,0 +1,152 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Infrastructure (netblock and autonomous-system) correlation signals: the evidence that ties a netblock or an AS to a target organization, so an enumeration's scope can be made more complete. docs/ai/INFRASTRUCTURE.md and `amass review infrastructure-signals` are generated from this file; edit the rationale here. Each signal's weight times 100 is the confidence the related-infrastructure lens records for an asset the signal supports; an asset found by several signals keeps the strongest (noisy-OR). A registrant organization that is a privacy proxy or placeholder is excluded, not scored, and a name match alone is never sufficient. The scored runtime scope-expansion decision and the classifier read the same catalog, so the lens, the engine and the model share one source of truth.",
+  "signals": [
+    {
+      "id": "ipnet-registrant-org",
+      "title": "Shared netblock registrant organization",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.75,
+      "matcher": "ipnet_registrant_org",
+      "finds": "A netblock whose RIR/WHOIS registration (IPNetRecord) names the same organization as its registrant as the target's.",
+      "rationale": "A Regional Internet Registry assigns an IP allocation to a specific organization and records it as the registrant of the inetnum/NetRange. When a netblock's registration names the target organization, the registry attributes that address space to it, which is direct evidence it belongs to the organization's footprint.",
+      "guards": [
+        "A privacy or proxy registrant organization is never an anchor: it is shared by many unrelated allocations.",
+        "A matching organization name alone, with no shared registration record, is never sufficient."
+      ],
+      "counter_indications": [
+        "A hosting or transit provider is the RIR registrant for address space it sub-allocates to many customers.",
+        "Legacy allocations can name a predecessor organization after an acquisition."
+      ]
+    },
+    {
+      "id": "asn-registrant-org",
+      "title": "Shared AS registrant organization",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.75,
+      "matcher": "asn_registrant_org",
+      "finds": "An autonomous system whose RIR/WHOIS registration (AutnumRecord) names the same organization as its registrant as the target's.",
+      "rationale": "An autonomous system number is registered to one operator, recorded as the registrant of the aut-num. When an AS registration names the target organization, the registry attributes that AS to it, direct evidence the AS is part of its network.",
+      "guards": [
+        "A privacy or proxy registrant organization is never an anchor.",
+        "A matching organization name alone is never sufficient."
+      ],
+      "counter_indications": [
+        "A parent or network operator can hold the AS registration for legally separate subsidiaries.",
+        "Upstream providers sometimes register AS numbers on behalf of customers."
+      ]
+    },
+    {
+      "id": "asn-announced-netblock",
+      "title": "Netblock announced by the organization's AS",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.6,
+      "matcher": "asn_announced_netblock",
+      "finds": "A netblock announced (originated) by an autonomous system whose RIR registration names the target organization.",
+      "rationale": "A prefix originated by the organization's own AS is routed by its network, corroborating that the address space is operated by it. It is supporting rather than strong because an AS routinely announces space it does not own — transit and customer routes among them — so announcement is operation, not registration. Combined with an RIR registration naming the organization (ipnet-registrant-org) it raises a netblock's confidence; announcement alone needs review.",
+      "guards": [
+        "Counts only when the AS announces more than 32 prefixes; a smaller AS gives the strong small-asn-announced-netblock signal instead.",
+        "Counts only for a netblock announced by an AS that is itself registered to the organization (asn-registrant-org).",
+        "A privacy or proxy registrant organization on the AS is never an anchor."
+      ],
+      "counter_indications": [
+        "A transit AS announces its customers' prefixes without owning them.",
+        "Route leaks and hijacks announce prefixes the AS has no claim to."
+      ]
+    },
+    {
+      "id": "roa-authorizes-own-asn",
+      "title": "RPKI ROA authorizes the organization's AS",
+      "kind": "infrastructure",
+      "strength": "strong",
+      "weight": 0.75,
+      "matcher": "roa_own_asn",
+      "finds": "A netblock that a valid RPKI Route Origin Authorization (ROA) authorizes an autonomous system registered to the target organization to announce.",
+      "rationale": "Only the holder of address space can sign a ROA for it, through its Regional Internet Registry's RPKI. A ROA naming the organization's own AS is the holder's signed statement that the organization's network may route the prefix, so the netblock is operated for the organization. Unlike an announcement, which any AS can make, a ROA cannot be created by a third party.",
+      "guards": [
+        "Counts only for a ROA naming an AS that is itself registered to the organization (asn-registrant-org).",
+        "Only valid ROAs whose prefix and maximum length cover the netblock count."
+      ],
+      "counter_indications": [
+        "A provider can sign a ROA for its own space naming a customer's AS (provider-assigned space): the customer operates the netblock without holding it.",
+        "A ROA can outlive the arrangement it was made for until the holder revokes it."
+      ]
+    },
+    {
+      "id": "irr-maintainer-own-origins",
+      "title": "Routing registry maintainer of the organization's netblocks",
+      "kind": "infrastructure",
+      "strength": "strong",
+      "weight": 0.7,
+      "matcher": "irr_maintainer_own_origins",
+      "finds": "A netblock whose routing registry (IRR) route object is kept by the same maintainer as one of the organization's own netblocks, when every route object that maintainer keeps is originated by an autonomous system registered to the organization.",
+      "rationale": "A maintainer is an account in a routing registry, and an operator files all its route objects under its own. When a maintainer keeps routes only for the organization's ASes, it is the organization's account, and every netblock it keeps is the organization's network.",
+      "guards": [
+        "Every origin AS among the maintainer's route objects must be registered to the organization.",
+        "A maintainer keeping more than 100 route objects, or routes from more than 5 origin ASes, gives no signal.",
+        "The registries' own maintainers (allocation, legacy and RPKI-generated objects) are never used."
+      ],
+      "counter_indications": [
+        "A consultant or managed network provider can keep route objects for a single client under its own maintainer.",
+        "Route objects are not removed when address space changes hands, so a maintainer's old routes can outlive the arrangement."
+      ]
+    },
+    {
+      "id": "shared-irr-maintainer",
+      "title": "Shared routing registry maintainer",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.5,
+      "matcher": "irr_maintainer",
+      "finds": "A netblock whose routing registry (IRR) route object is kept by the same maintainer as one of the organization's own netblocks, when that maintainer also keeps routes originated by other autonomous systems.",
+      "rationale": "Operators reuse one maintainer across their route objects, so a shared maintainer points to a common operator. It is supporting rather than strong when the maintainer's routes come from other ASes too: upstream providers and hosting companies keep route objects for their customers, so the maintainer shows who files the paperwork, not who runs the network.",
+      "guards": [
+        "A maintainer keeping more than 100 route objects, or routes from more than 5 origin ASes, gives no signal.",
+        "The registries' own maintainers are never used.",
+        "Never expands scope on its own."
+      ],
+      "counter_indications": [
+        "An upstream ISP or hosting provider keeps route objects for many customers under one maintainer."
+      ]
+    },
+    {
+      "id": "spf-declared-range",
+      "title": "Mail sender declared in the organization's SPF record",
+      "kind": "infrastructure",
+      "strength": "supporting",
+      "weight": 0.5,
+      "matcher": "spf_range",
+      "finds": "A netblock that the SPF record of a domain registered to the target organization authorizes to send its mail (an ip4: or ip6: mechanism), or the stored netblock holding an address it authorizes.",
+      "rationale": "An organization lists its own mail servers' addresses in its SPF record, so a declared range is often its own network. It is supporting rather than strong because SPF also lists the addresses of outside senders: marketing, ticketing and newsletter services the organization mails through.",
+      "guards": [
+        "Ranges broader than a /16 (IPv4) or a /32 (IPv6), private ranges, and ranges a minus qualifier excludes are not stored.",
+        "A netblock a cloud provider publishes as its own is skipped.",
+        "Never expands scope on its own."
+      ],
+      "counter_indications": [
+        "A bulk-mail or ticketing vendor's sending range is listed exactly like the organization's own."
+      ]
+    },
+    {
+      "id": "small-asn-announced-netblock",
+      "title": "Netblock announced by the organization's small AS",
+      "kind": "infrastructure",
+      "strength": "strong",
+      "weight": 0.7,
+      "matcher": "small_asn_announced_netblock",
+      "finds": "A netblock announced by an autonomous system registered to the target organization that announces at most 32 prefixes.",
+      "rationale": "An enterprise, campus or government network announces a handful of its own prefixes; carrying other networks' routes is what transit and hosting networks do, and they announce many. A prefix originated by the organization's own small AS is routed for the organization.",
+      "guards": [
+        "Counts only for an AS registered to the organization (asn-registrant-org).",
+        "The AS must announce at most 32 prefixes; one announcing more gives the supporting asn-announced-netblock signal instead."
+      ],
+      "counter_indications": [
+        "A small AS can announce a customer's or affiliate's prefix, such as a university announcing a hospital's space.",
+        "Route leaks and hijacks announce prefixes the AS has no claim to."
+      ]
+    }
+  ]
+}

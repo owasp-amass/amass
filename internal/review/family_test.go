@@ -1,0 +1,378 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package review
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
+	"github.com/owasp-amass/amass/v5/internal/lens"
+)
+
+func TestFindOrganizationFamily(t *testing.T) {
+	g := graphtest.FamilyGraph()
+	r, err := lens.FindOrganizationFamily(context.Background(), g, g.Assets["utica.edu"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The ARIN record of the university holds the network most of its
+	// names use, so it has the most ties.
+	if r.Main == nil || r.Main.ID != "uu-arin" {
+		t.Fatalf("main = %+v", r.Main)
+	}
+
+	got := map[string]string{}
+	for _, m := range r.Members {
+		got[m.Organization.ID] = m.Relation
+	}
+
+	want := map[string]string{"uu": lens.FamilySame, "uu-arin": lens.FamilySame, "its": lens.FamilyDepartment,
+		"med": lens.FamilyAffiliate, "isp": lens.FamilyOther, "person": lens.FamilySame}
+	for id, rel := range want {
+		if got[id] != rel {
+			t.Errorf("%s: relation %q, want %q (members %v)", id, got[id], rel, got)
+		}
+	}
+	for _, id := range []string{"cloud", "other", "unspecified"} {
+		if rel, ok := got[id]; ok {
+			t.Errorf("%s should not be family, got %s", id, rel)
+		}
+	}
+
+	dedicated := map[string]bool{}
+	for _, n := range r.Networks {
+		dedicated[n.CIDR] = n.Dedicated
+	}
+	if !dedicated["72.237.4.0/24"] || !dedicated["203.0.113.0/24"] || dedicated["52.0.0.0/8"] ||
+		!dedicated["10.20.0.0/16"] || dedicated["50.128.0.0/9"] {
+		t.Errorf("networks = %+v", r.Networks)
+	}
+
+	related := map[string]bool{}
+	for _, d := range r.RelatedDomains {
+		related[d.Domain] = true
+	}
+	if !related["uticamedical.org"] || !related["uticapublichealth.org"] || related["customer1.com"] {
+		t.Errorf("related domains = %+v", r.RelatedDomains)
+	}
+
+	// Only name variants are proposed for merging: the person who shares
+	// the address is reported, not merged.
+	units, merges := FamilyProposals(r)
+	if len(units) != 1 || units[0].AssetID != "its" {
+		t.Errorf("department proposals = %+v", units)
+	}
+	if len(merges) != 1 || (merges[0].DuplicateID != "uu" && merges[0].SurvivorID != "uu") {
+		t.Errorf("merge proposals = %+v", merges)
+	}
+	if r.Reads == 0 {
+		t.Error("the report does not count its reads")
+	}
+
+	text := lens.FormatFamilyReport(r)
+	for _, want := range []string{"Main organization: utica university", "Affiliates:",
+		"provider", "uticapublichealth.org", "Other organizations on its assets", "not proposed for merging"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("report lacks %q:\n%s", want, text)
+		}
+	}
+}
+
+func familyOf(t *testing.T, g graphtest.FakeGraph, domain string) (lens.FamilyReport, map[string]string, map[string]bool) {
+	t.Helper()
+	r, err := lens.FindOrganizationFamily(context.Background(), g, g.Assets[domain])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rel := map[string]string{}
+	for _, m := range r.Members {
+		rel[m.Organization.ID] = m.Relation
+	}
+
+	dedicated := map[string]bool{}
+	for _, n := range r.Networks {
+		dedicated[n.CIDR] = n.Dedicated
+	}
+
+	return r, rel, dedicated
+}
+
+// An organization registered owaspfdn.org, owasp.org and owaspfoundation.org;
+// its networks are held under a variant of its name and serve all three, so
+// owaspfdn.org has a third of no network's names.
+func TestFamilyNetworksServingSeveralBrandDomains(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("ngc", "owasp foundation", "", "", "")
+	g.Org("ngs", "owasp foundation systems corporation", "", "", "")
+	g.Org("host", "bighost", "", "", "")
+	g.Registers("ngc", "owaspfdn.org", "owasp.org", "owaspfoundation.org")
+	g.Network("nb-1", "10.1.0.0/16", "ngs")
+	g.Network("nb-host", "10.9.0.0/16", "host")
+	g.Serve("owaspfdn.org", "nb-1", "a", 6, 1)
+	g.Serve("owasp.org", "nb-1", "b", 10, 2)
+	g.Serve("owaspfoundation.org", "nb-1", "c", 10, 3)
+	g.Serve("owaspfdn.org", "nb-host", "h", 5, 9)
+	g.Serve("customer.example", "nb-host", "x", 40, 8)
+
+	r, rel, dedicated := familyOf(t, g.Graph, "owaspfdn.org")
+	if !dedicated["10.1.0.0/16"] || dedicated["10.9.0.0/16"] {
+		t.Errorf("networks = %+v", r.Networks)
+	}
+	if rel["ngs"] != lens.FamilySame || rel["ngc"] != lens.FamilySame {
+		t.Errorf("members = %v", rel)
+	}
+	if _, ok := rel["host"]; ok {
+		t.Errorf("the hosting provider is family: %v", rel)
+	}
+}
+
+// A domain with no registrant stored has half the few names stored for a
+// hosting provider's network, but another customer's domain has more: the
+// provider is not the domain's institution.
+func TestFamilyHostingProviderIsNotTheInstitution(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("host", "wphost", "", "", "")
+	g.Network("nb-host", "10.9.0.0/24", "host")
+	g.Serve("hotels.example", "nb-host", "h", 6, 1)
+	g.Serve("clinic.example", "nb-host", "c", 8, 2)
+
+	r, rel, dedicated := familyOf(t, g.Graph, "hotels.example")
+	if dedicated["10.9.0.0/24"] || r.Main != nil {
+		t.Errorf("the provider's network made it the institution: main %+v, networks %+v", r.Main, r.Networks)
+	}
+	if rel["host"] == lens.FamilySame {
+		t.Errorf("members = %v", rel)
+	}
+}
+
+// uticaproducts.com: the company named like the domain holds the network
+// its names use, which serves its other brands' names more.
+func TestFamilyOrganizationNamedLikeTheDomain(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("auto", "utica products", "utica products, inc.", "US-NY", "")
+	g.Org("unrelated", "hostpipe", "", "", "")
+	g.Network("nb-a", "10.1.0.0/16", "auto")
+	g.Network("nb-u", "10.2.0.0/16", "unrelated")
+	g.Serve("uticaproducts.com", "nb-a", "a", 6, 1)
+	g.Serve("widgetpress.com", "nb-a", "w", 30, 2)
+	g.Serve("uticaproducts.com", "nb-u", "u", 5, 3)
+	g.Serve("other.example", "nb-u", "o", 30, 4)
+
+	r, rel, dedicated := familyOf(t, g.Graph, "uticaproducts.com")
+	if r.Main == nil || r.Main.ID != "auto" || !dedicated["10.1.0.0/16"] || dedicated["10.2.0.0/16"] {
+		t.Fatalf("main = %+v, networks = %+v", r.Main, r.Networks)
+	}
+	if _, ok := rel["unrelated"]; ok {
+		t.Errorf("members = %v", rel)
+	}
+
+	related := map[string]bool{}
+	for _, d := range r.RelatedDomains {
+		related[d.Domain] = true
+	}
+	if !related["widgetpress.com"] {
+		t.Errorf("related domains = %+v", r.RelatedDomains)
+	}
+}
+
+// uticaproductsus.com: a platform vendor is named on more of the domain's
+// certificates than the company is; the company is named like the domain,
+// so it stays the main organization.
+func TestFamilyCertificateVendorIsNotMain(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("ng", "utica products usa service company", "", "", "")
+	g.Org("sf", "salesforce", "salesforce, inc.", "US-DE", "")
+	g.FQDN("uticaproductsus.com")
+	for i := 0; i < 3; i++ {
+		g.Cert(fmt.Sprintf("sf%d", i), fmt.Sprintf("portal%d.uticaproductsus.com", i), "sf")
+	}
+	for i := 0; i < 2; i++ {
+		g.Cert(fmt.Sprintf("ng%d", i), fmt.Sprintf("www%d.uticaproductsus.com", i), "ng")
+	}
+
+	r, rel, _ := familyOf(t, g.Graph, "uticaproductsus.com")
+	if r.Main == nil || r.Main.ID != "ng" {
+		t.Fatalf("main = %+v", r.Main)
+	}
+	if rel["sf"] != lens.FamilyOther {
+		t.Errorf("members = %v", rel)
+	}
+}
+
+// Utica College became Utica University: the same institution, reported but
+// not merged. OWASP's centers carry unit words: units, not the institution.
+func TestFamilyRenameAndCenters(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("uu", "utica university", "", "", "")
+	g.Org("uc", "utica college", "", "", "")
+	g.FQDN("utica.edu")
+	for i := 0; i < 3; i++ {
+		g.Cert(fmt.Sprintf("u%d", i), fmt.Sprintf("www%d.utica.edu", i), "uu")
+	}
+
+	g.Cert("c0", "old.utica.edu", "uc")
+
+	r, rel, _ := familyOf(t, g.Graph, "utica.edu")
+	if r.Main == nil || r.Main.ID != "uu" || rel["uc"] != lens.FamilySame {
+		t.Fatalf("main = %+v, members = %v", r.Main, rel)
+	}
+	if _, merges := FamilyProposals(r); len(merges) != 0 {
+		t.Errorf("a rename was proposed for merging: %+v", merges)
+	}
+
+	n := graphtest.NewBrandGraph()
+	n.Org("nasa", "owasp", "", "", "")
+	n.Org("ames", "owasp utica research center", "", "", "")
+	n.Org("gsfc", "owasp rome space flight center", "", "", "")
+	n.FQDN("owasp.org")
+	for i := 0; i < 3; i++ {
+		n.Cert(fmt.Sprintf("n%d", i), fmt.Sprintf("www%d.owasp.org", i), "nasa")
+	}
+
+	n.Cert("a0", "utica.owasp.org", "ames")
+	n.Cert("g0", "rome.owasp.org", "gsfc")
+
+	_, rel, _ = familyOf(t, n.Graph, "owasp.org")
+	if rel["ames"] != lens.FamilyDepartment || rel["gsfc"] != lens.FamilyDepartment {
+		t.Errorf("members = %v", rel)
+	}
+}
+
+// uticaproducts.com's names spread over the company's small networks, none
+// serving enough of them alone: together they tie the company.
+func TestFamilyNamedLikeAcrossSmallNetworks(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("auto", "utica products", "", "", "")
+	for i := 1; i <= 3; i++ {
+		block := fmt.Sprintf("nb-%d", i)
+		g.Network(block, fmt.Sprintf("10.%d.0.0/24", i), "auto")
+		g.Serve("uticaproducts.com", block, fmt.Sprintf("n%d-", i), 2, i)
+	}
+
+	// One of the small networks also serves the company's other brand, which
+	// it registered, and a customer's site, which it did not.
+	g.Serve("widgetpress.com", "nb-1", "w", 3, 7)
+	g.Registers("auto", "widgetpress.com")
+	g.Serve("customer.example", "nb-2", "c", 3, 8)
+
+	r, rel, _ := familyOf(t, g.Graph, "uticaproducts.com")
+	if r.Main == nil || r.Main.ID != "auto" || rel["auto"] != lens.FamilySame {
+		t.Fatalf("main = %+v, members = %v", r.Main, rel)
+	}
+
+	got := map[string]lens.RelatedDomain{}
+	for _, d := range r.RelatedDomains {
+		got[d.Domain] = d
+	}
+	if d := got["widgetpress.com"]; !d.Own || !d.OwnNetwork {
+		t.Errorf("the company's registered brand: %+v", d)
+	}
+	if d := got["customer.example"]; d.Own || !d.OwnNetwork {
+		t.Errorf("a hosted customer counted as the company's own: %+v", d)
+	}
+	if text := lens.FormatFamilyReport(r); !strings.Contains(text,
+		"customer.example (3 names, 10.2.0.0/24, hosted on") {
+		t.Errorf("report does not set the hosted domain apart:\n%s", text)
+	}
+}
+
+// A unit stored under a shorter name is the department its longer name is;
+// a network the institution holds is the family's however few of its
+// stored names are the domain's.
+func TestFamilyUnitVariantsAndMemberNetworks(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("nasa", "owasp", "", "", "")
+	g.Org("njpl", "owasp security testing laboratory", "", "", "")
+	g.Org("jpl", "security testing laboratory", "", "", "")
+	g.FQDN("owasp.org")
+	for i := 0; i < 3; i++ {
+		g.Cert(fmt.Sprintf("n%d", i), fmt.Sprintf("www%d.owasp.org", i), "nasa")
+	}
+
+	g.Cert("nj", "lab.owasp.org", "njpl")
+	g.Cert("j0", "a.lab.owasp.org", "jpl")
+	g.Cert("j1", "b.lab.owasp.org", "jpl")
+	// An OWASP network mostly serving other names.
+	g.Network("nb-shared", "10.5.0.0/16", "nasa")
+	g.Serve("owasp.org", "nb-shared", "s", 5, 5)
+	g.Serve("science.example", "nb-shared", "x", 40, 6)
+
+	_, rel, dedicated := familyOf(t, g.Graph, "owasp.org")
+	if rel["jpl"] != lens.FamilyDepartment || rel["njpl"] != lens.FamilyDepartment {
+		t.Errorf("members = %v", rel)
+	}
+	if !dedicated["10.5.0.0/16"] {
+		t.Error("the institution's own network is listed as a provider's")
+	}
+}
+
+// A name that is the institution's followed by a unit is a department, and
+// an institution whose own name ends in a unit noun is still itself.
+func TestFamilyUnitsByName(t *testing.T) {
+	g := graphtest.NewBrandGraph()
+	g.Org("ur", "utica university", "", "", "")
+	g.Org("urmc", "utica university medical center", "", "", "")
+	g.FQDN("utica.edu")
+	for i := 0; i < 3; i++ {
+		g.Cert(fmt.Sprintf("u%d", i), fmt.Sprintf("www%d.utica.edu", i), "ur")
+	}
+
+	g.Cert("m0", "med.utica.edu", "urmc")
+
+	_, rel, _ := familyOf(t, g.Graph, "utica.edu")
+	if rel["urmc"] != lens.FamilyDepartment {
+		t.Errorf("members = %v", rel)
+	}
+
+	c := graphtest.NewBrandGraph()
+	c.Org("a", "memorial cancer center", "", "", "")
+	c.Org("b", "memorial cancer center", "memorial cancer center, inc.", "", "")
+	c.FQDN("mcc.example")
+	for i := 0; i < 3; i++ {
+		c.Cert(fmt.Sprintf("a%d", i), fmt.Sprintf("www%d.mcc.example", i), "a")
+	}
+
+	c.Cert("b0", "portal.mcc.example", "b")
+
+	_, rel, _ = familyOf(t, c.Graph, "mcc.example")
+	if rel["b"] != lens.FamilySame {
+		t.Errorf("an institution named like a unit was split from itself: %v", rel)
+	}
+}
+
+// The lens reads outward from the domain, so organizations that have
+// nothing to do with it cost no reads, however many are stored.
+func TestFamilyReadsDoNotGrowWithUnrelatedOrganizations(t *testing.T) {
+	reads := func(unrelated int) int {
+		g := graphtest.NewBrandGraph()
+		g.Org("acme", "acme widgets", "", "", "")
+		g.Registers("acme", "acme.example")
+		for i := 0; i < 3; i++ {
+			g.Cert(fmt.Sprintf("a%d", i), fmt.Sprintf("www%d.acme.example", i), "acme")
+		}
+		for i := 0; i < unrelated; i++ {
+			id := fmt.Sprintf("other%d", i)
+			g.Org(id, fmt.Sprintf("other company %d", i), "", "", "")
+			g.Registers(id, fmt.Sprintf("other%d.example", i))
+			g.Cert("c-"+id, fmt.Sprintf("www.other%d.example", i), id)
+		}
+
+		r, rel, _ := familyOf(t, g.Graph, "acme.example")
+		if r.Main == nil || r.Main.ID != "acme" || len(rel) != 1 {
+			t.Fatalf("main = %+v, members = %v", r.Main, rel)
+		}
+
+		return r.Reads
+	}
+
+	if few, many := reads(10), reads(1000); few != many {
+		t.Errorf("reads grew with unrelated organizations: %d with 10, %d with 1000", few, many)
+	}
+}

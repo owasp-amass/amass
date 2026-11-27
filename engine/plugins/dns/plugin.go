@@ -10,13 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
@@ -58,15 +57,7 @@ func (d *dnsPlugin) Name() string {
 func (d *dnsPlugin) Start(r et.Registry) error {
 	d.log = r.Log().WithGroup("plugin").With("name", d.name)
 
-	cname := d.name + "-CNAME"
-	d.cname = &dnsCNAME{
-		name:   cname,
-		plugin: d,
-		source: &et.Source{
-			Name:       cname,
-			Confidence: 100,
-		},
-	}
+	d.cname = newCNAME(d)
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.cname.name,
@@ -80,16 +71,7 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	ipname := d.name + "-IP"
-	d.ip = &dnsIP{
-		name:    ipname,
-		queries: []uint16{dns.TypeA, dns.TypeAAAA},
-		plugin:  d,
-		source: &et.Source{
-			Name:       ipname,
-			Confidence: 100,
-		},
-	}
+	d.ip = newIP(d)
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.ip.name,
@@ -177,7 +159,8 @@ func (d *dnsPlugin) Stop() {
 	d.log.Info("Plugin stopped")
 }
 
-func (d *dnsPlugin) lookupWithinTTL(session et.Session, fent *dbt.Entity, atype oam.AssetType, since time.Time, reltype oam.RelationType, rrtypes ...int) []*dbt.Entity {
+func (d *dnsPlugin) lookupWithinTTL(session et.Session, fent *dbt.Entity, atype oam.AssetType, since time.Time,
+	src *et.Source, reltype oam.RelationType, rrtypes ...int) []*dbt.Entity {
 	var results []*dbt.Entity
 
 	if len(rrtypes) == 0 || since.IsZero() {
@@ -188,6 +171,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, fent *dbt.Entity, atype 
 	defer cancel()
 
 	if edges, err := session.DB().OutgoingEdges(ctx, fent, since, "dns_record"); err == nil && len(edges) > 0 {
+		var keep []*dbt.Edge
 		for _, edge := range edges {
 			var rrtype int
 
@@ -217,21 +201,18 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, fent *dbt.Entity, atype 
 				continue
 			}
 
-			if tags, err := session.DB().FindEdgeTags(ctx, edge, since, d.source.Name); err == nil && len(tags) > 0 {
-				var found bool
-
-				for _, tag := range tags {
-					if _, ok := tag.Property.(*general.SourceProperty); ok {
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue
-				}
+			// only the records the asking handler resolved count
+			if !support.Sourced(ctx, session, edge, since, src) {
+				continue
 			}
 
-			if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil && to.Asset.AssetType() == atype {
+			keep = append(keep, edge)
+		}
+
+		// The records' targets are read together.
+		ends := amassdb.EdgeEnds(ctx, session.DB(), keep, false)
+		for _, edge := range keep {
+			if to, ok := ends[edge.ToEntity.ID]; ok && to.Asset.AssetType() == atype {
 				results = append(results, to)
 			}
 		}
@@ -254,10 +235,7 @@ func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
 
 	entity, err := e.Session.DB().CreateAsset(ctx, ip)
 	if err == nil && entity != nil {
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
+		support.AddSource(ctx, e.Session, entity, src)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),

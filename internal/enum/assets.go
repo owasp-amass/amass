@@ -10,8 +10,10 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcontact "github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 // ipnet2Prefix converts a net.IPNet to a netip.Prefix.
@@ -77,5 +79,23 @@ func convertScopeToAssets(scope *config.Scope) []oam.Asset {
 		asset := oamnet.AutonomousSystem{Number: asn}
 		assets = append(assets, asset)
 	}
+
+	// Convert Organizations (corporations) to assets.
+	for _, org := range scope.Organizations {
+		assets = append(assets, oamorg.Organization{ID: org, Name: org})
+	}
+
+	// Convert Phones to assets: seeds the reverse lookup resolves to the
+	// organizations tied to the number.
+	for _, phone := range scope.Phones {
+		assets = append(assets, oamcontact.Phone{E164: phone, Raw: phone})
+	}
+
+	// Convert StreetAddresses to assets: seeds the reverse lookup resolves to the
+	// organizations at the address.
+	for _, address := range scope.StreetAddresses {
+		assets = append(assets, oamcontact.StreetAddress{Address: address})
+	}
+
 	return assets
 }

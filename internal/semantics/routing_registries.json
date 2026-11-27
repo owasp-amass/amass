@@ -1,0 +1,15 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Where Amass reads routing security records for a netblock, and which routing-registry maintainers say nothing about who runs it. RIPEstat (stat_api) answers for every region with no key: its whois data call returns the Internet Routing Registry (IRR) route objects for a prefix, each with its origin AS and maintainer (mnt-by), and its rpki-validation call returns the RPKI validity of a prefix and origin AS with the ROAs that cover it. irr_whois is a routing registry whois server that answers inverse queries (-i mnt-by <maintainer>), listing every route object one maintainer keeps across the registries it mirrors; RADb mirrors the major ones. A maintainer is an operator's account in the registry, and operators reuse one across all their route objects, so it is the routing counterpart of a shared registrant. registry_maintainers are prefixes of maintainer handles the registries themselves use for allocations, legacy space and RPKI-generated objects: they name the registry, not the operator, and are never used. max_routes is the most route objects a maintainer may keep for its other route objects to count: a maintainer keeping more is an ISP, hosting provider or registry keeping objects for many customers. max_origins likewise bounds the origin ASes across one maintainer's route objects.",
+  "stat_api": "https://stat.ripe.net/data",
+  "source_app": "owasp-amass",
+  "irr_whois": "whois.radb.net:43",
+  "registry_maintainers": ["RIPE-NCC-", "APNIC-", "AFRINIC-", "LACNIC-", "ARIN-", "IANA-", "RPKI-", "NIC-BR-", "JPNIC-", "KRNIC-", "TWNIC-"],
+  "max_routes": 100,
+  "max_origins": 5,
+  "sources": [
+    "https://stat.ripe.net/docs/02.data-api/whois.html",
+    "https://stat.ripe.net/docs/02.data-api/rpki-validation.html",
+    "https://www.radb.net/query-help"
+  ]
+}

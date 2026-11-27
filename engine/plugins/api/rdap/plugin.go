@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -23,11 +22,12 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/pacer"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/general"
-	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/time/rate"
@@ -39,9 +39,11 @@ type rdapPlugin struct {
 	client   *rdap.Client
 	rlimit   *rate.Limiter
 	autsys   *autsys
-	autnum   *autnum
+	autnum   *recordDetail
 	netblock *netblock
-	ipnet    *ipnet
+	ipnet    *recordDetail
+	domain   *domain
+	domrec   *recordDetail
 	source   *et.Source
 }
 
@@ -82,11 +84,13 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: tlsConfig,
 	}
+	// registries refuse a burst (ARIN answers 429); pace each one adaptively
+	paced := pacer.Default.Transport(transport)
 	bs.HTTP = &http.Client{
-		Transport: transport,
+		Transport: paced,
 	}
 	httpClient := &http.Client{
-		Transport: transport,
+		Transport: paced,
 	}
 	rd.client = &rdap.Client{
 		HTTP:      httpClient,
@@ -110,20 +114,7 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	rd.autnum = &autnum{
-		name:   rd.name + "-Autnum-Handler",
-		plugin: rd,
-		transforms: []string{
-			string(oam.FQDN),
-			string(oam.URL),
-			string(oam.ContactRecord),
-			string(oam.Person),
-			string(oam.Organization),
-			string(oam.Location),
-			string(oam.Identifier),
-			string(oam.Phone),
-		},
-	}
+	rd.autnum = newRecordDetail(rd, oam.AutnumRecord)
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       rd,
 		Name:         rd.autnum.name,
@@ -154,20 +145,7 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	rd.ipnet = &ipnet{
-		name:   rd.name + "-IPNetwork-Handler",
-		plugin: rd,
-		transforms: []string{
-			string(oam.FQDN),
-			string(oam.URL),
-			string(oam.ContactRecord),
-			string(oam.Person),
-			string(oam.Organization),
-			string(oam.Location),
-			string(oam.Identifier),
-			string(oam.Phone),
-		},
-	}
+	rd.ipnet = newRecordDetail(rd, oam.IPNetRecord)
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       rd,
 		Name:         rd.ipnet.name,
@@ -177,6 +155,42 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 		Transforms:   rd.ipnet.transforms,
 		EventType:    oam.IPNetRecord,
 		Callback:     rd.ipnet.check,
+	}); err != nil {
+		return err
+	}
+
+	rd.domain = &domain{
+		name:   rd.name + "-Domain-Handler",
+		plugin: rd,
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:   rd,
+		Name:     rd.domain.name,
+		Position: 14,
+		// Shares the stage with the WHOIS FQDN handler: RDAP and WHOIS are
+		// peer registration sources that both enrich the apex DomainRecord,
+		// so neither is exclusive at this position.
+		Exclusive:    false,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.DomainRecord)},
+		EventType:    oam.FQDN,
+		Callback:     rd.domain.check,
+	}); err != nil {
+		return err
+	}
+
+	rd.domrec = newRecordDetail(rd, oam.DomainRecord)
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:   rd,
+		Name:     rd.domrec.name,
+		Position: 2,
+		// Peer of the WHOIS DomainRecord handler at this stage; both enrich
+		// the record from their own source, so neither is exclusive.
+		Exclusive:    false,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   rd.domrec.transforms,
+		EventType:    oam.DomainRecord,
+		Callback:     rd.domrec.check,
 	}); err != nil {
 		return err
 	}
@@ -193,20 +207,42 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	roles := stringset.New(entity.Roles...)
 	defer roles.Close()
 
-	u := rd.getJSONLink(entity.Links)
-	if u == nil {
+	_, isDomain := asset.Asset.(*oamreg.DomainRecord)
+
+	// A domain record's contacts use the DomainRecord relation labels the
+	// semantics catalog knows (registrant_contact, …); an IP record keeps the
+	// labels the IP handlers already use.
+	var rel string
+	switch {
+	case roles.Has("registrant") && level == 1:
+		if isDomain {
+			rel = "registrant_contact"
+		} else {
+			rel = "registrant"
+		}
+	case roles.Has("administrative"):
+		rel = "admin_contact"
+	case roles.Has("technical"):
+		rel = "technical_contact"
+	case isDomain && roles.Has("billing"):
+		rel = "billing_contact"
+	case isDomain && roles.Has("registrar"):
+		rel = "registrar_contact"
+	case !isDomain && roles.Has("abuse"):
+		rel = "abuse_contact"
+	default:
 		return
 	}
 
-	var rel string
-	if roles.Has("registrant") && level == 1 {
-		rel = "registrant"
-	} else if roles.Has("administrative") {
-		rel = "admin_contact"
-	} else if roles.Has("abuse") {
-		rel = "abuse_contact"
-	} else if roles.Has("technical") {
-		rel = "technical_contact"
+	u := rd.getJSONLink(entity.Links)
+	// IP registration contacts are keyed by their RDAP self link; a domain
+	// contact is often redacted with no link, so it is keyed by the record
+	// and its role instead.
+	discoveredAt := ""
+	if u != nil {
+		discoveredAt = u.Raw
+	} else if isDomain {
+		discoveredAt = recordContactKey(asset, rel)
 	} else {
 		return
 	}
@@ -214,109 +250,64 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Minute)
 	defer cancel()
 
-	cr, err := e.Session.DB().CreateAsset(ctx, &contact.ContactRecord{DiscoveredAt: u.Raw})
+	cr, err := e.Session.DB().CreateAsset(ctx, &contact.ContactRecord{DiscoveredAt: discoveredAt})
 	if err != nil || cr == nil {
 		return
 	}
 
-	var name string
-	switch v := asset.Asset.(type) {
-	case *oamreg.AutnumRecord:
-		name = "AutnumRecord: " + v.Handle
-	case *oamreg.IPNetRecord:
-		name = "IPNetRecord: " + v.Handle
-	}
-
-	if m.IsMatch(string(oam.URL)) {
-		if a, err := e.Session.DB().CreateAsset(ctx, u); err == nil && a != nil {
-			_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "url"}, src)
-		}
-	}
-
 	v := entity.VCard
+	var info support.Contact
+	if u != nil {
+		info.URL = u.Raw
+	}
 	prop := v.GetFirst("kind")
 	if prop == nil {
+		// Without a kind the contact is only its RDAP link.
+		support.StoreContact(ctx, e.Session, cr, info, src, m)
 		return
 	}
 
-	if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
+	if adr := v.GetFirst("adr"); adr != nil {
 		if label, ok := adr.Parameters["label"]; ok {
-			s := strings.Join(label, " ")
+			info.Address = strings.Join(strings.Split(strings.Join(label, " "), "\n"), " ")
+		}
+	}
+	info.Email = v.Email()
+	info.Phone = v.Tel()
+	info.Fax = v.Fax()
+	info.Country = v.Country()
+	support.StoreContact(ctx, e.Session, cr, info, src, m)
 
-			addr := strings.Join(strings.Split(s, "\n"), " ")
-			if loc := support.StreetAddressToLocation(addr); loc != nil {
-				if a, err := e.Session.DB().CreateAsset(ctx, loc); err == nil && a != nil {
-					_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "location"}, src)
-				}
-			}
-		}
-	}
-	if email := strings.ToLower(v.Email()); m.IsMatch(string(oam.Identifier)) && email != "" {
-		if a, err := e.Session.DB().CreateAsset(ctx, &general.Identifier{
-			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
-			ID:       email,
-			Type:     general.EmailAddress,
-		}); err == nil && a != nil {
-			_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "id"}, src)
-		}
-	}
-	if m.IsMatch(string(oam.Phone)) {
-		if phone := support.PhoneToOAMPhone(v.Tel(), "", v.Country()); phone != nil {
-			phone.Type = contact.PhoneTypeRegular
-			if a, err := e.Session.DB().CreateAsset(ctx, phone); err == nil && a != nil {
-				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
-			}
-		}
-		if fax := support.PhoneToOAMPhone(v.Fax(), "", v.Country()); fax != nil {
-			fax.Type = contact.PhoneTypeFax
-			if a, err := e.Session.DB().CreateAsset(ctx, fax); err == nil && a != nil {
-				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
-			}
-		}
-	}
-
-	var findings []*support.Finding
-	findings = append(findings, &support.Finding{
-		From:     asset,
-		FromName: name,
-		To:       cr,
-		ToName:   "ContactRecord: " + u.Raw,
-		Rel:      &general.SimpleRelation{Name: rel},
-	})
 	// process the relation immediately
-	support.ProcessAssetsWithSource(e, findings, rd.source, rd.name, rd.name+"-storeEntity")
+	support.ProcessAssetsWithSource(e, []*support.Finding{{
+		From:     asset,
+		FromName: recordName(asset),
+		To:       cr,
+		ToName:   "ContactRecord: " + discoveredAt,
+		Rel:      &general.SimpleRelation{Name: rel},
+	}}, rd.source, rd.name, rd.name+"-storeEntity")
 
-	name = v.Name()
 	// the organization must come last due to a potential chicken-and-egg problem
-	if kind := strings.Join(prop.Values(), " "); m.IsMatch(string(oam.Person)) && name != "" && kind == "individual" {
-		if p := support.FullNameToPerson(name); p != nil {
-			if a, err := e.Session.DB().CreateAsset(ctx, p); err == nil && a != nil {
-				_ = rd.createContactEdge(ctx, e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
-				_ = e.Dispatcher.DispatchEvent(&et.Event{
-					Name:    fmt.Sprintf("%s:%s", p.FullName, p.ID),
-					Entity:  a,
-					Session: e.Session,
-				})
+	name := v.Name()
+	kind := strings.Join(prop.Values(), " ")
+	if kind == "individual" && name != "" {
+		// registries mark organizations as individuals too: the name decides
+		switch nk, why, p := support.NameKind(e.Session, name, nil, []string{info.Email}); nk {
+		case semantics.NameKindPerson:
+			if m.IsMatch(string(oam.Person)) {
+				support.LinkContactPerson(e, cr, p, src)
 			}
+		case semantics.NameKindOrganization:
+			kind = "org"
+		case semantics.NameKindUncertain:
+			support.KeepUncertainName(ctx, e.Session, cr, "person", name, why, src)
 		}
-	} else if m.IsMatch(string(oam.Organization)) && kind == "org" {
-		orgent, err := org.FindOrgByRDAPHandle(e.Session, entity.Handle, src)
-		if err != nil || orgent == nil {
-			orgent, err = org.CreateOrgAsset(e.Session, cr,
-				&general.SimpleRelation{Name: "organization"}, &oamorg.Organization{Name: name}, src)
-			if err == nil {
-				_, _ = org.CreateOrgRDAPHandle(e.Session, orgent, entity.Handle, src)
-			}
-		}
-
-		if err == nil && orgent != nil {
-			o := orgent.Asset.(*oamorg.Organization)
-
-			_ = e.Dispatcher.DispatchEvent(&et.Event{
-				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
-				Entity:  orgent,
-				Session: e.Session,
-			})
+	}
+	if m.IsMatch(string(oam.Organization)) && kind == "org" {
+		if orgent, err := org.FindOrgByRDAPHandle(e.Session, entity.Handle, src); err == nil && orgent != nil {
+			org.DispatchOrg(e, orgent)
+		} else if orgent := org.LinkContactOrg(e, cr, name, src); orgent != nil {
+			_, _ = org.CreateOrgRDAPHandle(e.Session, orgent, entity.Handle, src)
 		}
 	}
 
@@ -324,6 +315,21 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	for _, ent := range entity.Entities {
 		rd.storeEntity(e, level, &ent, asset, rd.source, m)
 	}
+}
+
+// recordContactKey identifies a registration contact that has no RDAP self
+// link by the record it belongs to and its role, so the same redacted contact
+// is one asset across reruns.
+func recordContactKey(asset *dbt.Entity, rel string) string {
+	switch v := asset.Asset.(type) {
+	case *oamreg.DomainRecord:
+		return v.Domain + " " + rel
+	case *oamreg.IPNetRecord:
+		return v.Handle + " " + rel
+	case *oamreg.AutnumRecord:
+		return v.Handle + " " + rel
+	}
+	return rel
 }
 
 func (rd *rdapPlugin) getJSONLink(links []rdap.Link) *url.URL {
@@ -335,23 +341,4 @@ func (rd *rdapPlugin) getJSONLink(links []rdap.Link) *url.URL {
 		}
 	}
 	return url
-}
-
-func (rd *rdapPlugin) createContactEdge(ctx context.Context, sess et.Session, cr, a *dbt.Entity, rel oam.Relation, src *et.Source) error {
-	edge, err := sess.DB().CreateEdge(ctx, &dbt.Edge{
-		Relation:   rel,
-		FromEntity: cr,
-		ToEntity:   a,
-	})
-	if err != nil {
-		return err
-	} else if edge == nil {
-		return errors.New("failed to create the edge")
-	}
-
-	_, err = sess.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-		Source:     src.Name,
-		Confidence: src.Confidence,
-	})
-	return err
 }

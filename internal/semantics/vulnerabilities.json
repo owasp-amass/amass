@@ -1,0 +1,316 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Where the vulnerable software lens gets its data, and which identified products it can check. The updater (amass vuln-update) asks the NVD CVE API for every CVE whose configurations name each product's CPE names, with the version ranges they affect, and reads CISA's Known Exploited Vulnerabilities catalog to mark the CVEs known to be exploited; it then fetches only what changed. products gives, for a product the services lens identifies (product_fingerprints.json), its CPE names as NVD's CPE dictionary writes them (cpe:2.3:part:vendor:product), with a source showing NVD using them. unchecked lists identified products whose stored version cannot be compared with NVD's, and why. Every product in product_fingerprints.json is in one list or the other. distributions are the Linux distributions whose own security data the updater also reads: a distribution backports fixes without changing the upstream version a server reports, so when a server's header or banner names its distribution (distributions.json), the vulnerable lens judges each CVE by what that distribution's security team recorded for its release: not affected, fixed in the package, fixed by an update, or open. A product's packages name its source packages in each distribution family; packages shows where a package name appears in that distribution's data. Add products here, not in Go code.",
+  "nvd_api": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+  "nvd_source": "https://nvd.nist.gov/developers/vulnerabilities",
+  "kev_feed": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+  "kev_source": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+  "distributions": [
+    {
+      "family": "debian",
+      "name": "Debian",
+      "data": "https://security-tracker.debian.org/tracker/data/json",
+      "source": "https://security-team.debian.org/security_tracker.html",
+      "packages": "https://security-tracker.debian.org/tracker/source-package/{package}"
+    },
+    {
+      "family": "ubuntu",
+      "name": "Ubuntu",
+      "data": "https://ubuntu.com/security/cves.json",
+      "source": "https://github.com/canonical/ubuntu-com-security-api",
+      "packages": "https://ubuntu.com/security/cves?package={package}"
+    },
+    {
+      "family": "redhat",
+      "name": "Red Hat Enterprise Linux",
+      "data": "https://access.redhat.com/hydra/rest/securitydata/cve/",
+      "list": "https://access.redhat.com/hydra/rest/securitydata/cve.json",
+      "source": "https://docs.redhat.com/en/documentation/red_hat_security_data_api/1.0/html/red_hat_security_data_api/cve",
+      "packages": "https://access.redhat.com/hydra/rest/securitydata/cve.json?package={package}"
+    }
+  ],
+  "products": [
+    {
+      "product": "nginx",
+      "cpe": [
+        "cpe:2.3:a:f5:nginx"
+      ],
+      "source": "https://cvemon.intruder.io/cves/CVE-2021-23017",
+      "packages": {
+        "debian": [
+          "nginx"
+        ],
+        "ubuntu": [
+          "nginx"
+        ],
+        "redhat": [
+          "nginx"
+        ]
+      }
+    },
+    {
+      "product": "Apache HTTP Server",
+      "cpe": [
+        "cpe:2.3:a:apache:http_server"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/143791",
+      "packages": {
+        "debian": [
+          "apache2"
+        ],
+        "ubuntu": [
+          "apache2"
+        ],
+        "redhat": [
+          "httpd"
+        ]
+      }
+    },
+    {
+      "product": "Microsoft IIS",
+      "cpe": [
+        "cpe:2.3:a:microsoft:internet_information_server",
+        "cpe:2.3:a:microsoft:internet_information_services"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/619517"
+    },
+    {
+      "product": "PHP",
+      "cpe": [
+        "cpe:2.3:a:php:php"
+      ],
+      "source": "https://cve.akaoma.com/cve-2015-4642",
+      "packages": {
+        "debian": [
+          "php7.4",
+          "php8.2",
+          "php8.4"
+        ],
+        "ubuntu": [
+          "php7.4",
+          "php8.1",
+          "php8.3",
+          "php8.4"
+        ],
+        "redhat": [
+          "php"
+        ]
+      }
+    },
+    {
+      "product": "OpenSSL",
+      "cpe": [
+        "cpe:2.3:a:openssl:openssl"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/839095",
+      "packages": {
+        "debian": [
+          "openssl"
+        ],
+        "ubuntu": [
+          "openssl"
+        ],
+        "redhat": [
+          "openssl"
+        ]
+      }
+    },
+    {
+      "product": "OpenSSH",
+      "cpe": [
+        "cpe:2.3:a:openbsd:openssh"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/1908",
+      "packages": {
+        "debian": [
+          "openssh"
+        ],
+        "ubuntu": [
+          "openssh"
+        ],
+        "redhat": [
+          "openssh"
+        ]
+      }
+    },
+    {
+      "product": "Postfix",
+      "cpe": [
+        "cpe:2.3:a:postfix:postfix"
+      ],
+      "source": "https://cvemon.intruder.io/cves/CVE-2023-51764",
+      "packages": {
+        "debian": [
+          "postfix"
+        ],
+        "ubuntu": [
+          "postfix"
+        ],
+        "redhat": [
+          "postfix"
+        ]
+      }
+    },
+    {
+      "product": "Exim",
+      "cpe": [
+        "cpe:2.3:a:exim:exim"
+      ],
+      "source": "https://cvepremium.circl.lu/vuln/cve-2023-42116",
+      "packages": {
+        "debian": [
+          "exim4"
+        ],
+        "ubuntu": [
+          "exim4"
+        ]
+      }
+    },
+    {
+      "product": "Dovecot",
+      "cpe": [
+        "cpe:2.3:a:dovecot:dovecot"
+      ],
+      "source": "https://db.gcve.eu/vuln/CVE-2021-33515",
+      "packages": {
+        "debian": [
+          "dovecot"
+        ],
+        "ubuntu": [
+          "dovecot"
+        ],
+        "redhat": [
+          "dovecot"
+        ]
+      }
+    },
+    {
+      "product": "vsftpd",
+      "cpe": [
+        "cpe:2.3:a:vsftpd_project:vsftpd"
+      ],
+      "source": "https://cve.akaoma.com/cve-2011-2523",
+      "packages": {
+        "debian": [
+          "vsftpd"
+        ],
+        "ubuntu": [
+          "vsftpd"
+        ],
+        "redhat": [
+          "vsftpd"
+        ]
+      }
+    },
+    {
+      "product": "Apache Traffic Server",
+      "cpe": [
+        "cpe:2.3:a:apache:traffic_server"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/1762807",
+      "packages": {
+        "debian": [
+          "trafficserver"
+        ],
+        "ubuntu": [
+          "trafficserver"
+        ]
+      }
+    },
+    {
+      "product": "Phusion Passenger",
+      "cpe": [
+        "cpe:2.3:a:phusion:passenger"
+      ],
+      "source": "https://db.gcve.eu/vuln/CVE-2013-2119",
+      "packages": {
+        "debian": [
+          "passenger"
+        ],
+        "ubuntu": [
+          "passenger"
+        ]
+      }
+    },
+    {
+      "product": "mod_perl",
+      "cpe": [
+        "cpe:2.3:a:apache:mod_perl"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/160",
+      "packages": {
+        "debian": [
+          "libapache2-mod-perl2"
+        ],
+        "ubuntu": [
+          "libapache2-mod-perl2"
+        ],
+        "redhat": [
+          "mod_perl"
+        ]
+      }
+    },
+    {
+      "product": "Perl",
+      "cpe": [
+        "cpe:2.3:a:perl:perl"
+      ],
+      "source": "https://db.gcve.eu/vuln/fkie_cve-2023-47038",
+      "packages": {
+        "debian": [
+          "perl"
+        ],
+        "ubuntu": [
+          "perl"
+        ],
+        "redhat": [
+          "perl"
+        ]
+      }
+    },
+    {
+      "product": "WordPress",
+      "cpe": [
+        "cpe:2.3:a:wordpress:wordpress"
+      ],
+      "source": "https://cpe.gcve.eu/cpes/41607",
+      "packages": {
+        "debian": [
+          "wordpress"
+        ],
+        "ubuntu": [
+          "wordpress"
+        ]
+      }
+    },
+    {
+      "product": "jQuery",
+      "cpe": [
+        "cpe:2.3:a:jquery:jquery"
+      ],
+      "source": "https://www.incibe.es/en/incibe-cert/early-warning/vulnerabilities/cve-2020-11022"
+    }
+  ],
+  "unchecked": [
+    {
+      "product": "Microsoft Exchange Server",
+      "reason": "its headers give a build number, while NVD names releases and cumulative updates"
+    },
+    {
+      "product": "ASP.NET",
+      "reason": "its header gives the .NET runtime version, not a product release NVD names"
+    },
+    {
+      "product": "Express",
+      "reason": "its header carries no version"
+    },
+    {
+      "product": "Drupal",
+      "reason": "its header gives only the major version, while NVD's ranges name full releases"
+    },
+    {
+      "product": "Next.js",
+      "reason": "its header carries no version"
+    }
+  ]
+}

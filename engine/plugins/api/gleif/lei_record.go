@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -21,12 +22,9 @@ func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei 
 	defer cancel()
 
 	if id, err := session.DB().CreateAsset(ctx, lei); err == nil && id != nil {
-		_, _ = session.DB().CreateEntityProperty(ctx, id, &general.SourceProperty{
-			Source:     g.source.Name,
-			Confidence: conf,
-		})
+		support.AddSource(ctx, session, id, g.withConfidence(conf))
 		if orgent != nil {
-			if err := g.createRelation(ctx, session, orgent, general.SimpleRelation{Name: "id"}, id, conf); err != nil {
+			if _, err := support.Relate(ctx, session, orgent, general.SimpleRelation{Name: "id"}, id, g.withConfidence(conf)); err != nil {
 				return nil, err
 			}
 		}

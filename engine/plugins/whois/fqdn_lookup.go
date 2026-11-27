@@ -16,12 +16,12 @@ import (
 	whoisparser "github.com/likexian/whois-parser"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"golang.org/x/net/publicsuffix"
 )
 
 type fqdnLookup struct {
@@ -40,7 +40,9 @@ func (r *fqdnLookup) check(e *et.Event) error {
 	}
 
 	name := strings.ToLower(fqdn.Name)
-	if dom, err := publicsuffix.EffectiveTLDPlusOne(name); err != nil || dom != name {
+	// Only a domain registered with a registry has a WHOIS record; a name
+	// under a hosting provider's suffix (site.github.io) has none.
+	if amassdns.RegistrableDomain(name) != name {
 		return nil
 	}
 
@@ -89,7 +91,7 @@ func (r *fqdnLookup) lookup(e *et.Event, name string, since time.Time) *dbt.Enti
 }
 
 func (r *fqdnLookup) query(e *et.Event, name string, fent *dbt.Entity, src *et.Source) (*dbt.Entity, *whoisparser.WhoisInfo) {
-	_ = r.plugin.rlimit.Wait(e.Session.Ctx())
+	_ = support.WaitLimit(e.Session.Ctx(), r.plugin.rlimit)
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
 	defer cancel()
@@ -157,15 +159,7 @@ func (r *fqdnLookup) store(e *et.Event, resp string, fent *dbt.Entity, src *et.S
 
 	autasset, err := e.Session.DB().CreateAsset(ctx, dr)
 	if err == nil && autasset != nil {
-		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-			Relation:   &general.SimpleRelation{Name: "registration"},
-			FromEntity: fent,
-			ToEntity:   autasset,
-		}); err == nil && edge != nil {
-			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
-			})
+		if _, err := support.Relate(ctx, e.Session, fent, &general.SimpleRelation{Name: "registration"}, autasset, src); err == nil {
 			msg := fmt.Sprintf("successfully acquired the WHOIS record for %s", fqdn.Name)
 			e.Session.Log().Info(msg, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 		}

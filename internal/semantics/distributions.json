@@ -1,0 +1,29 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the services lens recognizes the Linux distribution that packaged an identified product, from the same response header or banner that identified it (product_fingerprints.json). A distribution backports security fixes to the version it first shipped without changing that version, so a server's upstream version alone overstates its CVEs; the vulnerable lens judges each CVE by the distribution's own security data instead (vulnerabilities.json, distributions). patterns are regular expressions matched without case; a revision group, when present, captures the distribution's package revision, which with the identified version gives the exact package version (9.6p1-3ubuntu13.16). family names the distribution data that applies; a distribution without one is recognized and named, but its CVEs are judged by version alone, since its own errata are not read: a rebuild of another distribution publishes its own, on its own schedule. Each entry cites documentation of what it matches. Recognition is computed when asked and never written to the Asset Database. Add distributions here, not in Go code.",
+  "distributions": [
+    {"name": "Red Hat Enterprise Linux", "family": "redhat",
+      "patterns": ["\\(Red Hat Enterprise Linux\\)", "\\(Red Hat\\)"],
+      "source": "https://access.redhat.com/security/updates/backporting"},
+    {"name": "Ubuntu", "family": "ubuntu",
+      "patterns": ["\\(Ubuntu\\)",
+        "^SSH-[0-9.]+-OpenSSH_[^ ]+ Ubuntu-(?P<revision>[0-9][0-9A-Za-z.+~]*)",
+        "/[0-9][0-9A-Za-z.]*-(?P<revision>[0-9][0-9A-Za-z.+~]*ubuntu[0-9A-Za-z.+~]*)"],
+      "source": "https://documentation.ubuntu.com/security/security-features/network/version-banners/"},
+    {"name": "Debian", "family": "debian",
+      "patterns": ["\\(Debian\\)",
+        "^SSH-[0-9.]+-OpenSSH_[^ ]+ Debian-(?P<revision>[0-9][0-9A-Za-z.+~]*)",
+        "/[0-9][0-9A-Za-z.]*-(?P<revision>[0-9][0-9A-Za-z.+~]*[+~]deb[0-9]+u[0-9]+[0-9A-Za-z.+~]*)"],
+      "source": "https://manpages.debian.org/bookworm/openssh-server/sshd_config.5.en.html#DebianBanner"},
+    {"name": "Rocky Linux", "patterns": ["\\(Rocky Linux\\)"],
+      "source": "https://httpd.apache.org/docs/2.4/mod/core.html#servertokens"},
+    {"name": "AlmaLinux", "patterns": ["\\(AlmaLinux\\)"],
+      "source": "https://httpd.apache.org/docs/2.4/mod/core.html#servertokens"},
+    {"name": "Oracle Linux", "patterns": ["\\(Oracle Linux(?: Server)?\\)"],
+      "source": "https://httpd.apache.org/docs/2.4/mod/core.html#servertokens"},
+    {"name": "CentOS", "patterns": ["\\(CentOS(?: Stream)?\\)"],
+      "source": "https://httpd.apache.org/docs/2.4/mod/core.html#servertokens"},
+    {"name": "Fedora", "patterns": ["\\(Fedora\\)"],
+      "source": "https://httpd.apache.org/docs/2.4/mod/core.html#servertokens"}
+  ]
+}

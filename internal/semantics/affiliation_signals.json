@@ -1,0 +1,16 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Signals that two organizations are affiliated — distinct organizations with a real tie (shared management, premises, people or backers), not the same organization (that is the duplicates lens) and not mere coincidence. Each signal is a shared attribute with a weight in (0,1] and the rationale for it (ai-design-principles.md, principle 8). The affiliation lens combines the signals matched for a candidate by noisy-OR (confidence = 1 - product of (1 - weight)), so independent signals reinforce each other and no single weak signal is decisive. A shared attribute is evidence of a tie, never proof; a matching organization name is never a signal, because organizations in different jurisdictions often share a name (principle 8). Conclusions are computed when asked and written only through review (principle 10).",
+  "signals": [
+    {"key": "shared_phone", "weight": 0.7,
+      "rationale": "Organizations whose contact records use the same phone number usually share a switchboard, management company or operator — a strong tie that is rarely coincidental."},
+    {"key": "shared_person", "weight": 0.65,
+      "rationale": "A person who is a contact or member of both organizations ties them together, for example a shared officer, director, registrant or administrator."},
+    {"key": "shared_funder", "weight": 0.45,
+      "rationale": "Organizations that received funds from the same investor or agency are often portfolio companies, partners, suppliers or grantees of one program. Co-funding is a relationship signal, not ownership, so it is moderate."},
+    {"key": "shared_address", "weight": 0.35,
+      "rationale": "A shared postal address can mean a shared headquarters or registered office, but office buildings and registered-agent addresses host many unrelated tenants, so on its own it is weak."},
+    {"key": "document_affiliation", "weight": 0.25,
+      "rationale": "The subject's own documents state it is a member or partner of the other organization (member_of, partner_of), and the quote was checked against the text. A document finding is supporting evidence, never strong: it weighs 0.20 from one first-party document version and 0.25 when two or more agree (see document_signals.json), and the other organization must be named exactly."}
+  ]
+}

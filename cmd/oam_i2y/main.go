@@ -30,6 +30,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v5/config"
@@ -101,12 +102,51 @@ func main() {
 		log.Fatal("Failed to load the INI file:", err)
 	}
 
-	// this code below will take all the datasources specified in the ini and populate the filled ones into the yaml
-	yamlDataSources := make([]*config.DataSource, 0)
+	yamlConfig, yamlDataSrcConfigs := convert(&iniConfig)
 
-	for _, v := range iniConfig.datasrcConfigs {
+	// marshals and outputs it into a file
+
+	output, err := yaml.Marshal(yamlDataSrcConfigs)
+	if err != nil {
+		log.Println("failed to marshal the yaml:", err)
+	} else {
+		yamlConfig.Options["datasources"] = datasrcFile
+		err = os.WriteFile(datasrcFile, output, 0644)
+		if err != nil {
+			log.Println("Failed to write datasources file:", err)
+		} else {
+			_, _ = fmt.Println(b.Sprint("Wrote data sources file successfully at: ") + p.Sprint(datasrcFile))
+		}
+	}
+
+	output, err = yaml.Marshal(yamlConfig)
+	if err != nil {
+		log.Println("failed to marshal the yaml:", err)
+	} else {
+		err = os.WriteFile(configFile, output, 0644)
+		if err != nil {
+			log.Println("Failed to write config file:", err)
+		} else {
+			_, _ = fmt.Println(b.Sprint("Wrote config file successfully at ") + p.Sprint(configFile))
+		}
+	}
+}
+
+// convert translates a legacy INI configuration into the YAML configuration
+// and data source configuration: the data sources that have credentials, in
+// name order, and only the options the INI sets.
+func convert(iniConfig *Config) (*config.Config, config.DataSourceConfig) {
+	names := make([]string, 0, len(iniConfig.datasrcConfigs))
+	for name := range iniConfig.datasrcConfigs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	yamlDataSources := make([]*config.DataSource, 0)
+	for _, name := range names {
+		v := iniConfig.datasrcConfigs[name]
 		if len(v.creds) == 0 {
-			continue // Skip to the next iteration if there are no credentials
+			continue
 		}
 
 		creds := make(map[string]*config.Credentials)
@@ -127,37 +167,30 @@ func main() {
 		})
 	}
 
-	// this part of the code will populate the options only if theyre populated in the ini
 	options := make(map[string]interface{})
-
 	if len(iniConfig.Resolvers) > 0 {
 		options["resolvers"] = iniConfig.Resolvers
 	}
-
 	if iniConfig.BruteForcing {
-		bruteforce := make(map[string]interface{})
-		bruteforce["enabled"] = iniConfig.BruteForcing
-
+		bruteforce := map[string]interface{}{"enabled": true}
 		if len(iniConfig.Bruteforcelist) > 0 {
 			bruteforce["wordlist"] = iniConfig.Bruteforcelist
 		}
-
 		options["bruteforce"] = bruteforce
 	}
-
 	if iniConfig.Alterations {
-		alterations := make(map[string]interface{})
-		alterations["enabled"] = iniConfig.Alterations
-
+		alterations := map[string]interface{}{"enabled": true}
 		if len(iniConfig.Alterationslist) > 0 {
 			alterations["wordlist"] = iniConfig.Alterationslist
 		}
-
 		options["alterations"] = alterations
 	}
+	// only the first graph database the INI names is carried over
+	if len(iniConfig.GraphDBs) > 0 {
+		options["database"] = iniConfig.GraphDBs[0].URL
+	}
 
-	// this part of the code initializes the yamlconfig file with the values
-	yamlConfig := config.Config{
+	yamlConfig := &config.Config{
 		Scope: &config.Scope{
 			Domains:     iniConfig.domains,
 			IP:          iniConfig.Addresses,
@@ -169,43 +202,8 @@ func main() {
 		Options: options,
 	}
 
-	// if the databse is present in the ini, then store the first url.
-	if len(iniConfig.GraphDBs) > 0 {
-		yamlConfig.Options["database"] = iniConfig.GraphDBs[0].URL
-	}
-
-	// this part of the code initializes the yamlDataSrcConfigs file with the values
-	yamlDataSrcConfigs := config.DataSourceConfig{
-		Datasources: yamlDataSources,
-		GlobalOptions: map[string]int{
-			"minimum_ttl": iniConfig.MinimumTTL,
-		},
-	}
-
-	// marshals and outputs it into a file
-
-	output, err := yaml.Marshal(yamlDataSrcConfigs)
-	if err != nil {
-		log.Println("failed to marshal the yaml:", err)
-	} else {
-		yamlConfig.Options["datasources"] = datasrcFile
-		err = os.WriteFile(datasrcFile, output, 0644)
-		if err != nil {
-			log.Println("Failed to write datasources file:", err)
-		} else {
-			_, _ = fmt.Println(b.Sprint("Wrote data sources file successfully at: ") + p.Sprint(datasrcFile))
-		}
-	}
-
-	output, err = yaml.Marshal(&yamlConfig)
-	if err != nil {
-		log.Println("failed to marshal the yaml:", err)
-	} else {
-		err = os.WriteFile(configFile, output, 0644)
-		if err != nil {
-			log.Println("Failed to write config file:", err)
-		} else {
-			_, _ = fmt.Println(b.Sprint("Wrote config file successfully at ") + p.Sprint(configFile))
-		}
+	return yamlConfig, config.DataSourceConfig{
+		Datasources:   yamlDataSources,
+		GlobalOptions: map[string]int{"minimum_ttl": iniConfig.MinimumTTL},
 	}
 }

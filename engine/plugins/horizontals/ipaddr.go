@@ -102,17 +102,60 @@ func (h *horaddr) lookupPTRRecordData(sess et.Session, ptr *dbt.Entity) (*dbt.En
 }
 
 func (h *horaddr) process(e *et.Event, ip *oamnet.IPAddress, fqdn *dbt.Entity) {
-	// sweep around the IP, if the PTR record resolves to a FQDN that's in scope
-	if _, conf := e.Session.Scope().IsAssetInScope(fqdn.Asset, 0); conf > 0 {
-		h.performSweep(e, ip)
+	// The neighborhood sweep is informed by infrastructure ownership: when the IP
+	// sits in a netblock the organization owns (confirmed by the scored
+	// infrastructure correlation and in scope), the range is the org's, so the
+	// sweep runs — but bounded by that netblock's sweep budget so a large owned
+	// network is not probed wholesale (see performSweep). Otherwise the sweep
+	// runs only when the IP's PTR name is in scope — a name-confirmed IP
+	// justifies a modest probe of its immediate neighbors, but adjacency in an
+	// unowned (often shared/cloud) range is not evidence of ownership, so it
+	// stays narrow.
+	cidr, owned := h.inOwnedNetblock(e.Session, ip)
+	if _, conf := e.Session.Scope().IsAssetInScope(fqdn.Asset, 0); conf > 0 || owned {
+		h.performSweep(e, ip, cidr, owned)
 	}
 }
 
-func (h *horaddr) performSweep(e *et.Event, ip *oamnet.IPAddress) {
+// inOwnedNetblock reports whether the IP falls within a netblock already in
+// scope — i.e. one the organization owns, per the scored infrastructure
+// correlation (or an operator-provided netblock) — and returns that netblock's
+// CIDR so the sweep can be charged against its budget.
+func (h *horaddr) inOwnedNetblock(sess et.Session, ip *oamnet.IPAddress) (string, bool) {
+	for _, nb := range sess.Scope().Netblocks() {
+		if nb != nil && nb.CIDR.Contains(ip.Address) {
+			return nb.CIDR.String(), true
+		}
+	}
+	return "", false
+}
+
+func (h *horaddr) performSweep(e *et.Event, ip *oamnet.IPAddress, cidr string, owned bool) {
 	size := 32
 	if e.Session.Config().Active {
 		size = 64
 	}
 
+	// In an owned netblock the sweep is governed by that netblock's sweep budget,
+	// so a large owned network is not swept wholesale on the strength of
+	// ownership alone: the sweep probes only what the budget grants, records the
+	// addresses it spent, and those that prove to host a real asset refund the
+	// budget on the attribution drain (support.RecheckSweepBudgets). A netblock
+	// whose budget is exhausted (dead space) is left alone.
+	if owned {
+		budget := support.SweepBudgetFor(e.Session.ID().String())
+		granted := budget.TrySpend(cidr, size)
+		if granted <= 0 {
+			return
+		}
+		support.IPAddressSweep(e, ip, h.plugin.source, granted, func(ev *et.Event, a *oamnet.IPAddress, src *et.Source) {
+			budget.RecordSwept(cidr, a.Address.String())
+			h.plugin.submitIPAddress(ev, a, src)
+		})
+		return
+	}
+
+	// A name-confirmed IP in an un-owned (often shared/cloud) range justifies
+	// only a modest, fixed probe of its immediate neighbors.
 	support.IPAddressSweep(e, ip, h.plugin.source, size, h.plugin.submitIPAddress)
 }

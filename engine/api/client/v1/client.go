@@ -35,6 +35,10 @@ type Client struct {
 
 type CreateSessionResponse struct {
 	SessionToken string `json:"sessionToken"`
+	// JobID is the job the session works on: its own token, or a running
+	// job of the same scope that it joined, taking that job's configuration.
+	JobID  string `json:"jobId,omitempty"`
+	Joined bool   `json:"joined,omitempty"`
 }
 
 type ListSessionsResponse struct {
@@ -82,9 +86,20 @@ func (c *Client) HealthCheck(ctx context.Context) bool {
 
 // Creates a new session on the server with the provided configuration.
 func (c *Client) CreateSession(ctx context.Context, config *config.Config) (uuid.UUID, error) {
-	raw, err := json.Marshal(config)
+	out, err := c.NewSession(ctx, config)
 	if err != nil {
 		return uuid.UUID{}, err
+	}
+	return uuid.Parse(out.SessionToken)
+}
+
+// NewSession creates a new session on the server with the provided
+// configuration, and returns its token with the job it works on: its own, or
+// a running job of the same scope that it joined.
+func (c *Client) NewSession(ctx context.Context, config *config.Config) (*CreateSessionResponse, error) {
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient, &amasshttp.Request{
@@ -94,23 +109,21 @@ func (c *Client) CreateSession(ctx context.Context, config *config.Config) (uuid
 		Header: amasshttp.Header{"Content-Type": []string{"application/json"}},
 	})
 	if err != nil {
-		return uuid.UUID{}, err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return uuid.UUID{}, fmt.Errorf("createSession: status=%s", resp.Status)
-		}
-		return uuid.UUID{}, fmt.Errorf("createSession: status=%s error=%s", resp.Status, msg)
+		return nil, statusError("createSession", resp)
 	}
 
 	var out CreateSessionResponse
 	if err := json.Unmarshal([]byte(resp.Body), &out); err != nil {
-		return uuid.UUID{}, err
+		return nil, err
 	}
-
-	return uuid.Parse(out.SessionToken)
+	if _, err := uuid.Parse(out.SessionToken); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Lists the active session and associated tokens on the server.
@@ -121,11 +134,7 @@ func (c *Client) ListSessions(ctx context.Context) ([]uuid.UUID, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("listSessions: status=%s", resp.Status)
-		}
-		return nil, fmt.Errorf("listSessions: status=%s error=%s", resp.Status, msg)
+		return nil, statusError("listSessions", resp)
 	}
 
 	var out ListSessionsResponse
@@ -155,11 +164,7 @@ func (c *Client) TerminateSession(ctx context.Context, token uuid.UUID) error {
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return fmt.Errorf("terminateSession: status=%s", resp.Status)
-		}
-		return fmt.Errorf("terminateSession: status=%s error=%s", resp.Status, msg)
+		return statusError("terminateSession", resp)
 	}
 	return nil
 }
@@ -173,11 +178,7 @@ func (c *Client) SessionStats(ctx context.Context, token uuid.UUID) (*et.Session
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("%s/stats: status=%s", token.String(), resp.Status)
-		}
-		return nil, fmt.Errorf("%s/stats: status=%s error=%s", token.String(), resp.Status, msg)
+		return nil, statusError(token.String()+"/stats", resp)
 	}
 
 	var st et.SessionStats
@@ -185,6 +186,28 @@ func (c *Client) SessionStats(ctx context.Context, token uuid.UUID) (*et.Session
 		return nil, err
 	}
 	return &st, nil
+}
+
+// SessionWorkers retrieves the workers of the job the session works on,
+// which is empty when the engines share no work.
+func (c *Client) SessionWorkers(ctx context.Context, token uuid.UUID) ([]et.WorkerStats, error) {
+	resp, err := amasshttp.RequestWebPage(ctx, c.httpClient,
+		&amasshttp.Request{URL: c.base + "/sessions/" + token.String() + "/workers"})
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, statusError(token.String()+"/workers", resp)
+	}
+
+	var out struct {
+		Workers []et.WorkerStats `json:"workers"`
+	}
+	if err := json.Unmarshal([]byte(resp.Body), &out); err != nil {
+		return nil, err
+	}
+	return out.Workers, nil
 }
 
 // Retrieves scope for the session associated with the provided token.
@@ -198,11 +221,7 @@ func (c *Client) SessionScope(ctx context.Context, token uuid.UUID, atype oam.As
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("%s/scope: status=%s", token.String(), resp.Status)
-		}
-		return nil, fmt.Errorf("%s/scope: status=%s error=%s", token.String(), resp.Status, msg)
+		return nil, statusError(token.String()+"/scope", resp)
 	}
 
 	reader := strings.NewReader(resp.Body)
@@ -233,11 +252,7 @@ func (c *Client) CreateAsset(ctx context.Context, token uuid.UUID, asset oam.Ass
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("createAsset: status=%s", resp.Status)
-		}
-		return "", fmt.Errorf("createAsset: status=%s error=%s", resp.Status, msg)
+		return "", statusError("createAsset", resp)
 	}
 
 	var r AddAssetResponse
@@ -285,11 +300,7 @@ func (c *Client) CreateAssetsBulk(ctx context.Context, token uuid.UUID, atype st
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		msg, err := readJSONError(resp.Body)
-		if err != nil {
-			return 0, fmt.Errorf("addAssetsBulk: status=%s", resp.Status)
-		}
-		return 0, fmt.Errorf("addAssetsBulk: status=%s error=%s", resp.Status, msg)
+		return 0, statusError("addAssetsBulk", resp)
 	}
 
 	var out BulkAddAssetsResponse
@@ -348,6 +359,15 @@ func (c *Client) Subscribe(ctx context.Context, token uuid.UUID) (<-chan string,
 		}
 	}()
 	return ch, nil
+}
+
+// statusError reports an unexpected status, with the server's error message
+// when its answer carries one.
+func statusError(op string, resp *amasshttp.Response) error {
+	if msg, err := readJSONError(resp.Body); err == nil && msg != "" {
+		return fmt.Errorf("%s: status=%s error=%s", op, resp.Status, msg)
+	}
+	return fmt.Errorf("%s: status=%s", op, resp.Status)
 }
 
 func readJSONError(content string) (string, error) {

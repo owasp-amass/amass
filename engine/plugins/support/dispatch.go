@@ -31,15 +31,7 @@ func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, p
 	defer cancel()
 
 	for _, finding := range findings {
-		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
-			Relation:   finding.Rel,
-			FromEntity: finding.From,
-			ToEntity:   finding.To,
-		}); err == nil && edge != nil {
-			_, _ = e.Session.DB().CreateEdgeProperty(ctx, edge, &general.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
-			})
+		if _, err := Relate(ctx, e.Session, finding.From, finding.Rel, finding.To, src); err == nil {
 
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    finding.ToName,
@@ -65,10 +57,7 @@ func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source)
 			continue
 		}
 
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
+		AddSource(ctx, e.Session, entity, src)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fqdn.Name,
@@ -101,10 +90,7 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 			}
 		}
 
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, entity, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
+		AddSource(ctx, e.Session, entity, src)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    email.UniqueID,

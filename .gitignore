@@ -4,10 +4,11 @@
 *.so
 *.dylib
 
-# Output from Amass tooling
-*.json
+# Output from Amass tooling, written to the repository root. JSON and HTML
+# files in the source tree (catalogs, test data, examples, pages) are tracked.
+/*.json
+/*.html
 *.log
-*.html
 
 # Test binary, build with `go test -c`
 *.test

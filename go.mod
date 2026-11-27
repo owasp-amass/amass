@@ -10,8 +10,8 @@ require (
 	github.com/caffix/fullname_parser v0.0.0-20260303050922-5979016ffef9
 	github.com/caffix/jarm-go v0.0.0-20260306052330-3d837f3b03fc
 	github.com/caffix/pipeline v0.3.1-0.20260303045422-389f03cd4573
-	github.com/caffix/queue v0.4.1-0.20260303044231-38e3190f084d
-	github.com/caffix/stringset v0.2.1-0.20260303044338-0122c4694af1
+	github.com/caffix/queue v0.4.1-0.20261024025115-6facdac4cb31
+	github.com/caffix/stringset v0.2.1-0.20261024023700-d473a986fc28
 	github.com/cheggaaa/pb/v3 v3.2.1
 	github.com/fatih/color v1.19.0
 	github.com/google/uuid v1.6.1-0.20241114170450-2d3c2a9cc518
@@ -21,18 +21,22 @@ require (
 	github.com/likexian/whois v1.15.7
 	github.com/likexian/whois-parser v1.24.21
 	github.com/miekg/dns v1.1.73
+	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/neo4j/neo4j-go-driver/v5 v5.28.6
 	github.com/nyaruka/phonenumbers v1.8.1
 	github.com/openrdap/rdap v0.10.2
-	github.com/owasp-amass/asset-db v0.24.5
-	github.com/owasp-amass/open-asset-model v0.15.1
-	github.com/owasp-amass/resolve v0.10.0
+	github.com/owasp-amass/asset-db v0.24.6-0.20261127061424-a57650060ab2
+	github.com/owasp-amass/open-asset-model v0.15.2-0.20261122195447-ee84fa27984f
+	github.com/owasp-amass/resolve v0.10.2-0.20261123040118-169cbd251db8
 	github.com/pioz/countries v0.2.2
 	github.com/samber/slog-common v0.22.0
 	github.com/samber/slog-syslog/v2 v2.5.4
 	github.com/stretchr/testify v1.12.2-0.20260924145934-87a7b9d57689
 	github.com/swaggo/swag v1.16.6
 	github.com/yl2chen/cidranger v1.0.2
+	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
+	golang.org/x/text v0.43.0
 	golang.org/x/time v0.16.0
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v3 v3.0.1
@@ -62,6 +66,7 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/goccy/go-json v0.11.2 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/influxdata/line-protocol/v2 v2.2.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -77,20 +82,21 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.33 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
-	github.com/neo4j/neo4j-go-driver/v5 v5.28.6 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/samber/lo v1.53.0 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/xhit/go-str2duration/v2 v2.2.0 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
 	google.golang.org/grpc v1.84.0 // indirect

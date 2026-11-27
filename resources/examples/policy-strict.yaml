@@ -1,0 +1,29 @@
+# Expansion policy: strict
+#
+# Investigate only the scope the enumeration was given: the seed and the
+# scope section. Assets the run finds beyond it are still recorded, but
+# nothing is admitted into the scope (a confidence above 100 never admits;
+# each refusal is journaled with its reason) and nothing outside the given
+# scope is investigated further.
+#
+# To use it, merge these transformations into your config.yaml: they
+# replace entries of yours with the same key, default included.
+
+transformations:
+  default:
+    reach: scope            # within the given scope only
+    confidence: 101         # never admit anything into the scope
+  # Identify every organization the run meets (its name, LEI, jurisdiction),
+  # so third parties are still recognized; nothing more is collected for them.
+  Organization->GLEIF:
+    reach: any
+  # Look up every network's registration, so the target's own netblocks and
+  # autonomous systems can be attributed to it.
+  Netblock->RDAP:
+    reach: any
+  AutonomousSystem->RDAP:
+    reach: any
+  IPNetRecord->RDAP:
+    reach: any
+  AutnumRecord->RDAP:
+    reach: any

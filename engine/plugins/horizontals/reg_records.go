@@ -10,7 +10,6 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 type horRegRec struct {
@@ -26,8 +25,8 @@ func (h *horRegRec) check(e *et.Event) error {
 	var rlabel string
 	t := e.Entity.Asset.AssetType()
 
-	// check if scope expansion is allowed
-	if e.Session.Config().Rigid {
+	// the expansion policy may admit nothing at all
+	if !e.Session.Config().Widens() {
 		return nil
 	}
 
@@ -47,7 +46,7 @@ func (h *horRegRec) check(e *et.Event) error {
 		return nil
 	}
 
-	orgs, locs := h.plugin.lookupContactRecordOrgsAndLocations(e.Session, cr)
+	orgs, locs := h.plugin.lookupContactRecordOrgsAndStreetAddresses(e.Session, cr)
 	if len(orgs) == 0 && len(locs) == 0 {
 		return nil
 	}
@@ -67,10 +66,10 @@ func (h *horRegRec) processAutnumRecord(e *et.Event, orgs []*dbt.Entity, locs []
 	// check if the autnum record / registered autonomous system is in scope
 	if h.plugin.isEntityInScope(e.Session, e.Entity) {
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
 		}
 		for _, loc := range locs {
-			h.plugin.enqueueIfOutOfScope(e.Session, loc)
+			h.plugin.admitIfOutOfScope(e.Session, loc, et.SignalSharedContactRecord)
 		}
 		return
 	}
@@ -93,19 +92,20 @@ func (h *horRegRec) processAutnumRecord(e *et.Event, orgs []*dbt.Entity, locs []
 	}
 
 	if found {
-		// the autonomous system should be added to the scope
-		if an, valid := e.Entity.Asset.(*oamreg.AutnumRecord); valid {
-			if !h.plugin.isEntityInScope(e.Session, e.Entity) {
-				if as := h.plugin.addASNetblocksToScope(e.Session, an.Number); as != nil {
-					h.plugin.addToScopeAndEnqueue(e.Session, as)
-				}
+		// The organization's autonomous system and its netblocks are added
+		// through the scored infrastructure expansion for each in-scope
+		// organization, rather than a direct single-signal enqueue, so the scope
+		// change is scored, journaled and reconsiderable.
+		for _, o := range orgs {
+			if h.plugin.isEntityInScope(e.Session, o) {
+				h.plugin.expandRelatedInfrastructure(e, o)
 			}
 		}
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
 		}
 		for _, loc := range locs {
-			h.plugin.enqueueIfOutOfScope(e.Session, loc)
+			h.plugin.admitIfOutOfScope(e.Session, loc, et.SignalSharedContactRecord)
 		}
 	}
 }
@@ -114,10 +114,10 @@ func (h *horRegRec) processDomainRecord(e *et.Event, orgs []*dbt.Entity, locs []
 	// check if the domain record / registered domain name is in scope
 	if h.plugin.isEntityInScope(e.Session, e.Entity) {
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
 		}
 		for _, loc := range locs {
-			h.plugin.enqueueIfOutOfScope(e.Session, loc)
+			h.plugin.admitIfOutOfScope(e.Session, loc, et.SignalSharedContactRecord)
 		}
 		return
 	}
@@ -140,16 +140,20 @@ func (h *horRegRec) processDomainRecord(e *et.Event, orgs []*dbt.Entity, locs []
 	}
 
 	if found {
-		// get the registered domain FQDN entity
-		if fqdn, err := h.plugin.getRegisteredDomainEntity(e.Session, e.Entity); err == nil && fqdn != nil {
-			// add the FQDN to the session scope and review it
-			h.plugin.enqueueIfOutOfScope(e.Session, e.Entity)
+		// The registered domain is added through the scored horizontal
+		// expansion for each in-scope organization (which includes this
+		// domain via the shared-registrant signal), rather than a direct
+		// single-signal enqueue, so the scope change is scored and journaled.
+		for _, o := range orgs {
+			if h.plugin.isEntityInScope(e.Session, o) {
+				h.plugin.expandRelatedDomains(e, o)
+			}
 		}
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
 		}
 		for _, loc := range locs {
-			h.plugin.enqueueIfOutOfScope(e.Session, loc)
+			h.plugin.admitIfOutOfScope(e.Session, loc, et.SignalSharedContactRecord)
 		}
 	}
 }
@@ -158,10 +162,10 @@ func (h *horRegRec) processIPNetRecord(e *et.Event, orgs []*dbt.Entity, locs []*
 	// check if the ipnet record / registered netblock is in scope
 	if h.plugin.isEntityInScope(e.Session, e.Entity) {
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
 		}
 		for _, loc := range locs {
-			h.plugin.enqueueIfOutOfScope(e.Session, loc)
+			h.plugin.admitIfOutOfScope(e.Session, loc, et.SignalSharedContactRecord)
 		}
 		return
 	}
@@ -184,16 +188,20 @@ func (h *horRegRec) processIPNetRecord(e *et.Event, orgs []*dbt.Entity, locs []*
 	}
 
 	if found {
-		// get the registered CIDR Netblock entity
-		if nb, err := h.plugin.getRegisteredNetblockEntity(e.Session, e.Entity); err == nil && nb != nil {
-			// the netblock should be added to the scope
-			h.plugin.enqueueIfOutOfScope(e.Session, nb)
+		// The registered netblock is added through the scored infrastructure
+		// expansion for each in-scope organization (which includes it via the
+		// netblock-registrant signal), rather than a direct single-signal
+		// enqueue, so the scope change is scored, journaled and reconsiderable.
+		for _, o := range orgs {
+			if h.plugin.isEntityInScope(e.Session, o) {
+				h.plugin.expandRelatedInfrastructure(e, o)
+			}
 		}
 		for _, o := range orgs {
-			h.plugin.enqueueIfOutOfScope(e.Session, o)
+			h.plugin.admitIfOutOfScope(e.Session, o, et.SignalSharedContactRecord)
 		}
 		for _, loc := range locs {
-			h.plugin.enqueueIfOutOfScope(e.Session, loc)
+			h.plugin.admitIfOutOfScope(e.Session, loc, et.SignalSharedContactRecord)
 		}
 	}
 }

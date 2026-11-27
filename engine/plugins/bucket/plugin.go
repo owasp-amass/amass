@@ -1,0 +1,247 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+// Package bucket probes public object-storage buckets that the enumeration has
+// already observed — a name in the graph (a CNAME target or certificate SAN)
+// whose host matches a provider in internal/semantics/bucket_providers.json.
+// It never guesses bucket names and never lists or fetches objects: in active
+// mode it makes a single paced request to the bucket root to tell whether the
+// bucket exists, is missing (the subdomain-takeover case), or is world-readable,
+// and records that as an observation: a StorageBucket asset (identified by
+// provider service and bucket name, with whether it exists and is
+// world-listable) on the host's "bucket" relation, and the provider
+// Organization on the bucket's "provider" relation. Recognition of a bucket
+// endpoint from a stored name is left to the lenses (a computed conclusion);
+// only the probe outcome is stored. See claude/storage-bucket-oam-type-spec.md.
+package bucket
+
+import (
+	"context"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
+	"golang.org/x/time/rate"
+)
+
+// minBucketName is the shortest valid bucket/account name across the providers;
+// it also screens out generic redirect labels such as GCS's "c" host.
+const minBucketName = 3
+
+type bucketProbe struct {
+	name   string
+	log    *slog.Logger
+	rlimit *rate.Limiter
+	source *et.Source
+}
+
+func NewBucketProbe() et.Plugin {
+	return &bucketProbe{
+		name:   "BucketProbe",
+		rlimit: rate.NewLimiter(rate.Every(2*time.Second), 1),
+		source: &et.Source{Name: "BucketProbe", Confidence: 80},
+	}
+}
+
+func (p *bucketProbe) Name() string { return p.name }
+
+func (p *bucketProbe) Start(r et.Registry) error {
+	p.log = r.Log().WithGroup("plugin").With("name", p.name)
+
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       p,
+		Name:         p.name + "-Handler",
+		Position:     43,
+		MaxInstances: support.MidHandlerInstances,
+		Transforms:   []string{string(oam.StorageBucket)},
+		EventType:    oam.FQDN,
+		Callback:     p.check,
+	}); err != nil {
+		return err
+	}
+
+	p.log.Info("Plugin started")
+	return nil
+}
+
+func (p *bucketProbe) Stop() { p.log.Info("Plugin stopped") }
+
+func (p *bucketProbe) check(e *et.Event) error {
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
+	if !ok {
+		return nil
+	}
+
+	// Observed-name mining only: act only when this name is itself a known bucket
+	// endpoint already in the graph (reached from the scope as a CNAME target or
+	// cert SAN). No name guessing, no permutation.
+	prov, bucket, ok := semantics.MatchBucketHost(fqdn.Name)
+	if !ok || len(bucket) < minBucketName {
+		return nil
+	}
+
+	// The existence/listing request is a light active probe: active mode only,
+	// paced, rate-limited and TTL-guarded, like the service probes.
+	if !e.Session.Config().Active {
+		return nil
+	}
+
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.StorageBucket), p.name)
+	if err != nil {
+		return err
+	}
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, p.source, since) {
+		return nil
+	}
+	support.MarkAssetMonitored(e.Session, e.Entity, p.source)
+
+	p.probe(e, e.Entity, fqdn.Name, prov, bucket)
+	return nil
+}
+
+// probe makes the single bucket-root request and records the outcome.
+func (p *bucketProbe) probe(e *et.Event, host *dbt.Entity, name string, prov semantics.BucketProvider, bucket string) {
+	url := strings.ReplaceAll(prov.Endpoint, "{host}", name)
+	url = strings.ReplaceAll(url, "{bucket}", bucket)
+
+	if err := support.PaceProbe(e, name); err != nil {
+		return
+	}
+	_ = support.WaitLimit(e.Session.Ctx(), p.rlimit)
+
+	method := prov.Method
+	if method == "" {
+		method = "GET"
+	}
+
+	e.Session.NetSem().Acquire()
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
+	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().Probe, &amasshttp.Request{URL: url, Method: method})
+	cancel()
+	e.Session.NetSem().Release()
+	if err != nil || resp == nil {
+		return
+	}
+
+	status := classify(prov, resp)
+	if status == "" {
+		return
+	}
+
+	p.store(e, host, name, prov, bucket, status)
+}
+
+// classify maps a bucket-root response to exists, public or absent, using the
+// provider's signatures from the catalog.
+func classify(prov semantics.BucketProvider, resp *amasshttp.Response) string {
+	switch {
+	case matchSig(prov.PublicListing, resp):
+		return "public"
+	case matchSig(prov.NotFound, resp):
+		return "absent"
+	case resp.StatusCode == 403 || (resp.StatusCode >= 200 && resp.StatusCode < 400):
+		// A 2xx/3xx that is not a not-found, or an AccessDenied, is a bucket that
+		// exists but is not open.
+		return "exists"
+	}
+
+	return ""
+}
+
+// matchSig reports whether resp satisfies every constraint the signature sets
+// (status and/or body substring).
+func matchSig(sig semantics.BucketSignature, resp *amasshttp.Response) bool {
+	if len(sig.Status) == 0 && len(sig.BodyContains) == 0 {
+		return false
+	}
+	if len(sig.Status) > 0 {
+		ok := false
+		for _, s := range sig.Status {
+			if s == resp.StatusCode {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	if len(sig.BodyContains) > 0 {
+		ok := false
+		for _, sub := range sig.BodyContains {
+			if strings.Contains(resp.Body, sub) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+// store records the probe outcome as a StorageBucket: one node per provider
+// service and bucket name, however many host names reach it, holding the
+// latest state (an absent bucket is kept as the claimable takeover target).
+// The host reaches it on its "bucket" relation and the provider that operates
+// the namespace is an Organization on the bucket's "provider" relation. The
+// services, exposure and dangling lenses read the bucket from the host.
+func (p *bucketProbe) store(e *et.Event, host *dbt.Entity, name string, prov semantics.BucketProvider,
+	bucket, status string) {
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
+	defer cancel()
+
+	sb := newStorageBucket(prov, bucket, status)
+	sbEnt, err := e.Session.DB().CreateAsset(ctx, sb)
+	if err != nil || sbEnt == nil {
+		p.log.Warn("failed to store the storage bucket", "bucket", sb.ID, "error", err)
+		return
+	}
+	support.AddSource(ctx, e.Session, sbEnt, p.source)
+
+	support.ProcessAssetsWithSource(e, []*support.Finding{{
+		From:     host,
+		FromName: host.Asset.Key(),
+		To:       sbEnt,
+		ToName:   "StorageBucket: " + sb.ID,
+		Rel:      &oamgen.SimpleRelation{Name: "bucket"},
+	}}, p.source, p.name, p.name+"-Handler")
+
+	// The provider operates the bucket's namespace, reconciled with any
+	// organization of the same name already stored (as the cloud plugin does
+	// for a provider netblock).
+	if orgEnt, err := org.CreateOrgAsset(e.Session, sbEnt, &oamgen.SimpleRelation{Name: "provider"},
+		&oamorg.Organization{Name: prov.Organization}, p.source); err == nil && orgEnt != nil {
+		_ = e.Dispatcher.DispatchEvent(&et.Event{Name: orgEnt.Asset.Key(), Entity: orgEnt, Session: e.Session})
+	}
+
+	e.Session.Log().Info("bucket probed", "host", name, "provider", prov.Key, "bucket", bucket, "status", status,
+		slog.Group("plugin", "name", p.name, "handler", p.name+"-Handler"))
+}
+
+// newStorageBucket builds the bucket asset for a probe outcome: exists unless
+// the provider reported it missing, public when its listing was readable.
+func newStorageBucket(prov semantics.BucketProvider, bucket, status string) *oamplat.StorageBucket {
+	return &oamplat.StorageBucket{
+		ID:       prov.Service + ":" + bucket,
+		Name:     bucket,
+		Provider: prov.Organization,
+		Service:  prov.Service,
+		Exists:   status != "absent",
+		Public:   status == "public",
+	}
+}

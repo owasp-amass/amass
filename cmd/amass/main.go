@@ -33,17 +33,19 @@ import (
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
+	"github.com/owasp-amass/amass/v5/internal/ai"
+	aicli "github.com/owasp-amass/amass/v5/internal/ai/cli"
 	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
 	"github.com/owasp-amass/amass/v5/internal/assoc"
 	"github.com/owasp-amass/amass/v5/internal/enum"
-	"github.com/owasp-amass/amass/v5/internal/subs"
+	lenscli "github.com/owasp-amass/amass/v5/internal/lens/cli"
+	secretscli "github.com/owasp-amass/amass/v5/internal/secrets/cli"
 	"github.com/owasp-amass/amass/v5/internal/tools"
-	"github.com/owasp-amass/amass/v5/internal/track"
-	"github.com/owasp-amass/amass/v5/internal/viz"
+	vulncli "github.com/owasp-amass/amass/v5/internal/vuln/cli"
 )
 
 const (
-	usageMsg string = "[assoc|engine|enum|subs|track|viz] [options]"
+	usageMsg string = "[ai|assoc|db|engine|enum|lens|review|secrets|vuln-update] [options]"
 )
 
 type Args struct {
@@ -57,15 +59,22 @@ type subDesc struct {
 }
 
 var subcommands = []subDesc{
+	{"ai", aicli.Description},
 	{"assoc", assoc.Description},
+	{"db", lenscli.DBDescription},
 	{"engine", ae.Description},
 	{"enum", enum.Description},
-	{"subs", subs.Description},
-	{"track", track.Description},
-	{"viz", viz.Description},
+	{"lens", lenscli.LensDescription},
+	{"review", lenscli.ReviewDescription},
+	{"secrets", secretscli.Description},
+	{"vuln-update", vulncli.Description},
 }
 
 func main() {
+	// amass db org-named records the name classifier's advice; lens/cli
+	// cannot import internal/ai itself
+	lenscli.OrgNamedAdvice = ai.OrgNamedAdvice
+
 	var args Args
 	fs := flag.NewFlagSet("amass", flag.ContinueOnError)
 
@@ -85,7 +94,7 @@ func main() {
 			_, _ = afmt.G.Fprintln(color.Error, defaultBuf.String())
 			_, _ = afmt.G.Fprintf(color.Error, "Subcommands: \n\n")
 			for _, sub := range subcommands {
-				_, _ = afmt.G.Fprintf(color.Error, "\t%-5s\t%s\n", sub.Name, sub.Description)
+				_, _ = afmt.G.Fprintf(color.Error, "\t%-11s\t%s\n", sub.Name, sub.Description)
 			}
 			_, _ = afmt.G.Fprintln(color.Error)
 			return
@@ -133,6 +142,8 @@ func main() {
 
 	cmdName := fmt.Sprintf("%s %s", path.Base(os.Args[0]), os.Args[1])
 	switch os.Args[1] {
+	case "ai":
+		aicli.CLIWorkflow(cmdName, os.Args[2:])
 	case "assoc":
 		assoc.CLIWorkflow(cmdName, os.Args[2:])
 	case "engine":
@@ -143,8 +154,9 @@ func main() {
 
 		ae.CLIWorkflow(cmdName, os.Args[2:])
 	case "enum":
-		// The engine must be started before running the enum command
-		if !engineIsRunning() {
+		// The engine must be started before running the enum command, unless
+		// the command only prints its usage or the data sources
+		if enum.NeedsEngine(os.Args[2:]) && !engineIsRunning() {
 			if err := startEngine(); err != nil {
 				_, _ = afmt.R.Fprintf(color.Error, "Failed to start the Amass engine: %v\n", err)
 				os.Exit(1)
@@ -157,12 +169,16 @@ func main() {
 		}
 
 		enum.CLIWorkflow(cmdName, os.Args[2:])
-	case "subs":
-		subs.CLIWorkflow(cmdName, os.Args[2:])
-	case "track":
-		track.CLIWorkflow(cmdName, os.Args[2:])
-	case "viz":
-		viz.CLIWorkflow(cmdName, os.Args[2:])
+	case "db":
+		lenscli.DBWorkflow(cmdName, os.Args[2:])
+	case "lens":
+		lenscli.LensWorkflow(cmdName, os.Args[2:])
+	case "review":
+		lenscli.ReviewWorkflow(cmdName, os.Args[2:])
+	case "secrets":
+		secretscli.CLIWorkflow(cmdName, os.Args[2:])
+	case "vuln-update":
+		vulncli.CLIWorkflow(cmdName, os.Args[2:])
 	default:
 		usage()
 		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])

@@ -36,6 +36,10 @@ type SessionHTTPClients struct {
 	General *http.Client
 	Probe   *http.Client
 	Crawl   *http.Client
+	// Bulk is for data sources that take long to start answering a large
+	// query, such as a web archive's index for a whole domain. It is paced like
+	// General but waits minutes, not seconds, for the reply.
+	Bulk *http.Client
 }
 
 type Session interface {
@@ -54,17 +58,19 @@ type Session interface {
 	CIDRanger() cidranger.Ranger
 	TmpDir() string
 	Stats() *SessionStats
+	// NameKinds is the decider of names that may be a person's or an
+	// organization's, or nil when the session has none.
+	NameKinds() NameKindDecider
 	Done() bool
 	Kill()
 }
 
 type Association struct {
-	Submission  *dbt.Entity
-	ScopeChange bool
-	BestMatch   *dbt.Entity
-	Evidence    []*dbt.Entity
-	Rationale   string
-	Confidence  int
+	Submission *dbt.Entity
+	BestMatch  *dbt.Entity
+	Evidence   []*dbt.Entity
+	Rationale  string
+	Confidence int
 }
 
 type Scope interface {
@@ -102,9 +108,12 @@ type Scope interface {
 	AddOrgByName(o string) bool
 	Organizations() []*oamorg.Organization
 
-	// Methods for adding and getting Locations
-	Locations() []*oamcon.Location
-	AddLocation(loc *oamcon.Location) bool
+	// Methods for adding and getting StreetAddresses
+	StreetAddresses() []*oamcon.StreetAddress
+	AddStreetAddress(loc *oamcon.StreetAddress) bool
+
+	// Admission into scope (admission.go)
+	Admitter
 }
 
 // Backlog is the durable, per-session work backlog with claim/lease semantics.
@@ -116,7 +125,6 @@ type Backlog interface {
 	Has(e *dbt.Entity) bool
 
 	Enqueue(e *dbt.Entity) error
-	EnqueueDone(e *dbt.Entity) error
 
 	// ClaimNext leases up to num entities of this asset type.
 	// Claimed items will not be returned again until Ack/Release or lease expiry.
@@ -130,18 +138,68 @@ type Backlog interface {
 
 	Counts(atype oam.AssetType) (queued, leased, done int64, err error)
 
-	Delete(e *dbt.Entity) error
 	Close() error
+}
 
-	// Optional knobs:
-	SetOwner(owner string)
-	SetLeaseTTL(ttl time.Duration)
+// WorkerStats is what one worker of a job, an engine session, is doing: is
+// it still there, its background work, the items it holds and did, and the
+// requests its main model was sent (admissions and names it decided).
+type WorkerStats struct {
+	Worker     string `json:"worker"`
+	Live       bool   `json:"live"`
+	Leased     int64  `json:"leased"`
+	Done       int64  `json:"done"`
+	Background int    `json:"background"`
+	ModelCalls int64  `json:"modelCalls"`
 }
 
 type SessionStats struct {
 	sync.RWMutex
 	WorkItemsCompleted int `json:"workItemsCompleted"`
 	WorkItemsTotal     int `json:"workItemsTotal"`
+	// background counts work running outside the backlog, such as an
+	// attribution pass, so the session is not reported finished while a
+	// plugin still has work that can produce new assets; backgroundDone the
+	// units finished with DoneBackground, which count as completed work
+	// items, so long background work shows progress.
+	background     int
+	backgroundDone int
+}
+
+// AddBackground adds n (which may be negative) to the session's background
+// work. Each pending unit counts as an incomplete work item.
+func (ss *SessionStats) AddBackground(n int) {
+	ss.Lock()
+	defer ss.Unlock()
+
+	ss.background = max(0, ss.background+n)
+}
+
+// DoneBackground finishes n units of the session's background work, which
+// count as completed work items from then on.
+func (ss *SessionStats) DoneBackground(n int) {
+	ss.Lock()
+	defer ss.Unlock()
+
+	n = min(n, ss.background)
+	ss.background -= n
+	ss.backgroundDone += n
+}
+
+// BackgroundDone returns the background work units finished.
+func (ss *SessionStats) BackgroundDone() int {
+	ss.RLock()
+	defer ss.RUnlock()
+
+	return ss.backgroundDone
+}
+
+// Background returns the session's pending background work.
+func (ss *SessionStats) Background() int {
+	ss.RLock()
+	defer ss.RUnlock()
+
+	return ss.background
 }
 
 type SessionManager interface {

@@ -1,0 +1,26 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the services lens reads the services an enumerated domain or organization exposes. It walks the controlled footprint as the vendors lens does and follows relations of service_relation_types from each controlled name, address or URL to the services stored for it. A service's certificates and products are the relations the semantics table gives the purposes certificate_purpose and product_purpose. software_headers are the response header names (compared without case) whose values name software, such as a web server. expected_ports lists, for each service_type the probes store, the ports that type usually listens on; a service on another port is reported, since services on unusual ports are often forgotten. certificate_warning_days is how soon before it expires a certificate is reported. Add values here, not in Go code.",
+  "service_relation_types": ["PortRelation"],
+  "certificate_purpose": "certificate",
+  "product_purpose": "product",
+  "software_headers": [
+    "server",
+    "x-powered-by",
+    "x-aspnet-version",
+    "x-aspnetmvc-version",
+    "x-generator",
+    "x-runtime",
+    "x-served-by",
+    "via"
+  ],
+  "expected_ports": {
+    "web-service": [80, 443, 8080, 8443],
+    "ssh": [22],
+    "smtp": [25, 465, 587],
+    "ftp": [21],
+    "pop3": [110, 995],
+    "imap": [143, 993]
+  },
+  "certificate_warning_days": 30
+}

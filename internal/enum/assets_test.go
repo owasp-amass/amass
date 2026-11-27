@@ -9,6 +9,8 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 func TestMakeAssetsWithProvidedNames(t *testing.T) {
@@ -58,5 +60,32 @@ func TestMakeAssetsWithoutProvidedNames(t *testing.T) {
 	// Should have only 1 domain
 	if len(assets) != 1 {
 		t.Errorf("Expected 1 asset, got %d", len(assets))
+	}
+}
+
+func TestConvertScopeToAssetsOrganizations(t *testing.T) {
+	cfg := config.NewConfig()
+	cfg.Scope.Domains = []string{"example.com"}
+	cfg.Scope.ASNs = []int{64496}
+	cfg.Scope.Organizations = []string{"Example Corporation"}
+
+	var orgs, domains, asns int
+	for _, a := range convertScopeToAssets(cfg.Scope) {
+		switch v := a.(type) {
+		case oamorg.Organization:
+			orgs++
+			if v.Name != "Example Corporation" {
+				t.Errorf("organization name = %q", v.Name)
+			}
+		case oamdns.FQDN:
+			domains++
+		case oamnet.AutonomousSystem:
+			asns++
+		}
+	}
+	// Previously supported entry types still convert, alongside the new
+	// organization.
+	if orgs != 1 || domains != 1 || asns != 1 {
+		t.Errorf("orgs=%d domains=%d asns=%d", orgs, domains, asns)
 	}
 }

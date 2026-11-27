@@ -5,15 +5,11 @@
 package enrich
 
 import (
-	"context"
 	"errors"
 	"log/slog"
-	"time"
 
-	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 )
@@ -32,7 +28,7 @@ func NewContacts() et.Plugin {
 			string(oam.URL),
 			string(oam.Person),
 			string(oam.Organization),
-			string(oam.Location),
+			string(oam.StreetAddress),
 			string(oam.Identifier),
 			string(oam.Phone),
 		},
@@ -82,76 +78,20 @@ func (cr *contactrec) check(e *et.Event) error {
 		return nil
 	}
 
-	if findings := cr.lookup(e, e.Entity, matches); len(findings) > 0 {
+	// What any source attached to the contact record is dispatched again.
+	conrec := e.Entity.Asset.(*contact.ContactRecord)
+	if findings := support.StoredFindings(e, e.Entity, "ContactRecord: "+conrec.DiscoveredAt, cr.name, matches,
+		map[string][]string{
+			string(oam.Person):        {"person"},
+			string(oam.Organization):  {"organization"},
+			string(oam.StreetAddress): {"street_address"},
+			string(oam.Identifier):    {"id"},
+			string(oam.Phone):         {"phone"},
+			string(oam.URL):           {"url"},
+		}, nil); len(findings) > 0 {
 		cr.process(e, findings)
 	}
 	return nil
-}
-
-func (cr *contactrec) lookup(e *et.Event, entity *dbt.Entity, m *config.Matches) []*support.Finding {
-	var rtypes []string
-	confs := make(map[string]int)
-	sinces := make(map[string]time.Time)
-	conrec := entity.Asset.(*contact.ContactRecord)
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-	defer cancel()
-
-	for _, atype := range cr.transforms {
-		if !m.IsMatch(atype) {
-			continue
-		}
-
-		since, err := support.TTLStartTime(e.Session.Config(), string(oam.ContactRecord), atype, cr.name)
-		if err != nil {
-			continue
-		}
-		sinces[atype] = since
-
-		confs[atype] = m.Confidence(atype)
-		if confs[atype] == -1 {
-			confs[atype] = 0
-		}
-
-		switch atype {
-		case string(oam.Person):
-			rtypes = append(rtypes, "person")
-		case string(oam.Organization):
-			rtypes = append(rtypes, "organization")
-		case string(oam.Location):
-			rtypes = append(rtypes, "location")
-		case string(oam.Identifier):
-			rtypes = append(rtypes, "id")
-		case string(oam.Phone):
-			rtypes = append(rtypes, "phone")
-		case string(oam.URL):
-			rtypes = append(rtypes, "url")
-		}
-	}
-
-	var findings []*support.Finding
-	if edges, err := e.Session.DB().OutgoingEdges(ctx, entity, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
-		for _, edge := range edges {
-			a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID)
-			if err != nil {
-				continue
-			}
-
-			totype := string(a.Asset.AssetType())
-			if since, ok := sinces[totype]; !ok || (ok && a.LastSeen.Before(since)) {
-				continue
-			}
-
-			findings = append(findings, &support.Finding{
-				From:     entity,
-				FromName: "ContactRecord: " + conrec.DiscoveredAt,
-				To:       a,
-				ToName:   a.Asset.Key(),
-				Rel:      edge.Relation,
-			})
-		}
-	}
-	return findings
 }
 
 func (cr *contactrec) process(e *et.Event, findings []*support.Finding) {

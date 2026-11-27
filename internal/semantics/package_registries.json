@@ -1,0 +1,22 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "The software package registries Amass reads for an organization's published packages, from each in-scope registered domain. Maven Central: a groupId is the publisher's domain reversed (example.com is com.example), and Sonatype makes a publisher prove that domain with a DNS TXT record before it may publish under it (verification_source), so the groups search (maven.search, Solr query g:<group> and g:<group>.*) lists namespaces verified for the domain; the newest version's POM (maven.repository) names the project, organization and source control URLs, and the organization's name. npm: the registry search (npm.search, text=<domain>) returns each package's links and the email addresses of its publisher and maintainers; a package counts only when a maintainer's or the publisher's address is at the domain, or its homepage is on it. Each package is stored as a Product of product_type, named by its Package URL (purl_source), and its registry namespace (a Maven groupId, an npm scope, or the publishing user of an unscoped npm package) as an Account. At most max_packages packages per registry and domain are stored, newest first, and at most max_poms POMs are read per domain. Every http(s) URL a package names is stored, including code hosts, for later evidence. registry_hosts are the registries' and documentation sites where every package has a page under one host, like the code hosts and social sites account_platforms.json lists: the controlled-footprint walk does not pass control from a URL on one of them to the host, since the page is the publisher's but the site is not. hosting_domains give each project its own subdomain (example.github.io); the related-domains lens, like cloud providers' hosting domains, never offers them as an organization's domains.",
+  "maven": {
+    "search": "https://search.maven.org/solrsearch/select",
+    "repository": "https://repo1.maven.org/maven2",
+    "source": "https://central.sonatype.org/search/rest-api-guide/",
+    "verification_source": "https://central.sonatype.org/register/namespace/"
+  },
+  "npm": {
+    "search": "https://registry.npmjs.org/-/v1/search",
+    "source": "https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search"
+  },
+  "purl_source": "https://github.com/package-url/purl-spec",
+  "product_type": "software_package",
+  "max_packages": 100,
+  "max_poms": 25,
+  "registry_hosts": ["npmjs.com", "npmjs.org", "npm.im", "maven.apache.org", "maven.org", "sonatype.org",
+    "sonatype.com", "mvnrepository.com", "javadoc.io", "jitpack.io", "readthedocs.org", "unpkg.com", "jsdelivr.net",
+    "yarnpkg.com", "opensource.org", "spdx.org"],
+  "hosting_domains": ["github.io", "gitlab.io", "readthedocs.io"]
+}

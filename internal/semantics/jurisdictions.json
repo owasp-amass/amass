@@ -1,0 +1,26 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Jurisdiction words that a country-name lookup does not resolve, mapped to the codes GLEIF uses for an entity's legal jurisdiction: ISO 3166-2 subdivision codes where companies are formed under state or provincial law (United States, Canada), and the ISO 3166-1 country code for the parts of the United Kingdom, whose companies are registered nationally. Country names are resolved by the country lookup, so only these words are listed; 'Georgia' is the US state, which is far more common in US filings than the country. Keys are matched without regard to case, punctuation or a leading 'State of' / 'Province of'. Sources: ISO 3166-2:US and ISO 3166-2:CA (https://www.iso.org/obp/ui/#iso:code:3166:US, https://www.iso.org/obp/ui/#iso:code:3166:CA); GLEIF Level 1 data, LegalJurisdiction (https://www.gleif.org/en/about-lei/common-data-file-format/current-versions/level-1-data-lei-cdf-3-1-format).",
+  "codes": {
+    "alabama": "US-AL", "alaska": "US-AK", "arizona": "US-AZ", "arkansas": "US-AR", "california": "US-CA",
+    "colorado": "US-CO", "connecticut": "US-CT", "delaware": "US-DE", "district of columbia": "US-DC",
+    "washington dc": "US-DC", "florida": "US-FL", "georgia": "US-GA", "hawaii": "US-HI", "idaho": "US-ID",
+    "illinois": "US-IL", "indiana": "US-IN", "iowa": "US-IA", "kansas": "US-KS", "kentucky": "US-KY",
+    "louisiana": "US-LA", "maine": "US-ME", "maryland": "US-MD", "massachusetts": "US-MA", "michigan": "US-MI",
+    "minnesota": "US-MN", "mississippi": "US-MS", "missouri": "US-MO", "montana": "US-MT", "nebraska": "US-NE",
+    "nevada": "US-NV", "new hampshire": "US-NH", "new jersey": "US-NJ", "new mexico": "US-NM",
+    "new york": "US-NY", "north carolina": "US-NC", "north dakota": "US-ND", "ohio": "US-OH",
+    "oklahoma": "US-OK", "oregon": "US-OR", "pennsylvania": "US-PA", "rhode island": "US-RI",
+    "south carolina": "US-SC", "south dakota": "US-SD", "tennessee": "US-TN", "texas": "US-TX", "utah": "US-UT",
+    "vermont": "US-VT", "virginia": "US-VA", "washington": "US-WA", "west virginia": "US-WV",
+    "wisconsin": "US-WI", "wyoming": "US-WY",
+    "alberta": "CA-AB", "british columbia": "CA-BC", "manitoba": "CA-MB", "new brunswick": "CA-NB",
+    "newfoundland and labrador": "CA-NL", "newfoundland": "CA-NL", "nova scotia": "CA-NS", "ontario": "CA-ON",
+    "prince edward island": "CA-PE", "quebec": "CA-QC", "saskatchewan": "CA-SK",
+    "northwest territories": "CA-NT", "nunavut": "CA-NU", "yukon": "CA-YT",
+    "canada federal": "CA", "canada (federal)": "CA",
+    "england": "GB", "wales": "GB", "england and wales": "GB", "england & wales": "GB", "scotland": "GB",
+    "northern ireland": "GB", "great britain": "GB", "united kingdom": "GB", "uk": "GB", "u.k.": "GB",
+    "usa": "US", "u.s.a.": "US", "u.s.": "US", "us": "US", "united states": "US", "united states of america": "US"
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Question evaluation set. Each case runs offline in CI against a fixture graph (planner_replies stand in for the model) and live with `amass ai eval` against a real model and Asset Database. Add a case for every question a user reports; a fix counts when the new case and every earlier one pass.",
+  "cases": [
+    {
+      "id": "owasp-subdomains",
+      "question": "What are all the subdomains within owasp.org?",
+      "note": "Reported 2026-11-09: failed with a per-node edge limit and model path selection.",
+      "expect": {"answer": "hierarchy", "subject_type": "FQDN", "max_model_calls": 0},
+      "offline": {
+        "fixture": "campus-dns",
+        "checks": {"answer_contains": ["Found 200 subdomain FQDN asset(s)"], "results_include": ["lab49.cslab.owasp.org"],
+                   "min_results": 200, "complete": true}
+      },
+      "live": {"results_include": ["www.owasp.org", "cs.owasp.org"], "results_exclude": ["utica.edu"],
+               "min_results": 150, "complete": true}
+    },
+    {
+      "id": "owasp-namespace",
+      "question": "What are all the subdomains within OWASP Foundation's DNS namespace?",
+      "note": "Reported 2026-11-09: the model planned an explore search instead of a listing.",
+      "expect": {"answer": "hierarchy", "subject_type": "FQDN", "max_model_calls": 1},
+      "offline": {
+        "fixture": "campus-dns",
+        "planner_replies": [
+          "{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"owasp.org\"},\"target_types\":[\"FQDN\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"hierarchy\"}"
+        ],
+        "checks": {"answer_contains": ["Found 200 subdomain FQDN asset(s)"], "min_results": 200, "complete": true}
+      },
+      "live": {"results_include": ["www.owasp.org"], "min_results": 150, "complete": true}
+    },
+    {
+      "id": "owasp-vendors-org",
+      "question": "Which third-party vendors are being used by the OWASP Foundation organization?",
+      "note": "Reported 2026-11-09: the organization name did not resolve and no vendor answer existed.",
+      "expect": {"answer": "third_party", "subject_type": "Organization", "max_model_calls": 0},
+      "offline": {
+        "fixture": "campus",
+        "checks": {"results_include": ["FASTLY", "pphosted.com", "EDUCAUSE", "DigiCert"],
+                   "results_exclude": ["OWASP Foundation", "Utica University", "cloudflare"], "complete": true}
+      },
+      "live": {"results_include": ["pphosted.com", "cloudfront.net"], "results_exclude": ["owasp"],
+               "answer_excludes": ["No assets are documented as controlled"]}
+    },
+    {
+      "id": "owasp-vendors-domain",
+      "question": "Which third-party vendors are used by owasp.org?",
+      "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 0},
+      "offline": {
+        "fixture": "campus",
+        "checks": {"answer_contains": ["including those of its registrant OWASP Foundation"],
+                   "results_include": ["FASTLY", "DigiCert"], "results_exclude": ["owasp.org"]}
+      },
+      "live": {"answer_contains": ["including those of its registrant"], "results_include": ["pphosted.com"],
+               "results_exclude": ["owasp"]}
+    },
+    {
+      "id": "owasp-asn",
+      "question": "Which ASN is associated to the OWASP Foundation organization?",
+      "note": "Reported 2026-11-09: the organization name did not resolve; the question needs the controlled answer.",
+      "expect": {"answer": "controlled", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {
+        "fixture": "campus",
+        "planner_replies": [
+          "{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"OWASP Foundation\"},\"target_types\":[\"AutonomousSystem\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"controlled\"}"
+        ],
+        "checks": {"results_include": ["64500"], "results_exclude": ["54113"], "complete": true}
+      },
+      "live": {"results_include": ["64500"], "results_exclude": ["54113", "14061", "16509"]}
+    },
+    {
+      "id": "owasp-parent",
+      "question": "What is the highest parent organization of owasp.org?",
+      "note": "Reported 2026-11-09: Let's Encrypt was named as the parent through a certificate SAN and issuer. Three calls: planning plus up to two navigation rounds.",
+      "expect": {"answer": "paths", "subject_type": "FQDN", "purpose": "ultimate_parent", "max_model_calls": 3},
+      "offline": {
+        "fixture": "owasp-certificate",
+        "planner_replies": [
+          "{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"owasp.org\"},\"target_types\":[\"Organization\"],\"direction\":\"both\",\"purpose\":\"ultimate_parent\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"paths\"}"
+        ],
+        "checks": {"answer_contains": ["No organization is documented as the owner", "only as third parties", "let's encrypt"],
+                   "results_exclude": ["let's encrypt"]}
+      },
+      "live": {"results_exclude": ["let's encrypt"], "answer_excludes": ["parent organization candidate(s) from stored OAM paths (not independently verified ultimate legal ownership): let's encrypt"]}
+    },
+    {
+      "id": "owasp-website-hosting-table",
+      "question": "Please create a table with each website, it's IP address, and hosting provider that's within the OWASP Foundation organization?",
+      "note": "Reported 2026-11-09: explore search hit the node limit and found nothing; needs the table answer kind. On 2026-11-09 Qwen needed two corrections (row type, then column chain). Repeated columns are now repaired without a call and the row-type retry is schema-constrained, so two calls is the budget; tighten to one if the live eval allows; the column chain may include intermediate columns (for example FQDN before IP address). On 2026-11-10 Qwen repeated the Organization row type twice (three calls); a table row type an owner cannot control is now repaired from the first ownable type the question names (website: URL), and failed live results list each rejected plan.",
+      "expect": {"answer": "table", "subject_type": "Organization", "max_model_calls": 2},
+      "offline": {"fixture": "campus-web", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"OWASP Foundation\"},\"target_types\":[\"URL\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"table\",\"columns\":[{\"type\":\"IPAddress\",\"role\":\"\"},{\"type\":\"Organization\",\"role\":\"controller\"}]}"], "checks": {"answer_contains": ["| URLs | IP addresses | Controlling organization |", "| https://www.owasp.org | 151.101.1.1 | FASTLY |", "| https://portal.owasp.org | 203.0.113.11 | OWASP Foundation (self) |"], "complete": true}},
+      "live": {"answer_contains": ["| URLs |", "| IP addresses |", "| Controlling organization |", "(self)"], "results_include": ["www.owasp.org"], "answer_excludes": ["No URLs are documented"]}
+    },
+    {
+      "id": "owasp-vendors-cited-summary",
+      "question": "Which third-party vendors are used by owasp.org?",
+      "note": "Roadmap 1c: the model's summary must cite the stored relationships it uses, verified in Go. On 2026-11-10 Qwen's summaries named the subject (owasp.org) in sentences citing www.owasp.org items; naming the question's subject is now allowed in any cited sentence.",
+      "narrate": true,
+      "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 2},
+      "offline": {"fixture": "campus", "planner_replies": ["owasp.org receives mail through mx1.pphosted.com and uses pdns1.ultradns.net as a name server [E1, E2]. owasp.org relies on FASTLY: www.owasp.org resolves to 151.101.1.1, which AutonomousSystem 54113 announces and whose registration names FASTLY [E6, E7, E8, E9]. Its certificate was issued by DigiCert Inc [E3, E4, E5]. The domain's registrar contact belongs to EDUCAUSE [E10, E11]."], "checks": {"narrative_verified": true}},
+      "live": {"narrative_verified": true}
+    },
+    {
+      "id": "sunyit-names-services-table",
+      "question": "Create a table with domain names within the sunyit.edu dns namespace and the services they map to",
+      "note": "Reported 2026-11-10: Qwen planned the services column as a Service with role controller three times and validation failed the question. Column shapes are now schema-constrained and a controller naming another type is read as that type.",
+      "expect": {"answer": "table", "subject_type": "FQDN", "max_model_calls": 2},
+      "offline": {"fixture": "sunyit-services", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"sunyit.edu\"},\"target_types\":[\"FQDN\"],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"table\",\"columns\":[{\"type\":\"FQDN\",\"role\":\"\"},{\"type\":\"Service\",\"role\":\"controller\"}]}"], "checks": {"answer_contains": ["| FQDNs | Services |", "| www.sunyit.edu | https (443/tcp) |", "| mail.sunyit.edu | smtp (25/tcp) |", "| vpn.sunyit.edu | - |"], "complete": true}},
+      "live": {"answer_contains": ["| FQDNs |", "Services"], "results_include": ["sunyit.edu"]}
+    },
+    {
+      "id": "owasp-ownership-gaps",
+      "question": "What assets might OWASP Foundation own that are not attributed to it?",
+      "note": "Phase 2: ownership gaps. The fixture has a registrant contact sharing OWASP's phone and address (propose), a name on OWASP's certificate that resolves into its network (review), a name only resolving there (weak) and a Utica University name resolving there (controlled elsewhere, excluded).",
+      "expect": {"answer": "ownership_gaps", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "campus-gaps", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"OWASP Foundation\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"ownership_gaps\",\"columns\":[]}"], "checks": {"results_include": ["propose ContactRecord https://rdap.example/alumni", "review FQDN owasp-events.com", "weak FQDN raiders.example.net"], "results_exclude": ["utica"], "answer_contains": ["--organization--> Organization OWASP Foundation", "Nothing has been written."], "complete": true}},
+      "live": {"answer_excludes": ["No documented owner"]}
+    },
+    {
+      "id": "owasp-vendors-dns-txt",
+      "question": "Which third-party vendors are used by owasp.org?",
+      "note": "The vendors lens from a domain: the organization behind a verification token (a verified_for relationship from the DNS-SD plugin), the mail senders its SPF record authorizes, and the SPF include and verification-like record nothing recognizes.",
+      "expect": {"answer": "third_party", "subject_type": "FQDN", "max_model_calls": 0},
+      "offline": {"fixture": "campus-txt", "checks": {"results_include": ["Google LLC", "Google Workspace", "FASTLY"], "answer_contains": ["SaaS: domain verification (DNS TXT)", "Email: authorized senders (SPF)", "SPF includes no vendor entry recognizes (1): spf.acme-mailer.example", "acme-domain-verification="]}},
+      "live": {"answer_contains": ["Email: authorized senders (SPF)"]}
+    },
+    {
+      "id": "utica-institution-family",
+      "question": "Which organizations make up utica.edu's institution?",
+      "note": "The family answer kind: the institution's name variants, its IT department (a registration contact), an affiliate holding a network that serves the domain, and the other domains that network serves; a provider and a similarly named company are not family.",
+      "expect": {"answer": "family", "subject_type": "FQDN", "max_model_calls": 1},
+      "offline": {"fixture": "institution-family", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"utica.edu\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"family\",\"columns\":[]}"], "checks": {"results_include": ["same_institution utica university", "department utica information technology services", "affiliate the utica medical institutions", "related uticamedical.org"], "results_exclude": ["cloudhost", "utica & sons plumbing"], "answer_contains": ["Main organization: utica university"]}},
+      "live": {"answer_contains": ["Main organization:"]}
+    },
+    {
+      "id": "utica-products-usa-owner",
+      "question": "Who owns Utica Products USA Inc.?",
+      "note": "The org_group answer kind: the climb to the ultimate parent through stored subsidiary relationships (as GLEIF records them) and the organizations below it, including a reviewed unit; a company that only shares a name word is not in the group.",
+      "expect": {"answer": "org_group", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "corporate-group", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"Utica Products USA Inc.\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"org_group\",\"columns\":[]}"], "checks": {"results_include": ["0 Utica Products Holdings S.A.", "1 Utica Products AB", "2 Utica Products USA Inc.", "2 Utica Products Security"], "results_exclude": ["Fans Club"], "answer_contains": ["Ultimate parent: Utica Products Holdings S.A."], "complete": true}},
+      "live": {"answer_contains": ["Corporate group of"]}
+    },
+    {
+      "id": "owasp-exposed-services",
+      "question": "What services does owasp.org expose, and what software do they run?",
+      "note": "The services answer kind: services stored by the probes for the domain's names, the software identified from a stored server header (with the fingerprint's source), and what stands out: an SSH service on an unusual port with a self-issued certificate.",
+      "expect": {"answer": "services", "subject_type": "FQDN", "max_model_calls": 1},
+      "offline": {"fixture": "campus-services", "planner_replies": ["{\"subject\":{\"type\":\"FQDN\",\"field\":\"name\",\"value\":\"owasp.org\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"services\",\"columns\":[]}"], "checks": {"results_include": ["runs nginx 1.18.0", "ssh portal.owasp.org:2222"], "answer_contains": ["What stands out:", "unusual port 2222/TCP"], "complete": true}},
+      "live": {"answer_contains": ["Services exposed by"]}
+    },
+    {
+      "id": "college-group-vendors",
+      "question": "Which vendors do OWASP Foundation and the rest of its corporate group depend on?",
+      "note": "The group_vendors answer kind: each group organization scanned on its own, a registrar both colleges use counted once per college, and a group organization acting as a contact for another set apart from outside vendors.",
+      "expect": {"answer": "group_vendors", "subject_type": "Organization", "max_model_calls": 1},
+      "offline": {"fixture": "college-group", "planner_replies": ["{\"subject\":{\"type\":\"Organization\",\"field\":\"name\",\"value\":\"OWASP Foundation\"},\"target_types\":[],\"direction\":\"both\",\"purpose\":\"connected\",\"relationships\":[],\"path_rule\":\"\",\"answer\":\"group_vendors\",\"columns\":[]}"], "checks": {"results_include": ["EDUCAUSE", "cloudflare.com"], "results_exclude": ["OWASP Foundation"], "answer_contains": ["EDUCAUSE: used by 2 of 3", "Services one group organization provides another"], "complete": true}},
+      "live": {"answer_contains": ["Vendors across the corporate group of"]}
+    }
+  ]
+}

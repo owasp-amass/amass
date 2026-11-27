@@ -53,6 +53,10 @@ func (ae *employees) check(e *et.Event) error {
 		return err
 	}
 
+	if ae.plugin.identOrg(e, e.Entity) == nil {
+		return nil
+	}
+
 	var orgent *dbt.Entity
 	var employents []*dbt.Entity
 	src := &et.Source{
@@ -80,7 +84,7 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ae.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, ae.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
@@ -99,7 +103,7 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, orgent, since, "member"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ae.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, ae.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
@@ -116,7 +120,7 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, []*dbt.Entity) {
 	oamid := e.Entity.Asset.(*oamgen.Identifier)
 
-	orgent := ae.getAssociatedOrg(e, ident)
+	orgent := ae.plugin.identOrg(e, ident)
 	if orgent == nil {
 		msg := fmt.Sprintf("failed to find the Organization asset for %s", oamid.UniqueID)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
@@ -133,31 +137,33 @@ loop:
 			headers := amasshttp.Header{"Content-Type": []string{"application/json"}}
 			headers["Authorization"] = []string{"Bearer " + key}
 
-			_ = ae.plugin.rlimit.Wait(e.Session.Ctx())
+			_ = support.WaitLimit(e.Session.Ctx(), ae.plugin.rlimit)
 			e.Session.NetSem().Acquire()
 
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 			defer cancel()
 
-			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)
+			u := fmt.Sprintf("%s/company/%s/employees?perPage=%d&page=%d", ae.plugin.api,
+				url.QueryEscape(oamid.ID), perPage, page)
 			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
 			e.Session.NetSem().Release()
 			if err != nil {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, err)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				// try the next key for the same page
+				continue loop
 			} else if resp.StatusCode != 200 {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Status)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				continue loop
 			} else if resp.Body == "" {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: empty body", oamid.ID)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
-			} else if strings.Contains(resp.Body, "error") {
+				continue loop
+			} else if strings.Contains(resp.Body, `"error"`) {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Body)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				continue loop
 			}
 
 			var result employeesResult
@@ -189,62 +195,24 @@ loop:
 	return orgent, employents
 }
 
-func (ae *employees) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entity {
-	var orgent *dbt.Entity
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
-	defer cancel()
-
-	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, time.Time{}, "id"); err == nil {
-		for _, edge := range edges {
-			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*oamorg.Organization); ok {
-					orgent = a
-					break
-				}
-			}
-		}
-	}
-
-	return orgent
-}
-
 func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []employeeResult) []*dbt.Entity {
 	var employents []*dbt.Entity
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-	defer cancel()
-
 	for _, emp := range employlist {
-		p := support.FullNameToPerson(emp.Person.FullName)
+		p := support.ListedPerson(emp.Person.FullName)
 		if p == nil {
 			continue
 		}
 
-		personent, err := e.Session.DB().CreateAsset(ctx, p)
+		personent, err := support.CreatePersonAsset(e.Session, orgent,
+			&oamgen.SimpleRelation{Name: "member"}, p, ae.plugin.source)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 			continue
 		}
 
-		_, err = e.Session.DB().CreateEntityProperty(ctx, personent, &oamgen.SourceProperty{
-			Source:     ae.name,
-			Confidence: ae.plugin.source.Confidence,
-		})
-		if err != nil {
-			msg := fmt.Sprintf("failed to create the Person asset source property for %s: %s", p.FullName, err)
-			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-			continue
-		}
-
-		if err := ae.plugin.createRelation(ctx, e.Session, orgent,
-			oamgen.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
-			employents = append(employents, personent)
-		} else {
-			msg := fmt.Sprintf("failed to create the member relation for %s: %s", p.FullName, err)
-			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-		}
+		employents = append(employents, personent)
 	}
 
 	return employents

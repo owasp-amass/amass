@@ -28,7 +28,13 @@ type Handler struct {
 	MaxInstances int
 	EventType    oam.AssetType
 	Transforms   []string
-	Callback     func(*Event) error
+	// Probes marks a handler that sends traffic to the asset itself, such as
+	// a port or banner probe. The expansion policy cannot widen where it runs:
+	// only on an asset the scope takes in by itself, matched or admitted, and
+	// never on one that only inherits its standing (a shared host an in-scope
+	// name resolves to) or stands only within a wider reach.
+	Probes   bool
+	Callback func(*Event) error
 }
 
 type AssetPipeline struct {

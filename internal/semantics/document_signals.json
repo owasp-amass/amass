@@ -1,0 +1,130 @@
+{
+  "_license": "SPDX-License-Identifier: Apache-2.0",
+  "_about": "Document signals: what a validated document finding (a doc_statement property on a File) counts for when it names two stored assets. Every document signal is supporting, never strong: a model read the text, and documents age. A finding counts only when each name resolves to exactly one stored asset by exact name (organizations by name or legal name, people by full name, addresses by their normalized text). The weight starts at base, gains first_party_bonus when the document is published on a domain the subject controls and corroboration_bonus when two or more distinct document versions state the same thing, and never passes cap. Document evidence never causes or helps cause an automatic write: the relations below are review-gated proposals. See docs/ai/documents.md.",
+  "weights": {
+    "base": 0.15,
+    "first_party_bonus": 0.05,
+    "corroboration_bonus": 0.05,
+    "cap": 0.25
+  },
+  "signals": [
+    {
+      "id": "document_states_unit",
+      "title": "A document states one organization is a unit of another",
+      "predicates": ["unit_of"],
+      "subject_type": "Organization",
+      "object_type": "Organization",
+      "label": "org_unit",
+      "direction": "inverse",
+      "finds": "A finding that an organization is a division, department, campus or other unit of another, both stored; or that an office, department, campus or program is a unit of the organization that published the document, which is proposed as a new unit when no source has stored it.",
+      "rationale": "Organizations describe their own structure in annual reports, catalogs and policies, and the quote was checked against the text. A unit and its parent are often stored as separate records (a foundation and its college), and nothing else in the database may connect them.",
+      "guards": [
+        "Both names must resolve to exactly one stored organization by exact name or legal name; an ambiguous name gives no evidence.",
+        "A unit of the publisher that is not stored, or is stored only as another organization's unit, is proposed as a new organization whose unique ID includes its parent's, so two organizations' units of one name never become one record.",
+        "Documents older than five years give no unit, except as history.",
+        "A pair already linked by org_unit or subsidiary is not proposed again.",
+        "The proposal waits for a reviewer: it is never applied automatically."
+      ],
+      "counter_indications": [
+        "An old document can describe a structure that has since changed.",
+        "A document may call an affiliated but independent body (an alumni association, a foundation with its own board) a unit.",
+        "A unit of the publisher is implied by where the document is published rather than stated in a sentence naming both; a budget or directory line can name a fund, a committee or a service rather than an office."
+      ]
+    },
+    {
+      "id": "document_states_subsidiary",
+      "title": "A document states one organization is a subsidiary of, acquired by or owned by another",
+      "predicates": ["subsidiary_of", "acquired_by", "owned_by"],
+      "subject_type": "Organization",
+      "object_type": "Organization",
+      "label": "subsidiary",
+      "direction": "inverse",
+      "finds": "A finding that an organization is a subsidiary of, was acquired by or is owned by another organization, both stored.",
+      "rationale": "Filings, press releases and annual reports name parent companies in plain words, often before the registries record the link.",
+      "guards": [
+        "Both names must resolve to exactly one stored organization by exact name or legal name.",
+        "Ownership by a person is not proposed: OAM records a subsidiary between organizations.",
+        "A pair already linked by subsidiary or org_unit is not proposed again; the proposal waits for a reviewer."
+      ],
+      "counter_indications": [
+        "An acquisition can be followed by a merger, so the acquired company no longer exists as a separate entity.",
+        "A divestiture after the document was published ends the relationship."
+      ]
+    },
+    {
+      "id": "document_states_funder",
+      "title": "A document states one organization is funded by another",
+      "predicates": ["funded_by"],
+      "subject_type": "Organization",
+      "object_type": "Organization",
+      "label": "funding_source",
+      "direction": "forward",
+      "finds": "A finding that an organization receives funding from another organization, both stored.",
+      "rationale": "Grant acknowledgements and financial reports name funders explicitly, and a funder relationship is part of how an organization is controlled and influenced.",
+      "guards": [
+        "Both names must resolve to exactly one stored organization by exact name or legal name.",
+        "A pair already linked by funding_source is not proposed again; the proposal waits for a reviewer."
+      ],
+      "counter_indications": [
+        "A single grant years ago is a funding relationship that has ended.",
+        "Sponsorship of an event is not funding of the organization."
+      ]
+    },
+    {
+      "id": "document_states_role",
+      "title": "A document states a person holds a role at an organization",
+      "predicates": ["holds_role"],
+      "subject_type": "Person",
+      "object_type": "Organization",
+      "label": "member",
+      "direction": "inverse",
+      "finds": "A finding that a stored person holds a named role at a stored organization.",
+      "rationale": "Staff directories and reports name officers and staff with their titles; the role ties the person to the organization the way registry contacts do.",
+      "guards": [
+        "The person must resolve to exactly one stored Person by exact full name, and the organization to exactly one stored organization.",
+        "A pair already linked by member is not proposed again; the proposal waits for a reviewer."
+      ],
+      "counter_indications": [
+        "People change jobs; an old directory names former staff.",
+        "Two people can share a full name."
+      ]
+    },
+    {
+      "id": "document_states_address",
+      "title": "A document states an organization is located at an address",
+      "predicates": ["located_at"],
+      "subject_type": "Organization",
+      "object_type": "StreetAddress",
+      "label": "street_address",
+      "direction": "forward",
+      "finds": "A finding that an organization is at a street address the database already stores.",
+      "rationale": "Organizations publish their own addresses; linking a stored address to the organization connects registry and contact records that use it.",
+      "guards": [
+        "The address must already be stored, matched by its exact text: the proposal links existing assets and never creates one.",
+        "A pair already linked by street_address is not proposed again; the proposal waits for a reviewer."
+      ],
+      "counter_indications": [
+        "A shared building or a registered agent's address houses many organizations.",
+        "An organization moves."
+      ]
+    },
+    {
+      "id": "document_states_headquarters",
+      "title": "A document states an organization is headquartered at an address",
+      "predicates": ["headquartered_at"],
+      "subject_type": "Organization",
+      "object_type": "StreetAddress",
+      "label": "hq_address",
+      "direction": "forward",
+      "finds": "A finding that an organization's headquarters is at a street address the database already stores.",
+      "rationale": "A headquarters address is how registries and filings identify an organization; a first-party document naming it is good supporting evidence.",
+      "guards": [
+        "The address must already be stored, matched by its exact text; nothing is created.",
+        "A pair already linked by hq_address is not proposed again; the proposal waits for a reviewer."
+      ],
+      "counter_indications": [
+        "Headquarters move, and old documents keep the old address."
+      ]
+    }
+  ]
+}

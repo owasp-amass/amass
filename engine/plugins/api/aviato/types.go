@@ -18,6 +18,7 @@ const (
 
 type aviato struct {
 	name          string
+	api           string
 	log           *slog.Logger
 	rlimit        *rate.Limiter
 	companyEnrich *companyEnrich

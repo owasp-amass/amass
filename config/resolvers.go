@@ -5,214 +5,137 @@
 package config
 
 import (
-	"context"
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/caffix/stringset"
-	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
 )
 
-// DefaultQueriesPerPublicResolver is the number of queries sent to each public DNS resolver per second.
-const DefaultQueriesPerPublicResolver = 5
-
-// DefaultQueriesPerBaselineResolver is the number of queries sent to each trusted DNS resolver per second.
-const DefaultQueriesPerBaselineResolver = 15
-const minResolverReliability = 0.85
-
-// DefaultBaselineResolvers is a list of trusted public DNS resolvers.
-var DefaultBaselineResolvers = []string{
-	"8.8.8.8",        // Google
-	"1.1.1.1",        // Cloudflare
-	"9.9.9.9",        // Quad9
-	"208.67.222.222", // Cisco OpenDNS
-	"84.200.69.80",   // DNS.WATCH
-	"64.6.64.6",      // Neustar DNS
-	"8.26.56.26",     // Comodo Secure DNS
-	"205.171.3.65",   // Level3
-	"134.195.4.2",    // OpenNIC
-	"185.228.168.9",  // CleanBrowsing
-	"76.76.19.19",    // Alternate DNS
-	"37.235.1.177",   // FreeDNS
-	"77.88.8.1",      // Yandex.DNS
-	"94.140.14.140",  // AdGuard
-	"38.132.106.139", // CyberGhost
-	"74.82.42.42",    // Hurricane Electric
-	"76.76.2.0",      // ControlD
-}
-
-// PublicResolvers includes the addresses of public resolvers obtained dynamically.
-var PublicResolvers []string
-
-// GetPublicDNSResolvers obtains the public DNS server addresses from public-dns.info and assigns them to PublicResolvers.
-func GetPublicDNSResolvers() error {
-	url := "https://public-dns.info/nameservers-all.csv"
-	resp, err := amasshttp.RequestWebPage(context.Background(),
-		amasshttp.DefaultClient, &amasshttp.Request{URL: url})
-	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return fmt.Errorf("failed to obtain the Public DNS csv file at %s: %v", url, err)
-	}
-
-	var resolvers []string
-	var ipIdx, reliabilityIdx int
-	r := csv.NewReader(strings.NewReader(resp.Body))
-	for i := 0; ; i++ {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			continue
-		}
-		if i == 0 {
-			for idx, val := range record {
-				switch val {
-				case "ip_address":
-					ipIdx = idx
-				case "reliability":
-					reliabilityIdx = idx
-				}
-			}
-			continue
-		}
-		if rel, err := strconv.ParseFloat(record[reliabilityIdx], 64); err == nil && rel >= minResolverReliability {
-			resolvers = append(resolvers, record[ipIdx])
-		}
-	}
-loop:
-	for _, addr := range resolvers {
-		for _, br := range DefaultBaselineResolvers {
-			if addr == br {
-				continue loop
-			}
-		}
-		PublicResolvers = append(PublicResolvers, addr)
-	}
-	return nil
-}
-
-// SetResolvers assigns the untrusted resolver names provided in the parameter to the list in the configuration.
+// SetResolvers replaces the untrusted resolvers with the ones provided.
+// Queries go to the untrusted resolvers when the configuration has any.
 func (c *Config) SetResolvers(resolvers ...string) {
-	c.Resolvers = []string{}
+	c.Lock()
+	c.Resolvers = nil
+	c.Unlock()
+
 	c.AddResolvers(resolvers...)
 }
 
-// AddResolvers appends the untrusted resolver names provided in the parameter to the list in the configuration.
+// AddResolvers appends the untrusted resolvers provided.
 func (c *Config) AddResolvers(resolvers ...string) {
 	for _, r := range resolvers {
 		c.AddResolver(r)
 	}
-	c.CalcMaxQPS()
 }
 
-// AddResolver appends the untrusted resolver name provided in the parameter to the list in the configuration.
+// AddResolver appends the untrusted resolver provided.
 func (c *Config) AddResolver(resolver string) {
 	c.Lock()
 	defer c.Unlock()
 
-	// Check that the domain string is not empty
-	r := strings.TrimSpace(resolver)
-	if r == "" {
-		return
+	if r := strings.TrimSpace(resolver); r != "" {
+		c.Resolvers = stringset.Deduplicate(append(c.Resolvers, r))
 	}
-
-	c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolver))
 }
 
-// SetTrustedResolvers assigns the trusted resolver names provided in the parameter to the list in the configuration.
+// SetTrustedResolvers replaces the trusted resolvers with the ones provided.
+// The first trusted resolver tests for DNS wildcards, and the trusted
+// resolvers take the queries when there are no untrusted ones.
 func (c *Config) SetTrustedResolvers(resolvers ...string) {
-	c.Resolvers = []string{}
-	c.AddResolvers(resolvers...)
+	c.Lock()
+	c.TrustedResolvers = nil
+	c.Unlock()
+
+	c.AddTrustedResolvers(resolvers...)
 }
 
-// AddTrustedResolvers appends the trusted resolver names provided in the parameter to the list in the configuration.
+// AddTrustedResolvers appends the trusted resolvers provided.
 func (c *Config) AddTrustedResolvers(resolvers ...string) {
 	for _, r := range resolvers {
 		c.AddTrustedResolver(r)
 	}
-	c.CalcMaxQPS()
 }
 
-// AddTrustedResolver appends the trusted resolver name provided in the parameter to the list in the configuration.
+// AddTrustedResolver appends the trusted resolver provided.
 func (c *Config) AddTrustedResolver(resolver string) {
 	c.Lock()
 	defer c.Unlock()
 
-	// Check that the domain string is not empty
-	r := strings.TrimSpace(resolver)
-	if r == "" {
-		return
+	if r := strings.TrimSpace(resolver); r != "" {
+		c.TrustedResolvers = stringset.Deduplicate(append(c.TrustedResolvers, r))
 	}
-
-	c.TrustedResolvers = stringset.Deduplicate(append(c.TrustedResolvers, resolver))
 }
 
-// CalcMaxQPS updates the MaxDNSQueries field of the configuration based on current settings.
-func (c *Config) CalcMaxQPS() {
-	c.MaxDNSQueries = (len(c.Resolvers) * c.ResolversQPS) + (len(c.TrustedResolvers) * c.TrustedQPS)
-}
-
+// loadResolverSettings reads options.resolvers and options.trusted_resolvers.
+// Each entry is a resolver's IP address, with an optional port, or the path
+// of a file listing one resolver per line.
 func (c *Config) loadResolverSettings(cfg *Config) error {
-	// Fetch resolvers from the Options map in the Config.
-	resolversRaw, ok := c.Options["resolvers"]
-	if !ok {
-		// "resolvers" not found in options, so nothing to do here.
-		return nil
+	untrusted, err := c.resolverOption("resolvers")
+	if err != nil {
+		return err
+	}
+	trusted, err := c.resolverOption("trusted_resolvers")
+	if err != nil {
+		return err
 	}
 
-	// Type assert the raw resolvers to []interface{}
-	resolvers, ok := resolversRaw.([]interface{})
+	if untrusted != nil {
+		c.Resolvers = untrusted
+	}
+	if trusted != nil {
+		c.TrustedResolvers = trusted
+	}
+	return nil
+}
+
+// resolverOption returns the resolvers listed under the option key, or nil
+// when the option is absent.
+func (c *Config) resolverOption(key string) ([]string, error) {
+	raw, ok := c.Options[key]
 	if !ok {
-		return errors.New("resolvers section is not a list")
+		return nil, nil
 	}
 
-	var resolversList []string
-	for _, r := range resolvers {
-		// Type assert the resolver to string
-		rStr, ok := r.(string)
+	entries, ok := raw.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("%s section is not a list", key)
+	}
+
+	var list []string
+	for _, r := range entries {
+		entry, ok := r.(string)
 		if !ok {
-			return fmt.Errorf("resolver entry %v is not a string", r)
+			return nil, fmt.Errorf("%s entry %v is not a string", key, r)
 		}
 
-		// Check if rStr is an IP address.
-		ip := net.ParseIP(rStr)
-		if ip != nil {
-			resolversList = append(resolversList, rStr)
+		entry = strings.TrimSpace(entry)
+		if IsResolverAddress(entry) {
+			list = append(list, entry)
 			continue
 		}
 
-		// rStr is not an IP address, so we assume it is a file path.
-		absPath, err := c.AbsPathFromConfigDir(rStr)
+		// Not an address, so the entry is the path of a file of resolvers.
+		absPath, err := c.AbsPathFromConfigDir(entry)
 		if err != nil {
-			return fmt.Errorf("failed to get absolute path for resolver file: %w", err)
+			return nil, fmt.Errorf("failed to get absolute path for resolver file: %w", err)
 		}
 
 		fileResolvers, err := c.loadResolversFromFile(absPath)
 		if err != nil {
-			return fmt.Errorf("failed to load resolvers from file: %w", err)
+			return nil, fmt.Errorf("failed to load resolvers from file: %w", err)
 		}
-
-		resolversList = append(resolversList, fileResolvers...)
-
+		list = append(list, fileResolvers...)
 	}
 
-	// Deduplicate the list of resolvers and assign to c.Resolvers.
-	resolverIPs := stringset.Deduplicate(resolversList)
-
-	if len(resolverIPs) == 0 {
-		return errors.New("no valid resolvers were found")
+	list = stringset.Deduplicate(list)
+	if len(list) == 0 {
+		return nil, fmt.Errorf("no valid %s were found", strings.ReplaceAll(key, "_", " "))
 	}
-
-	c.Resolvers = resolverIPs
-
-	return nil
+	return list, nil
 }
 
 func (c *Config) loadResolversFromFile(path string) ([]string, error) {
@@ -226,25 +149,29 @@ func (c *Config) loadResolversFromFile(path string) ([]string, error) {
 		return nil, fmt.Errorf("failed to open resolvers file: %w", err)
 	}
 
-	// Split the file data by newlines to get the IP addresses.
-	lines := strings.Split(string(data), "\n")
-
 	var resolvers []string
-	for _, line := range lines {
+	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		// Skip empty lines.
 		if line == "" {
 			continue
 		}
-
-		// Check if each line in the file is a valid IP address.
-		ip := net.ParseIP(line)
-		if ip == nil {
-			return nil, fmt.Errorf("invalid IP address in resolvers file: %s", line)
+		if !IsResolverAddress(line) {
+			return nil, fmt.Errorf("invalid resolver address in resolvers file: %s", line)
 		}
-
 		resolvers = append(resolvers, line)
 	}
-
+	if len(resolvers) == 0 {
+		return nil, errors.New("the resolvers file lists no resolvers")
+	}
 	return resolvers, nil
+}
+
+// IsResolverAddress reports whether s is a resolver's IP address, with an
+// optional port.
+func IsResolverAddress(s string) bool {
+	host := strings.TrimSpace(s)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return net.ParseIP(host) != nil
 }

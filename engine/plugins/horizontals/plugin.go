@@ -9,31 +9,53 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/caffix/stringset"
+	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/ai"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
+	"github.com/owasp-amass/amass/v5/internal/registrant"
+	"github.com/owasp-amass/amass/v5/internal/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
-	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 type horizPlugin struct {
-	name        string
-	log         *slog.Logger
-	horfqdn     *horfqdn
-	horaddr     *horaddr
-	horOrg      *horOrg
-	horLocation *horLocation
-	horRegRec   *horRegRec
-	horTlsCert  *horTlsCert
-	source      *et.Source
+	name             string
+	log              *slog.Logger
+	horfqdn          *horfqdn
+	horaddr          *horaddr
+	horOrg           *horOrg
+	horStreetAddress *horStreetAddress
+	horRegRec        *horRegRec
+	horTlsCert       *horTlsCert
+	source           *et.Source
+	// infraSource marks organizations monitored by the scored netblock/AS
+	// expansion, separately from the domain pass (monitoring is per source), so
+	// both passes run for the same organization.
+	infraSource *et.Source
+	// lookup resolves environment variables for the AI-attribution journal
+	// configuration; overridable in tests.
+	lookup func(string) (string, bool)
+	mu     sync.Mutex
+	// scorers caches the trained horizontal model by review journal (nil
+	// when none is trained), with when it was loaded.
+	scorers map[*review.Journal]scorerEntry
+}
+
+// scorerEntry is a loaded horizontal model and when it was loaded.
+type scorerEntry struct {
+	model *ai.HorizontalModel
+	at    time.Time
 }
 
 func NewHorizontals() et.Plugin {
@@ -43,6 +65,9 @@ func NewHorizontals() et.Plugin {
 			Name:       "Horizontals",
 			Confidence: 75,
 		},
+		infraSource: &et.Source{Name: "Horizontals-Infrastructure", Confidence: 75},
+		lookup:      os.LookupEnv,
+		scorers:     make(map[*review.Journal]scorerEntry),
 	}
 }
 
@@ -104,19 +129,19 @@ func (h *horizPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	h.horLocation = &horLocation{
-		name:   h.name + "-Location-Handler",
+	h.horStreetAddress = &horStreetAddress{
+		name:   h.name + "-StreetAddress-Handler",
 		plugin: h,
 	}
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       h,
-		Name:         h.horLocation.name,
+		Name:         h.horStreetAddress.name,
 		Position:     10,
 		Exclusive:    true,
 		MaxInstances: support.MinHandlerInstances,
-		Transforms:   []string{string(oam.Location)},
-		EventType:    oam.Location,
-		Callback:     h.horLocation.check,
+		Transforms:   []string{string(oam.StreetAddress)},
+		EventType:    oam.StreetAddress,
+		Callback:     h.horStreetAddress.check,
 	}); err != nil {
 		return err
 	}
@@ -201,10 +226,7 @@ func (h *horizPlugin) submitIPAddress(e *et.Event, asset *oamnet.IPAddress, src 
 
 	addr, err := e.Session.DB().CreateAsset(ctx, asset)
 	if err == nil && addr != nil {
-		_, _ = e.Session.DB().CreateEntityProperty(ctx, addr, &oamgen.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
+		support.AddSource(ctx, e.Session, addr, src)
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    addr.Asset.Key(),
 			Entity:  addr,
@@ -239,7 +261,7 @@ func (h *horizPlugin) getContactRecord(sess et.Session, ent *dbt.Entity, label s
 	return nil, errors.New("failed to cast the ContactRecord entity")
 }
 
-func (h *horizPlugin) lookupContactRecordOrgsAndLocations(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, []*dbt.Entity) {
+func (h *horizPlugin) lookupContactRecordOrgsAndStreetAddresses(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, []*dbt.Entity) {
 	var orgents []*dbt.Entity
 
 	if ents, err := h.getContactRecordOrganizations(sess, cr); err == nil && len(ents) > 0 {
@@ -255,12 +277,12 @@ func (h *horizPlugin) lookupContactRecordOrgsAndLocations(sess et.Session, cr *d
 
 	var locents []*dbt.Entity
 	for _, o := range orgents {
-		if ents, err := h.getOrganizationLocations(sess, o); err == nil && len(ents) > 0 {
+		if ents, err := h.getOrganizationStreetAddresses(sess, o); err == nil && len(ents) > 0 {
 			for _, ent := range ents {
 				if set.Has(ent.ID) {
 					continue
 				}
-				if _, valid := ent.Asset.(*oamcon.Location); valid {
+				if _, valid := ent.Asset.(*oamcon.StreetAddress); valid {
 					set.Insert(ent.ID)
 					locents = append(locents, ent)
 				}
@@ -268,12 +290,12 @@ func (h *horizPlugin) lookupContactRecordOrgsAndLocations(sess et.Session, cr *d
 		}
 	}
 
-	if ents, err := h.getContactRecordLocations(sess, cr); err == nil && len(ents) > 0 {
+	if ents, err := h.getContactRecordStreetAddresses(sess, cr); err == nil && len(ents) > 0 {
 		for _, ent := range ents {
 			if set.Has(ent.ID) {
 				continue
 			}
-			if _, valid := ent.Asset.(*oamcon.Location); valid {
+			if _, valid := ent.Asset.(*oamcon.StreetAddress); valid {
 				set.Insert(ent.ID)
 				locents = append(locents, ent)
 			}
@@ -310,6 +332,16 @@ func (h *horizPlugin) getContactRecordOrganizations(sess et.Session, cr *dbt.Ent
 		}
 
 		if _, valid := to.Asset.(*oamorg.Organization); valid {
+			// A WHOIS privacy / registrar proxy (e.g. "Domains By Proxy, LLC")
+			// is the registrant of record for thousands of unrelated domains;
+			// using it as a correlation anchor would pull every one of them into
+			// scope. Never let it anchor horizontal expansion (principle 8,
+			// horizontal-domain-correlation-spec.md).
+			if h.isPrivacyProxyOrg(to) {
+				sess.Log().Debug("ignoring privacy-proxy registrant organization for horizontal correlation",
+					slog.String("organization", to.Asset.Key()))
+				continue
+			}
 			results = append(results, to)
 		}
 	}
@@ -320,9 +352,24 @@ func (h *horizPlugin) getContactRecordOrganizations(sess et.Session, cr *dbt.Ent
 	return results, nil
 }
 
-func (h *horizPlugin) getContactRecordLocations(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, error) {
+// isPrivacyProxyOrg reports whether an Organization entity is a WHOIS privacy /
+// registrar proxy or a redaction placeholder. Such an organization is shared by
+// many unrelated registrants, so it must never anchor horizontal scope
+// expansion nor be added to scope itself.
+func (h *horizPlugin) isPrivacyProxyOrg(ent *dbt.Entity) bool {
+	if ent == nil {
+		return false
+	}
+	o, ok := ent.Asset.(*oamorg.Organization)
+	if !ok {
+		return false
+	}
+	return registrant.IsPrivacyProxyName(o.Name)
+}
+
+func (h *horizPlugin) getContactRecordStreetAddresses(sess et.Session, cr *dbt.Entity) ([]*dbt.Entity, error) {
 	since, err := support.TTLStartTime(sess.Config(),
-		string(oam.ContactRecord), string(oam.Location), h.name)
+		string(oam.ContactRecord), string(oam.StreetAddress), h.name)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +377,7 @@ func (h *horizPlugin) getContactRecordLocations(sess et.Session, cr *dbt.Entity)
 	ctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
 	defer cancel()
 
-	edges, err := sess.DB().OutgoingEdges(ctx, cr, since, "location")
+	edges, err := sess.DB().OutgoingEdges(ctx, cr, since, "street_address")
 	if err != nil || len(edges) == 0 {
 		return nil, errors.New("zero locations found")
 	}
@@ -346,7 +393,7 @@ func (h *horizPlugin) getContactRecordLocations(sess et.Session, cr *dbt.Entity)
 			continue
 		}
 
-		if _, valid := to.Asset.(*oamcon.Location); valid {
+		if _, valid := to.Asset.(*oamcon.StreetAddress); valid {
 			results = append(results, to)
 		}
 	}
@@ -357,9 +404,9 @@ func (h *horizPlugin) getContactRecordLocations(sess et.Session, cr *dbt.Entity)
 	return results, nil
 }
 
-func (h *horizPlugin) getOrganizationLocations(sess et.Session, o *dbt.Entity) ([]*dbt.Entity, error) {
+func (h *horizPlugin) getOrganizationStreetAddresses(sess et.Session, o *dbt.Entity) ([]*dbt.Entity, error) {
 	since, err := support.TTLStartTime(sess.Config(),
-		string(oam.Organization), string(oam.Location), h.name)
+		string(oam.Organization), string(oam.StreetAddress), h.name)
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +414,7 @@ func (h *horizPlugin) getOrganizationLocations(sess et.Session, o *dbt.Entity) (
 	ctx, cancel := context.WithTimeout(sess.Ctx(), 5*time.Second)
 	defer cancel()
 
-	edges, err := sess.DB().OutgoingEdges(ctx, o, since, "hq_address", "location")
+	edges, err := sess.DB().OutgoingEdges(ctx, o, since, "hq_address", "street_address")
 	if err != nil || len(edges) == 0 {
 		return nil, errors.New("zero locations found")
 	}
@@ -383,7 +430,7 @@ func (h *horizPlugin) getOrganizationLocations(sess et.Session, o *dbt.Entity) (
 			continue
 		}
 
-		if _, valid := to.Asset.(*oamcon.Location); valid {
+		if _, valid := to.Asset.(*oamcon.StreetAddress); valid {
 			results = append(results, to)
 		}
 	}
@@ -419,10 +466,11 @@ func (h *horizPlugin) addASNetblocksToScope(sess et.Session, asn int) *dbt.Entit
 		ctx, cancel := context.WithTimeout(sess.Ctx(), time.Duration(seconds)*time.Second)
 		defer cancel()
 
+		ends := amassdb.EdgeEnds(ctx, sess.DB(), edges, false)
 		for _, edge := range edges {
-			if to, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
-				// add the announced netblock to the scope
-				h.enqueueIfOutOfScope(sess, to)
+			if to, ok := ends[edge.ToEntity.ID]; ok {
+				// an in-scope AS announces the netblock
+				h.admitIfOutOfScope(sess, to, et.SignalAnnouncedByScopeAS)
 			}
 		}
 	}
@@ -435,10 +483,10 @@ func (h *horizPlugin) confidence(sess et.Session, atype oam.AssetType) int {
 
 	if matches, err := sess.Config().CheckTransformations(tstr, tstr); err == nil && matches != nil {
 		if conf := matches.Confidence(h.name); conf > 0 {
-			return conf
+			return config.MatchConfidence(conf)
 		}
 		if conf := matches.Confidence(tstr); conf > 0 {
-			return conf
+			return config.MatchConfidence(conf)
 		}
 	}
 
@@ -457,21 +505,54 @@ func (h *horizPlugin) isEntityInScope(sess et.Session, ent *dbt.Entity) bool {
 	return false
 }
 
-func (h *horizPlugin) addToScopeAndEnqueue(sess et.Session, ent *dbt.Entity) {
-	if sess.Scope().Add(ent.Asset) {
-		if econf := h.confidence(sess, ent.Asset.AssetType()); econf > 0 {
-			if a, conf := sess.Scope().IsAssetInScope(ent.Asset, econf); conf >= econf {
-				if strings.EqualFold(a.Key(), ent.Asset.Key()) {
-					_ = sess.Backlog().Enqueue(ent)
-				}
-			}
-		}
-	}
+// admit asks the session's scope to admit ent on the evidence, reached through
+// this plugin.
+func (h *horizPlugin) admit(sess et.Session, ent *dbt.Entity, conf int,
+	ev ...et.AdmissionEvidence) (*et.AdmissionDecision, error) {
+	return sess.Scope().Admit(&et.AdmissionRequest{Entity: ent, Via: h.name, Evidence: ev, Confidence: conf,
+		Source: h.source})
 }
 
-func (h *horizPlugin) enqueueIfOutOfScope(sess et.Session, ent *dbt.Entity) {
-	if !h.isEntityInScope(sess, ent) {
-		h.addToScopeAndEnqueue(sess, ent)
+// widen asks the scope to admit ent on the evidence and reports whether it was
+// newly admitted: false when it was in scope already, or the evidence was not
+// enough.
+func (h *horizPlugin) widen(sess et.Session, ent *dbt.Entity, conf int, ev ...et.AdmissionEvidence) bool {
+	if ent == nil {
+		return false
+	}
+	if st := sess.Scope().Standing(ent.Asset); st == et.InScope || st == et.StandingAdmitted {
+		return false
+	}
+	d, err := h.admit(sess, ent, conf, ev...)
+	return err == nil && d.Outcome == et.Admitted
+}
+
+// admitIfOutOfScope asks the scope to admit an asset the signal ties to an
+// in-scope one, such as an organization on the same contact record.
+func (h *horizPlugin) admitIfOutOfScope(sess et.Session, ent *dbt.Entity, signal string) {
+	_ = h.widen(sess, ent, 0, et.AdmissionEvidence{Signal: signal, Strength: et.StrengthStrong})
+}
+
+// admitAssociated sends the submission's strongest association with the
+// scope (through a registrant, a certificate subject or a location) to the
+// scope as evidence, and logs an admission.
+func (h *horizPlugin) admitAssociated(e *et.Event) {
+	assocs, err := e.Session.Scope().IsAssociated(&et.Association{Submission: e.Entity})
+	if err != nil || len(assocs) == 0 {
+		return
+	}
+
+	best := assocs[0]
+	for _, a := range assocs[1:] {
+		if a.Confidence > best.Confidence {
+			best = a
+		}
+	}
+	cites := append([]*dbt.Entity{best.BestMatch}, best.Evidence...)
+	d, err := h.admit(e.Session, e.Entity, best.Confidence, et.AdmissionEvidence{Signal: et.SignalAssociation,
+		Strength: et.StrengthStrong, Cites: cites, Detail: best.Rationale})
+	if err == nil && d.Outcome == et.Admitted && d.DecidedBy != "matching" {
+		e.Session.Log().Info(best.Rationale+"; admitted into scope", slog.Group("plugin", "name", h.name))
 	}
 }
 

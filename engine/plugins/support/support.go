@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/netip"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/sessions"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	"github.com/owasp-amass/amass/v5/internal/net/dns"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -42,7 +44,6 @@ var subre, urlre *regexp.Regexp
 
 func init() {
 	done = make(chan struct{})
-	trusted = trustedResolvers()
 
 	urlre = xurls.Relaxed()
 	subre = regexp.MustCompile(dns.AnySubdomainRegexString())
@@ -62,11 +63,10 @@ func ScrapeSubdomainNames(s string) []string {
 }
 
 func ExtractURLFromString(s string) *url.URL {
-	if u := urlre.FindString(s); u != "" {
-		if !strings.HasPrefix(u, "http") && !strings.HasPrefix(u, "https") {
-			u = "http://" + u
+	for _, match := range urlre.FindAllString(s, -1) {
+		if u := webURL(match); u != nil {
+			return u
 		}
-		return RawURLToOAM(u)
 	}
 	return nil
 }
@@ -74,22 +74,88 @@ func ExtractURLFromString(s string) *url.URL {
 func ExtractURLsFromString(s string) []*url.URL {
 	var results []*url.URL
 
-	matches := urlre.FindAllString(s, -1)
-	if matches == nil {
-		return results
-	}
-
-	for _, match := range matches {
-		if match != "" {
-			if !strings.HasPrefix(match, "http") && !strings.HasPrefix(match, "https") {
-				match = "http://" + match
-			}
-			if u := RawURLToOAM(match); u != nil {
-				results = append(results, u)
-			}
+	for _, match := range urlre.FindAllString(s, -1) {
+		if u := webURL(match); u != nil {
+			results = append(results, u)
 		}
 	}
 	return results
+}
+
+// webURL turns a match of the relaxed URL pattern into a web URL, or nil when
+// it is not one. The pattern also matches email addresses and other schemes
+// ("mailto:helpdesk@example.edu", "tel:+1…"); prefixing those with http://
+// made fake URLs whose "username" was the mailbox, so a match with a scheme
+// other than http(s), or without a scheme but with an "@", is not a web URL.
+// Email addresses are extracted separately (ExtractEmailsFromString).
+func webURL(match string) *url.URL {
+	if match == "" {
+		return nil
+	}
+	// a link read from HTML carries its character references ("&amp;"
+	// between query parameters); the URL is the unescaped text
+	match = html.UnescapeString(match)
+	// a URL ends where an unescaped bracket or quote starts: the relaxed
+	// pattern also takes the "&gt;" closing an HTTP Link header
+	// ("<https://example.edu/?p=1>; rel=shortlink"), which unescapes to ">"
+	if i := strings.IndexAny(match, "<>\"'`"); i >= 0 {
+		match = match[:i]
+	}
+	match = strings.TrimRight(match, ".,;:!?")
+	if match == "" {
+		return nil
+	}
+
+	lower := strings.ToLower(match)
+	switch {
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+	case schemere.MatchString(lower):
+		// mailto:, tel:, ftp:, data:, javascript: and other non-web schemes
+		return nil
+	case strings.Contains(strings.SplitN(match, "/", 2)[0], "@"):
+		// a bare email address (an "@" before any path), not a host
+		return nil
+	default:
+		match = "http://" + match
+	}
+
+	return RawURLToOAM(match)
+}
+
+// WebURL turns a link read from a document, page or record into a web URL,
+// or nil when it is not one (webURL): a mailto: or tel: link, or a bare email
+// address, is none, and the URL ends where an unescaped bracket or quote
+// starts.
+func WebURL(raw string) *url.URL { return webURL(strings.TrimSpace(raw)) }
+
+// MalformedURL reports whether a URL holds characters a well-formed URL
+// escapes: whitespace, brackets, quotes or a backtick. Archives and crawlers
+// record links cut out of broken markup ("…/?subject='To" from a mailto: link
+// read as a relative one); such a capture names no real page.
+func MalformedURL(raw string) bool {
+	return strings.ContainsAny(raw, "<>\"'`{}| \t\r\n")
+}
+
+// schemere matches a leading URI scheme ("mailto:", "tel:"), but not a host
+// with a port ("example.com:8080").
+var schemere = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:[^0-9]`)
+
+// emailre matches email addresses in free text.
+var emailre = regexp.MustCompile(`(?i)\b[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b`)
+
+// ExtractEmailsFromString returns the distinct email addresses in s, in
+// lowercase and in the order first seen.
+func ExtractEmailsFromString(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range emailre.FindAllString(s, -1) {
+		m = strings.ToLower(strings.TrimRight(m, "."))
+		if !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func Shutdown() {
@@ -268,12 +334,17 @@ func NameIPAddresses(session et.Session, name *oamdns.FQDN) []*oamnet.IPAddress 
 
 	var results []*oamnet.IPAddress
 	if edges, err := session.DB().OutgoingEdges(ctx, fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
+		var addrs []*dbt.Edge
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
-				if to, err := session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil {
-					if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
-						results = append(results, ip)
-					}
+				addrs = append(addrs, edge)
+			}
+		}
+		ends := amassdb.EdgeEnds(ctx, session.DB(), addrs, false)
+		for _, edge := range addrs {
+			if to, ok := ends[edge.ToEntity.ID]; ok {
+				if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
+					results = append(results, ip)
 				}
 			}
 		}
@@ -298,6 +369,12 @@ func NameResolved(session et.Session, name *oamdns.FQDN) bool {
 type FQDNMeta struct {
 	SLDInScope  bool
 	RecordTypes map[int]bool
+	// FromRecord marks an FQDN obtained from an authoritative DNS record (a
+	// CNAME target), rather than generated by brute force or name alteration.
+	// Its resolution skips wildcard suppression: DNS already proved the name
+	// exists, so its address is recorded even when the name's zone serves a
+	// wildcard (see PerformQueryNoWildcard).
+	FromRecord bool
 }
 
 func AddSLDInScope(e *et.Event) {

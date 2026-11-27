@@ -1,0 +1,13 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Default, signal-free fingerprint values that collectors do not materialize as shared Identifiers. A default favicon or a server or CMS default page title appears on many unrelated hosts, so turning it into a shared Identifier would make one hub that every such host links to; and because every enumeration writes to the same Asset Database, that hub would grow without bound across unrelated organizations while telling an owner nothing. Each entry is matched case-insensitively, after trimming whitespace, against a fingerprint's value for its id_type, and cites the software that ships the default. This removes only the clearly generic hubs: a value that genuinely distinguishes an owner (a custom favicon, or an unusual JARM shared by one organization's own servers) is never listed and is recorded in full, and the ownership lens separately bounds any value shared by more than GapMaxShared assets. favicon_mmh3 entries are added only once a hash is confirmed against the vendor's shipped icon, so the list grows from observation after review. Add values here, not in Go code.",
+  "defaults": [
+    {"id_type": "http_title", "value": "Welcome to nginx!", "source": "https://nginx.org/en/docs/http/ngx_http_core_module.html"},
+    {"id_type": "http_title", "value": "Apache2 Ubuntu Default Page: It works", "source": "https://sources.debian.org/src/apache2/latest/debian/apache2.conf/"},
+    {"id_type": "http_title", "value": "Apache2 Debian Default Page: It works", "source": "https://sources.debian.org/src/apache2/latest/debian/apache2.conf/"},
+    {"id_type": "http_title", "value": "403 Forbidden", "source": "https://www.rfc-editor.org/rfc/rfc9110.html#name-403-forbidden"},
+    {"id_type": "http_title", "value": "404 Not Found", "source": "https://www.rfc-editor.org/rfc/rfc9110.html#name-404-not-found"},
+    {"id_type": "http_title", "value": "401 Unauthorized", "source": "https://www.rfc-editor.org/rfc/rfc9110.html#name-401-unauthorized"},
+    {"id_type": "http_title", "value": "500 Internal Server Error", "source": "https://www.rfc-editor.org/rfc/rfc9110.html#name-500-internal-server-error"}
+  ]
+}

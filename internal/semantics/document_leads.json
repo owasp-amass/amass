@@ -1,0 +1,22 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Which organization names a document names are too generic to give a running enumeration as leads. Documents name offices and services ('Counseling', 'Health Center', 'Rapid Response') as if they were organizations; given to the engine, such a name matches unrelated bodies in the registries and funding records. A name is generic when it has none of entity_forms (a word that makes it the name of a particular body: an institution type) and no legal form of org_names.json (Inc, LLC, GmbH) and every word in it, other than particles, is one of generic_words. A generic name is still stored as a finding on its document; it just does not become a lead. Words are compared lower-cased, without surrounding punctuation.",
+  "entity_forms": ["association", "foundation", "society", "trust", "fund", "college", "university", "institute",
+    "academy", "school", "bank", "agency", "authority", "commission", "council", "board", "bureau", "hospital",
+    "church", "museum", "federation", "union", "cooperative", "partners", "group", "holdings"],
+  "generic_words": ["academic", "access", "accessibility", "accounting", "accounts", "admission", "admissions",
+    "advancement", "advising", "affairs", "aid", "alumni", "assistance", "athletics", "benefits", "bookstore",
+    "budget", "business", "campus", "care", "career", "careers", "center", "centre", "child", "clinic",
+    "communications", "community", "compliance", "computing", "conference", "continuing", "counsel", "counseling",
+    "counselling", "dean", "desk", "development", "dining", "disability", "diversity", "early", "education",
+    "emergency", "employment", "engagement", "enrollment", "equity", "events", "experience", "facilities",
+    "finance", "financial", "general", "giving", "graduate", "health", "help", "housing", "human", "inclusion",
+    "information", "international", "learning", "legal", "library", "life", "mail", "maintenance", "management",
+    "marketing", "medical", "nursing", "office", "operations", "outreach", "parking", "payroll", "planning",
+    "police", "printing", "procurement", "program", "programs", "public", "purchasing", "rapid", "records",
+    "recreation", "registrar", "relations", "research", "residence", "residential", "resources", "response",
+    "safety", "security", "service", "services", "student", "students", "studies", "success", "support",
+    "sustainability", "teaching", "technology", "testing", "training", "transportation", "tutoring",
+    "undergraduate", "wellness", "workforce", "writing"],
+  "particles": ["of", "and", "&", "for", "the", "a", "an", "at", "in", "on", "to"]
+}

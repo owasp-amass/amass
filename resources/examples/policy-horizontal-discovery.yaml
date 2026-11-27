@@ -1,0 +1,38 @@
+# Expansion policy: horizontal discovery
+#
+# Find the organization's other domains and networks. The scope widens on
+# strong evidence (the same registrant organization, a certificate's subject,
+# name or mail servers inside the organization's own domains, the official
+# website), and the main model decides the domains that only supporting
+# evidence ties to it. Assets up to two relations from the footprint are
+# looked at closely enough to see whether they tie back.
+#
+# To use it, merge these transformations into your config.yaml: they
+# replace entries of yours with the same key, default included.
+
+transformations:
+  default:
+    reach: footprint
+    confidence: 70
+  FQDN->DNS:
+    reach: connected
+    hops: 2
+  # A certificate's names widen the scope only on strong evidence.
+  TLSCertificate->ALL:
+    reach: connected
+    hops: 1
+    confidence: 90
+  Organization->ALL:
+    reach: footprint
+  Organization->GLEIF:
+    reach: any
+  # Look up every network's registration, so the target's own netblocks and
+  # autonomous systems can be attributed to it.
+  Netblock->RDAP:
+    reach: any
+  AutonomousSystem->RDAP:
+    reach: any
+  IPNetRecord->RDAP:
+    reach: any
+  AutnumRecord->RDAP:
+    reach: any

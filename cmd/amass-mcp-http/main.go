@@ -1,0 +1,164 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/owasp-amass/amass/v5/config"
+	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
+	"github.com/owasp-amass/amass/v5/internal/ai"
+	"github.com/owasp-amass/amass/v5/internal/ai/mcp"
+	"github.com/owasp-amass/amass/v5/internal/graph"
+	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/review"
+	"github.com/owasp-amass/amass/v5/internal/tools"
+	"github.com/owasp-amass/amass/v5/internal/vuln"
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "amass-mcp-http:", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfgFile := flag.String("config", "/.config/amass/config.yaml", "Existing Amass configuration")
+	addr := flag.String("listen", "0.0.0.0:8090", "Internal MCP HTTP listener")
+	flag.Parse()
+	token, opToken, err := tokens(os.Getenv)
+	if err != nil {
+		return err
+	}
+
+	cfg := config.NewConfig()
+	if err := config.AcquireConfig("", *cfgFile, cfg); err != nil {
+		return fmt.Errorf("load Amass config: %w", err)
+	}
+
+	repo := tools.OpenGraphDatabase(cfg)
+	if repo == nil {
+		return errors.New("unable to open OAM database")
+	}
+
+	defer func() { _ = repo.Close() }()
+	// models served here read document text only when the user shares it
+	g := oamrepo.New(repo, cfg)
+	g.WithholdDocumentText = !cfg.AI.DocumentsShared()
+	server := mcp.NewHTTPServer(ai.ToolRunner{
+		Graph:   g,
+		Catalog: oamrepo.Catalog{},
+		Limits:  graph.DefaultLimits(),
+		// The vendors lens reports TXT tokens the DNS-SD plugin does not know.
+		KnownVerification: dnssd.IsVerificationRecord,
+	}, token)
+	// The config assistant reads this file, and writes it in operator mode.
+	server.ConfigFile = *cfgFile
+	// The ownership-gap answer uses the trained attribution model, if one has
+	// been trained on the review journal.
+	if _, journal, err := cfg.AIAttribution(os.LookupEnv); err == nil {
+		if scorer, err := ai.LoadAttributionScorer(review.OpenJournal(journal, repo)); err != nil {
+			return fmt.Errorf("load attribution model: %w", err)
+		} else {
+			server.Runner.Attribution = scorer
+		}
+	}
+
+	// Interactive drawings are served at links the visualize tool returns.
+	if public := os.Getenv("AMASS_MCP_PUBLIC_URL"); public != "" {
+		server.Viz = &mcp.VizLinks{BaseURL: public, Runner: server.Runner}
+	}
+
+	// Operator mode: a second, different token unlocks the tools that start
+	// enumerations, review proposals and manage data sources.
+	if opToken != "" {
+		op, release, err := mcp.NewOperator(cfg, g, mcp.OperatorOptions{
+			ConfigFile:          *cfgFile,
+			RunJournal:          os.Getenv("AMASS_MCP_RUN_JOURNAL"),
+			WatchFile:           os.Getenv("AMASS_MCP_WATCHES"),
+			PublicURL:           os.Getenv("AMASS_MCP_PUBLIC_URL"),
+			RequireConfirmation: os.Getenv("AMASS_MCP_REQUIRE_CONFIRMATION") == "true",
+		})
+		if err != nil {
+			return fmt.Errorf("operator mode: %w", err)
+		}
+
+		defer release()
+		server.OperatorToken, server.Operator = opToken, op
+		fmt.Fprintln(os.Stderr, "mcp: operator mode enabled for the operator token")
+		if cfg.AI.DocumentModelEnabled() {
+			go func() {
+				for _, w := range ai.DocumentContextWarnings(context.Background(), cfg.AI.Documents) {
+					fmt.Fprintln(os.Stderr, "mcp: document model:", w)
+				}
+			}()
+		}
+	}
+
+	httpServer := &http.Server{
+		Addr:              *addr,
+		Handler:           server.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		MaxHeaderBytes:    16 << 10,
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		timeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(timeout)
+	}()
+	if os.Getenv(vulnRefreshEnv) != "off" {
+		go refreshVulnerabilities(ctx, vuln.DefaultPath())
+	}
+
+	fmt.Fprintln(os.Stderr, "mcp: authenticated read-only HTTP listener enabled")
+	err = httpServer.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+
+	return err
+}
+
+// vulnRefreshEnv set to "off" stops the daily vulnerability data refresh.
+// minTokenLength is the shortest bearer token accepted.
+const minTokenLength = 32
+
+// tokens returns the read-only bearer token and the optional operator token.
+// Each must be a strong random secret, and the operator token must differ from
+// the read-only one so that it alone unlocks the operator tools.
+func tokens(getenv func(string) string) (string, string, error) {
+	token := getenv("AMASS_MCP_TOKEN")
+	if len(token) < minTokenLength {
+		return "", "", errors.New("AMASS_MCP_TOKEN must be a strong random secret (at least 32 characters)")
+	}
+	opToken := getenv("AMASS_MCP_OPERATOR_TOKEN")
+	if opToken != "" && (len(opToken) < minTokenLength || opToken == token) {
+		return "", "", errors.New("AMASS_MCP_OPERATOR_TOKEN must be a strong random secret (at least 32 " +
+			"characters) different from AMASS_MCP_TOKEN")
+	}
+	return token, opToken, nil
+}
+
+const vulnRefreshEnv = "AMASS_MCP_VULN_REFRESH"
+
+// refreshVulnerabilities keeps the vulnerable lens's data current: it is
+// refreshed once a day, and when the catalog gains products.
+func refreshVulnerabilities(ctx context.Context, path string) {
+	vuln.KeepFresh(ctx, path, os.Getenv("NVD_API_KEY"), 24*time.Hour, func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "mcp: "+format+"\n", args...)
+	})
+}

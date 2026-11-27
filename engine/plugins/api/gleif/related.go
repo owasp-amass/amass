@@ -7,7 +7,6 @@ package gleif
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
@@ -60,7 +59,7 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 
 	if edges, err := e.Session.DB().IncomingEdges(ctx, ident, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ro.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, ro.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
@@ -79,7 +78,7 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 	var p *dbt.Entity
 	if edges, err := e.Session.DB().IncomingEdges(ctx, o, since, "subsidiary"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ro.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, ro.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil && a != nil {
@@ -94,7 +93,7 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 	var children []*dbt.Entity
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, o, since, "subsidiary"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.DB().FindEdgeTags(ctx, edge, since, ro.plugin.source.Name); err != nil || len(tags) == 0 {
+			if !support.Sourced(ctx, e.Session, edge, since, ro.plugin.source) {
 				continue
 			}
 			if a, err := e.Session.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && a != nil {
@@ -116,8 +115,8 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 
 func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 	id := ident.Asset.(*oamgen.Identifier)
-	parent, _ := GLEIFGetDirectParentRecord(e.Session.Ctx(), id.ID)
-	children, _ := GLEIFGetDirectChildrenRecords(e.Session.Ctx(), id.ID)
+	parent, _ := GLEIFGetDirectParentRecord(e.Session.Ctx(), e.Session.Clients().General, id.ID)
+	children, _ := GLEIFGetDirectChildrenRecords(e.Session.Ctx(), e.Session.Clients().General, id.ID)
 	return ro.store(e, ident, parent, children)
 }
 
@@ -142,8 +141,8 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *LEIRecord, 
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent, ro.plugin.source.Confidence)
 			support.MarkAssetMonitored(e.Session, parentent, ro.plugin.source)
-			_ = ro.plugin.createRelation(e.Session.Ctx(), e.Session, parentent,
-				&oamgen.SimpleRelation{Name: "subsidiary"}, orgent, ro.plugin.source.Confidence)
+			_, _ = support.Relate(e.Session.Ctx(), e.Session, parentent,
+				&oamgen.SimpleRelation{Name: "subsidiary"}, orgent, ro.plugin.source)
 		}
 	}
 
@@ -177,12 +176,6 @@ func (ro *relatedOrgs) getOrganization(sess et.Session, ent *dbt.Entity, rel oam
 
 func (ro *relatedOrgs) process(e *et.Event, assets []*dbt.Entity) {
 	for _, orgent := range assets {
-		if o, valid := orgent.Asset.(*oamorg.Organization); valid {
-			_ = e.Dispatcher.DispatchEvent(&et.Event{
-				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
-				Entity:  orgent,
-				Session: e.Session,
-			})
-		}
+		org.DispatchOrg(e, orgent)
 	}
 }

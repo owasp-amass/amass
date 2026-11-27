@@ -111,7 +111,7 @@ func (g *grepApp) query(e *et.Event, name string) []*dbt.Entity {
 
 	cont := true
 	for page := 1; cont; page++ {
-		_ = g.rlimit.Wait(e.Session.Ctx())
+		_ = support.WaitLimit(e.Session.Ctx(), g.rlimit)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

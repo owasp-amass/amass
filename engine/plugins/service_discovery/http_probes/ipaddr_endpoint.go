@@ -43,11 +43,6 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 		return nil
 	}
 
-	// only perform the probe if the address is in scope
-	if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf <= 0 {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.IPAddress), string(oam.Service), r.name)
 	if err != nil || since.IsZero() {
 		return err
@@ -76,7 +71,8 @@ func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, since time.Time) []
 
 	if edges, err := e.Session.DB().OutgoingEdges(ctx, ip, since); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.DB().FindEdgeTags(ctx, edge, since, r.plugin.source.Name); err != nil {
+			// only the services this plugin found count
+			if !support.Sourced(ctx, e.Session, edge, since, r.plugin.source) {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
@@ -100,8 +96,9 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 	var findings []*support.Finding
 
 	var count int
-	fch := make(chan []*support.Finding, len(e.Session.Config().Scope.Ports))
-	for _, port := range e.Session.Config().Scope.Ports {
+	ports := support.ShufflePorts(support.HTTPPorts(e.Session.Config()))
+	fch := make(chan []*support.Finding, len(ports))
+	for _, port := range ports {
 		count++
 		go r.probeOnePort(e, ipaddr, port, fch)
 	}
@@ -117,6 +114,13 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 
 func (r *ipaddrEndpoint) probeOnePort(e *et.Event, ipaddr *dbt.Entity, port int, ch chan []*support.Finding) {
 	ip := ipaddr.Asset.(*network.IPAddress)
+
+	// Space this host's probes so its ports are not all reached at once; a
+	// stopped session returns no finding for this port.
+	if err := support.PaceProbe(e, ip.Address.String()); err != nil {
+		ch <- nil
+		return
+	}
 
 	a := ip.Address.String()
 	if ip.Type == "IPv6" {
