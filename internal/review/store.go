@@ -110,7 +110,7 @@ func (j *Journal) append(kind string, body any) error {
 		return err
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := json.Marshal(map[string]any{"kind": kind, "data": body})
 	if err != nil {
 		return err

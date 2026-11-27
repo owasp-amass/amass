@@ -136,8 +136,8 @@ func renameIn(v any) bool {
 	switch t := v.(type) {
 	case map[string]any:
 		for k, x := range t {
-			switch {
-			case k == "signal":
+			switch k {
+			case "signal":
 				if s, ok := x.(string); ok {
 					if n, ok := signalIDRenames[s]; ok {
 						t[k] = n
@@ -145,7 +145,7 @@ func renameIn(v any) bool {
 						continue
 					}
 				}
-			case k == "signal_ids":
+			case "signal_ids":
 				if ids, ok := x.([]any); ok {
 					for i, id := range ids {
 						if s, ok := id.(string); ok {

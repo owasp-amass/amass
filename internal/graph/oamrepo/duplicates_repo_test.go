@@ -88,8 +88,8 @@ func findGlobalSignDuplicates(t *testing.T, repo repository.Repository) {
 	if c.Decision != lens.GapPropose {
 		t.Fatalf("decision %s, want propose: %+v", c.Decision, c.Signals)
 	}
-	if got := []string{c.Survivor.ID, c.Duplicate.ID}; !(got[0] == ids[0] && got[1] == ids[1]) &&
-		!(got[0] == ids[1] && got[1] == ids[0]) {
+	if got := []string{c.Survivor.ID, c.Duplicate.ID}; (got[0] != ids[0] || got[1] != ids[1]) &&
+		(got[0] != ids[1] || got[1] != ids[0]) {
 		t.Fatalf("pair %v, want %v", got, ids)
 	}
 }

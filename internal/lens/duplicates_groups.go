@@ -274,7 +274,7 @@ func hasStrength(signals []GapSignal, strength string) bool {
 	for _, s := range signals {
 		// a strong signal that rests on contributions is supporting
 		if def, ok := DuplicateSignal(s.Signal); ok && def.Strength == strength &&
-			!(strength == StrengthStrong && s.Contributed) {
+			(strength != StrengthStrong || !s.Contributed) {
 			return true
 		}
 	}

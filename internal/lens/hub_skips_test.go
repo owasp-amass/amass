@@ -34,8 +34,12 @@ func TestHubSkips(t *testing.T) {
 	if phone.over("+1 555 0100", 140, false) {
 		t.Error("a value at the derived limit was stopped")
 	}
-	if !phone.over("+1 555 0199", 812, false) || !phone.over("+1 555 0199", 812, false) {
+	if !phone.over("+1 555 0199", 812, false) {
 		t.Error("a value over the derived limit was not stopped")
+	}
+	// asked again, it is stopped again and still recorded once
+	if !phone.over("+1 555 0199", 812, false) {
+		t.Error("a value over the derived limit was stopped only once")
 	}
 	address := derivedHub(ctx, g, "street_address", "in", 10, skips)
 	if !address.over("1 Main St", 11, false) {

@@ -123,7 +123,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	switch operation {
 	case "train", "status", "review":
 		if repo := tools.OpenGraphDatabase(cfg); repo != nil {
-			defer repo.Close()
+			defer func() { _ = repo.Close() }()
 			e.journal = review.OpenJournal(o.journalPath, repo)
 		} else {
 			e.journal = review.OpenJournal(o.journalPath, nil)
@@ -148,7 +148,7 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 		return errors.New("unable to open OAM database")
 	}
 
-	defer repo.Close()
+	defer func() { _ = repo.Close() }()
 	e.journal = review.OpenJournal(o.journalPath, repo)
 	aliases, err := loadAliases(o.aliasesPath)
 	if err != nil {
@@ -215,12 +215,6 @@ func run(group string, in io.Reader, out, errout io.Writer, args []string) error
 	}
 
 	return nil
-}
-
-// validateModelEndpoint prevents accidental plaintext transmission of graph
-// evidence. In-container HTTP to Ollama requires explicit opt-in.
-func validateModelEndpoint(endpoint string, allowHTTP bool) error {
-	return ai.ValidateModelEndpoint(endpoint, allowHTTP)
 }
 
 func validateClassifierEndpoint(endpoint string) error {

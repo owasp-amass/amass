@@ -37,7 +37,9 @@ func (m *manager) NewSession(cfg *config.Config) (et.Session, error) {
 	}
 
 	s := plugintest.NewSession(m.t)
-	m.AddSession(s)
+	if err := m.AddSession(s); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 

@@ -76,8 +76,8 @@ func (s *distroSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.asked = append(s.asked, r.URL.Path+"?"+r.URL.RawQuery)
 	s.mu.Unlock()
 
-	switch {
-	case r.URL.Path == "/debian/json":
+	switch r.URL.Path {
+	case "/debian/json":
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"bash": map[string]any{"CVE-2014-6271": map[string]any{}},
 			"apache2": map[string]any{
@@ -97,7 +97,7 @@ func (s *distroSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						"repositories": map[string]any{"bookworm": "2.4.62-1~deb12u2"}}}},
 			},
 		})
-	case r.URL.Path == "/ubuntu/cves.json":
+	case "/ubuntu/cves.json":
 		if r.URL.Query().Get("package") != "openssh" {
 			_, _ = fmt.Fprint(w, `{"cves":[],"total_results":0}`)
 			return
@@ -117,7 +117,7 @@ func (s *distroSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Sscan(r.URL.Query().Get("offset"), &offset)
 		page := all[min(offset, len(all)):min(offset+1, len(all))] // one a page, to test paging
 		_ = json.NewEncoder(w).Encode(map[string]any{"cves": page, "total_results": len(all)})
-	case r.URL.Path == "/redhat/cve.json":
+	case "/redhat/cve.json":
 		if r.URL.Query().Get("package") != "httpd" || r.URL.Query().Get("page") != "1" {
 			_, _ = fmt.Fprint(w, `[]`)
 			return
@@ -128,7 +128,7 @@ func (s *distroSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			 "affected_packages":["httpd:2.4-8040020211008164252.522a0ee4","httpd-0:2.4.6-97.el7_9.1"]},
 			{"CVE":"CVE-2099-0003","advisories":[],"affected_packages":[]},
 			{"CVE":"CVE-2099-0004","advisories":["RHSA-2099:1"],"affected_packages":["httpd-0:2.4.62-1.el9_5.1"]}]`)
-	case r.URL.Path == "/redhat/cve/CVE-2021-40438.json":
+	case "/redhat/cve/CVE-2021-40438.json":
 		_, _ = fmt.Fprint(w, `{"affected_release":[
 			{"product_name":"Red Hat Enterprise Linux 8","advisory":"RHSA-2021:3816",
 			 "package":"httpd:2.4-8040020211008164252.522a0ee4"},
@@ -137,7 +137,7 @@ func (s *distroSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			 "package":"jbcs-httpd24-httpd-0:2.4.37-76.el8jbcs"}],
 			"package_state":[{"product_name":"Red Hat Enterprise Linux 9","fix_state":"Not affected",
 			 "package_name":"httpd"}]}`)
-	case r.URL.Path == "/redhat/cve/CVE-2099-0003.json":
+	case "/redhat/cve/CVE-2099-0003.json":
 		_, _ = fmt.Fprint(w, `{"package_state":[
 			{"product_name":"Red Hat Enterprise Linux 8","fix_state":"Affected","package_name":"httpd:2.4/httpd"},
 			{"product_name":"Red Hat Enterprise Linux 9","fix_state":"Will not fix","package_name":"httpd"}]}`)

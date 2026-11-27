@@ -300,14 +300,12 @@ func fuzzyLabelSearches(name string, distance int, chars string) []string {
 // guess is built in a new slice: building it in the label's own runes
 // would change the label for the guesses that follow.
 func additions(set []string, chars string) []string {
-	ldh := []rune(chars)
-
 	var guesses []string
 	for _, str := range set {
 		rstr := []rune(str)
 
 		for i := 0; i <= len(rstr); i++ {
-			for _, c := range ldh {
+			for _, c := range chars {
 				temp := make([]rune, 0, len(rstr)+1)
 				temp = append(temp, rstr[:i]...)
 				temp = append(temp, c)
@@ -342,14 +340,12 @@ func deletions(set []string) []string {
 
 // substitutions replaces each character of each label with each of chars.
 func substitutions(set []string, chars string) []string {
-	ldh := []rune(chars)
-
 	var guesses []string
 	for _, str := range set {
 		rstr := []rune(str)
 
 		for i := range rstr {
-			for _, c := range ldh {
+			for _, c := range chars {
 				temp := slices.Clone(rstr)
 				temp[i] = c
 				guesses = append(guesses, string(temp))

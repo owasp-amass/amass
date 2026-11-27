@@ -91,7 +91,9 @@ func TestDecisionsSinceReportsNewItemsOnly(t *testing.T) {
 	if _, err := f.WriteString(`{"kind":"ownership_proposal","data":`); err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 	partial, err := DecisionsSince(path, applied.Cursor)
 	if err != nil || len(partial.Items) != 0 || partial.Cursor != applied.Cursor {
 		t.Fatalf("a partial line moved the cursor: %+v, %v", partial, err)

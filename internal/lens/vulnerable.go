@@ -174,7 +174,6 @@ func FindVulnerable(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 
 	for _, k := range order {
 		matches, status, reason := data.Check(k.product, k.version)
-		label := strings.TrimSpace(k.product + " " + k.version)
 		if status != vuln.Checked {
 			// versions that differ only by distribution are listed once
 			i := slices.IndexFunc(out.Unchecked, func(u UncheckedSoftware) bool {
@@ -210,7 +209,7 @@ func FindVulnerable(ctx context.Context, g graph.Graph, schema graph.SchemaCatal
 		judgeByDistribution(&v, data, k.family)
 
 		if len(v.CVEs)+len(v.Update) == 0 {
-			label = v.label()
+			label := v.label()
 			if len(v.Settled) > 0 {
 				label += fmt.Sprintf(": %d CVE(s) settled by its data", len(v.Settled))
 			}

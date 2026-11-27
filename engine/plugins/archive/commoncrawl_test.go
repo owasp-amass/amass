@@ -41,12 +41,12 @@ func newCommonCrawl(t *testing.T, indexStatus int) (*commonCrawl, *plugintest.Se
 	s := &ccServer{indexStatus: indexStatus}
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/collinfo.json":
+		switch r.URL.Path {
+		case "/collinfo.json":
 			s.listHits.Add(1)
 			_, _ = fmt.Fprintf(w, `[{"id":"CC-MAIN-2026-44","cdx-api":"%[1]s/CC-MAIN-2026-44-index"},
 				{"id":"CC-MAIN-2026-40","cdx-api":"%[1]s/CC-MAIN-2026-40-index"}]`, srv.URL)
-		case r.URL.Path == "/CC-MAIN-2026-44-index":
+		case "/CC-MAIN-2026-44-index":
 			s.indexHits.Add(1)
 			s.query.Store(r.URL.RawQuery)
 			w.WriteHeader(s.indexStatus)

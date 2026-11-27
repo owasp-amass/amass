@@ -35,7 +35,6 @@ type GuidedFrontier struct {
 
 type guidedPath struct {
 	match graph.PlanMatch
-	score int
 }
 
 type guidedEdgeBatch struct {

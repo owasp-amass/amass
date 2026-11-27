@@ -34,10 +34,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// breachTTL is how long an identifier is left before it is checked again.
-// Breach data changes slowly, so a weekly re-check is ample.
-const breachTTL = 7 * 24 * time.Hour
-
 // fetcher fetches a source response; a field so tests can supply responses
 // without the network.
 type fetcher func(ctx context.Context, sess et.Session, reqURL, apiKey string) ([]byte, error)

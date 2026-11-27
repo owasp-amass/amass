@@ -76,13 +76,12 @@ const (
 // scope-expansion decision and the classifier share one source of truth
 // (principle 8). Each is the signal's catalog weight times 100.
 var (
-	relatedRegistrantConfidence = HorizontalConfidence(SigRegistrantOrg)
-	relatedCertConfidence       = HorizontalConfidence(SigCertSubjectOrg)
-	relatedNSConfidence         = HorizontalConfidence(SigSharedNameServer)
-	relatedMXConfidence         = HorizontalConfidence(SigSharedMX)
-	relatedDMARCConfidence      = HorizontalConfidence(SigDMARCReportsTo)
-	relatedSPFConfidence        = HorizontalConfidence(SigSPFAuthorizes)
-	relatedWebsiteConfidence    = HorizontalConfidence(SigOfficialWebsite)
+	relatedCertConfidence    = HorizontalConfidence(SigCertSubjectOrg)
+	relatedNSConfidence      = HorizontalConfidence(SigSharedNameServer)
+	relatedMXConfidence      = HorizontalConfidence(SigSharedMX)
+	relatedDMARCConfidence   = HorizontalConfidence(SigDMARCReportsTo)
+	relatedSPFConfidence     = HorizontalConfidence(SigSPFAuthorizes)
+	relatedWebsiteConfidence = HorizontalConfidence(SigOfficialWebsite)
 )
 
 // HorizontalDomain is a registered (apex) domain a horizontal signal ties to

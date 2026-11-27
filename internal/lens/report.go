@@ -80,19 +80,6 @@ var loadReportRules = sync.OnceValue(func() reportRules {
 type sectionFinder func(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog, root graph.Asset,
 	limits LensLimits) (Report, error)
 
-// textReport adapts a lens that has a text form but no Report.
-type textReport struct {
-	text, reason string
-	facts        []string
-	partial      bool
-}
-
-func (t textReport) Text() string { return t.text }
-
-func (t textReport) Facts() []string { return t.facts }
-
-func (t textReport) Partial() (bool, string) { return t.partial, t.reason }
-
 // reportSection finds the registered subject lens a section names.
 func reportSection(name string) (sectionFinder, bool) {
 	if l, ok := SubjectLensNamed(name); ok && !l.NeedsOther && l.Name != LensReport {

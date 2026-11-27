@@ -197,8 +197,8 @@ func (p *Pacer) refusal(host string, s *state, after time.Duration) {
 	s.mu.Lock()
 	now := p.now()
 	s.failures++
-	switch {
-	case s.spacing == 0:
+	switch s.spacing {
+	case 0:
 		s.spacing = firstStep
 	default:
 		s.spacing = min(2*s.spacing, maxSpacing)

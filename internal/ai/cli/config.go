@@ -35,30 +35,30 @@ func configAssist(ctx context.Context, in io.Reader, out, errout io.Writer, mode
 		return err
 	}
 
-	fmt.Fprintf(out, "Summary: %s\n", edit.Summary)
+	_, _ = fmt.Fprintf(out, "Summary: %s\n", edit.Summary)
 	if edit.Rationale != "" {
-		fmt.Fprintf(out, "\n%s\n", edit.Rationale)
+		_, _ = fmt.Fprintf(out, "\n%s\n", edit.Rationale)
 	}
 
-	fmt.Fprintf(out, "\nProposed configuration:\n%s\n", edit.Content)
+	_, _ = fmt.Fprintf(out, "\nProposed configuration:\n%s\n", edit.Content)
 	safeCurrent, _ := confighelp.RedactSecrets(current)
 	safeProposed, _ := confighelp.RedactSecrets(edit.Content)
 	if diff := confighelp.Diff(safeCurrent, safeProposed); diff != "" {
-		fmt.Fprintf(out, "\nChanges (credentials masked):\n%s\n", diff)
+		_, _ = fmt.Fprintf(out, "\nChanges (credentials masked):\n%s\n", diff)
 	}
 
 	if configPath == "" {
-		fmt.Fprintln(out, "\nNo -config file was given, so there is nothing to write.")
+		_, _ = fmt.Fprintln(out, "\nNo -config file was given, so there is nothing to write.")
 		return nil
 	}
 
 	apply := approve
 	if !apply && isInteractive(in) {
-		fmt.Fprintf(errout, "\nWrite this configuration to %s? [y/N] ", configPath)
+		_, _ = fmt.Fprintf(errout, "\nWrite this configuration to %s? [y/N] ", configPath)
 		apply = confirmed(in)
 	}
 	if !apply {
-		fmt.Fprintf(out, "\nNothing was written. Re-run with -approve-config to write it to %s.\n", configPath)
+		_, _ = fmt.Fprintf(out, "\nNothing was written. Re-run with -approve-config to write it to %s.\n", configPath)
 		return nil
 	}
 
@@ -66,7 +66,7 @@ func configAssist(ctx context.Context, in io.Reader, out, errout io.Writer, mode
 		return err
 	}
 
-	fmt.Fprintf(out, "\nWrote %s. The new configuration applies to the next enumeration.\n", configPath)
+	_, _ = fmt.Fprintf(out, "\nWrote %s. The new configuration applies to the next enumeration.\n", configPath)
 	return nil
 }
 
