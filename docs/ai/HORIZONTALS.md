@@ -36,6 +36,9 @@ Horizontal correlation associates more registered (apex) domains with a target o
 | [Shared mail exchanger](#shared-mx) | supporting | infrastructure | 0.60 |
 | [DMARC reports to the organization](#dmarc-reports-to) | strong | infrastructure | 0.70 |
 | [Official website](#official-website) | strong | identity | 0.80 |
+| [Shared identity tenant](#shared-identity-tenant) | strong | identity | 0.75 |
+| [Federated sibling domain](#federated-sibling) | strong | identity | 0.75 |
+| [Shared federation signing certificate](#shared-signing-certificate) | strong | identity | 0.70 |
 
 <a id="bug-bounty-scope"></a>
 ## Listed in the organization's bug-bounty program
@@ -541,3 +544,63 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 
 - A curated source can record a campaign or microsite domain hosted by a third party as an official website.
 - An out-of-date record can name a domain the organization no longer controls.
+
+<a id="shared-identity-tenant"></a>
+## Shared identity tenant
+
+`shared-identity-tenant`: strong identity signal, weight 0.75 (confidence 75).
+
+**Finds:** Another registered domain whose identity tenant is the same as one of the organization's domains': the same Microsoft Entra tenant GUID, or the same Okta organization, read from the provider's own metadata (FQDN --identity_tenant--> Identifier).
+
+**Why it counts:** An identity tenant is one organization's user directory. Adding a domain to an Entra tenant requires proving control of it with a DNS record, and an Okta organization is a single customer account, so two domains on one tenant are almost always run by the same organization.
+
+**Guards:**
+
+- A tenant shared by more registered domains than the hub limit for identity tenants is skipped: a managed service provider's or a provider's shared tenant.
+- The organization's own domains are not candidates.
+
+**Can still mislead when:**
+
+- A managed service provider can run several clients' domains in its own tenant.
+- After an acquisition, a parent's tenant can hold the domains of a company that was later sold.
+
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
+<a id="federated-sibling"></a>
+## Federated sibling domain
+
+`federated-sibling`: strong identity signal, weight 0.75 (confidence 75).
+
+**Finds:** A registered domain Microsoft lists as sharing the tenant of one of the organization's domains (GetFederationInformation, FQDN --federated_with--> FQDN).
+
+**Why it counts:** Microsoft lists only domains verified in the same tenant, and verifying a domain requires a DNS record in its zone, so the tenant's administrator controls every listed domain.
+
+**Guards:**
+
+- Microsoft's *.onmicrosoft.com routing names and the domain's own subdomains are not recorded.
+- The organization's own domains are not candidates.
+
+**Can still mislead when:**
+
+- A tenant can hold a partner's or a former subsidiary's domain that was verified there and never removed.
+
+<a id="shared-signing-certificate"></a>
+## Shared federation signing certificate
+
+`shared-signing-certificate`: strong identity signal, weight 0.70 (confidence 70).
+
+**Finds:** A registered domain whose federation server, or the federation server its users sign in at, signs tokens with the same certificate as a federation server inside the organization's domains (FQDN --identity_provider--> FQDN --signing_certificate--> TLSCertificate).
+
+**Why it counts:** A token-signing certificate belongs to one federation farm (an AD FS deployment, for example): whoever signs with it holds its private key, so two sign-in hosts sharing it are one identity system.
+
+**Guards:**
+
+- Only federation servers inside the organization's own domains are compared; a hosted identity provider's tenant hosts are never asked for signing certificates.
+- A certificate on more federation servers than the hub limit is skipped.
+- The organization's own domains are not candidates.
+
+**Can still mislead when:**
+
+- An outsourced identity service can sign several customers' tokens with one certificate.
+
+**Hub limit:** 10, fixed.

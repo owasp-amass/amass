@@ -171,8 +171,8 @@ relations:
      attribution: shared, purpose: identity, reviewed: true,
      note: "Another domain that shares the source domain's identity tenant federation (for example a sibling domain returned by Microsoft GetFederationInformation). Tenant membership usually indicates the same organization, but a tenant can include guest or vanity domains, so ownership does not pass through automatically; same-organization targets are correlated by the horizontal identity signal."}
   - {source: FQDN, label: identity_provider, relation_type: SimpleRelation, destination: FQDN,
-     attribution: shared, purpose: identity, reviewed: true,
-     note: "The host the domain's users sign in at, from Microsoft's realm answer (a federated tenant's AuthURL) or the domain's OpenID Connect discovery issuer: often an identity provider's tenant host (an Okta or Auth0 name) or a federation server the organization runs. A provider host serves many customers, so ownership does not pass through; the identity provider is a third party of the domain."}
+     attribution: third_party, purpose: identity, reviewed: true,
+     note: "The host the domain's users sign in at, from Microsoft's realm answer (a federated tenant's AuthURL) or the domain's OpenID Connect discovery issuer: often an identity provider's tenant host (an Okta or Auth0 name) or a federation server the organization runs. A provider host serves many customers, so ownership does not pass through: the identity provider is a third party the domain depends on, listed by the third-party lens. A federation server the organization runs itself is matched to it by the horizontal identity signal instead."}
   - {source: FQDN, label: signing_certificate, relation_type: SimpleRelation, destination: TLSCertificate,
      attribution: attribute, purpose: identity, reviewed: true,
      note: "A certificate the host's SAML or WS-Federation metadata names for signing tokens. It describes the identity system behind the host; the same signing certificate on another host means the same identity system, which the horizontal identity signal weighs."}

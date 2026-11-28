@@ -68,6 +68,13 @@ const (
 	SigSharedAnalyticsID = "shared-analytics-id"
 	SigSharedFavicon     = "shared-favicon"
 	SigSharedPageContent = "shared-page-content"
+	// Identity system: another apex on the same identity tenant (an Entra
+	// tenant or Okta organization), one Microsoft lists as sharing the
+	// organization's tenant, and one signing in at a federation server that
+	// shares the organization's token-signing certificate.
+	SigSharedIdentityTenant = "shared-identity-tenant"
+	SigFederatedSibling     = "federated-sibling"
+	SigSharedSigningCert    = "shared-signing-certificate"
 )
 
 // Horizontal signal matchers: how each signal is found in the graph.
@@ -94,6 +101,9 @@ const (
 	matchHorAdsSellerDom  = "ads_seller_domain"
 	matchHorAdsOwnerDom   = "ads_owner_domain"
 	matchHorAdsOwnedBy    = "ads_owned_by"
+	matchHorTenant        = "shared_identity_tenant"
+	matchHorFederated     = "federated_sibling"
+	matchHorSigningCert   = "shared_signing_certificate"
 )
 
 var horizontalMatchers = map[string]bool{matchHorRegistrantOrg: true, matchHorCertOrg: true,
@@ -102,7 +112,8 @@ var horizontalMatchers = map[string]bool{matchHorRegistrantOrg: true, matchHorCe
 	matchHorBountyScope: true, matchHorSOAOwn: true, matchHorSOAShared: true,
 	matchHorNSOwn: true, matchHorMXOwn: true, matchHorSPFExclusive: true, matchHorPackageOrg: true,
 	matchHorPackageSite: true, matchHorAdsSeller: true, matchHorAdsSellerDom: true,
-	matchHorAdsOwnerDom: true, matchHorAdsOwnedBy: true}
+	matchHorAdsOwnerDom: true, matchHorAdsOwnedBy: true, matchHorTenant: true, matchHorFederated: true,
+	matchHorSigningCert: true}
 
 var loadHorizontalCatalog = sync.OnceValues(func() (signalCatalog, error) {
 	c, err := signalView(UseRelatedDomain)
@@ -157,7 +168,7 @@ func HorizontalSignals() []OwnershipSignal {
 // shared value, so their signals need a hub limit.
 var horizontalHubMatchers = map[string]bool{matchHorCertOrg: true, matchHorNameServer: true, matchHorMX: true,
 	matchHorDMARC: true, matchHorSPF: true, matchHorFingerprint: true, matchHorSOAShared: true,
-	matchHorAdsSeller: true}
+	matchHorAdsSeller: true, matchHorTenant: true, matchHorSigningCert: true}
 
 // relatedHub is the hub limit of the related-domain signal with id.
 func relatedHub(id string) SignalHub {

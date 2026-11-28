@@ -306,6 +306,7 @@ func FindRelatedDomains(ctx context.Context, g graph.Graph, schema graph.SchemaC
 	bountyScopePivot(ctx, g, name, ownApexes, add)
 	packagePivot(ctx, g, ownApexes, ownDomains, add)
 	adsSellerPivot(ctx, g, ownApexes, ownDomains, skips, add)
+	identityPivot(ctx, g, ownApexes, ownDomains, skips, add)
 	soaMailboxPivot(ctx, g, ownApexes, signalHub(ctx, g, relatedHub(SigSharedSOAMailbox), edgeSource("soa_rname",
 		"in"), "soa_rname", skips), add)
 	sharedDNSHostPivot(ctx, g, ownApexes, RRTypeNS, SigSharedNameServer, "shared name server", nsHub,

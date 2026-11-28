@@ -1612,6 +1612,82 @@
           ]
         }
       }
+    },
+    {
+      "id": "shared-identity-tenant",
+      "title": "Shared identity tenant",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.75,
+          "matcher": "shared_identity_tenant",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
+          "finds": "Another registered domain whose identity tenant is the same as one of the organization's domains': the same Microsoft Entra tenant GUID, or the same Okta organization, read from the provider's own metadata (FQDN --identity_tenant--> Identifier).",
+          "rationale": "An identity tenant is one organization's user directory. Adding a domain to an Entra tenant requires proving control of it with a DNS record, and an Okta organization is a single customer account, so two domains on one tenant are almost always run by the same organization.",
+          "guards": [
+            "A tenant shared by more registered domains than the hub limit for identity tenants is skipped: a managed service provider's or a provider's shared tenant.",
+            "The organization's own domains are not candidates."
+          ],
+          "counter_indications": [
+            "A managed service provider can run several clients' domains in its own tenant.",
+            "After an acquisition, a parent's tenant can hold the domains of a company that was later sold."
+          ]
+        }
+      }
+    },
+    {
+      "id": "federated-sibling",
+      "title": "Federated sibling domain",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.75,
+          "matcher": "federated_sibling",
+          "finds": "A registered domain Microsoft lists as sharing the tenant of one of the organization's domains (GetFederationInformation, FQDN --federated_with--> FQDN).",
+          "rationale": "Microsoft lists only domains verified in the same tenant, and verifying a domain requires a DNS record in its zone, so the tenant's administrator controls every listed domain.",
+          "guards": [
+            "Microsoft's *.onmicrosoft.com routing names and the domain's own subdomains are not recorded.",
+            "The organization's own domains are not candidates."
+          ],
+          "counter_indications": [
+            "A tenant can hold a partner's or a former subsidiary's domain that was verified there and never removed."
+          ]
+        }
+      }
+    },
+    {
+      "id": "shared-signing-certificate",
+      "title": "Shared federation signing certificate",
+      "uses": {
+        "related-domain": {
+          "kind": "identity",
+          "strength": "strong",
+          "weight": 0.7,
+          "matcher": "shared_signing_certificate",
+          "params": {
+            "hub": {
+              "limit": 10
+            }
+          },
+          "finds": "A registered domain whose federation server, or the federation server its users sign in at, signs tokens with the same certificate as a federation server inside the organization's domains (FQDN --identity_provider--> FQDN --signing_certificate--> TLSCertificate).",
+          "rationale": "A token-signing certificate belongs to one federation farm (an AD FS deployment, for example): whoever signs with it holds its private key, so two sign-in hosts sharing it are one identity system.",
+          "guards": [
+            "Only federation servers inside the organization's own domains are compared; a hosted identity provider's tenant hosts are never asked for signing certificates.",
+            "A certificate on more federation servers than the hub limit is skipped.",
+            "The organization's own domains are not candidates."
+          ],
+          "counter_indications": [
+            "An outsourced identity service can sign several customers' tokens with one certificate."
+          ]
+        }
+      }
     }
   ]
 }

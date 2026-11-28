@@ -24,6 +24,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
+	"golang.org/x/net/publicsuffix"
 )
 
 // maxSigningCerts bounds the signing certificates kept from one federation
@@ -103,7 +104,7 @@ func (p *identity) signsInAt(e *et.Event, from *dbt.Entity, idp string) {
 }
 
 // tenantOf asks a provider's tenant host for its organization identifier
-// and records it as from's identity tenant.
+// and records it as the identity tenant of from's registered domain.
 func (p *identity) tenantOf(e *et.Event, from *dbt.Entity, prov semantics.IdentityProvider, idp string) {
 	var meta struct {
 		ID string `json:"id"`
@@ -114,7 +115,15 @@ func (p *identity) tenantOf(e *et.Event, from *dbt.Entity, prov semantics.Identi
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
 	defer cancel()
-	_ = support.LinkAsset(ctx, e.Session, from, "identity_tenant", &oamgen.Identifier{
+	domain := from
+	if fqdn, ok := from.Asset.(*oamdns.FQDN); ok {
+		if apex, err := publicsuffix.EffectiveTLDPlusOne(fqdn.Name); err == nil && apex != fqdn.Name {
+			if domain, err = e.Session.DB().CreateAsset(ctx, &oamdns.FQDN{Name: apex}); err != nil {
+				return
+			}
+		}
+	}
+	_ = support.LinkAsset(ctx, e.Session, domain, "identity_tenant", &oamgen.Identifier{
 		UniqueID: prov.TenantType + ":" + meta.ID, ID: meta.ID, Type: prov.TenantType,
 	}, p.source)
 }
