@@ -89,7 +89,7 @@ func TestURLDisclosures(t *testing.T) {
 		t.Errorf("the secret identifier = %+v", id)
 	}
 	hash := strings.TrimPrefix(id.ID, "github_token:")
-	if v, err := vault.Found("github_token", hash); err != nil || v != fakeToken {
+	if v, err := vault.Found("github_token", hash, "test"); err != nil || v != fakeToken {
 		t.Errorf("the sealed value = %q, %v", v, err)
 	}
 	if accts := targets(t, sess, keyID, "cloud_account"); len(accts) != 1 ||

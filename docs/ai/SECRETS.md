@@ -89,3 +89,33 @@ query strings, service banners and response headers, and TXT records.
   credentials: `Values` and `List` skip them, and `Rotate` re-seals them with
   the rest.
 - Found credentials are never used or tested.
+
+### Reading a found credential
+
+`amass secrets found <reference>` prints a found credential's value, where
+the reference is the `exposed_secret` Identifier's ID, with or without the
+`exposed_secret:` prefix (`exposed_secret:github_token:<hash>`). It needs the
+master key, like every other `amass secrets` command, and each read is
+audited with the operator as the actor (`Store.Found`). The value is shown
+only there: never in a lens, an MCP result, a model's prompt or a log.
+
+### What models see
+
+Every model provider (`internal/ai/llm`: Anthropic, Ollama and the
+OpenAI-compatible client) passes the history through `llm.Masked` before a
+request, so a credential in any message, a tool result included, reaches the
+model as its kind and masked preview (`secretscan.Mask`). Identifiers, such
+as AWS account and access key IDs, stay whole. The caller's history is not
+changed.
+
+### The leaked credentials exposure class
+
+The exposure lens reports `leaked_credentials` ("Leaked credentials") for each
+credential an asset of the footprint discloses: its kind, masked preview,
+where it was found (masked too, since a URL's query can carry the key), the
+AWS account of an access key ID found beside an AWS key, and the reference
+`amass secrets found` takes. A credential found only outside the footprint is
+not reported. It reads with one value search for `exposed_secret`
+Identifiers, then each one's incoming `discloses`. The report lists it first
+among its key findings: it is the only priority 1 finding in
+`internal/semantics/report.json`.

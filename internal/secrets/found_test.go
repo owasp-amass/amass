@@ -20,7 +20,7 @@ func TestFoundCredentials(t *testing.T) {
 		t.Error("a kind with a colon was accepted")
 	}
 
-	if v, err := s.Found("github_token", "abc123"); err != nil || v != "found-value" {
+	if v, err := s.Found("github_token", "abc123", "test"); err != nil || v != "found-value" {
 		t.Fatalf("Found = %q, %v", v, err)
 	}
 	values, skipped, err := s.Values()
@@ -35,11 +35,25 @@ func TestFoundCredentials(t *testing.T) {
 	if rotated, skipped, err := s.Rotate(next, "test"); err != nil || rotated != 2 || skipped != 0 {
 		t.Fatalf("Rotate = %d, %d, %v", rotated, skipped, err)
 	}
-	if _, err := s.Found("github_token", "abc123"); err == nil {
+	if _, err := s.Found("github_token", "abc123", "test"); err == nil {
 		t.Error("the old key still opens the rotated credential")
 	}
 	moved := &Store{DB: s.DB, Key: next}
-	if v, err := moved.Found("github_token", "abc123"); err != nil || v != "found-value" {
+	if v, err := moved.Found("github_token", "abc123", "test"); err != nil || v != "found-value" {
 		t.Errorf("after rotation Found = %q, %v", v, err)
+	}
+}
+
+func TestParseFound(t *testing.T) {
+	for ref, want := range map[string]string{"github_token:abc": "github_token abc",
+		"exposed_secret:slack_token:def": "slack_token def", "nohash": "", "a:b:c": ""} {
+		kind, hash, ok := ParseFound(ref)
+		got := ""
+		if ok {
+			got = kind + " " + hash
+		}
+		if got != want {
+			t.Errorf("ParseFound(%q) = %q, want %q", ref, got, want)
+		}
 	}
 }

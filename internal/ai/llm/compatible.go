@@ -82,6 +82,7 @@ const (
 
 func (m CompatibleModel) complete(ctx context.Context, history []Message, specs []ToolSpec,
 	format map[string]any) (Response, error) {
+	history = Masked(history)
 	var out Response
 	if m.Endpoint == "" || m.ModelName == "" {
 		return out, errors.New("model endpoint and name required")

@@ -26,11 +26,12 @@ import (
 // Description describes amass secrets.
 const Description = "Keep data source credentials encrypted in the Asset Database, shared by every engine on it"
 
-const usage = "usage: amass secrets <set|list|delete|rotate|new-key> [flags] [args]\n" +
+const usage = "usage: amass secrets <set|list|delete|rotate|found|new-key> [flags] [args]\n" +
 	"  set <source> <field>     store a credential read from standard input (fields: apikey, secret, username, password)\n" +
 	"  list                     list the stored credentials, never their values\n" +
 	"  delete <source> [field]  delete a source's credential, or all of them without a field\n" +
 	"  rotate                   re-encrypt every credential under a new key read from standard input\n" +
+	"  found <kind>:<hash>      print the value of a credential found exposed (an exposed_secret Identifier)\n" +
 	"  new-key                  print a new key for " + secrets.KeyEnv
 
 // OpenStore opens the secret store of the database the configuration in
@@ -105,6 +106,13 @@ func Run(in io.Reader, out, errout io.Writer, args []string, lookup func(string)
 		if len(rest) < 1 || len(rest) > 2 {
 			return errors.New("usage: amass secrets delete [flags] <source> [field]")
 		}
+	case "found":
+		if len(rest) != 1 {
+			return errors.New("usage: amass secrets found [flags] <kind>:<hash>, the ID of an exposed_secret Identifier")
+		}
+		if _, _, ok := secrets.ParseFound(rest[0]); !ok {
+			return fmt.Errorf("%q is not an exposed_secret Identifier's ID (<kind>:<hash>)", rest[0])
+		}
 	case "list", "rotate":
 		if len(rest) != 0 {
 			return fmt.Errorf("amass secrets %s takes no arguments", cmd)
@@ -151,6 +159,14 @@ func Run(in io.Reader, out, errout io.Writer, args []string, lookup func(string)
 		return remove(store, out, rest, actor)
 	case "rotate":
 		return rotate(store, in, out, actor)
+	case "found":
+		kind, hash, _ := secrets.ParseFound(rest[0])
+		value, err := store.Found(kind, hash, actor)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(out, value)
+		return err
 	}
 	return list(store, out, format)
 }

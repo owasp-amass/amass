@@ -148,6 +148,9 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	listed := ExposureClass{Name: ExposureReputation, Title: "Addresses on reputation feeds",
 		Rationale: "an address or netblock a blocklist names is often refused by mail servers and firewalls, and " +
 			"can mean a host was compromised, a range was hijacked or a Tor exit runs there"}
+	leaked := ExposureClass{Name: ExposureLeaked, Title: "Leaked credentials",
+		Rationale: "a key or token the footprint serves or publishes can be used by anyone who finds it; " +
+			"rotate it, then find out how it was published (amass secrets found <reference> shows the value)"}
 	note := func(c *ExposureClass, example string) {
 		c.Count++
 		if len(c.Examples) < exposureExamples {
@@ -239,13 +242,18 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		return out, err
 	}
 
+	if err := leakedCredentials(ctx, g, s.owned, func(example string) { note(&leaked, example) }); err != nil {
+		return out, err
+	}
+
 	out.lensBase = s.base()
 	if services.Truncated {
 		out.Truncated, out.Reason = true, services.Reason
 	}
 
 	out.Services = len(services.Services)
-	for _, c := range append(classes, unsupported, unusual, certs, publicBucket, listed) {
+	for _, c := range append(append([]ExposureClass{leaked}, classes...), unsupported, unusual, certs,
+		publicBucket, listed) {
 		if c.Count > 0 {
 			out.Classes = append(out.Classes, c)
 		}

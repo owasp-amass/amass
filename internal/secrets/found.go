@@ -16,6 +16,18 @@ import (
 // are never data source credentials.
 const foundPrefix = "found:"
 
+// ParseFound reads a found credential's reference: an exposed_secret
+// Identifier's ID ("<kind>:<hash>") or unique ID
+// ("exposed_secret:<kind>:<hash>").
+func ParseFound(ref string) (kind, hash string, ok bool) {
+	ref = strings.TrimPrefix(strings.TrimSpace(ref), "exposed_secret:")
+	kind, hash, ok = strings.Cut(ref, ":")
+	if !ok || kind == "" || hash == "" || strings.ContainsAny(hash, ":/") {
+		return "", "", false
+	}
+	return kind, hash, true
+}
+
 // FoundName is the secret's name for a found credential.
 func FoundName(kind, hash string) string { return foundPrefix + kind + ":" + hash }
 
@@ -31,8 +43,9 @@ func (s *Store) PutFound(kind, hash, value, actor string) error {
 	return s.put(FoundName(kind, hash), value, actor)
 }
 
-// Found opens the value of a found credential.
-func (s *Store) Found(kind, hash string) (string, error) {
+// Found opens the value of a found credential; actor names who asked, and
+// the read is recorded, without the value.
+func (s *Store) Found(kind, hash, actor string) (string, error) {
 	name := FoundName(kind, hash)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -50,6 +63,6 @@ func (s *Store) Found(kind, hash string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	s.audit("read", name, "")
+	s.audit("read", name, actor)
 	return string(plain), nil
 }

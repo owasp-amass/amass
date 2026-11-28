@@ -122,6 +122,7 @@ func (m OllamaModel) GenerateStructured(ctx context.Context, history []Message, 
 }
 
 func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSpec, format map[string]any) (Response, error) {
+	history = Masked(history)
 	var out Response
 	if m.ModelName == "" {
 		return out, errors.New("ollama model name required")

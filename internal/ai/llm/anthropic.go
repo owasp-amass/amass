@@ -50,6 +50,7 @@ func NewAnthropicModel(endpoint, model, key string, client *http.Client) Anthrop
 const DefaultAnthropicMaxTokens = 4096
 
 func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs []ToolSpec) (Response, error) {
+	history = Masked(history)
 	if m.Refused.Has("temperature") {
 		m.Temperature = nil
 	}
