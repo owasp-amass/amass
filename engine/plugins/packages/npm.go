@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
@@ -44,7 +45,7 @@ type npmSearch struct {
 // footprint: a maintainer's or the publisher's address is in it, or the
 // homepage is. A scoped package's namespace is its scope; an unscoped
 // package's is its publishing user.
-func parseNPMSearch(data []byte, f footprint) ([]pkg, error) {
+func parseNPMSearch(data []byte, f support.Footprint) ([]pkg, error) {
 	var s npmSearch
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, err
@@ -65,14 +66,14 @@ func parseNPMSearch(data []byte, f footprint) ([]pkg, error) {
 		}
 		for _, e := range emails {
 			e = strings.ToLower(strings.TrimSpace(e))
-			if d := f.address(e); d != "" && !slices.Contains(own, e) {
+			if d := f.Address(e); d != "" && !slices.Contains(own, e) {
 				own = append(own, e)
 				if domain == "" {
 					domain = d
 				}
 			}
 		}
-		urls, homeDomain := f.tiedURLs(pkgURL{n.Links.Homepage, RoleHomepage},
+		urls, homeDomain := tiedURLs(f, pkgURL{n.Links.Homepage, RoleHomepage},
 			pkgURL{n.Links.Repository, RoleRepository})
 		if domain == "" {
 			domain = homeDomain
@@ -104,7 +105,7 @@ func npmPurl(name string) string {
 
 // npm returns the npm packages a search for the domain finds that are tied to
 // the footprint, newest first.
-func (p *packagesPlugin) npm(e *et.Event, apex string, f footprint) []pkg {
+func (p *packagesPlugin) npm(e *et.Event, apex string, f support.Footprint) []pkg {
 	data := p.search(e, p.catalog.NPM.Search, url.Values{"text": {apex},
 		"size": {strconv.Itoa(min(p.catalog.MaxPackages, npmMaxPage))}})
 	pkgs, err := parseNPMSearch(data, f)

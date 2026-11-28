@@ -56,7 +56,7 @@ func (p *packagesPlugin) search(e *et.Event, base string, query url.Values) []by
 
 // parseNuGetSearch reads the packages of a NuGet search answer whose project
 // URL is in the footprint. A package's namespace is its first owner.
-func parseNuGetSearch(data []byte, f footprint) []pkg {
+func parseNuGetSearch(data []byte, f support.Footprint) []pkg {
 	var s struct {
 		Data []struct {
 			ID         string     `json:"id"`
@@ -70,7 +70,7 @@ func parseNuGetSearch(data []byte, f footprint) []pkg {
 
 	var out []pkg
 	for _, d := range s.Data {
-		urls, domain := f.tiedURLs(pkgURL{d.ProjectURL, RoleProject})
+		urls, domain := tiedURLs(f, pkgURL{d.ProjectURL, RoleProject})
 		if d.ID == "" || domain == "" {
 			continue
 		}
@@ -85,14 +85,15 @@ func parseNuGetSearch(data []byte, f footprint) []pkg {
 
 // nuget returns the NuGet packages a search for the domain finds that are
 // tied to the footprint.
-func (p *packagesPlugin) nuget(e *et.Event, apex string, f footprint) []pkg {
+func (p *packagesPlugin) nuget(e *et.Event, apex string, f support.Footprint) []pkg {
 	data := p.search(e, p.catalog.NuGet.Search, url.Values{"q": {apex}, "take": {strconv.Itoa(p.catalog.MaxPackages)}})
 	return newest(parseNuGetSearch(data, f), p.catalog.MaxPackages)
 }
 
 // parseCratesSearch reads the crates of a crates.io search answer whose
-// homepage or documentation is in the footprint. Crates have no namespace.
-func parseCratesSearch(data []byte, f footprint) []pkg {
+// homepage or documentation is in the footprint. A crate's namespace is its
+// first owner (crateOwner).
+func parseCratesSearch(data []byte, f support.Footprint) []pkg {
 	var s struct {
 		Crates []struct {
 			Name          string `json:"name"`
@@ -108,7 +109,7 @@ func parseCratesSearch(data []byte, f footprint) []pkg {
 
 	var out []pkg
 	for _, c := range s.Crates {
-		urls, domain := f.tiedURLs(pkgURL{c.Homepage, RoleHomepage}, pkgURL{c.Documentation, RoleProject})
+		urls, domain := tiedURLs(f, pkgURL{c.Homepage, RoleHomepage}, pkgURL{c.Documentation, RoleProject})
 		if c.Name == "" || domain == "" {
 			continue
 		}
@@ -122,16 +123,62 @@ func parseCratesSearch(data []byte, f footprint) []pkg {
 }
 
 // crates returns the crates a crates.io search for the domain finds that are
-// tied to the footprint, newest first.
-func (p *packagesPlugin) crates(e *et.Event, apex string, f footprint) []pkg {
+// tied to the footprint, newest first, with their owners.
+func (p *packagesPlugin) crates(e *et.Event, apex string, f support.Footprint) []pkg {
 	data := p.search(e, p.catalog.Crates.Search, url.Values{"q": {apex},
 		"per_page": {strconv.Itoa(min(p.catalog.MaxPackages, 100))}})
-	return newest(parseCratesSearch(data, f), p.catalog.MaxPackages)
+	return p.withOwners(e, newest(parseCratesSearch(data, f), p.catalog.MaxPackages), p.catalog.Crates.Owners,
+		crateOwner)
+}
+
+// crateOwner returns the login of the first owner a crates.io owners answer
+// lists, or "".
+func crateOwner(data []byte) string {
+	var o struct {
+		Users []struct {
+			Login string `json:"login"`
+		} `json:"users"`
+	}
+	if json.Unmarshal(data, &o) != nil || len(o.Users) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(o.Users[0].Login)
+}
+
+// gemOwner returns the handle of the first owner a RubyGems owners answer
+// lists, or "".
+func gemOwner(data []byte) string {
+	var o []struct {
+		Handle string `json:"handle"`
+	}
+	if json.Unmarshal(data, &o) != nil || len(o) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(o[0].Handle)
+}
+
+// withOwners sets the namespace of at most max_metadata packages to their
+// first owner, read from the owners list at tmpl ({name} the package's name)
+// by owner.
+func (p *packagesPlugin) withOwners(e *et.Event, pkgs []pkg, tmpl string, owner func([]byte) string) []pkg {
+	for i := range pkgs {
+		if i >= p.catalog.MaxMetadata {
+			break
+		}
+		u := strings.ReplaceAll(tmpl, "{name}", url.PathEscape(pkgs[i].name))
+		if data, err := support.FetchBody(e, u, p.rlimit, maxPackageBody); err == nil {
+			if login := owner(data); login != "" {
+				pkgs[i].namespace = "~" + login
+			}
+		}
+	}
+	return pkgs
 }
 
 // parseRubyGemsSearch reads the gems of a RubyGems search answer whose
-// homepage or documentation is in the footprint. Gems have no namespace.
-func parseRubyGemsSearch(data []byte, f footprint) []pkg {
+// homepage or documentation is in the footprint. A gem's namespace is its
+// first owner (gemOwner).
+func parseRubyGemsSearch(data []byte, f support.Footprint) []pkg {
 	var gems []struct {
 		Name          string `json:"name"`
 		Homepage      string `json:"homepage_uri"`
@@ -144,7 +191,7 @@ func parseRubyGemsSearch(data []byte, f footprint) []pkg {
 
 	var out []pkg
 	for _, g := range gems {
-		urls, domain := f.tiedURLs(pkgURL{g.Homepage, RoleHomepage}, pkgURL{g.Documentation, RoleProject})
+		urls, domain := tiedURLs(f, pkgURL{g.Homepage, RoleHomepage}, pkgURL{g.Documentation, RoleProject})
 		if g.Name == "" || domain == "" {
 			continue
 		}
@@ -158,10 +205,11 @@ func parseRubyGemsSearch(data []byte, f footprint) []pkg {
 }
 
 // rubygems returns the gems a RubyGems search for the domain finds that are
-// tied to the footprint.
-func (p *packagesPlugin) rubygems(e *et.Event, apex string, f footprint) []pkg {
+// tied to the footprint, with their owners.
+func (p *packagesPlugin) rubygems(e *et.Event, apex string, f support.Footprint) []pkg {
 	data := p.search(e, p.catalog.RubyGems.Search, url.Values{"query": {apex}})
-	return newest(parseRubyGemsSearch(data, f), p.catalog.MaxPackages)
+	return p.withOwners(e, newest(parseRubyGemsSearch(data, f), p.catalog.MaxPackages), p.catalog.RubyGems.Owners,
+		gemOwner)
 }
 
 // parsePackagistSearch returns the package names of a Packagist search
@@ -187,7 +235,7 @@ func parsePackagistSearch(data []byte) []string {
 // parsePackagistMetadata reads a package's Packagist metadata: it is kept
 // when its homepage, an author's homepage or an author's address is in the
 // footprint. Its namespace is its vendor.
-func parsePackagistMetadata(data []byte, name string, f footprint) (pkg, bool) {
+func parsePackagistMetadata(data []byte, name string, f support.Footprint) (pkg, bool) {
 	var m struct {
 		Packages map[string][]struct {
 			Homepage string `json:"homepage"`
@@ -212,14 +260,14 @@ func parsePackagistMetadata(data []byte, name string, f footprint) (pkg, bool) {
 	links := []pkgURL{{v.Homepage, RoleHomepage}}
 	for _, a := range v.Authors {
 		links = append(links, pkgURL{a.Homepage, RoleOrganization})
-		if d := f.address(a.Email); d != "" {
+		if d := f.Address(a.Email); d != "" {
 			k.maintainers = append(k.maintainers, strings.ToLower(strings.TrimSpace(a.Email)))
 			if k.domain == "" {
 				k.domain = d
 			}
 		}
 	}
-	urls, domain := f.tiedURLs(links...)
+	urls, domain := tiedURLs(f, links...)
 	if k.domain == "" {
 		k.domain = domain
 	}
@@ -236,7 +284,7 @@ func parsePackagistMetadata(data []byte, name string, f footprint) (pkg, bool) {
 // packagist returns the Packagist packages a search for the domain finds
 // that are tied to the footprint, reading at most max_metadata packages'
 // metadata, newest first.
-func (p *packagesPlugin) packagist(e *et.Event, apex string, f footprint) []pkg {
+func (p *packagesPlugin) packagist(e *et.Event, apex string, f support.Footprint) []pkg {
 	names := parsePackagistSearch(p.search(e, p.catalog.Packagist.Search, url.Values{"q": {apex},
 		"per_page": {strconv.Itoa(min(p.catalog.MaxPackages, 100))}}))
 

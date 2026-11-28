@@ -7,6 +7,8 @@ package packages
 import (
 	"reflect"
 	"testing"
+
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 )
 
 func TestMavenGroup(t *testing.T) {
@@ -66,7 +68,7 @@ func TestParseNPMSearch(t *testing.T) {
 		{"package":{"name":"unrelated","scope":"unscoped",
 			"links":{"homepage":"https://elsewhere.org"},
 			"publisher":{"username":"someone","email":"someone@elsewhere.org"}}}]}`)
-	got, err := parseNPMSearch(data, footprint{"example.com"})
+	got, err := parseNPMSearch(data, support.Footprint{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,19 +106,11 @@ func TestPackageURL(t *testing.T) {
 	}
 }
 
-// A footprint ties addresses and URLs in any of its domains, and names the
-// domain that tied them.
-func TestFootprint(t *testing.T) {
-	f := footprint{"example.com", "example-labs.org"}
-	if f.address("Dev@Mail.Example.com") != "example.com" || f.address("dev@notexample.com") != "" ||
-		f.address("example.com") != "" || f.address("ops@example-labs.org") != "example-labs.org" {
-		t.Error("address")
-	}
-	if f.host("git+https://www.example.com/x") != "example.com" || f.host("https://example.com.evil.org") != "" ||
-		f.host("https://docs.example-labs.org/") != "example-labs.org" {
-		t.Error("host")
-	}
-	urls, domain := f.tiedURLs(pkgURL{"", RoleHomepage}, pkgURL{"https://github.com/x/y", RoleRepository},
+// tiedURLs keeps the URLs given and names the footprint domain of the first
+// one in it.
+func TestTiedURLs(t *testing.T) {
+	f := support.Footprint{"example.com", "example-labs.org"}
+	urls, domain := tiedURLs(f, pkgURL{"", RoleHomepage}, pkgURL{"https://github.com/x/y", RoleRepository},
 		pkgURL{"https://docs.example-labs.org", RoleProject})
 	if len(urls) != 2 || domain != "example-labs.org" {
 		t.Errorf("tiedURLs = %v, %q", urls, domain)

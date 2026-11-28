@@ -5,13 +5,14 @@
 package packages
 
 import (
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"reflect"
 	"testing"
 )
 
 // fp is the footprint the registry tests search with: the domain searched
 // for and another domain in scope.
-var fp = footprint{"example.com", "example-labs.org"}
+var fp = support.Footprint{"example.com", "example-labs.org"}
 
 func TestParseNuGetSearch(t *testing.T) {
 	got := parseNuGetSearch([]byte(`{"data":[
@@ -65,5 +66,17 @@ func TestParsePackagist(t *testing.T) {
 		`"authors":[{"email":"a@x.example.net"}]}]}}`)
 	if _, ok := parsePackagistMetadata(unrelated, "x/y", fp); ok {
 		t.Error("a package tied to nothing in the footprint was kept")
+	}
+}
+
+func TestOwners(t *testing.T) {
+	if got := crateOwner([]byte(`{"users":[{"login":"example-dev","kind":"user"},{"login":"x"}]}`)); got != "example-dev" {
+		t.Errorf("crateOwner = %q", got)
+	}
+	if got := gemOwner([]byte(`[{"id":1,"handle":"exampledev"}]`)); got != "exampledev" {
+		t.Errorf("gemOwner = %q", got)
+	}
+	if crateOwner([]byte(`{"users":[]}`)) != "" || gemOwner([]byte(`<html>`)) != "" {
+		t.Error("an empty or unreadable owners answer gave an owner")
 	}
 }

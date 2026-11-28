@@ -148,7 +148,7 @@ func (p *packagesPlugin) check(e *et.Event) error {
 		return err
 	}
 
-	f := footprintOf(e, apex)
+	f := support.FootprintOf(e, apex)
 	pkgs := p.maven(e, apex)
 	pkgs = append(pkgs, p.npm(e, apex, f)...)
 	pkgs = append(pkgs, p.nuget(e, apex, f)...)
@@ -251,55 +251,9 @@ func packageURL(raw string) *oamurl.URL {
 	return support.RawURLToOAM(u.String())
 }
 
-// footprint is the registered domains a package's addresses and URLs must
-// be in to tie it to the organization: the domain searched for, and every
-// domain in the enumeration's scope.
-type footprint []string
-
-// footprintOf is the footprint of a search for apex in e's session.
-func footprintOf(e *et.Event, apex string) footprint {
-	f := footprint{apex}
-	for _, d := range e.Session.Scope().Domains() {
-		if d = strings.TrimSuffix(strings.ToLower(d), "."); d != "" && d != apex {
-			f = append(f, d)
-		}
-	}
-	return f
-}
-
-// host returns the footprint domain a URL's host is or is under, or "".
-func (f footprint) host(raw string) string {
-	u, err := url.Parse(strings.TrimPrefix(strings.TrimSpace(raw), "git+"))
-	if err != nil {
-		return ""
-	}
-	return f.domainOf(u.Hostname())
-}
-
-// address returns the footprint domain an email address is at, or "".
-func (f footprint) address(email string) string {
-	email = strings.TrimSpace(email)
-	at := strings.LastIndexByte(email, '@')
-	if at < 1 {
-		return ""
-	}
-	return f.domainOf(email[at+1:])
-}
-
-// domainOf returns the footprint domain host is or is under, or "".
-func (f footprint) domainOf(host string) string {
-	host = strings.TrimSuffix(strings.ToLower(host), ".")
-	for _, d := range f {
-		if host == d || strings.HasSuffix(host, "."+d) {
-			return d
-		}
-	}
-	return ""
-}
-
 // tiedURLs returns the URLs of us that are not empty, and the footprint
-// domain of the first one in it, or "".
-func (f footprint) tiedURLs(us ...pkgURL) ([]pkgURL, string) {
+// domain of the first one in f, or "".
+func tiedURLs(f support.Footprint, us ...pkgURL) ([]pkgURL, string) {
 	var out []pkgURL
 	domain := ""
 	for _, u := range us {
@@ -308,7 +262,7 @@ func (f footprint) tiedURLs(us ...pkgURL) ([]pkgURL, string) {
 		}
 		out = append(out, u)
 		if domain == "" {
-			domain = f.host(u.raw)
+			domain = f.Host(u.raw)
 		}
 	}
 	return out, domain
