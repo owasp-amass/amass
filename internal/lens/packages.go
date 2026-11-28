@@ -20,10 +20,11 @@ import (
 // that maintain an npm namespace), and to its packages, whose website
 // relations carry the role of each URL (url_role).
 const (
-	packageAccountType = "package_namespace"
-	packagePropURLRole = "url_role"
-	packageRoleOrg     = "organization"
-	packageMavenPrefix = "maven:"
+	packageAccountType  = "package_namespace"
+	codeHostAccountType = "code_host_organization"
+	packagePropURLRole  = "url_role"
+	packageRoleOrg      = "organization"
+	packageMavenPrefix  = "maven:"
 )
 
 // packagePivot finds the other registered domains the organization's
@@ -48,12 +49,25 @@ func packagePivot(ctx context.Context, g graph.Graph, ownApexes, ownDomains []st
 			}
 			seen[te.FromID] = true
 			ns, err := g.GetAsset(ctx, te.FromID)
-			if err != nil || graph.ContentString(ns, "account_type") != packageAccountType {
+			if err != nil {
+				continue
+			}
+			tiedW := graph.WitnessEdge{EdgeID: te.ID, Label: "namespace_domain", RelationType: te.Type,
+				FromID: te.FromID, FromType: "Account", ToID: te.ToID, ToType: "FQDN"}
+			switch graph.ContentString(ns, "account_type") {
+			case codeHostAccountType:
+				// a code-host organization tied to the domain names its own
+				// and its repositories' websites (engine plugin codehost)
+				for _, site := range publisherSites(ctx, g, ns.ID, ownDomains) {
+					add(site.apex, SigCodeHostWebsite, "named by the organization's code-host organization",
+						tiedW, witnessOf(site.edge, "Account", "URL"))
+				}
+				continue
+			case packageAccountType:
+			default:
 				continue
 			}
 			maven := strings.HasPrefix(graph.ContentString(ns, "unique_id"), packageMavenPrefix)
-			tiedW := graph.WitnessEdge{EdgeID: te.ID, Label: "namespace_domain", RelationType: te.Type,
-				FromID: te.FromID, FromType: "Account", ToID: te.ToID, ToType: "FQDN"}
 
 			products, err := g.Edges(ctx, ns.ID, "out", "package", time.Time{})
 			if err != nil {
@@ -72,21 +86,8 @@ func packagePivot(ctx context.Context, g graph.Graph, ownApexes, ownDomains []st
 func packageURLs(ctx context.Context, g graph.Graph, er graph.EdgeEvidenceReader, productID string, maven bool,
 	ownDomains []string, add func(string, string, string, ...graph.WitnessEdge),
 	witness ...graph.WitnessEdge) {
-	sites, err := g.Edges(ctx, productID, "out", "website", time.Time{})
-	if err != nil {
-		return
-	}
-	for _, se := range sites {
-		u, err := g.GetAsset(ctx, se.ToID)
-		if err != nil {
-			continue
-		}
-		host := strings.ToLower(graph.ContentString(u, "host"))
-		apex := graph.RegisteredDomain(host)
-		if apex == "" || withinAny(host, ownDomains) || !publisherHost(host) {
-			continue
-		}
-
+	for _, site := range publisherSites(ctx, g, productID, ownDomains) {
+		se, apex := site.edge, site.apex
 		role := ""
 		if er != nil {
 			if ev, err := er.EdgeEvidence(ctx, se.ID, 20); err == nil {
@@ -106,6 +107,34 @@ func packageURLs(ctx context.Context, g graph.Graph, er graph.EdgeEvidenceReader
 			FromID: se.FromID, FromType: "Product", ToID: se.ToID, ToType: "URL"}
 		add(apex, sig, label, append(append([]graph.WitnessEdge{}, witness...), siteW)...)
 	}
+}
+
+// namedSite is a website an asset names, with its registered domain.
+type namedSite struct {
+	edge graph.Relation
+	apex string
+}
+
+// publisherSites returns the websites the asset with id names (website)
+// that can be a publisher's own and are not in the organization's domains.
+func publisherSites(ctx context.Context, g graph.Graph, id string, ownDomains []string) []namedSite {
+	sites, err := g.Edges(ctx, id, "out", "website", time.Time{})
+	if err != nil {
+		return nil
+	}
+	var out []namedSite
+	for _, se := range sites {
+		u, err := g.GetAsset(ctx, se.ToID)
+		if err != nil {
+			continue
+		}
+		host := strings.ToLower(graph.ContentString(u, "host"))
+		apex := graph.RegisteredDomain(host)
+		if apex != "" && !withinAny(host, ownDomains) && publisherHost(host) {
+			out = append(out, namedSite{edge: se, apex: apex})
+		}
+	}
+	return out
 }
 
 // publisherHost reports whether a host a package names can be its publisher's

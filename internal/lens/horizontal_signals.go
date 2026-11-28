@@ -42,6 +42,10 @@ const (
 	// one any of the organization's packages names otherwise.
 	SigPackageOrganization = "package-publisher-site"
 	SigPackageWebsite      = "package-website"
+	// SigCodeHostWebsite is another apex a code-host organization tied to
+	// one of the organization's domains names as its or a repository's
+	// website.
+	SigCodeHostWebsite = "code-host-website"
 	// SigSharedAdsSeller is another apex whose ads.txt lists one of the
 	// organization's DIRECT ad seller accounts; SigAdsSellerDomain the domain
 	// an ad system's sellers.json gives for such an account.
@@ -97,6 +101,7 @@ const (
 	matchHorSPFExclusive  = "spf_authorizes_exclusive"
 	matchHorPackageOrg    = "package_publisher_site"
 	matchHorPackageSite   = "package_website"
+	matchHorCodeHostSite  = "code_host_website"
 	matchHorAdsSeller     = "shared_ads_seller"
 	matchHorAdsSellerDom  = "ads_seller_domain"
 	matchHorAdsOwnerDom   = "ads_owner_domain"
@@ -113,7 +118,7 @@ var horizontalMatchers = map[string]bool{matchHorRegistrantOrg: true, matchHorCe
 	matchHorNSOwn: true, matchHorMXOwn: true, matchHorSPFExclusive: true, matchHorPackageOrg: true,
 	matchHorPackageSite: true, matchHorAdsSeller: true, matchHorAdsSellerDom: true,
 	matchHorAdsOwnerDom: true, matchHorAdsOwnedBy: true, matchHorTenant: true, matchHorFederated: true,
-	matchHorSigningCert: true}
+	matchHorSigningCert: true, matchHorCodeHostSite: true}
 
 var loadHorizontalCatalog = sync.OnceValues(func() (signalCatalog, error) {
 	c, err := signalView(UseRelatedDomain)

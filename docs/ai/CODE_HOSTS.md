@@ -38,3 +38,10 @@ its public members.
 
 Commit emails are not read: they cost one request per repository, which the
 unauthenticated budget cannot cover.
+
+**Related domains:** the related-domains lens (`packagePivot`, which also reads
+package namespaces) follows each code-host organization tied to one of the
+organization's domains (`namespace_domain`) to the websites it names, and
+scores each other registered domain `code-host-website` (supporting). Shared
+platforms, project-hosting domains (`example.github.io`) and cloud hosting
+domains are skipped (`publisherSites`).

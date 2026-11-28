@@ -1688,6 +1688,29 @@
           ]
         }
       }
+    },
+    {
+      "id": "code-host-website",
+      "title": "Named by the organization's code-host organization",
+      "uses": {
+        "related-domain": {
+          "kind": "declaration",
+          "strength": "supporting",
+          "weight": 0.5,
+          "matcher": "code_host_website",
+          "finds": "Another registered domain that a GitHub or GitLab organization tied to one of the organization's domains names as its website or as a repository's homepage (Account --website--> URL).",
+          "rationale": "An organization's code-host profile and its repositories' homepages usually point at its own sites. It is supporting because a repository can point to a community site, a hosted documentation service or a partner's product page.",
+          "guards": [
+            "Only code-host organizations tied to one of the organization's domains count: named by its stored profile URLs, or guessed from the domain and naming a website or email in the footprint.",
+            "URLs on registries, documentation and code hosts, and cloud providers' hosting domains are never counted.",
+            "Never expands scope on its own."
+          ],
+          "counter_indications": [
+            "An open-source project the organization hosts can live on its own community domain that no organization owns.",
+            "A repository can be a fork-like copy whose homepage still names the original project's site."
+          ]
+        }
+      }
     }
   ]
 }

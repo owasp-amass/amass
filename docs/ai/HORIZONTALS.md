@@ -39,6 +39,7 @@ Horizontal correlation associates more registered (apex) domains with a target o
 | [Shared identity tenant](#shared-identity-tenant) | strong | identity | 0.75 |
 | [Federated sibling domain](#federated-sibling) | strong | identity | 0.75 |
 | [Shared federation signing certificate](#shared-signing-certificate) | strong | identity | 0.70 |
+| [Named by the organization's code-host organization](#code-host-website) | supporting | declaration | 0.50 |
 
 <a id="bug-bounty-scope"></a>
 ## Listed in the organization's bug-bounty program
@@ -604,3 +605,23 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 - An outsourced identity service can sign several customers' tokens with one certificate.
 
 **Hub limit:** 10, fixed.
+
+<a id="code-host-website"></a>
+## Named by the organization's code-host organization
+
+`code-host-website`: supporting declaration signal, weight 0.50 (confidence 50).
+
+**Finds:** Another registered domain that a GitHub or GitLab organization tied to one of the organization's domains names as its website or as a repository's homepage (Account --website--> URL).
+
+**Why it counts:** An organization's code-host profile and its repositories' homepages usually point at its own sites. It is supporting because a repository can point to a community site, a hosted documentation service or a partner's product page.
+
+**Guards:**
+
+- Only code-host organizations tied to one of the organization's domains count: named by its stored profile URLs, or guessed from the domain and naming a website or email in the footprint.
+- URLs on registries, documentation and code hosts, and cloud providers' hosting domains are never counted.
+- Never expands scope on its own.
+
+**Can still mislead when:**
+
+- An open-source project the organization hosts can live on its own community domain that no organization owns.
+- A repository can be a fork-like copy whose homepage still names the original project's site.
