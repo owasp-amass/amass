@@ -39,11 +39,20 @@ func init() {
 	}
 }
 
+// BuildAssetPipeline builds an asset type's pipeline with a stage for each
+// handler position, 1 to 50, that an event passes through in order.
 func (r *registry) BuildAssetPipeline(ctx context.Context, atype oam.AssetType) (*et.AssetPipeline, error) {
+	stages, bufsize := r.positionStages(atype, 1, 50)
+	return r.runPipeline(ctx, atype, stages, bufsize), nil
+}
+
+// positionStages returns a stage for each handler position from first to
+// last of an asset type, in order, and the buffer the stages need.
+func (r *registry) positionStages(atype oam.AssetType, first, last int) ([]pipeline.Stage, int) {
 	var stages []pipeline.Stage
 
 	bufsize := 1
-	for priority := 1; priority <= 50; priority++ {
+	for priority := first; priority <= last; priority++ {
 		handlers, found := r.handlers[atype][priority]
 		if !found || len(handlers) == 0 {
 			continue
@@ -62,6 +71,13 @@ func (r *registry) BuildAssetPipeline(ctx context.Context, atype oam.AssetType) 
 		}
 	}
 
+	return stages, bufsize
+}
+
+// runPipeline starts a pipeline of the stages, fed by its own queue, until
+// ctx ends.
+func (r *registry) runPipeline(ctx context.Context, atype oam.AssetType, stages []pipeline.Stage,
+	bufsize int) *et.AssetPipeline {
 	ap := &et.AssetPipeline{
 		Pipeline: pipeline.NewPipeline(stages...),
 		Queue:    et.NewPipelineQueue(),
@@ -73,7 +89,7 @@ func (r *registry) BuildAssetPipeline(ctx context.Context, atype oam.AssetType) 
 		}
 	}(ap)
 
-	return ap, nil
+	return ap
 }
 
 func makeSink() pipeline.SinkFunc {

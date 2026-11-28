@@ -40,6 +40,7 @@ type Session struct {
 	id      uuid.UUID
 	start   time.Time
 	ctx     context.Context
+	cancel  context.CancelFunc
 	cfg     *config.Config
 	db      repository.Repository
 	log     *slog.Logger
@@ -84,7 +85,7 @@ func NewSession(t testing.TB) *Session {
 	cfg.Dir = t.TempDir()
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	s = &Session{id: uuid.New(), start: time.Now(), ctx: ctx, cfg: cfg, db: db,
+	s = &Session{id: uuid.New(), start: time.Now(), ctx: ctx, cancel: cancel, cfg: cfg, db: db,
 		log: slog.New(slog.NewTextHandler(io.Discard, nil)), stats: &et.SessionStats{},
 		http:   &et.SessionHTTPClients{General: client, Probe: client, Crawl: client, Bulk: client},
 		ranger: cidranger.NewPCTrieRanger(), backlog: &Backlog{}, ps: pubsub.NewLogger()}
@@ -108,6 +109,9 @@ func (s *Session) DB() repository.Repository { return s.db }
 func (s *Session) Stats() *et.SessionStats { return s.stats }
 
 func (s *Session) Done() bool { return s.ctx.Err() != nil }
+
+// Kill ends the session, as the engine does when a user stops it.
+func (s *Session) Kill() { s.cancel() }
 
 // Scope is the session's scope, empty until the test adds to it.
 func (s *Session) Scope() et.Scope { return s.scope }

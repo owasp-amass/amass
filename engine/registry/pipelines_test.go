@@ -91,6 +91,14 @@ func (c *concurrency) handler(d time.Duration, err error) func(*et.Event) error 
 
 func runEvents(t *testing.T, r *registry, sess *plugintest.Session, n int) ([]*et.EventDataElement, time.Duration) {
 	t.Helper()
+	return runBuiltEvents(t, r.BuildAssetPipeline, sess, n)
+}
+
+// runBuiltEvents passes n address events through the IP address pipeline
+// that build makes, and returns them as they left it.
+func runBuiltEvents(t *testing.T, build func(context.Context, oam.AssetType) (*et.AssetPipeline, error),
+	sess *plugintest.Session, n int) ([]*et.EventDataElement, time.Duration) {
+	t.Helper()
 	// these tests are of the pipeline, not the expansion policy (gate_test.go),
 	// so the addresses, which stand nowhere in this session, reach every handler
 	sess.Config().DefaultTransformations = &config.Transformation{Reach: config.ReachAny}
@@ -98,7 +106,7 @@ func runEvents(t *testing.T, r *registry, sess *plugintest.Session, n int) ([]*e
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	ap, err := r.BuildAssetPipeline(ctx, oam.IPAddress)
+	ap, err := build(ctx, oam.IPAddress)
 	if err != nil {
 		t.Fatalf("the pipeline was not built: %v", err)
 	}

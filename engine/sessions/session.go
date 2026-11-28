@@ -467,8 +467,12 @@ func (s *Session) createTemporaryDir() (string, error) {
 func (s *Session) createSessionPipelines(reg et.Registry) error {
 	s.pipelines = make(et.SessionPipelines, len(oam.AssetList))
 
+	build := reg.BuildAssetPipeline
+	if s.cfg.PhasedDispatch() {
+		build = reg.BuildPhasedPipeline
+	}
 	for _, atype := range oam.AssetList {
-		p, err := reg.BuildAssetPipeline(s.Ctx(), atype)
+		p, err := build(s.Ctx(), atype)
 		if err != nil {
 			return err
 		}

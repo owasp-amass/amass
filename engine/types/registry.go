@@ -46,6 +46,9 @@ type Registry interface {
 	Log() *slog.Logger
 	RegisterHandler(h *Handler) error
 	BuildAssetPipeline(ctx context.Context, atype oam.AssetType) (*AssetPipeline, error)
+	// BuildPhasedPipeline builds the pipeline from phases of positions, where
+	// an event goes to every plugin of a phase at once (options.dispatch).
+	BuildPhasedPipeline(ctx context.Context, atype oam.AssetType) (*AssetPipeline, error)
 }
 
 type PipelineQueue struct {
