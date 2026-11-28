@@ -216,3 +216,29 @@ func TestPruneDead(t *testing.T) {
 		t.Error("an address with a PTR answer was removed")
 	}
 }
+
+// Once the session's other work is done, every swept address that showed
+// no hit is removed whatever its age, and is not swept again.
+func TestSweepBudgetFinish(t *testing.T) {
+	sess := plugintest.NewSession(t)
+	ctx := context.Background()
+	b := SweepBudgetFor(sess)
+
+	const cidr = "198.51.100.0/24"
+	b.Seed(cidr, 64)
+	nb := sess.Asset(t, &oamnet.Netblock{CIDR: netip.MustParsePrefix(cidr), Type: "IPv4"})
+	ip := sess.Asset(t, &oamnet.IPAddress{Address: netip.MustParseAddr("198.51.100.9"), Type: "IPv4"})
+	sess.Edge(t, nb, &oamgen.SimpleRelation{Name: "contains"}, ip)
+	b.RecordSwept(cidr, "198.51.100.9")
+
+	if !SessionDrained(sess.Stats()) {
+		t.Fatal("a session with no work is not drained")
+	}
+	b.finish(ctx, sess.DB(), time.Now().Add(-time.Minute), time.Now())
+	if _, err := sess.DB().FindEntityById(ctx, ip.ID); err == nil {
+		t.Error("the dead address swept just now was kept at the end of the session")
+	}
+	if !b.removed(cidr, "198.51.100.9") {
+		t.Error("the removed address may be swept again")
+	}
+}

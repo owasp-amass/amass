@@ -83,6 +83,9 @@ type SweepBudget struct {
 	mu   sync.Mutex
 	sess et.Session
 	nb   map[string]*nbBudget
+	// watching is set while the watcher that removes the dead addresses
+	// left at the end of the session runs (watch)
+	watching bool
 }
 
 // sweepBudgets holds every live session's budget, keyed by session ID string.
@@ -206,7 +209,7 @@ func (b *SweepBudget) recheck(ctx context.Context, db SweepDB, cidr string, sinc
 		if ctx.Err() != nil {
 			break
 		}
-		if pruneDead(ctx, db, addr, since, now) {
+		if pruneDead(ctx, db, addr, since, now.Add(-sweepPruneQuiet)) {
 			removed = append(removed, addr)
 		}
 	}
@@ -289,6 +292,7 @@ func BudgetedSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int
 
 	b := SweepBudgetFor(e.Session)
 	b.Seed(cidr, SweepSeedWindow)
+	b.watch()
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
 	b.recheck(ctx, e.Session.DB(), cidr, e.Session.StartTime(), time.Now())
 	cancel()

@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -89,5 +90,31 @@ func TestFindOrgUnitsRejectsNoHierarchyAndAlreadyLinked(t *testing.T) {
 		case c.FromID == "globex" || c.ToID == "globex" || c.FromID == "globexlabs" || c.ToID == "globexlabs":
 			t.Errorf("an already-linked org_unit pair was re-proposed: %+v", c)
 		}
+	}
+}
+
+// A current document stating one organization is a unit of another stands
+// in for a name hierarchy: with a shared address, the pair is proposed.
+func TestFindOrgUnitsFromDocuments(t *testing.T) {
+	g := valueDocGraph{graphtest.VendorGraph{PlannedGraph: graphtest.PlannedGraph{FakeGraph: orgUnitsGraph()}}}
+	g.EvidenceByID = map[string][]graph.Evidence{}
+	g.Assets["f-report"] = graph.Asset{ID: "f-report", Type: "File", Key: "https://www.owasp.org/report.pdf",
+		Content: map[string]any{"url": "https://www.owasp.org/report.pdf"}}
+	g.EvidenceByID["f-report"] = []graph.Evidence{graphtest.SimpleProp(propDocStatement,
+		`{"kind":"relation","subject":"Beta Inc","subject_type":"Organization","predicate":"unit_of",`+
+			`"object":"Alpha  Corp","object_type":"Organization","sha256":"v1"}`)}
+
+	r, err := FindOrgUnits(context.Background(), g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, c := range r.Candidates {
+		if c.FromID == "alpha" && c.ToID == "beta" {
+			found = len(c.Signals) == 2 && strings.Contains(c.Signals[0], "a document states")
+		}
+	}
+	if !found || len(r.Candidates) != 2 {
+		t.Errorf("candidates %+v, want sys->campus and alpha->beta on the document", r.Candidates)
 	}
 }

@@ -374,6 +374,19 @@ and proposes, through the relation framework:
   edge when accepted.
 - **Recording:** `amass db doc-relations` and `DocumentCompanion.Finish`
   record them. They are review-gated: nothing applies them automatically.
+- **One proposal per relationship:** `Journal.SubmitRelations` keys proposals
+  by their ends and label, whatever the correlator (`relationEdgeKey`). When
+  another correlator proposed the same relationship first, a pending
+  proposal takes this one's signals, evidence and higher confidence as a
+  `relation_support` record (`RelationSupport.fold`, listed as "also proposed
+  by"), and a decided one is left as decided. The proposal's witness stays
+  its own.
+- **Org-unit correlator:** `FindOrgUnits` reads current `unit_of` findings
+  (`orgUnitDocuments`). A pair that shares an address or identifier, where a
+  document names one a unit of the other, is proposed as `org_unit` even
+  without a name hierarchy (`orgUnitDocs.hierarchy`). With the rule above, a
+  document's `doc_relation` proposal and the correlator's are one
+  proposal.
 
 ### Classifier signals
 

@@ -7,6 +7,7 @@ package lens
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -122,6 +123,13 @@ func FindOrgUnits(ctx context.Context, g graph.Graph) (RelationReport, error) {
 		}
 	}
 
+	// what the organizations' documents say is a unit of what stands in for
+	// a name hierarchy (document_states_unit)
+	docs, err := orgUnitDocuments(ctx, g)
+	if err != nil {
+		return report, err
+	}
+
 	seen := map[[2]string]bool{}
 	keys := make([]string, 0, len(byKey))
 	for k := range byKey {
@@ -146,7 +154,7 @@ func FindOrgUnits(ctx context.Context, g graph.Graph) (RelationReport, error) {
 				}
 				seen[pair] = true
 
-				if c, ok := orgUnitCandidate(a, b); ok {
+				if c, ok := orgUnitCandidate(a, b, docs); ok {
 					report.Candidates = append(report.Candidates, c)
 				}
 			}
@@ -164,13 +172,17 @@ func FindOrgUnits(ctx context.Context, g graph.Graph) (RelationReport, error) {
 }
 
 // orgUnitCandidate returns the org_unit proposal a pair warrants, or ok=false
-// when they are already linked or show no parent/unit name hierarchy.
-func orgUnitCandidate(a, b *orgUnitProfile) (RelationCandidate, bool) {
+// when they are already linked or show no parent/unit hierarchy, by name or
+// by what their documents state.
+func orgUnitCandidate(a, b *orgUnitProfile, docs orgUnitDocs) (RelationCandidate, bool) {
 	if a.id == b.id || a.linked[b.id] || b.linked[a.id] {
 		return RelationCandidate{}, false
 	}
 
 	parent, unit, nameSig, ok := orgUnitHierarchy(a, b)
+	if !ok {
+		parent, unit, nameSig, ok = docs.hierarchy(a, b)
+	}
 	if !ok {
 		return RelationCandidate{}, false
 	}
@@ -348,4 +360,41 @@ func orgUnitStrongIDType(idtype string) bool {
 		return true
 	}
 	return false
+}
+
+// orgUnitDocs maps a unit's and a parent's folded names to the statement
+// of a current document that the one is a unit of the other.
+type orgUnitDocs map[[2]string]string
+
+// orgUnitDocuments reads what current documents state is a unit of what
+// (unit_of findings), by folded names.
+func orgUnitDocuments(ctx context.Context, g graph.Graph) (orgUnitDocs, error) {
+	findings, err := documentFindings(ctx, g, []string{"unit_of"})
+	if err != nil {
+		return nil, err
+	}
+
+	docs := orgUnitDocs{}
+	for _, f := range findings {
+		if f.st.SubjectType != "Organization" || f.st.ObjectType != "Organization" {
+			continue
+		}
+		k := [2]string{docFold(f.st.Subject), docFold(f.st.Object)}
+		if _, ok := docs[k]; !ok && k[0] != k[1] {
+			docs[k] = fmt.Sprintf("a document states %q unit_of %q, in %s", f.st.Subject, f.st.Object, f.url)
+		}
+	}
+	return docs, nil
+}
+
+// hierarchy reports which of two organizations a document names as the
+// other's parent.
+func (docs orgUnitDocs) hierarchy(a, b *orgUnitProfile) (parent, unit *orgUnitProfile, sig string, ok bool) {
+	if s, yes := docs[[2]string{docFold(b.name), docFold(a.name)}]; yes {
+		return a, b, s, true
+	}
+	if s, yes := docs[[2]string{docFold(a.name), docFold(b.name)}]; yes {
+		return b, a, s, true
+	}
+	return nil, nil, "", false
 }

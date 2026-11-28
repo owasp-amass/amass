@@ -54,6 +54,10 @@ type RelationProposal struct {
 	NewTo     *lens.NewAsset `json:"new_to,omitempty"`
 	Status    string         `json:"status"`
 	CreatedAt time.Time      `json:"created_at"`
+	// AlsoBy are the other correlators that concluded the same relationship;
+	// their signals and evidence are added to this proposal
+	// (RelationSupport) instead of a second proposal being raised.
+	AlsoBy []string `json:"also_by,omitempty"`
 }
 
 // RelationOutcome records a reviewer's decision on a relation proposal, and the
@@ -146,9 +150,16 @@ func (j *Journal) relationProposalIDs() (map[string]bool, error) {
 }
 
 // SubmitRelations records the relation proposals not already in the journal and
-// returns the ones it added.
+// returns the ones it added. A relationship another correlator has proposed
+// already is not proposed twice: while that proposal is pending, this one's
+// signals and evidence are added to it (RelationSupport); once it is decided,
+// the decision stands.
 func (j *Journal) SubmitRelations(proposals []RelationProposal) ([]RelationProposal, error) {
 	seen, err := j.relationProposalIDs()
+	if err != nil {
+		return nil, err
+	}
+	edges, err := j.relationEdges()
 	if err != nil {
 		return nil, err
 	}
@@ -161,10 +172,17 @@ func (j *Journal) SubmitRelations(proposals []RelationProposal) ([]RelationPropo
 		if seen[p.ID] {
 			continue
 		}
+		if done, err := edges.support(j, p); err != nil || done {
+			if err != nil {
+				return added, err
+			}
+			continue
+		}
 		if err := j.append("relation_proposal", p); err != nil {
 			return added, err
 		}
 		seen[p.ID] = true
+		edges.add(p, ProposalPending)
 		added = append(added, p)
 	}
 
@@ -193,6 +211,7 @@ func (j *Journal) RecordRelation(o RelationOutcome) error {
 func (j *Journal) relationRecords(kind string) (map[string]RelationProposal, map[string]string, error) {
 	proposals := map[string]RelationProposal{}
 	status := map[string]string{}
+	var supports []RelationSupport
 	hist, err := j.History()
 	if errors.Is(err, os.ErrNotExist) {
 		return proposals, status, nil
@@ -226,6 +245,16 @@ func (j *Journal) relationRecords(kind string) (map[string]RelationProposal, map
 					status[o.ProposalID] = o.Status
 				}
 			}
+		case "relation_support":
+			var s RelationSupport
+			if json.Unmarshal(head.Data, &s) == nil && s.ProposalID != "" {
+				supports = append(supports, s)
+			}
+		}
+	}
+	for _, s := range supports {
+		if p, ok := proposals[s.ProposalID]; ok {
+			proposals[s.ProposalID] = s.fold(p)
 		}
 	}
 
@@ -360,6 +389,9 @@ func FormatRelationEntries(entries []RelationEntry) string {
 			p.To, p.Confidence)
 		if len(p.Signals) > 0 {
 			fmt.Fprintf(&b, "  signals: %s\n", strings.Join(p.Signals, "; "))
+		}
+		if len(p.AlsoBy) > 0 {
+			fmt.Fprintf(&b, "  also proposed by: %s\n", strings.Join(p.AlsoBy, ", "))
 		}
 		for _, ev := range p.EvidenceIDs {
 			fmt.Fprintf(&b, "    %s\n", ev)

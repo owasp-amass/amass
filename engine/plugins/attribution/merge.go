@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	orgsupport "github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	"github.com/owasp-amass/amass/v5/internal/coord"
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -147,12 +148,7 @@ func (t *tracker) drained() bool {
 		return false
 	}
 
-	stats := t.sess.Stats()
-	stats.RLock()
-	total, completed := stats.WorkItemsTotal, stats.WorkItemsCompleted
-	stats.RUnlock()
-
-	return total-completed <= stats.Background()
+	return support.SessionDrained(t.sess.Stats())
 }
 
 // mergeDuplicates records the duplicate organizations as merge proposals

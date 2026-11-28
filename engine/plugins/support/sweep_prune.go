@@ -13,18 +13,18 @@ import (
 )
 
 // sweepPruneQuiet is how long nothing may have been recorded on a dead
-// address before it is removed.
+// address before it is removed while the session runs.
 const sweepPruneQuiet = 5 * time.Minute
 
 // pruneDead removes a dead swept address, and its reverse DNS alias, when
 // the session that started at since stored them and nothing else was
 // recorded about them: the only relation to the address is its netblock's
-// contains, the only one from it is the ptr_record to an alias no answer
-// was stored for, and no property was added to it in the last
-// sweepPruneQuiet. Every asset is stored before it is investigated; this
+// contains, the only ones from it are the ptr_record to an alias no answer
+// was stored for and a geolocation, and no property was added to it since
+// quietSince. Every asset is stored before it is investigated; this
 // takes back the ones the sweep stored that turned out to be nothing. It
 // reports whether the address was removed.
-func pruneDead(ctx context.Context, db SweepDB, addr string, since, now time.Time) bool {
+func pruneDead(ctx context.Context, db SweepDB, addr string, since, quietSince time.Time) bool {
 	ents, err := db.FindEntitiesByContent(ctx, oam.IPAddress, time.Time{}, 1, dbt.ContentFilters{"address": addr})
 	if err != nil || len(ents) == 0 {
 		return false
@@ -44,6 +44,10 @@ func pruneDead(ctx context.Context, db SweepDB, addr string, since, now time.Tim
 	var aliases []string
 	out, _ := db.OutgoingEdges(ctx, ip, time.Time{})
 	for _, e := range out {
+		// where a geolocation source places any address says nothing of it
+		if e.Relation != nil && e.Relation.Label() == "geolocation" {
+			continue
+		}
 		if e.Relation == nil || e.Relation.Label() != "ptr_record" || e.ToEntity == nil {
 			return false
 		}
@@ -53,7 +57,7 @@ func pruneDead(ctx context.Context, db SweepDB, addr string, since, now time.Tim
 		aliases = append(aliases, e.ToEntity.ID)
 	}
 
-	if tags, _ := db.FindEntityTags(ctx, ip, now.Add(-sweepPruneQuiet)); len(tags) > 0 {
+	if tags, _ := db.FindEntityTags(ctx, ip, quietSince); len(tags) > 0 {
 		return false
 	}
 
