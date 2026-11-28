@@ -80,6 +80,8 @@ The same evidence is also ownership evidence: see [Listed in the organization's 
 - A hosting or email provider's SPF macro domain is included by all of its customers.
 - A domain can keep an include for a service it no longer uses.
 
+**Hub limit:** 25, fixed.
+
 The same evidence is also ownership evidence: see [Email authentication delegated to the organization](SIGNALS.md#spf-authorizes).
 
 <a id="dns-provider-delegation-set"></a>
@@ -123,6 +125,8 @@ The same evidence is also ownership evidence: see [Same DNS provider delegation 
 - A marketing agency can embed one analytics property across several unrelated clients.
 - A template or theme can ship a placeholder property identifier that several unrelated sites keep.
 
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 The same evidence is also ownership evidence: see [Shared analytics or tag identifier](SIGNALS.md#shared-analytics-id).
 
 <a id="shared-favicon"></a>
@@ -145,6 +149,8 @@ The same evidence is also ownership evidence: see [Shared analytics or tag ident
 - A framework, CMS theme or hosting panel ships a default favicon that unrelated sites keep.
 - A hosting provider can serve one favicon across many parked or placeholder sites.
 
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 The same evidence is also ownership evidence: see [Shared favicon](SIGNALS.md#shared-favicon).
 
 <a id="shared-page-content"></a>
@@ -166,6 +172,8 @@ The same evidence is also ownership evidence: see [Shared favicon](SIGNALS.md#sh
 
 - Parking services, registrars and hosting providers serve one placeholder body across many unrelated domains.
 - A CDN error or maintenance page can be identical across unrelated sites.
+
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 The same evidence is also ownership evidence: see [Shared page content](SIGNALS.md#shared-page-content).
 
@@ -208,6 +216,8 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 - A hosting or SaaS provider can name itself as the subject organization on certificates it issues for customer domains.
 - A domain-validated certificate carries no verified organization and does not produce this signal.
 
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="shared-name-server"></a>
 ## Shared name server
 
@@ -227,6 +237,8 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 
 - Managed DNS and small hosting providers run name servers shared by many unrelated customers.
 - A registrar's default name servers are shared across its whole customer base.
+
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 <a id="allowed-origin"></a>
 ## Allowed cross-origin by the organization's site
@@ -267,6 +279,8 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 
 - A sales house or agency can list its own account as DIRECT on the sites it manages.
 - A copied ads.txt can keep a former owner's accounts.
+
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 <a id="ads-seller-domain"></a>
 ## Domain an ad system gives for the organization's seller account
@@ -405,6 +419,8 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 
 - An agency or contractor administers unrelated clients' zones from one mailbox.
 
+**Hub limit:** 25 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="name-server-own-domain"></a>
 ## Name server run by the organization
 
@@ -483,6 +499,8 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 - Managed mail providers and SaaS email gateways are the MX for many unrelated customers.
 - A parent company can run one mail system for legally separate subsidiaries.
 
+**Hub limit:** 25, fixed.
+
 <a id="dmarc-reports-to"></a>
 ## DMARC reports to the organization
 
@@ -502,6 +520,8 @@ The same evidence is also ownership evidence: see [Shared page content](SIGNALS.
 
 - A managed DMARC service receives many unrelated customers' reports at its own domain.
 - An external reporting destination requires the destination to authorize it, which this signal does not yet verify.
+
+**Hub limit:** 25, fixed.
 
 <a id="official-website"></a>
 ## Official website

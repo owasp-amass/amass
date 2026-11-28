@@ -93,7 +93,8 @@ func (g *gapSearch) fingerprintMatches(def OwnershipSignal, src, ident graph.Ass
 		return nil
 	}
 
-	hub := fingerprintHub(g.w.ctx, g.w.graph, graph.ContentString(ident, "id_type"), GapMaxShared, &g.hubs)
+	idType := graph.ContentString(ident, "id_type")
+	hub := g.value(def, fingerprintSource(idType), "fingerprint "+idType)
 	edges, more, err := graph.ReadEdges(g.w.ctx, g.w.graph, ident.ID, "in", "fingerprint",
 		g.searchBound(hub.rule.Limit, "Service", "URL"), g.read)
 	if err != nil {

@@ -102,7 +102,7 @@ func (g *gapSearch) emailDomainSignals(rec graph.Asset) error {
 		contacts = g.outsideAssets(contacts)
 		// A mail domain carried by many other registrants is a provider or a
 		// free service, not one owner's.
-		if g.fixed("registrant mail domain").over(dom, len(contacts), false) {
+		if g.fixed(def, "registrant mail domain").over(dom, len(contacts), false) {
 			continue
 		}
 		for _, cr := range contacts {
@@ -152,15 +152,16 @@ func (g *gapSearch) dkimSignals(apex graph.Asset) error {
 				continue
 			}
 
+			hub := g.fixed(def, "DKIM public key")
 			others, more, err := g.values.FindByTagValue(g.w.ctx, "FQDN", graph.DNSRecordProperty, key, true,
-				g.searchBound(GapMaxShared, "FQDN"))
+				g.searchBound(hub.rule.Limit, "FQDN"))
 			if err != nil {
 				return err
 			}
 			others = g.outsideAssets(others)
 			// A key published by many domains is a provider's shared or
 			// CNAME-delegated key, not one owner's.
-			if g.fixed("DKIM public key").over(graph.AssetLabel(s.other)+" DKIM key", len(others), more) {
+			if hub.over(graph.AssetLabel(s.other)+" DKIM key", len(others), more) {
 				continue
 			}
 
@@ -332,7 +333,7 @@ func (g *gapSearch) addSecurityTxtCandidates(apex graph.Asset, contacts []graph.
 			}
 
 			hosts = append(hosts, host)
-			if g.fixed("security.txt files").over(detail, len(hosts), false) {
+			if g.fixed(def, "security.txt files").over(detail, len(hosts), false) {
 				return
 			}
 		}

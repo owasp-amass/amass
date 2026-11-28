@@ -1,0 +1,8 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How the Asset Database's own data decides when a shared value (a phone number, a certificate, a name server, a fingerprint) is held by too many assets to be evidence about any one of them. For a kind of value, the histogram of how many holders each value has gives the median and spread of those counts in log scale; a value whose count's modified z-score is above k is a hub (Iglewicz and Hoaglin's usual cut is 3.5). A kind needs at least min_sample values before its counts decide; with fewer, the signal's fixed limit in signals.json applies. A derived limit is never below floor. A computed threshold is used for refresh_hours before it is computed again. options.hubs.derive set to false (or the lens -fixed-hubs flag) uses the fixed limits in signals.json throughout.",
+  "k": 3.5,
+  "min_sample": 1000,
+  "floor": 5,
+  "refresh_hours": 6
+}

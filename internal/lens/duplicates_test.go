@@ -217,7 +217,7 @@ func TestDuplicateCatalog(t *testing.T) {
 
 // docs/ai/DUPLICATES.md is generated from the duplicate catalog.
 // Regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run
-// TestDuplicatesDocIsCurrent ./internal/ai/.
+// TestDuplicatesDocIsCurrent ./internal/lens/.
 func TestDuplicatesDocIsCurrent(t *testing.T) {
 	path := filepath.Join("..", "..", "docs", "ai", "DUPLICATES.md")
 	want := DuplicateSignalsMarkdown()
@@ -233,7 +233,7 @@ func TestDuplicatesDocIsCurrent(t *testing.T) {
 	}
 	if string(got) != want {
 		t.Error("docs/ai/DUPLICATES.md is out of date; regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run " +
-			"TestDuplicatesDocIsCurrent ./internal/ai/")
+			"TestDuplicatesDocIsCurrent ./internal/lens/")
 	}
 }
 

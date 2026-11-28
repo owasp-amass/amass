@@ -38,8 +38,9 @@ func fingerprintSignalFor(idType string) (signalID, label string, ok bool) {
 // fingerprint edge to an Identifier reads the other services carrying that same
 // Identifier and takes the registered domain of each one's FQDN host. A default
 // or signal-free value (fingerprint_defaults.json) is skipped, and an Identifier
-// carried by more distinct apex domains than fpMaxApexes is treated as a shared
-// default or CDN value and skipped, not scored, and recorded.
+// carried by more distinct apex domains than the signal's hub limit
+// (signals.json) is treated as a shared default or CDN value and skipped, not
+// scored, and recorded.
 func sharedFingerprintPivot(ctx context.Context, g graph.Graph, w *lensWalker, org graph.Asset, skips *hubSkips,
 	add func(string, string, string, ...graph.WitnessEdge)) {
 	owned, order, err := w.controlledFootprint([]graph.Asset{org})
@@ -81,7 +82,8 @@ func sharedFingerprintPivot(ctx context.Context, g graph.Graph, w *lensWalker, o
 				ownW := graph.WitnessEdge{EdgeID: fs.edge.ID, Label: "fingerprint", RelationType: fs.edge.Type,
 					FromID: svc.ID, FromType: "Service", ToID: ident.ID, ToType: "Identifier", To: idType + ":" + value}
 				fingerprintSiblings(ctx, g, svc.ID, ident.ID, signalID, label, ownW,
-					fingerprintHub(ctx, g, idType, fpMaxApexes, skips), add)
+					signalHub(ctx, g, relatedHub(signalID), fingerprintSource(idType), "fingerprint "+idType, skips),
+					add)
 			}
 		}
 	}

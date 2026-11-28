@@ -71,6 +71,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 - Resellers and agencies sometimes register assets for clients with their own details.
 - A university or holding company address can be shared by legally separate tenants or affiliates.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="shared-registrant-email-domain"></a>
 ## Shared registrant email domain
 
@@ -91,6 +93,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 - A parent company or shared-services provider may register domains for several affiliates from one mailbox domain.
 - Resellers and agencies sometimes register client domains using their own email domain.
 
+**Hub limit:** 50, fixed.
+
 <a id="dkim-key-reuse"></a>
 ## DKIM signing key reuse
 
@@ -110,6 +114,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A mail provider or marketing platform may publish one DKIM key, through CNAME delegation, across many customers' domains (the 50-domain limit catches large ones).
 
+**Hub limit:** 50, fixed.
+
 <a id="txt-verification-token"></a>
 ## Shared DNS verification token
 
@@ -128,6 +134,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A managed-service provider or agency may verify client domains under its own account.
 - Tokens copied from documentation or templates appear on unrelated domains (the 50-domain limit catches the common ones).
+
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 **Verification prefixes:** `google-site-verification=`, `ms=`, `facebook-domain-verification=`, `atlassian-domain-verification=`, `apple-domain-verification=`, `adobe-idp-site-verification=`, `docusign=`, `zoom-domain-verification=`, `slack-domain-verification=`, `dropbox-domain-verification=`, `stripe-verification=`, `hubspot-developer-verification=`, `onetrust-domain-verification=`, `cisco-ci-domain-verification=`, `globalsign-domain-verification=`, `_globalsign-domain-verification=`
 
@@ -149,6 +157,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A hosting or CDN provider that reuses one key across its customers' certificates (the 50-certificate limit catches large providers).
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="certificate-public-key-reuse"></a>
 ## Certificate public key reuse
 
@@ -166,6 +176,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 **Can still mislead when:**
 
 - A hosting or CDN provider that reuses one key pair across its customers' certificates (the 50-certificate limit catches large providers).
+
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 <a id="private-ca-issuance"></a>
 ## Issued by the organization's private CA
@@ -187,6 +199,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 - A managed PKI provider can operate one private CA for several customers.
 - A public root missing from the authorities in certificates.json would wrongly count until it is added.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="security-txt-reference"></a>
 ## security.txt points to the organization
 
@@ -206,6 +220,8 @@ Amass proposes that an organization owns an asset it has not been attributed to 
 
 - A managed security provider or bug-bounty platform may publish one organization's contact across several clients' files.
 - A template copied between unrelated sites can carry another organization's canonical URL.
+
+**Hub limit:** 50, fixed.
 
 <a id="bug-bounty-scope"></a>
 ## Listed in the organization's bug-bounty program
@@ -323,6 +339,8 @@ The same evidence also ties other domains to the organization: see [Email authen
 
 - CDN and hosting certificates that cover several customers.
 
+**Hub limit:** 10 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="web-redirect-to-organization"></a>
 ## Web redirect to the organization
 
@@ -361,6 +379,8 @@ The same evidence also ties other domains to the organization: see [Email authen
 - Hosting providers set PTR names a customer asks for on addresses the provider still controls.
 - Stale PTR records outlive a move to new infrastructure.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="dns-provider-delegation-set"></a>
 ## Same DNS provider delegation set
 
@@ -380,6 +400,8 @@ The same evidence also ties other domains to the organization: see [Email authen
 **Can still mislead when:**
 
 - A reseller, agency or managed-service provider can host many clients' zones in its own account, so the domains share an operator rather than an owner.
+
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 The same evidence also ties other domains to the organization: see [Same DNS provider delegation set](HORIZONTALS.md#dns-provider-delegation-set).
 
@@ -403,6 +425,8 @@ The same evidence also ties other domains to the organization: see [Same DNS pro
 
 - Providers that give every customer the same name servers make unrelated domains share a set; the 50-registration limit catches large ones.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="tls-fingerprint-match"></a>
 ## Same TLS server fingerprint
 
@@ -421,6 +445,8 @@ The same evidence also ties other domains to the organization: see [Same DNS pro
 **Can still mislead when:**
 
 - Default configurations of popular servers, load balancers and CDNs produce the same fingerprint for unrelated sites.
+
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 <a id="name-token"></a>
 ## Organization name in the asset's name
@@ -500,6 +526,8 @@ The same evidence also ties other domains to the organization: see [Same DNS pro
 - A cloned or phishing copy of the organization's site carries the same identifiers; this is why it is never strong evidence.
 - Agencies sometimes run one tag-manager container across several clients.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 The same evidence also ties other domains to the organization: see [Shared analytics or tag identifier](HORIZONTALS.md#shared-analytics-id).
 
 <a id="shared-favicon"></a>
@@ -520,6 +548,8 @@ The same evidence also ties other domains to the organization: see [Shared analy
 
 - A cloned or phishing copy of the organization's site carries the same favicon; this is why it is never strong evidence.
 - Resellers and partners display the organization's logo as their icon.
+
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 The same evidence also ties other domains to the organization: see [Shared favicon](HORIZONTALS.md#shared-favicon).
 
@@ -543,6 +573,8 @@ The same evidence also ties other domains to the organization: see [Shared favic
 - A cloned or phishing copy of the organization's site carries the same page; this is why it is never strong evidence.
 - Parking, maintenance and hosting-provider pages are identical across their customers.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 The same evidence also ties other domains to the organization: see [Shared page content](HORIZONTALS.md#shared-page-content).
 
 <a id="shared-page-title"></a>
@@ -565,6 +597,8 @@ The same evidence also ties other domains to the organization: see [Shared page 
 - A cloned or phishing copy of the organization's site carries the same title; this is why it is never strong evidence.
 - Products and templates give unrelated sites the same title.
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="ssh-host-key-reuse"></a>
 ## SSH host key reuse
 
@@ -584,6 +618,8 @@ The same evidence also ties other domains to the organization: see [Shared page 
 
 - Vendor appliances and published VM images that share one default key across customers (the 50-service limit catches widely deployed ones).
 
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
+
 <a id="caa-account-binding"></a>
 ## Same certificate account in CAA
 
@@ -601,6 +637,8 @@ The same evidence also ties other domains to the organization: see [Shared page 
 **Can still mislead when:**
 
 - A managed hosting or certificate service may bind all its customers' domains to its own account.
+
+**Hub limit:** 50, fixed.
 
 <a id="shared-private-addresses"></a>
 ## Same internal addresses in public DNS
@@ -620,6 +658,8 @@ The same evidence also ties other domains to the organization: see [Shared page 
 **Can still mislead when:**
 
 - Two organizations that merged, or that share an outsourced IT provider's internal DNS, can publish the same internal addresses.
+
+**Hub limit:** 50 until the database holds enough values of this kind to derive its own (internal/semantics/hubs.json; `options.hubs.derive`).
 
 <a id="mark-certificate-identifier"></a>
 ## Mark certificate for the organization's LEI
@@ -657,6 +697,8 @@ The same evidence also ties other domains to the organization: see [Shared page 
 
 - A managed security provider or bug-bounty platform may publish its own key in several clients' files.
 
+**Hub limit:** 50, fixed.
+
 <a id="page-names-organization"></a>
 ## Web page names the organization
 
@@ -677,6 +719,8 @@ The same evidence also ties other domains to the organization: see [Shared page 
 
 - A news site, directory or partner page can carry markup describing the organization.
 - A site copied from a template can keep another organization's copyright line.
+
+**Hub limit:** 50, fixed.
 
 <a id="page-references-bucket"></a>
 ## Organization's pages load from the bucket

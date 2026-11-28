@@ -8,8 +8,9 @@
 // servers. For a kind of value (a Source: the values a relation label links
 // to their holders, or the exact values of a tag or attribute), the
 // database's histogram of how many holders each value has gives the typical
-// count; a value whose count is a robust outlier (a modified z-score above K,
-// in log scale) is a hub. A database with too few such values says too
+// count; a value whose count is a robust outlier (a modified z-score above k,
+// in log scale) is a hub. k, the sample size and the floor come from
+// internal/semantics/hubs.json. A database with too few such values says too
 // little, and the caller's fixed limit applies.
 package hubs
 
@@ -19,19 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
-)
-
-const (
-	// K is the modified z-score above which a value's holder count is an
-	// outlier (Iglewicz and Hoaglin's usual cut).
-	K = 3.5
-	// MinSample is the fewest values of a kind the database must have
-	// before their counts decide; with fewer, the caller's limit applies.
-	MinSample = 1000
-	// Floor is the lowest derived limit: a value held by this many assets
-	// or fewer is never a hub.
-	Floor = 5
 )
 
 // Source names a kind of shared value whose holder counts the database can
@@ -86,13 +76,15 @@ type Threshold struct {
 }
 
 // For returns the most holders a value may have, and whether the database
-// decided it: the derived limit (at least Floor) when the database has
-// MinSample values of the kind and their counts vary, otherwise fallback.
+// decided it: the derived limit (at least the floor) when the database has
+// the minimum sample of values of the kind and their counts vary, otherwise
+// fallback.
 func (t Threshold) For(fallback int) (int, bool) {
-	if t.Values < MinSample || t.Limit <= 0 {
+	c := semantics.HubsCatalog()
+	if t.Values < c.MinSample || t.Limit <= 0 {
 		return fallback, false
 	}
-	return max(Floor, t.Limit), true
+	return max(c.Floor, t.Limit), true
 }
 
 // point is one degree of a histogram in log scale, with how many values
@@ -132,7 +124,7 @@ func Derive(key string, h dbt.DegreeHistogram) Threshold {
 		t.Spread = 1.253314 * sum / float64(t.Values)
 	}
 	if t.Spread > 0 {
-		t.Limit = int(math.Floor(math.Exp(t.Median + K*t.Spread)))
+		t.Limit = int(math.Floor(math.Exp(t.Median + semantics.HubsCatalog().K*t.Spread)))
 	}
 	return t
 }

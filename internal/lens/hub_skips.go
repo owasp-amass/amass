@@ -87,31 +87,29 @@ type hubCheck struct {
 	skips *hubSkips
 }
 
-// derivedHub is g's hub rule for values linked by label in direction: the
-// database's when it can say, otherwise fallback.
-func derivedHub(ctx context.Context, g graph.Graph, label, direction string, fallback int, skips *hubSkips) hubCheck {
-	return hubCheck{rule: graph.HubRuleFor(ctx, g, label, direction, fallback), kind: label, skips: skips}
-}
-
-// valueHub is g's hub rule for the values of src, which a search compares by
-// exact value: the database's when it can say, otherwise fallback.
-func valueHub(ctx context.Context, g graph.Graph, src graph.HubSource, kind string, fallback int,
+// signalHub is a signal's hub check (its catalog SignalHub) for the values
+// of src, named kind in the report: when the signal lets the limit be
+// derived, the database's for those values when it can say, and otherwise
+// the signal's limit.
+func signalHub(ctx context.Context, g graph.Graph, h SignalHub, src graph.HubSource, kind string,
 	skips *hubSkips) hubCheck {
-	return hubCheck{rule: graph.SourceHubRule(ctx, g, src, fallback), kind: kind, skips: skips}
+	if !h.Derived {
+		return hubCheck{rule: graph.HubRule{Limit: h.Limit}, kind: kind, skips: skips}
+	}
+	return hubCheck{rule: graph.SourceHubRule(ctx, g, src, h.Limit), kind: kind, skips: skips}
 }
 
-// fingerprintHub is the hub rule for the fingerprint Identifiers of one
+// edgeSource is the hub source for the values linked by label in direction.
+func edgeSource(label, direction string) graph.HubSource {
+	return graph.HubSource{Label: label, Direction: direction}
+}
+
+// fingerprintSource is the hub source for the fingerprint Identifiers of one
 // id_type: a page title and a favicon spread very differently, so each type
-// has the database's own limit when it can say, otherwise fallback.
-func fingerprintHub(ctx context.Context, g graph.Graph, idType string, fallback int, skips *hubSkips) hubCheck {
-	return valueHub(ctx, g, graph.HubSource{Label: "fingerprint", Direction: "in", AssetType: "Identifier",
-		Property: "id_type", Value: idType}, "fingerprint "+idType, fallback, skips)
-}
-
-// fixedHub is a fixed limit for values whose holders no relation counts,
-// such as those a property search finds.
-func fixedHub(kind string, limit int, skips *hubSkips) hubCheck {
-	return hubCheck{rule: graph.HubRule{Limit: limit}, kind: kind, skips: skips}
+// has its own limit.
+func fingerprintSource(idType string) graph.HubSource {
+	return graph.HubSource{Label: "fingerprint", Direction: "in", AssetType: "Identifier", Property: "id_type",
+		Value: idType}
 }
 
 // exceeded reports whether holders exceed the limit (more: a search found

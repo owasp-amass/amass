@@ -51,7 +51,7 @@ func TestSignalCatalogIsValid(t *testing.T) {
 
 // TestSignalsDocIsCurrent keeps docs/ai/SIGNALS.md generated from the
 // catalog. Regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run
-// TestSignalsDocIsCurrent ./internal/ai/.
+// TestSignalsDocIsCurrent ./internal/lens/.
 func TestSignalsDocIsCurrent(t *testing.T) {
 	path := filepath.Join("..", "..", "docs", "ai", "SIGNALS.md")
 	want := SignalsMarkdown()
@@ -67,6 +67,6 @@ func TestSignalsDocIsCurrent(t *testing.T) {
 	}
 	if string(got) != want {
 		t.Error("docs/ai/SIGNALS.md is out of date; regenerate it with AMASS_UPDATE_SIGNALS_DOC=1 go test -run " +
-			"TestSignalsDocIsCurrent ./internal/ai/")
+			"TestSignalsDocIsCurrent ./internal/lens/")
 	}
 }

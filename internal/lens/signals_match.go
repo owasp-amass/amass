@@ -248,7 +248,7 @@ func (g *gapSearch) txtSignals(apex graph.Asset) error {
 	}
 	for _, def := range signalsByMatcher(matchTXTToken) {
 		// the signal's own tokens, counted by exact value
-		hub := g.value(graph.HubSource{AssetType: "FQDN", Property: graph.DNSRecordProperty,
+		hub := g.value(def, graph.HubSource{AssetType: "FQDN", Property: graph.DNSRecordProperty,
 			Prefixes: def.Params.TXTPrefixes}, "TXT verification token")
 		for _, txt := range records {
 			prefix := verificationPrefix(txt, def.Params.TXTPrefixes)
@@ -410,7 +410,8 @@ func (g *gapSearch) certificateSignals(cert graph.Asset) error {
 		}
 
 		// the attribute's values, counted by exact value
-		hub := g.value(graph.HubSource{AssetType: "TLSCertificate", Property: def.Params.Attribute, Attribute: true},
+		hub := g.value(def, graph.HubSource{AssetType: "TLSCertificate", Property: def.Params.Attribute,
+			Attribute: true},
 			"certificate "+def.Params.Attribute)
 		others, more, err := g.values.FindByAttribute(g.w.ctx, "TLSCertificate", def.Params.Attribute, value, false,
 			g.searchBound(hub.rule.Limit, "TLSCertificate"))

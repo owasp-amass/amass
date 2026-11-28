@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/coord"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -31,7 +32,7 @@ func TestDerive(t *testing.T) {
 	// most values held once: the spread comes from the mean deviation, and
 	// the floor keeps small counts ordinary
 	ones := dbt.DegreeHistogram{1: 2000, 3: 10, 500: 1}
-	if limit, derived := Derive("phone|in", ones).For(50); !derived || limit != Floor {
+	if limit, derived := Derive("phone|in", ones).For(50); !derived || limit != semantics.HubsCatalog().Floor {
 		t.Errorf("limit %d (derived %v), not the floor", limit, derived)
 	}
 

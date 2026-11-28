@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/coord"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -21,9 +22,6 @@ const (
 	// Topic is the journal topic the thresholds are shared through, so
 	// engines and tools on one database compute each once.
 	Topic = "hubs"
-	// RefreshEvery is how long a threshold is used before it is computed
-	// again.
-	RefreshEvery = 6 * time.Hour
 	// retryAfter is how soon a threshold that could not be computed is
 	// tried again.
 	retryAfter = 10 * time.Minute
@@ -32,6 +30,11 @@ const (
 	// thresholdKind is the kind of the topic's records.
 	thresholdKind = "threshold"
 )
+
+// refreshEvery is how long a threshold is used before it is computed again.
+func refreshEvery() time.Duration {
+	return time.Duration(semantics.HubsCatalog().RefreshHours) * time.Hour
+}
 
 // Table keeps the thresholds of one database.
 type Table struct {
@@ -72,7 +75,7 @@ func (t *Table) Limit(ctx context.Context, src Source, fallback int) int {
 }
 
 // Threshold returns the source's threshold: the one this process or another
-// on the database computed within RefreshEvery, or a new one.
+// on the database computed within the refresh period (hubs.json), or a new one.
 func (t *Table) Threshold(ctx context.Context, src Source) Threshold {
 	if t == nil || !t.counts(src) {
 		return Threshold{}
@@ -82,7 +85,7 @@ func (t *Table) Threshold(ctx context.Context, src Source) Threshold {
 	// one computation at a time; a lens asks for a handful of sources
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if th, ok := t.known[key]; ok && time.Since(th.At) < RefreshEvery {
+	if th, ok := t.known[key]; ok && time.Since(th.At) < refreshEvery() {
 		return th
 	}
 
@@ -122,11 +125,11 @@ func (t *Table) histogram(ctx context.Context, src Source) (dbt.DegreeHistogram,
 // again after retryAfter.
 func (t *Table) compute(ctx context.Context, key string, src Source) Threshold {
 	recorded, ok := t.recorded(key)
-	if ok && time.Since(recorded.At) < RefreshEvery {
+	if ok && time.Since(recorded.At) < refreshEvery() {
 		return recorded
 	}
 	retry := func() Threshold {
-		recorded.At = time.Now().Add(retryAfter - RefreshEvery)
+		recorded.At = time.Now().Add(retryAfter - refreshEvery())
 		return recorded
 	}
 

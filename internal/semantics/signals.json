@@ -11,6 +11,12 @@
           "strength": "strong",
           "weight": 0.45,
           "matcher": "shared_attribute",
+          "params": {
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
+          },
           "finds": "A registration contact the organization does not yet own that carries the same phone, postal address, email address or other identifier as a contact the organization controls. Only contact records count: a service's fingerprints are judged by the fingerprint signals.",
           "rationale": "Registrant details are entered by whoever registers the asset. Two registrations with the same phone and address were almost always made by the same party, and registries verify some of these details. One shared value can be a coincidence or a typo; two different shared values rarely are, which is why one shared value needs review and two may propose.",
           "guards": [
@@ -64,7 +70,10 @@
               "qq.com",
               "163.com",
               "126.com"
-            ]
+            ],
+            "hub": {
+              "limit": 50
+            }
           },
           "finds": "A registration contact the organization does not yet own whose email address is at the same custom domain as a contact of a registration the organization controls, such as admin@acme.com and security@acme.com. The controlled registration can be a domain, IP network or autonomous-system record.",
           "rationale": "A registrant email address is a mailbox at a domain the registrant controls. Two registrations whose contacts use the same custom mail domain were almost always made by the same organization, even when the mailboxes differ, which a match on the exact email address misses. Domain, network and autonomous-system registrations all carry these contacts, so the signal links assets across them. The registered domain is compared, so a mailbox at a subdomain still counts.",
@@ -89,6 +98,11 @@
           "strength": "strong",
           "weight": 0.4,
           "matcher": "dkim_key",
+          "params": {
+            "hub": {
+              "limit": 50
+            }
+          },
           "finds": "A domain the organization does not yet own that publishes the same DKIM public key as a domain the organization controls.",
           "rationale": "A DKIM public key in DNS pairs with a private key held by whoever signs the domain's mail. The same public key on two domains means their mail is signed by the same private key, so the same party operates both.",
           "guards": [
@@ -129,7 +143,11 @@
               "cisco-ci-domain-verification=",
               "globalsign-domain-verification=",
               "_globalsign-domain-verification="
-            ]
+            ],
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A domain the organization does not yet own whose DNS TXT records carry the same service verification token as a domain the organization controls.",
           "rationale": "SaaS providers ask a customer to publish a token in DNS to prove control of a domain, and the token is issued to one customer account. The same token on two domains means one account verified both, so the same administrators control them.",
@@ -154,7 +172,11 @@
           "weight": 0.45,
           "matcher": "shared_certificate_field",
           "params": {
-            "attribute": "subject_key_id"
+            "attribute": "subject_key_id",
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A certificate whose subject key identifier matches a certificate the organization controls; the candidate is the name that certificate was issued to.",
           "rationale": "The subject key identifier is derived from the certificate's public key. Two certificates with the same identifier were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.",
@@ -178,7 +200,11 @@
           "weight": 0.45,
           "matcher": "shared_certificate_field",
           "params": {
-            "attribute": "public_key_sha256"
+            "attribute": "public_key_sha256",
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A certificate whose public key (the SHA-256 of its SubjectPublicKeyInfo) matches a certificate the organization controls; the candidate is the name that certificate was issued to.",
           "rationale": "The public key hash identifies the key pair itself, whatever the subject key identifier, which some certificates omit or set non-standardly. Two certificates with the same public key were issued for the same key pair, and only the holder of the private key can request them, so the same party operates both.",
@@ -203,7 +229,11 @@
           "matcher": "shared_certificate_field",
           "params": {
             "attribute": "authority_key_id",
-            "private_issuer": true
+            "private_issuer": true,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A certificate signed by the same issuing key as a certificate the organization controls, when that issuer is not a public certificate authority; the candidate is the name that certificate was issued to.",
           "rationale": "Organizations run private certificate authorities for internal and partner-facing services, and only they can sign with that CA's key. A certificate from the same private issuing key was issued by the same organization.",
@@ -228,6 +258,11 @@
           "strength": "supporting",
           "weight": 0.25,
           "matcher": "security_txt_reference",
+          "params": {
+            "hub": {
+              "limit": 50
+            }
+          },
           "finds": "A name the organization does not yet own whose security.txt names a security contact at the organization's domain, or gives a canonical or policy URL in the organization's namespace.",
           "rationale": "A security.txt is published by whoever runs the site, and its contact and canonical URL are normally the operator's own. A file that reports to the organization's mailbox or points to the organization's canonical copy was usually published for the organization.",
           "guards": [
@@ -358,6 +393,11 @@
           "strength": "supporting",
           "weight": 0.55,
           "matcher": "spf_authorizes",
+          "params": {
+            "hub": {
+              "limit": 25
+            }
+          },
           "finds": "Another registered domain whose SPF record delegates its sending (include: or redirect=) to a domain the organization owns.",
           "rationale": "An SPF include or redirect names a domain allowed to send mail as the publishing domain. Delegating to a domain the organization controls means the organization's mail infrastructure sends on the other domain's behalf, which is evidence of common administration. It is supporting rather than strong because a provider's SPF macro is included by many unrelated customers.",
           "guards": [
@@ -404,6 +444,12 @@
           "strength": "supporting",
           "weight": 0.15,
           "matcher": "colisting",
+          "params": {
+            "hub": {
+              "limit": 10,
+              "derived": true
+            }
+          },
           "finds": "A name the organization does not yet own that appears as a subject alternative name on a certificate that also lists a name the organization controls.",
           "rationale": "One certificate covering several names was usually requested by one party for its own services. Certificates listing many names are often a provider's shared certificate, so this counts only for certificates with few names and only as supporting evidence.",
           "guards": [
@@ -458,7 +504,11 @@
           "params": {
             "labels": [
               "ptr_record"
-            ]
+            ],
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "An IP address the organization does not yet own whose reverse DNS (PTR) name is a name the organization controls, and the names that resolve to that address.",
           "rationale": "Reverse DNS is set by whoever controls the address space, so an address that names itself inside the organization's namespace is usually run for the organization. A provider can set PTR names on a customer's request, which is why it only supports other evidence.",
@@ -483,7 +533,11 @@
           "weight": 0.4,
           "matcher": "provider_nameserver_set",
           "params": {
-            "min_servers": 4
+            "min_servers": 4,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A domain registration the organization does not yet own that lists exactly the same full set of name servers as one of the organization's domain registrations, when the set belongs to a provider that gives each account or hosted zone its own set drawn from a large pool (dns.json assignment unique_set, such as an Amazon Route 53 delegation set of four servers).",
           "rationale": "Route 53 gives each hosted zone four name servers chosen from thousands, and an account can reuse one delegation set across its zones. Two unrelated zones landing on the identical set of four by chance is vanishingly rare, so a shared full set is strong evidence the domains are in one account.",
@@ -525,7 +579,11 @@
           "weight": 0.25,
           "matcher": "nameserver_set",
           "params": {
-            "min_servers": 2
+            "min_servers": 2,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A domain registration the organization does not yet own that lists every name server of one of the organization's domain registrations.",
           "rationale": "Several DNS providers assign each customer account its own pair or set of name servers. A domain served by exactly the same set as the organization's domain was likely set up in the same provider account.",
@@ -553,7 +611,11 @@
           "matcher": "service_fingerprint",
           "params": {
             "property": "JARM",
-            "skip_shared_infrastructure": true
+            "skip_shared_infrastructure": true,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A name or address the organization does not yet own whose service has the same JARM TLS fingerprint as a service on a name the organization controls.",
           "rationale": "A JARM fingerprint summarizes how a TLS server answers ten crafted handshakes, which reflects its software and configuration. A matching fingerprint is consistent with the same team deploying both servers, but many unrelated servers share common configurations, so it is only a tiebreaker.",
@@ -698,7 +760,11 @@
               "Service",
               "URL"
             ],
-            "min_length": 6
+            "min_length": 6,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A name, address or URL the organization does not yet own whose pages carry an analytics or tag-manager identifier (Google Analytics, Google Tag Manager, Google Ads, AdSense, Meta pixel, Hotjar, Clarity) that a page of the organization also carries.",
           "rationale": "Analytics and tag-manager identifiers are issued to one account, and the account's owner adds them to the sites it runs, so two sites reporting to the same account are usually run by the same team. They are copied along with a page, though, so they only support other evidence.",
@@ -717,6 +783,12 @@
           "strength": "strong",
           "weight": 0.7,
           "matcher": "shared_service_fingerprint",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "Another registered domain whose web service embeds the same analytics or tag-manager identifier (a Google Analytics or Tag Manager property, a Facebook pixel and the like) as one of the organization's own services.",
           "rationale": "An analytics or tag-manager property is registered to one account and embedded by that account's own sites to report their traffic together. Two sites carrying the same property identifier are administered by the same account, which is strong evidence of common control. The identifier is a shared Identifier asset, so the match is a one-hop graph pivot, not a value scan.",
           "guards": [
@@ -746,7 +818,11 @@
               "Service",
               "URL"
             ],
-            "min_length": 2
+            "min_length": 2,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A name, address or URL the organization does not yet own whose site has the same favicon (by its MurmurHash3, as Shodan computes it) as a site of the organization.",
           "rationale": "A custom favicon is a brand asset an organization reuses across its own sites, so the same icon suggests the same owner. Default icons of web servers, frameworks and hosting panels are shared by countless unrelated sites, which the hub limit excludes.",
@@ -764,6 +840,12 @@
           "strength": "supporting",
           "weight": 0.6,
           "matcher": "shared_service_fingerprint",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "Another registered domain whose web service serves a favicon with the same hash as one of the organization's own services.",
           "rationale": "Organizations reuse one brand favicon across their sites, so two services serving a byte-identical favicon are often the same operator's. It is supporting rather than strong because content-management frameworks and hosting panels ship default favicons that many unrelated sites keep unchanged.",
           "guards": [
@@ -793,7 +875,11 @@
               "Service",
               "URL"
             ],
-            "min_length": 64
+            "min_length": 64,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A name, address or URL the organization does not yet own that serves exactly the same page (by the SHA-256 of its normalized body) as a site of the organization.",
           "rationale": "Serving byte-for-byte the same page usually means the same deployment behind several names, such as mirrors, aliases and old domains. Pages under 512 bytes are never hashed, because redirects, error stubs and default pages are identical everywhere.",
@@ -812,6 +898,12 @@
           "strength": "supporting",
           "weight": 0.6,
           "matcher": "shared_service_fingerprint",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "Another registered domain whose web service returns a page body with the same hash as one of the organization's own services.",
           "rationale": "A byte-identical, non-trivial page body served from two domains is usually one deployment answering on both, which is evidence of common control. It is supporting because parked, placeholder and default-install pages are identical across many unrelated domains.",
           "guards": [
@@ -869,7 +961,11 @@
               "Welcome",
               "Untitled",
               "Document"
-            ]
+            ],
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "A name, address or URL the organization does not yet own whose page has the same title as a page of the organization.",
           "rationale": "A distinctive title, such as one naming the organization or a product of it, is often reused across its sites. Titles are short, chosen freely and copied, so a title only breaks ties between candidates other evidence found.",
@@ -899,7 +995,11 @@
             "asset_types": [
               "Service"
             ],
-            "min_length": 16
+            "min_length": 16,
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "An address or name the organization does not yet own whose SSH server presents a host key that an SSH server on an address the organization controls also presents.",
           "rationale": "An SSH host key is a private key generated on the server. The same key on two servers means they are the same machine reachable at two addresses, or were built from the same image by whoever holds the key, so the same party operates both.",
@@ -923,6 +1023,11 @@
           "strength": "strong",
           "weight": 0.5,
           "matcher": "caa_account",
+          "params": {
+            "hub": {
+              "limit": 50
+            }
+          },
           "finds": "A domain the organization does not yet own whose CAA record binds certificate issuance to the same ACME account (accounturi, RFC 8657) as a CAA record of a domain the organization controls.",
           "rationale": "An accounturi parameter lets only one ACME account obtain certificates for the domain. The account belongs to whoever requests the certificates, so two domains bound to the same account have their certificates issued by the same operator.",
           "guards": [
@@ -950,7 +1055,11 @@
               "192.168.0.0/23",
               "10.0.0.0/24",
               "172.16.0.0/24"
-            ]
+            ],
+            "hub": {
+              "limit": 50,
+              "derived": true
+            }
           },
           "finds": "Names under a domain the organization does not yet own that resolve to at least two of the same private (RFC 1918) or other reserved addresses as names the organization controls.",
           "rationale": "A private address only means something inside one network. Public names that resolve to the same internal addresses come from the same internal DNS, which one operator runs; two unrelated organizations rarely publish the same two internal addresses.",
@@ -995,6 +1104,11 @@
           "strength": "strong",
           "weight": 0.45,
           "matcher": "security_txt_key",
+          "params": {
+            "hub": {
+              "limit": 50
+            }
+          },
           "finds": "A name the organization does not yet own whose security.txt gives the same Encryption key URL as a security.txt of a domain the organization controls.",
           "rationale": "The Encryption field names the key reports to the security team should be encrypted with. One security team holds that key, so two files naming the same key report to the same team.",
           "guards": [
@@ -1017,7 +1131,10 @@
           "weight": 0.3,
           "matcher": "page_organization",
           "params": {
-            "min_length": 6
+            "min_length": 6,
+            "hub": {
+              "limit": 50
+            }
           },
           "finds": "A name or address the organization does not yet own whose web page carries a copyright notice for the organization, or describes the organization in its schema.org Organization markup.",
           "rationale": "A site's footer and its structured data name whoever publishes it. A page that declares itself the organization's was usually published for the organization, though a vendor building a site for a client publishes the client's name too.",
@@ -1087,6 +1204,12 @@
           "strength": "strong",
           "weight": 0.75,
           "matcher": "certificate_subject_org",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "The apex domains covered by a TLS certificate (its common name and DNS subject-alternative names) whose subject contact names the organization.",
           "rationale": "An organization-validated certificate carries a subject organization the certificate authority verified against the requesting entity. The apex domains such a certificate covers were presented together by that organization, so they tie to its footprint.",
           "guards": [
@@ -1109,6 +1232,12 @@
           "strength": "supporting",
           "weight": 0.65,
           "matcher": "shared_name_server",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "Another registered domain served by the same authoritative name server as one of the organization's own domains.",
           "rationale": "A private or vanity name server operated by one organization serves only that organization's domains, so sharing it is evidence of common control. It is supporting rather than strong because a small hosting provider's shared name server can serve unrelated customers.",
           "guards": [
@@ -1155,6 +1284,12 @@
           "strength": "strong",
           "weight": 0.7,
           "matcher": "shared_ads_seller",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "Another registered domain whose ads.txt or app-ads.txt lists, as DIRECT, the same advertising seller account (an ad system and account ID, such as a Google AdSense publisher ID) as one of the organization's own domains.",
           "rationale": "A DIRECT line names an ad account the publisher controls itself and is paid through, so it is as specific to its owner as an analytics property: the domains that list it are run by the same publisher.",
           "guards": [
@@ -1314,6 +1449,12 @@
           "strength": "supporting",
           "weight": 0.5,
           "matcher": "soa_mailbox",
+          "params": {
+            "hub": {
+              "limit": 25,
+              "derived": true
+            }
+          },
           "finds": "Another registered domain whose SOA record names the same zone administrator mailbox (RNAME) as one of the organization's zones, when that mailbox is outside the organization's domains.",
           "rationale": "The same administrator mailbox in two zones points to one administrator. It is supporting rather than strong for an outside mailbox: a web agency, registrar or IT contractor administers many clients' zones from its own mailbox.",
           "guards": [
@@ -1403,6 +1544,11 @@
           "strength": "supporting",
           "weight": 0.6,
           "matcher": "shared_mx",
+          "params": {
+            "hub": {
+              "limit": 25
+            }
+          },
           "finds": "Another registered domain whose mail is handled by the same mail exchanger (MX host) as one of the organization's own domains.",
           "rationale": "A mail exchanger an organization runs for its own mail serves only that organization's domains, so two apex domains pointing their MX at the same host are evidence of common control. It is supporting rather than strong because a mail provider's exchanger is shared by many unrelated customers; in OAM an MX record is the same shape as a name-server record (an apex FQDN pointing to a server FQDN), so this mirrors the shared-name-server signal.",
           "guards": [
@@ -1426,6 +1572,11 @@
           "strength": "strong",
           "weight": 0.7,
           "matcher": "dmarc_reports_to",
+          "params": {
+            "hub": {
+              "limit": 25
+            }
+          },
           "finds": "Another registered domain whose DMARC record sends its aggregate or forensic reports (rua/ruf) to a domain the organization owns.",
           "rationale": "A domain's DMARC record names where its mail-authentication reports are sent. Pointing them at a domain the organization controls is a deliberate administrative act: that organization's mail team collects and acts on the reports, so the two domains are administered together. The reporting address is derived from the published DMARC TXT record, which is kept as evidence.",
           "guards": [

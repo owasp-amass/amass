@@ -380,6 +380,7 @@ func (c *Config) LoadSettings(path string) error {
 		c.loadActiveSettings,
 		c.loadBackgroundSettings,
 		c.loadJobSettings,
+		c.loadHubSettings,
 		c.refuseRemovedSettings,
 	}
 	for _, load := range loads {

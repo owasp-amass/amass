@@ -93,6 +93,46 @@ type SignalParams struct {
 	// ranges whose addresses never count.
 	MinShared    int      `json:"min_shared,omitempty"`
 	IgnoreRanges []string `json:"ignore_ranges,omitempty"`
+	// Hub is the signal's hub limit, for the signals that pivot on a shared
+	// value (hubMatchers).
+	Hub *SignalHub `json:"hub,omitempty"`
+}
+
+// SignalHub is how many holders a value a signal pivots on may have, outside
+// the subject's own footprint, before the value is a registrar's, a
+// provider's or a shared service's rather than evidence about one owner.
+// With Derived, the database derives the limit from how many holders values
+// of the kind have (internal/hubs), and Limit applies until it can and
+// whenever derivation is off (options.hubs.derive); otherwise Limit is
+// fixed.
+type SignalHub struct {
+	Limit   int  `json:"limit"`
+	Derived bool `json:"derived,omitempty"`
+}
+
+// hubMatchers are the owned-asset matchers that pivot on a shared value, so
+// their signals need a hub limit.
+var hubMatchers = map[string]bool{matchSharedAttribute: true, matchColisting: true, matchReverseDNS: true,
+	matchNameserverSet: true, matchPrivateAddress: true, matchFingerprint: true, matchTXTToken: true,
+	matchProviderNameserverSet: true, matchCertificateField: true, matchCAAAccount: true, matchEmailDomain: true,
+	matchDKIMKey: true, matchSecurityTxtKey: true, matchSecurityTxtRef: true, matchPageOrganization: true}
+
+// validHub checks a signal's hub limit: required when needed, and positive.
+func validHub(s OwnershipSignal, needed bool) error {
+	switch {
+	case needed && s.Params.Hub == nil:
+		return fmt.Errorf("signal %s: a hub limit is required", s.ID)
+	case s.Params.Hub != nil && s.Params.Hub.Limit < 1:
+		return fmt.Errorf("signal %s: the hub limit must be at least 1", s.ID)
+	}
+	return nil
+}
+
+// ownedSignal is the owned-asset signal with id, or a signal with no
+// parameters when the catalog lacks it.
+func ownedSignal(id string) OwnershipSignal {
+	s, _ := LookupOwnershipSignal(id)
+	return s
 }
 
 // OwnershipSignal is one kind of ownership evidence and why it counts.
@@ -175,6 +215,9 @@ func validateSignals(signals []OwnershipSignal) error {
 			if _, err := netip.ParsePrefix(r); err != nil {
 				return fmt.Errorf("signal %s: ignore_ranges entry %q is not a CIDR range", s.ID, r)
 			}
+		}
+		if err := validHub(s, hubMatchers[s.Matcher]); err != nil {
+			return err
 		}
 
 		seen[s.ID] = true
@@ -266,6 +309,7 @@ func SignalsMarkdown() string {
 		fmt.Fprintf(&b, "**Finds:** %s\n\n**Why it counts:** %s\n", s.Finds, s.Rationale)
 		writeList(&b, "Guards", s.Guards)
 		writeList(&b, "Can still mislead when", s.CounterIndications)
+		writeHub(&b, s.Params.Hub)
 		if signalUses(s.ID)[UseRelatedDomain] {
 			fmt.Fprintf(&b, "\nThe same evidence also ties other domains to the organization: see "+
 				"[%s](HORIZONTALS.md#%s).\n", s.Title, s.ID)
@@ -279,6 +323,18 @@ func SignalsMarkdown() string {
 	}
 
 	return b.String()
+}
+
+// writeHub documents a signal's hub limit.
+func writeHub(b *strings.Builder, h *SignalHub) {
+	switch {
+	case h == nil:
+	case h.Derived:
+		fmt.Fprintf(b, "\n**Hub limit:** %d until the database holds enough values of this kind to derive its own "+
+			"(internal/semantics/hubs.json; `options.hubs.derive`).\n", h.Limit)
+	default:
+		fmt.Fprintf(b, "\n**Hub limit:** %d, fixed.\n", h.Limit)
+	}
 }
 
 func writeList(b *strings.Builder, title string, items []string) {

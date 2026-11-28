@@ -30,7 +30,7 @@ func TestHubSkips(t *testing.T) {
 	g := hubGraph{graphtest.SampleGraph()}
 	skips := &hubSkips{}
 
-	phone := derivedHub(ctx, g, "phone", "in", GapMaxShared, skips)
+	phone := signalHub(ctx, g, SignalHub{Limit: GapMaxShared, Derived: true}, edgeSource("phone", "in"), "phone", skips)
 	if phone.over("+1 555 0100", 140, false) {
 		t.Error("a value at the derived limit was stopped")
 	}
@@ -41,11 +41,12 @@ func TestHubSkips(t *testing.T) {
 	if !phone.over("+1 555 0199", 812, false) {
 		t.Error("a value over the derived limit was stopped only once")
 	}
-	address := derivedHub(ctx, g, "street_address", "in", 10, skips)
+	address := signalHub(ctx, g, SignalHub{Limit: 10, Derived: true}, edgeSource("street_address", "in"),
+		"street_address", skips)
 	if !address.over("1 Main St", 11, false) {
 		t.Error("a value over the fallback was not stopped")
 	}
-	token := fixedHub("TXT verification token", GapMaxShared, skips)
+	token := signalHub(ctx, g, SignalHub{Limit: GapMaxShared}, graph.HubSource{}, "TXT verification token", skips)
 	if !token.over("google-site-verification=x", 51, true) {
 		t.Error("a search with more matches was not stopped")
 	}

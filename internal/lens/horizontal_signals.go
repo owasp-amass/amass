@@ -133,6 +133,9 @@ func validateHorizontalSignals(signals []OwnershipSignal) error {
 		case len(s.Guards) == 0 || len(s.CounterIndications) == 0:
 			return fmt.Errorf("signal %s: guards and counter_indications are required", s.ID)
 		}
+		if err := validHub(s, horizontalHubMatchers[s.Matcher]); err != nil {
+			return err
+		}
 
 		seen[s.ID] = true
 	}
@@ -148,6 +151,20 @@ func HorizontalSignals() []OwnershipSignal {
 	}
 
 	return c.Signals
+}
+
+// horizontalHubMatchers are the related-domain matchers that pivot on a
+// shared value, so their signals need a hub limit.
+var horizontalHubMatchers = map[string]bool{matchHorCertOrg: true, matchHorNameServer: true, matchHorMX: true,
+	matchHorDMARC: true, matchHorSPF: true, matchHorFingerprint: true, matchHorSOAShared: true,
+	matchHorAdsSeller: true}
+
+// relatedHub is the hub limit of the related-domain signal with id.
+func relatedHub(id string) SignalHub {
+	if s, ok := LookupHorizontalSignal(id); ok && s.Params.Hub != nil {
+		return *s.Params.Hub
+	}
+	return SignalHub{Limit: GapMaxShared}
 }
 
 // LookupHorizontalSignal returns the catalog entry for id.
@@ -253,6 +270,7 @@ func HorizontalSignalsMarkdown() string {
 		fmt.Fprintf(&b, "**Finds:** %s\n\n**Why it counts:** %s\n", s.Finds, s.Rationale)
 		writeList(&b, "Guards", s.Guards)
 		writeList(&b, "Can still mislead when", s.CounterIndications)
+		writeHub(&b, s.Params.Hub)
 		if signalUses(s.ID)[UseOwnedAsset] {
 			fmt.Fprintf(&b, "\nThe same evidence is also ownership evidence: see [%s](SIGNALS.md#%s).\n",
 				s.Title, s.ID)

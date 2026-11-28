@@ -37,13 +37,14 @@ func (g *gapSearch) caaAccountSignals(apex graph.Asset) error {
 		}
 		seen[uri] = true
 
+		hub := g.fixed(def, "CAA account URI")
 		others, more, err := g.values.FindByTagValue(g.w.ctx, "FQDN", graph.DNSRecordProperty, "accounturi="+uri, true,
-			g.searchBound(GapMaxShared, "FQDN"))
+			g.searchBound(hub.rule.Limit, "FQDN"))
 		if err != nil {
 			return err
 		}
 		others = g.outsideAssets(others)
-		if g.fixed("CAA account URI").over(uri, len(others), more) {
+		if hub.over(uri, len(others), more) {
 			continue
 		}
 		for _, o := range others {
@@ -186,7 +187,7 @@ func (g *gapSearch) privateAddressSignals(order []string) error {
 				}
 			}
 			resolving = g.outsideSteps(resolving)
-			if g.hub("dns_record", "in", GapMaxShared).over(graph.AssetLabel(s.other), len(resolving), false) {
+			if g.hub(def, "dns_record", "in").over(graph.AssetLabel(s.other), len(resolving), false) {
 				continue
 			}
 
@@ -361,7 +362,7 @@ func (g *gapSearch) pageOrganizationSignals() error {
 				services = append(services, naming{svc: svc, how: how})
 			}
 		}
-		if g.fixed("name in service output").over(name, len(services), false) {
+		if g.fixed(def, "name in service output").over(name, len(services), false) {
 			continue
 		}
 		for _, n := range services {

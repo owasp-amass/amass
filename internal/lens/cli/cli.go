@@ -214,7 +214,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 	var only bool
 	var withDomain, withOrg string
 	var lensAssets, lensReads, ownerSteps, ownerDepth int
-	var readStats bool
+	var readStats, fixedHubs bool
 	var vulnData string
 	var timeout time.Duration
 	fs.StringVar(&dir, "dir", "", "Amass data directory")
@@ -246,6 +246,8 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 		"(default from AMASS_VULN_DATA, or vulnerabilities.json in the output directory)")
 	fs.BoolVar(&readStats, "read-stats", false,
 		"Print the database reads the run made and their time to standard error")
+	fs.BoolVar(&fixedHubs, "fixed-hubs", false, "Use the fixed hub limits in signals.json, not the limits the "+
+		"database's data derives (as options.hubs.derive false does)")
 	fs.DurationVar(&timeout, "investigation-timeout", 8*time.Minute,
 		"Maximum time for one lens or review run (default from AMASS_LLM_INVESTIGATION_TIMEOUT, the limit amass ai also uses)")
 	if err := fs.Parse(args); err != nil {
@@ -305,6 +307,7 @@ func run(group string, _ io.Reader, out, errout io.Writer, args []string) error 
 
 	defer func() { _ = repo.Close() }()
 	g := oamrepo.New(repo, cfg)
+	g.FixedHubs = g.FixedHubs || fixedHubs
 	if readStats {
 		g.Stats = &oamrepo.ReadStats{}
 		start := time.Now()

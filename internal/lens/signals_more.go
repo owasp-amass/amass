@@ -52,7 +52,7 @@ func (g *gapSearch) reverseDNSSignals(cur graph.Asset, s step, hop graph.Witness
 		}
 	}
 	names = g.outsideSteps(names)
-	if g.hub("dns_record", "in", GapMaxShared).over(graph.AssetLabel(addr), len(names), false) {
+	if g.hub(def, "dns_record", "in").over(graph.AssetLabel(addr), len(names), false) {
 		return nil
 	}
 	for _, t := range names {
@@ -249,7 +249,7 @@ func (g *gapSearch) nameserverSignals(dr graph.Asset) error {
 		}
 	}
 	if len(shared) == 0 ||
-		g.hub("name_server", "in", GapMaxShared).over("the name servers of "+graph.AssetLabel(dr), len(shared), false) {
+		g.hub(def, "name_server", "in").over("the name servers of "+graph.AssetLabel(dr), len(shared), false) {
 		return nil
 	}
 

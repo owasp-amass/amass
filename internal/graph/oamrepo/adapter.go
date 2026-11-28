@@ -38,6 +38,9 @@ type Adapter struct {
 	// StrongContributions lets what assistants contributed be strong
 	// evidence (options.ai.contributions.strong_evidence).
 	StrongContributions bool
+	// FixedHubs keeps every hub limit at the caller's fixed limit, not the
+	// one the database's data derives (options.hubs.derive false).
+	FixedHubs bool
 }
 
 // New is the adapter for repo under cfg's settings: its Neo4j database and
@@ -46,6 +49,7 @@ func New(repo repository.Repository, cfg *config.Config) Adapter {
 	a := Adapter{Repo: repo, Neo4jDatabase: Neo4jDatabaseName(cfg)}
 	if cfg != nil {
 		a.StrongContributions = cfg.AI.ContributionsStrong()
+		a.FixedHubs = !cfg.DerivesHubs()
 	}
 	return a
 }

@@ -47,8 +47,12 @@ A value held by more assets than the hub limit (see the main guard in
 [Ownership signals](SIGNALS.md)) never counts. The report lists each value
 a signal passed over this way in `hub_skips`: the value, what links it to
 its holders (a relation label, or the property a search matched), how many
-hold it, the limit and whether the database derived it (`internal/hubs`)
-or the fixed one applied. The text answer names up to three of them. The
+hold it, the limit and whether the database derived it (`internal/hubs`,
+tuned by `internal/semantics/hubs.json`) or the fixed one applied. Each
+signal's fixed limit, and whether the database may derive one for it, is
+the `hub` parameter of its entry in `internal/semantics/signals.json`.
+`options.hubs.derive: false`, or the lens `-fixed-hubs` flag, keeps every
+limit fixed. The text answer names up to three of them. The
 related-domains lens reports its own skips the same way (`lens.HubSkip`,
 `hubCheck` in `internal/lens/hub_skips.go`).
 

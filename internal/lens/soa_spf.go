@@ -17,11 +17,6 @@ import (
 // rrTypeSOA is the SOA record type.
 const rrTypeSOA = 6
 
-// soaMaxApexes skips a mailbox more registered domains than this list in
-// their SOA records: a provider or registrar default. The database's hub limit
-// for SOA mailboxes replaces it when the database can say (graph.HubLimit).
-const soaMaxApexes = 25
-
 // soaZone is a registered domain's SOA as stored: its administrator mailbox
 // and primary name server.
 type soaZone struct {

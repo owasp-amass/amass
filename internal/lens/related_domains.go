@@ -41,35 +41,9 @@ import (
 //
 // A WHOIS privacy proxy or a placeholder organization is shared by many
 // unrelated domains, so such a subject is never correlated on. A certificate or
-// name server shared by more than a cap of distinct apexes is provider/CDN
-// infrastructure, not shared ownership, and is skipped.
-
-const (
-	// certMaxApexes / nsMaxApexes skip a certificate or name server covering
-	// more distinct apex domains than this: shared or CDN/provider
-	// infrastructure spanning many tenants is not evidence of shared ownership
-	// (principle 8). The database's hub limit for the certificate's listing
-	// label, or for name servers, replaces each when the database can say
-	// (graph.HubLimit).
-	certMaxApexes = 25
-	nsMaxApexes   = 25
-	// mxMaxApexes skips a mail exchanger serving more distinct apex domains than
-	// this: a shared mail provider (Google Workspace, Microsoft 365, …), not
-	// evidence of shared ownership.
-	mxMaxApexes = 25
-	// dmarcMaxPublishers and spfMaxPublishers skip one of the organization's
-	// domains referenced by more distinct apexes than this in their DMARC
-	// reporting or SPF records: a shared mail-policy endpoint (a DMARC processor
-	// or a provider's SPF macro), not evidence of shared ownership.
-	dmarcMaxPublishers = 25
-	spfMaxPublishers   = 25
-	// fpMaxApexes skips a service fingerprint Identifier carried by more
-	// distinct apex domains than this: a shared default or CDN value (a
-	// framework favicon, a parked-page body), not evidence of shared
-	// ownership, even after the default-value catalog skip. The database's
-	// hub limit for fingerprints replaces it when the database can say.
-	fpMaxApexes = 25
-)
+// name server shared by more distinct apexes than the signal's hub limit
+// (signals.json) is provider/CDN infrastructure, not shared ownership, and is
+// skipped.
 
 // The per-signal confidences come from the horizontal signal catalog
 // (internal/semantics/signals.json, related-domain uses), so the lens, the runtime
@@ -180,8 +154,10 @@ func FindRelatedDomains(ctx context.Context, g graph.Graph, schema graph.SchemaC
 	// for the shared-name-server pivot.
 	var ownDRs []string
 
-	certHub := derivedHub(ctx, g, "san_dns_name", "out", certMaxApexes, skips)
-	nsHub := derivedHub(ctx, g, "name_server", "in", nsMaxApexes, skips)
+	certHub := signalHub(ctx, g, relatedHub(SigCertSubjectOrg), edgeSource("san_dns_name", "out"), "san_dns_name",
+		skips)
+	nsHub := signalHub(ctx, g, relatedHub(SigSharedNameServer), edgeSource("name_server", "in"), "name_server",
+		skips)
 	for _, ce := range contacts {
 		// DomainRecord --registrant_contact--> ContactRecord.
 		drs, err := g.Edges(ctx, ce.FromID, "in", "registrant_contact", time.Time{})
@@ -330,21 +306,24 @@ func FindRelatedDomains(ctx context.Context, g graph.Graph, schema graph.SchemaC
 	bountyScopePivot(ctx, g, name, ownApexes, add)
 	packagePivot(ctx, g, ownApexes, ownDomains, add)
 	adsSellerPivot(ctx, g, ownApexes, ownDomains, skips, add)
-	soaMailboxPivot(ctx, g, ownApexes, derivedHub(ctx, g, "soa_rname", "in", soaMaxApexes, skips), add)
+	soaMailboxPivot(ctx, g, ownApexes, signalHub(ctx, g, relatedHub(SigSharedSOAMailbox), edgeSource("soa_rname",
+		"in"), "soa_rname", skips), add)
 	sharedDNSHostPivot(ctx, g, ownApexes, RRTypeNS, SigSharedNameServer, "shared name server", nsHub,
 		isNameServerProvider, ownHostTier{signalID: SigNameServerOwn, label: "name server run by the organization",
 			domains: ownDomains}, add)
 	sharedDNSHostPivot(ctx, g, ownApexes, rrTypeMX, SigSharedMX, "shared mail exchanger",
-		fixedHub("mail exchanger", mxMaxApexes, skips),
+		signalHub(ctx, g, relatedHub(SigSharedMX), graph.HubSource{}, "mail exchanger", skips),
 		isMailProvider, ownHostTier{signalID: SigMXOwn, label: "mail exchanger run by the organization",
 			domains: ownDomains}, add)
 
 	// Mail-policy references: another domain that points its DMARC reporting or
 	// SPF sending at one of the organization's own domains.
 	policyReferencePivot(ctx, g, ownApexes, "dmarc_reports_to", SigDMARCReportsTo, "shared DMARC reporting",
-		fixedHub("DMARC reporting domain", dmarcMaxPublishers, skips), isPolicyProvider, nil, add)
+		signalHub(ctx, g, relatedHub(SigDMARCReportsTo), graph.HubSource{}, "DMARC reporting domain", skips),
+		isPolicyProvider, nil, add)
 	policyReferencePivot(ctx, g, ownApexes, "spf_authorizes", SigSPFAuthorizes, "SPF authorization",
-		fixedHub("SPF domain", spfMaxPublishers, skips), isPolicyProvider, ownDomains, add)
+		signalHub(ctx, g, relatedHub(SigSPFAuthorizes), graph.HubSource{}, "SPF domain", skips), isPolicyProvider,
+		ownDomains, add)
 
 	// Official website: domains the organization publishes as its own site
 	// (Organization --website--> URL --domain--> FQDN).

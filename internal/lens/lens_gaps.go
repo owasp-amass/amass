@@ -39,15 +39,10 @@ const (
 
 // Gap bounds.
 const (
-	// gapMaxColisted skips a certificate listing more names: a provider's
-	// multi-tenant certificate. The database's hub limit for the listing
-	// label replaces it when the database can say (graph.HubLimit).
-	gapMaxColisted = 10
-	// GapMaxShared skips an attribute value that more assets carry: a
-	// provider's or privacy service's phone or address, not an owner's.
-	// Where a relation label counts the holders, the database's own hub
-	// limit replaces it once the database has enough values of the kind
-	// (graph.HubLimit, internal/hubs); it stays the limit elsewhere.
+	// GapMaxShared bounds the buckets of shared values compared at once
+	// (duplicates, co-key groups, the attribution merge). Each signal's own
+	// hub limit is in its catalog entry (SignalHub); this is also the limit
+	// of a signal the catalog gives none.
 	GapMaxShared = 50
 	GapMaxGains  = 10
 )
@@ -329,20 +324,31 @@ func SearchOwnershipGapsWithin(ctx context.Context, gr graph.Graph, schema graph
 	return report, nil
 }
 
-// hub is the run's hub rule for values linked by label in direction.
-func (g *gapSearch) hub(label, direction string, fallback int) hubCheck {
-	return derivedHub(g.w.ctx, g.w.graph, label, direction, fallback, &g.hubs)
+// hub is the run's hub check for the signal def's values linked by label in
+// direction.
+func (g *gapSearch) hub(def OwnershipSignal, label, direction string) hubCheck {
+	return g.value(def, edgeSource(label, direction), label)
 }
 
-// value is the run's hub rule for the values of src, which a search compares
-// by exact value.
-func (g *gapSearch) value(src graph.HubSource, kind string) hubCheck {
-	return valueHub(g.w.ctx, g.w.graph, src, kind, GapMaxShared, &g.hubs)
+// value is the run's hub check for the signal def's values of src, named
+// kind in the report.
+func (g *gapSearch) value(def OwnershipSignal, src graph.HubSource, kind string) hubCheck {
+	h := SignalHub{Limit: GapMaxShared}
+	if def.Params.Hub != nil {
+		h = *def.Params.Hub
+	}
+	return signalHub(g.w.ctx, g.w.graph, h, src, kind, &g.hubs)
 }
 
-// fixed is the run's fixed limit for values a search finds.
-func (g *gapSearch) fixed(kind string) hubCheck {
-	return fixedHub(kind, GapMaxShared, &g.hubs)
+// fixed is the run's hub check for the signal def's values whose holders no
+// relation counts, such as those a property search finds.
+func (g *gapSearch) fixed(def OwnershipSignal, kind string) hubCheck {
+	h := SignalHub{Limit: GapMaxShared}
+	if def.Params.Hub != nil {
+		h = *def.Params.Hub
+	}
+	h.Derived = false
+	return signalHub(g.w.ctx, g.w.graph, h, graph.HubSource{}, kind, &g.hubs)
 }
 
 // pathTo returns the attribution witness from the subject to an owned asset.

@@ -103,7 +103,7 @@ func (g *gapSearch) identity(cur graph.Asset, s step, hop graph.WitnessEdge) err
 	}
 	// a value held by unusually many other contacts for its kind is a
 	// provider's
-	if g.hub(s.edge.Label, "in", GapMaxShared).over(graph.AssetLabel(value), len(others), false) {
+	if g.hub(ownedSignal(sigSharedRegistrant), s.edge.Label, "in").over(graph.AssetLabel(value), len(others), false) {
 		return nil
 	}
 
@@ -198,7 +198,7 @@ func (g *gapSearch) colisting(cur, shared graph.Asset, hop graph.WitnessEdge) er
 	}
 	// the names it lists besides the subject's own
 	listed = g.outsideSteps(listed)
-	if g.hub(hop.Label, "out", gapMaxColisted).over(graph.AssetLabel(shared), len(listed), false) {
+	if g.hub(ownedSignal(sigColisting), hop.Label, "out").over(graph.AssetLabel(shared), len(listed), false) {
 		return nil
 	}
 	for _, t := range listed {

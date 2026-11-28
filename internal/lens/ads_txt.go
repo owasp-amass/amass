@@ -147,8 +147,8 @@ func adsAccounts(ctx context.Context, g graph.Graph, file graph.Asset, ownDomain
 		ownW := graph.WitnessEdge{EdgeID: fe.ID, Label: "fingerprint", RelationType: fe.Type, FromID: file.ID,
 			FromType: "URL", ToID: ident.ID, ToType: "Identifier", To: fingerprint.AdsSeller + ":" + value}
 		fingerprintSiblings(ctx, g, file.ID, ident.ID, SigSharedAdsSeller,
-			"same DIRECT ad seller account "+value, ownW, fingerprintHub(ctx, g, fingerprint.AdsSeller, fpMaxApexes, skips),
-			add)
+			"same DIRECT ad seller account "+value, ownW, signalHub(ctx, g, relatedHub(SigSharedAdsSeller),
+				fingerprintSource(fingerprint.AdsSeller), "fingerprint "+fingerprint.AdsSeller, skips), add)
 
 		system, _, _ := strings.Cut(value, ":")
 		host := webHost(sellerDomain)
