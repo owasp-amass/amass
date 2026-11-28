@@ -1,11 +1,13 @@
 {
   "_license": "SPDX-License-Identifier: Apache-2.0",
-  "_about": "Document signals: what a validated document finding (a doc_statement property on a File) counts for when it names two stored assets. Every document signal is supporting, never strong: a model read the text, and documents age. A finding counts only when each name resolves to exactly one stored asset by exact name (organizations by name or legal name, people by full name, addresses by their normalized text). The weight starts at base, gains first_party_bonus when the document is published on a domain the subject controls and corroboration_bonus when two or more distinct document versions state the same thing, and never passes cap. Document evidence never causes or helps cause an automatic write: the relations below are review-gated proposals. See docs/ai/documents.md.",
+  "_about": "Document signals: what a validated document finding (a doc_statement property on a File) counts for when it names two stored assets. Every document signal is supporting, never strong: a model read the text, and documents age. A finding counts only when each name resolves to exactly one stored asset by exact name (organizations by name or legal name, people by full name, addresses by their normalized text). The weight starts at base, gains first_party_bonus when the document is published on a domain the subject controls and corroboration_bonus when two or more distinct document versions state the same thing, and never passes cap. Past current_years the weight falls in a straight line to aged_factor of itself at five years, when a document stops counting, except for what states history (a former name or a merger). Document evidence never causes or helps cause an automatic write: the relations below are review-gated proposals. See docs/ai/documents.md.",
   "weights": {
     "base": 0.15,
     "first_party_bonus": 0.05,
     "corroboration_bonus": 0.05,
-    "cap": 0.25
+    "cap": 0.25,
+    "current_years": 2,
+    "aged_factor": 0.5
   },
   "signals": [
     {

@@ -76,16 +76,18 @@ the others count the version as remaining.
 ## Reading
 
 - **Scanned PDFs:** a PDF with under 200 characters of text (`scanned`) has
-  its page pictures read instead: `docmeta.PageImages` returns its JPEG image
-  streams of at least 600 pixels a side, in order (CCITT, JBIG2 and JPEG 2000
-  pages are not read yet). `HTTPFetcher.Pages` (`ai.DocumentPages`) reads at
+  its page pictures read instead: `docmeta.PageImages` returns its image
+  streams of at least 600 pixels a side, in order: JPEG, and CCITT fax (group
+  3 or 4, what office scanners write for black-and-white pages) wrapped as a
+  one-strip TIFF (`faxTIFF`). JBIG2 and JPEG 2000 pages are not read. `HTTPFetcher.Pages` (`ai.DocumentPages`) reads at
   most 64 of them:
   - when the document model sees pictures (`options.ai.documents.vision`; on
     auto, an Anthropic model does, an Ollama model does when `/api/show`
     lists `vision`, an OpenAI-compatible one does not), each page is sent as
     an `llm.Image` with a prompt to write out its text;
-  - otherwise Tesseract (`tesseract stdin stdout`) reads each page, when it is
-    installed (the Compose images have it);
+  - otherwise, and for a fax page (models take no TIFF), Tesseract
+    (`tesseract stdin stdout`) reads the page, when it is installed (the
+    Compose images have it); without it such a page is skipped;
   - without either, the document has no text, as before
     (`ErrNoPageReader`).
 
@@ -309,8 +311,11 @@ weights are in `document_signals.json`:
 | First-party bonus | +0.05: the document is on one of the subject's own domains |
 | Corroboration bonus | +0.05: two or more distinct versions (SHA-256) state it |
 | Cap | 0.25; loading rejects a cap at or above 0.3, below every strong signal (0.35) |
+| Age | full weight while the newest document stating it is at most `current_years` (2) old, then falling in a straight line to `aged_factor` (0.5) of it at five years (`documentFreshness`); an undated document, and a former name or merger, keep their weight |
 
-`DocumentWeight(firstParty, versions)` computes it. `GapSignal.Weight`
+`DocumentWeight(firstParty, versions, dated)` computes it, where `dated` is
+the newest date of the documents stating the finding (`DocumentSource.Dated`,
+`docFinding.dated`). `GapSignal.Weight`
 carries it into `scoreSignals`, which uses the smaller of it and the catalog
 weight. Names resolve exactly: `docFold` folds case and whitespace only, and
 an ambiguous match gives nothing.

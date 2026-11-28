@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
@@ -104,7 +103,7 @@ func canSee(ctx context.Context, d *config.DocumentModelSettings) bool {
 	case "anthropic":
 		return true
 	case "ollama":
-		m := llm.NewOllamaModel(d.Endpoint, d.Model, &http.Client{})
+		m := llm.NewOllamaModel(d.Endpoint, d.Model, nil)
 		ok, err := m.Capable(ctx, "vision")
 		return err == nil && ok
 	}

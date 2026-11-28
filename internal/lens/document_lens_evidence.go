@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 )
@@ -198,6 +199,7 @@ func documentAffiliations(ctx context.Context, g graph.Graph, schema graph.Schem
 	type agg struct {
 		a        docAffiliation
 		versions map[string]bool
+		dated    time.Time
 	}
 	found := map[string]*agg{}
 	var order []string
@@ -228,12 +230,13 @@ func documentAffiliations(ctx context.Context, g graph.Graph, schema graph.Schem
 			order = append(order, org.ID)
 		}
 		x.versions[f.version()] = true
+		x.dated = newer(x.dated, f.dated)
 	}
 
 	out := make([]docAffiliation, 0, len(order))
 	for _, id := range order {
 		x := found[id]
-		x.a.weight = DocumentWeight(true, len(x.versions))
+		x.a.weight = DocumentWeight(true, len(x.versions), x.dated)
 		out = append(out, x.a)
 	}
 	return out, nil

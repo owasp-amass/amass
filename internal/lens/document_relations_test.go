@@ -9,6 +9,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
@@ -181,15 +182,37 @@ func TestDocumentSignalCatalog(t *testing.T) {
 	}{
 		{false, 1, 0.15}, {true, 1, 0.20}, {false, 3, 0.20}, {true, 2, 0.25},
 	} {
-		if got := DocumentWeight(tc.firstParty, tc.versions); !near(got, tc.want) {
+		if got := DocumentWeight(tc.firstParty, tc.versions, time.Time{}); !near(got, tc.want) {
 			t.Errorf("DocumentWeight(%v, %d) = %.2f, want %.2f", tc.firstParty, tc.versions, got, tc.want)
 		}
 	}
 	if w := DocumentSignalWeights(); w.Cap >= 0.35 {
 		t.Errorf("cap %.2f reaches a strong signal", w.Cap)
 	}
-	if documentConfidence(DocumentWeight(true, 2)) != 50 || documentConfidence(DocumentWeight(true, 1)) != 40 {
+	if documentConfidence(DocumentWeight(true, 2, time.Time{})) != 50 ||
+		documentConfidence(DocumentWeight(true, 1, time.Time{})) != 40 {
 		t.Error("confidence is not twice the weight")
+	}
+
+	// a finding keeps its weight while current, then loses it in a straight
+	// line to aged_factor at the stale age
+	w := DocumentWeights{CurrentYears: 2, AgedFactor: 0.5}
+	now := time.Date(2026, 11, 27, 0, 0, 0, 0, time.UTC)
+	year := 365 * 24 * time.Hour
+	for _, tc := range []struct {
+		age  time.Duration
+		want float64
+	}{{0, 1}, {2 * year, 1}, {7 * year / 2, 0.75}, {5 * year, 0.5}, {9 * year, 0.5}} {
+		if got := documentFreshness(w, now.Add(-tc.age), now); !near(got, tc.want) {
+			t.Errorf("freshness at %v = %.3f, want %.3f", tc.age, got, tc.want)
+		}
+	}
+	if documentFreshness(w, time.Time{}, now) != 1 {
+		t.Error("an undated document lost weight")
+	}
+	if validateDocumentSignals(documentSignalCatalog{Weights: DocumentWeights{Base: 0.15, Cap: 0.25,
+		CurrentYears: 6, AgedFactor: 0.5}}) == nil {
+		t.Error("a current age past the stale age was accepted")
 	}
 
 	bad := documentSignalCatalog{Weights: DocumentWeights{Base: 0.15, Cap: 0.4}}

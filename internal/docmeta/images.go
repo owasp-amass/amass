@@ -91,25 +91,31 @@ func pdfImages(data []byte) ([]Image, error) {
 // image stream of a PDF kept whole, in order, at most maxImages of them,
 // until each returns false.
 func pdfJPEGs(data []byte, each func(n int, dict, body []byte) bool) error {
+	read := 0
+	return pdfStreams(data, func(n int, dict, body []byte) bool {
+		// a JPEG kept whole, not one recompressed with another filter too
+		if !bytes.Contains(dict, []byte("/DCTDecode")) || bytes.Contains(dict, []byte("/FlateDecode")) ||
+			len(body) < 4 || body[0] != 0xFF || body[1] != 0xD8 {
+			return true
+		}
+		read++
+		return each(n, dict, body) && read < maxImages
+	})
+}
+
+// pdfStreams calls each with the dictionary and body of each stream of a PDF
+// up to maxImageSize, in order, until each returns false.
+func pdfStreams(data []byte, each func(n int, dict, body []byte) bool) error {
 	if !bytes.HasPrefix(bytes.TrimLeft(data[:min(len(data), 1024)], "\x00\r\n\t "), []byte("%PDF-")) {
 		return errNotPDF
 	}
 
-	read := 0
 	for n, loc := range streamRe.FindAllIndex(data, -1) {
-		if read >= maxImages {
-			break
-		}
 		if loc[0] >= 3 && string(data[loc[0]-3:loc[0]]) == "end" {
 			continue
 		}
-		dictStart := bytes.LastIndex(data[max(0, loc[0]-2048):loc[0]], []byte("<<"))
-		if dictStart < 0 {
-			continue
-		}
-		dict := data[max(0, loc[0]-2048)+dictStart : loc[0]]
-		// a JPEG kept whole, not one recompressed with another filter too
-		if !bytes.Contains(dict, []byte("/DCTDecode")) || bytes.Contains(dict, []byte("/FlateDecode")) {
+		dict := streamDict(data[max(0, loc[0]-2048):loc[0]])
+		if dict == nil {
 			continue
 		}
 
@@ -117,13 +123,27 @@ func pdfJPEGs(data []byte, each func(n int, dict, body []byte) bool) error {
 		if end := bytes.Index(body, []byte("endstream")); end >= 0 {
 			body = body[:end]
 		}
-		if len(body) > maxImageSize || len(body) < 4 || body[0] != 0xFF || body[1] != 0xD8 {
+		if len(body) > maxImageSize {
 			continue
 		}
-		read++
 		if !each(n, dict, body) {
 			break
 		}
+	}
+	return nil
+}
+
+// streamDict returns the dictionary before a stream: from the first "<<"
+// after the object's "obj", so a nested dictionary (/DecodeParms << … >>)
+// is read with it, or from the last "<<" when no "obj" is near.
+func streamDict(before []byte) []byte {
+	if o := bytes.LastIndex(before, []byte("obj")); o >= 0 {
+		if d := bytes.Index(before[o:], []byte("<<")); d >= 0 {
+			return before[o+d:]
+		}
+	}
+	if d := bytes.LastIndex(before, []byte("<<")); d >= 0 {
+		return before[d:]
 	}
 	return nil
 }

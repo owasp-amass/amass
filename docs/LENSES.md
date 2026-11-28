@@ -894,8 +894,17 @@ Retracting restores the duplicate and removes what the merge added. When
 more than two organizations are linked as one (one organization stored five times), each
 is proposed for merging into the one with the most evidence, not into every
 other: four proposals instead of ten. During
-an enumeration with `AMASS_ATTRIBUTION=auto`, proposed merges are applied
-once the engine's enumerations have finished their work.
+an enumeration with `AMASS_ATTRIBUTION=auto`, a proposed merge that needs
+no review is applied as soon as no enumeration has written to either
+organization for five minutes, and the rest once the engine's enumerations
+have finished their work.
+
+People are compared the same way, but a person always decides their merge.
+Two people's records are proposed when their family names match, their
+given names are the same, one is the other's initial, or one is a short form
+of the other (`given_names.json`: Bob and Robert, Kate and Katherine), and
+they share an organization, an identifier or a contact detail (two contact
+records naming them give one email address or phone).
 
 ## Identity corrections
 

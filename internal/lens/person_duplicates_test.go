@@ -6,6 +6,8 @@ package lens
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
@@ -97,11 +99,11 @@ func TestComparePersonsIsSeedScoped(t *testing.T) {
 	}
 }
 
-// A name the person is known by counts: "Bob Smith" is not a rendering of
-// "Robert Smith", but a record known as Robert Smith too is.
+// A name the person is known by counts: "Morgan Smith" is not a rendering
+// of "Riley Smith", but a record known as Riley Smith too is.
 func TestPersonDuplicatesReadOtherNames(t *testing.T) {
 	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}, EvidenceByID: map[string][]graph.Evidence{}}
-	for id, first := range map[string]string{"bob": "Bob", "robert": "Robert"} {
+	for id, first := range map[string]string{"bob": "Morgan", "robert": "Riley"} {
 		g.Assets[id] = graph.Asset{ID: id, Type: "Person", Key: first + " Smith", Content: map[string]any{
 			"full_name": first + " Smith", "first_name": first, "family_name": "Smith"}}
 		g.Links = append(g.Links, graph.Relation{ID: "m" + id, FromID: "acme", ToID: id, Label: "member",
@@ -115,10 +117,10 @@ func TestPersonDuplicatesReadOtherNames(t *testing.T) {
 	}
 
 	g.EvidenceByID["bob"] = []graph.Evidence{{ID: "t1", SubjectID: "bob", Kind: "property",
-		Property: map[string]any{"property_name": graph.PersonAlias, "property_value": "Robert Smith"}}}
+		Property: map[string]any{"property_name": graph.PersonAlias, "property_value": "Riley Smith"}}}
 	report, err := FindPersonDuplicates(context.Background(), g)
 	if err != nil || len(report.Candidates) != 1 {
-		t.Fatalf("known as Robert Smith too: %+v, %v", report.Candidates, err)
+		t.Fatalf("known as Riley Smith too: %+v, %v", report.Candidates, err)
 	}
 }
 
@@ -150,5 +152,37 @@ func TestPersonDuplicatesAcrossFamilyNames(t *testing.T) {
 	report, err = ComparePersons(context.Background(), g, []string{"doe"}, []string{"smith", "smith"})
 	if err != nil || len(report.Candidates) != 1 {
 		t.Fatalf("seed-scoped: %+v, %v", report.Candidates, err)
+	}
+}
+
+// A short form of a given name is a rendering of the name ("Bob" of
+// "Robert"), and two contact records that give one email address link the
+// people they name: such a pair is proposed, and found from either person.
+func TestPersonDuplicatesGivenNameFormsAndContacts(t *testing.T) {
+	g := graphtest.FakeGraph{Assets: map[string]graph.Asset{}}
+	link := func(from, label, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+	for id, first := range map[string]string{"bob": "Bob", "robert": "Robert"} {
+		g.Assets[id] = graph.Asset{ID: id, Type: "Person", Key: first + " Smith", Content: map[string]any{
+			"full_name": first + " Smith", "first_name": first, "family_name": "Smith"}}
+		cr := "cr-" + id
+		g.Assets[cr] = graph.Asset{ID: cr, Type: "ContactRecord", Key: cr}
+		link(cr, "person", id)
+		link(cr, "id", "email")
+	}
+	g.Assets["email"] = graph.Asset{ID: "email", Type: "Identifier", Key: "email:rsmith@owasp.org"}
+
+	report, err := FindPersonDuplicates(context.Background(), g)
+	if err != nil || len(report.Candidates) != 1 {
+		t.Fatalf("candidates %+v, %v; want the Bob and Robert Smith pair", report.Candidates, err)
+	}
+	signals := strings.Join(report.Candidates[0].Signals, "; ")
+	if !strings.Contains(signals, "another form") || !strings.Contains(signals, "shared contact details") {
+		t.Errorf("signals %q", signals)
+	}
+	if got := PersonCandidates(context.Background(), g, "bob"); !slices.Contains(got, "robert") {
+		t.Errorf("candidates of bob %v, want robert", got)
 	}
 }

@@ -53,6 +53,12 @@ type DocumentWeights struct {
 	FirstPartyBonus    float64 `json:"first_party_bonus"`
 	CorroborationBonus float64 `json:"corroboration_bonus"`
 	Cap                float64 `json:"cap"`
+	// CurrentYears is how old the newest document stating a finding may be
+	// at full weight; past it the weight falls in a straight line to
+	// AgedFactor of itself at DocumentStaleAge, when the document stops
+	// counting. 0 leaves age out.
+	CurrentYears float64 `json:"current_years,omitempty"`
+	AgedFactor   float64 `json:"aged_factor,omitempty"`
 }
 
 type documentSignalCatalog struct {
@@ -81,6 +87,10 @@ func validateDocumentSignals(c documentSignalCatalog) error {
 	case w.Cap < w.Base || w.Cap > documentSupportingMax:
 		return fmt.Errorf("document_signals.json: cap must be from base to %.2f, below every strong signal",
 			documentSupportingMax)
+	case w.CurrentYears < 0 || time.Duration(w.CurrentYears*float64(365*24*time.Hour)) >= DocumentStaleAge ||
+		(w.CurrentYears > 0 && (w.AgedFactor <= 0 || w.AgedFactor > 1)):
+		return errors.New("document_signals.json: current_years must be under the stale age, with an " +
+			"aged_factor above 0 and at most 1")
 	}
 
 	rules := semantics.StatementPredicateRules()
@@ -166,8 +176,10 @@ func documentSignalFor(predicate, subjectType, objectType string) (DocumentSigna
 // DocumentWeight is how much a document finding weighs: the base weight, the
 // first-party bonus when the document is published on a domain the subject
 // controls, the corroboration bonus when two or more distinct document
-// versions state it, capped.
-func DocumentWeight(firstParty bool, versions int) float64 {
+// versions state it, capped, and less as dated, the newest date of the
+// documents stating it, ages past CurrentYears. An undated finding, or one
+// that states history, is passed the zero time and keeps its weight.
+func DocumentWeight(firstParty bool, versions int, dated time.Time) float64 {
 	w := DocumentSignalWeights()
 	v := w.Base
 	if firstParty {
@@ -176,7 +188,29 @@ func DocumentWeight(firstParty bool, versions int) float64 {
 	if versions >= 2 {
 		v += w.CorroborationBonus
 	}
-	return math.Min(v, w.Cap)
+	return math.Min(v, w.Cap) * documentFreshness(w, dated, time.Now())
+}
+
+// documentFreshness is the share of its weight a finding keeps at now when
+// its newest document is dated dated.
+func documentFreshness(w DocumentWeights, dated, now time.Time) float64 {
+	current := time.Duration(w.CurrentYears * float64(365*24*time.Hour))
+	age := now.Sub(dated)
+	if dated.IsZero() || w.CurrentYears <= 0 || age <= current {
+		return 1
+	}
+	if age >= DocumentStaleAge {
+		return w.AgedFactor
+	}
+	return 1 - (1-w.AgedFactor)*float64(age-current)/float64(DocumentStaleAge-current)
+}
+
+// newer returns the later of two times.
+func newer(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // docStatement is a stored finding, as the doc_statement property holds it
@@ -273,10 +307,12 @@ type docRelation struct {
 	versions map[string]bool
 	files    map[string]bool
 	cited    []string
+	// dated is the newest date of the documents stating it
+	dated time.Time
 }
 
 func (d *docRelation) candidate() RelationCandidate {
-	weight := DocumentWeight(true, len(d.versions))
+	weight := DocumentWeight(true, len(d.versions), d.dated)
 	files := make([]string, 0, len(d.files))
 	for id := range d.files {
 		files = append(files, id)
@@ -393,6 +429,7 @@ func (r *docRelations) count(src DocumentSource, st docStatement, sig DocumentSi
 		version = src.FileID
 	}
 	d.versions[version] = true
+	d.dated = newer(d.dated, src.Dated)
 	if !d.files[src.FileID] {
 		d.files[src.FileID] = true
 		if len(d.cited) < docRelationMaxCited {

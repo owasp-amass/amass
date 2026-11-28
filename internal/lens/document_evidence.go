@@ -44,6 +44,8 @@ type docFinding struct {
 	st     docStatement
 	fileID string
 	url    string
+	// dated is the newest date the document's metadata states
+	dated time.Time
 }
 
 // version is the document version the finding was read from.
@@ -83,7 +85,8 @@ func documentFindings(ctx context.Context, g graph.Graph, predicates []string) (
 				return out, err
 			}
 			fileURL := graph.ContentString(f, "url")
-			stale := StaleDocument(documentDated(ev), time.Now())
+			dated := documentDated(ev)
+			stale := StaleDocument(dated, time.Now())
 			for _, v := range propertyValues(ev, propDocStatement) {
 				var st docStatement
 				if json.Unmarshal([]byte(v), &st) != nil || st.Kind != "relation" ||
@@ -92,7 +95,7 @@ func documentFindings(ctx context.Context, g graph.Graph, predicates []string) (
 					// the publisher placeholder names no organization by name
 					continue
 				}
-				out = append(out, docFinding{st: st, fileID: f.ID, url: fileURL})
+				out = append(out, docFinding{st: st, fileID: f.ID, url: fileURL, dated: dated})
 			}
 		}
 	}
@@ -145,6 +148,7 @@ type docLink struct {
 	former   bool
 	parent   bool
 	versions map[string]bool
+	dated    time.Time
 	text     string
 	url      string
 	// fromName and toName are the two names as the document wrote them,
@@ -191,6 +195,7 @@ func buildDocLinks(findings []docFinding) docLinks {
 				l.parent = true
 			}
 			l.versions[f.version()] = true
+			l.dated = newer(l.dated, f.dated)
 		}
 	}
 	return out
@@ -221,6 +226,7 @@ func (g *gapSearch) documentSignals() error {
 	type operated struct {
 		asset      graph.Asset
 		versions   map[string]bool
+		dated      time.Time
 		firstParty bool
 		via        string
 	}
@@ -253,12 +259,13 @@ func (g *gapSearch) documentSignals() error {
 			order = append(order, a.ID)
 		}
 		o.versions[f.version()] = true
+		o.dated = newer(o.dated, f.dated)
 		o.firstParty = o.firstParty || g.firstParty(f.url)
 	}
 
 	for _, id := range order {
 		o := found[id]
-		g.addWeighted(o.asset, sigDocumentOperator, o.via, nil, DocumentWeight(o.firstParty, len(o.versions)))
+		g.addWeighted(o.asset, sigDocumentOperator, o.via, nil, DocumentWeight(o.firstParty, len(o.versions), o.dated))
 	}
 	return nil
 }

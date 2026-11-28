@@ -69,6 +69,9 @@ type personProfile struct {
 	names  []personName
 	orgs   map[string]bool
 	idents map[string]bool
+	// contacts are the contact records that name the person and the email
+	// identifiers and phones those records give
+	contacts map[string]bool
 }
 
 // personName is one rendering of a person's name, in plain text.
@@ -200,6 +203,41 @@ func PersonCandidates(ctx context.Context, g graph.Graph, personID string) []str
 			}
 		}
 	}
+	// The people named by other contact records that give one of this
+	// person's contact details. A detail many records give is a role
+	// address or a switchboard, and is passed over.
+	for d := range prof.contacts {
+		edges, err := g.Edges(ctx, d, "in", "", time.Time{})
+		if err != nil || len(edges) > dupMaxBucket {
+			continue
+		}
+		for _, e := range edges {
+			if e.Label != "id" && e.Label != "phone" {
+				continue
+			}
+			for _, person := range contactPeople(ctx, g, e.FromID) {
+				add(person)
+			}
+		}
+	}
+	// and the other people a contact record of this person names
+	for d := range prof.contacts {
+		for _, person := range contactPeople(ctx, g, d) {
+			add(person)
+		}
+	}
+	return out
+}
+
+// contactPeople returns the people a contact record names; an ID that is
+// no contact record names none.
+func contactPeople(ctx context.Context, g graph.Graph, cr string) []string {
+	var out []string
+	if edges, err := g.Edges(ctx, cr, "out", "person", time.Time{}); err == nil {
+		for _, e := range edges {
+			out = append(out, e.ToID)
+		}
+	}
 	return out
 }
 
@@ -306,8 +344,9 @@ func newPersonProfileWith(ctx context.Context, g graph.Graph, p graph.Asset, ali
 			first:  semantics.PlainText(graph.ContentString(p, "first_name")),
 			middle: semantics.PlainText(graph.ContentString(p, "middle_name")),
 		}},
-		orgs:   map[string]bool{},
-		idents: map[string]bool{},
+		orgs:     map[string]bool{},
+		idents:   map[string]bool{},
+		contacts: map[string]bool{},
 	}
 	for _, alias := range aliases {
 		prof.names = append(prof.names, aliasName(alias))
@@ -325,8 +364,42 @@ func newPersonProfileWith(ctx context.Context, g graph.Graph, p graph.Asset, ali
 			prof.idents[e.ToID] = true
 		}
 	}
+	// Contact records that name the person (ContactRecord --person-->
+	// Person), and their contact details: ContactRecord --id--> Identifier
+	// and ContactRecord --phone--> Phone.
+	for _, cr := range personContactRecords(ctx, g, p.ID) {
+		prof.contacts[cr] = true
+		for _, d := range contactDetails(ctx, g, cr) {
+			prof.contacts[d] = true
+		}
+	}
 
 	return prof
+}
+
+// personContactRecords returns the contact records that name the person.
+func personContactRecords(ctx context.Context, g graph.Graph, personID string) []string {
+	var out []string
+	if edges, err := g.Edges(ctx, personID, "in", "person", time.Time{}); err == nil {
+		for _, e := range edges {
+			out = append(out, e.FromID)
+		}
+	}
+	return out
+}
+
+// contactDetails returns the identifiers (email addresses) and phones a
+// contact record gives.
+func contactDetails(ctx context.Context, g graph.Graph, cr string) []string {
+	var out []string
+	for _, label := range []string{"id", "phone"} {
+		if edges, err := g.Edges(ctx, cr, "out", label, time.Time{}); err == nil {
+			for _, e := range edges {
+				out = append(out, e.ToID)
+			}
+		}
+	}
+	return out
 }
 
 // comparePersons reports whether two person profiles are the same person: a
@@ -347,6 +420,9 @@ func comparePersons(a, b *personProfile) (PersonDuplicate, bool) {
 	}
 	if intersects(a.idents, b.idents) {
 		linkSigs = append(linkSigs, "shared identifier")
+	}
+	if intersects(a.contacts, b.contacts) {
+		linkSigs = append(linkSigs, "shared contact details")
 	}
 	if len(linkSigs) == 0 {
 		return PersonDuplicate{}, false
@@ -402,6 +478,8 @@ func variantOf(a, b personName) (string, bool) {
 		return "same given and family name", true
 	case initialOf(a.first, b.first) || initialOf(b.first, a.first):
 		return "same family name, given name by initial", true
+	case semantics.GivenNameForms(a.first, b.first):
+		return "same family name, given name in another form", true
 	}
 	return "", false
 }

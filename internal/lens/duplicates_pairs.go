@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/owasp-amass/amass/v5/internal/semantics"
@@ -219,7 +220,8 @@ func pairSignals(a, b *orgProfile) []GapSignal {
 		case matchDocumentStatement:
 			if l := docLinkTo(a, b); l != nil && l.former {
 				out = append(out, GapSignal{Signal: def.ID, Kind: def.Kind, Via: l.text + ", in " + l.url,
-					Weight: DocumentWeight(false, len(l.versions))})
+					// a former name is history: its age takes nothing away
+					Weight: DocumentWeight(false, len(l.versions), time.Time{})})
 			}
 		}
 	}
