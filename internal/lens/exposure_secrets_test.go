@@ -34,8 +34,9 @@ func (secretsGraph) FindByTagValue(context.Context, string, string, string, bool
 	return nil, false, nil
 }
 
-// Only credentials the footprint discloses are noted, with the masked
-// preview and the AWS account of the access key ID found beside the key.
+// Only credentials the footprint, or a document from one of its URLs,
+// discloses are noted, with the masked preview and the AWS account of the
+// access key ID found beside the key.
 func TestLeakedCredentials(t *testing.T) {
 	ident := func(id, typ, value string) graph.Asset {
 		return graph.Asset{ID: id, Type: "Identifier", Key: typ + ":" + value,
@@ -52,29 +53,38 @@ func TestLeakedCredentials(t *testing.T) {
 	token := ident("s2", exposedSecretType, "github_token:h2")
 	keyID := ident("k1", accessKeyIDType, "AKIAIOSFODNN7EXAMPLE")
 	acct := ident("a1", "aws_account_id", "111122223333")
+	doc := graph.Asset{ID: "f1", Type: "File", Key: "https://www.example.com/ops/deploy.docx",
+		Content: map[string]any{"url": "https://www.example.com/ops/deploy.docx"}}
+	docURL := graph.Asset{ID: "u3", Type: "URL", Key: doc.Key, Content: map[string]any{"url": doc.Key}}
+	npm := ident("s3", exposedSecretType, "npm_token:h3")
 
 	g := secretsGraph{graphtest.FakeGraph{
 		Assets: map[string]graph.Asset{"u1": page, "u2": elsewhere, "s1": awsKey, "s2": token, "k1": keyID,
-			"a1": acct},
+			"a1": acct, "f1": doc, "u3": docURL, "s3": npm},
 		Links: []graph.Relation{
 			{ID: "e1", FromID: "u1", ToID: "s1", Label: "discloses"},
 			{ID: "e2", FromID: "u1", ToID: "k1", Label: "discloses"},
 			{ID: "e3", FromID: "k1", ToID: "a1", Label: "cloud_account"},
 			{ID: "e4", FromID: "u2", ToID: "s2", Label: "discloses"},
+			{ID: "e5", FromID: "u3", ToID: "f1", Label: "file"},
+			{ID: "e6", FromID: "f1", ToID: "s3", Label: "discloses"},
 		},
 		EvidenceByID: map[string][]graph.Evidence{
 			"s1": {prop(secretKindProp, "aws_secret_access_key"), prop(secretPreviewProp, "wJal…KEY")},
 			"s2": {prop(secretKindProp, "github_token"), prop(secretPreviewProp, "ghp_…0jS")},
+			"s3": {prop(secretKindProp, "npm_token"), prop(secretPreviewProp, "npm_…x9Q")},
 		},
 	}}
 
 	var got []string
-	if err := leakedCredentials(context.Background(), g, map[string]graph.Asset{"u1": page},
+	if err := leakedCredentials(context.Background(), g, map[string]graph.Asset{"u1": page, "u3": docURL},
 		func(example string) { got = append(got, example) }); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"aws_secret_access_key wJal…KEY in https://www.example.com/config.js (AWS account 111122223333) " +
-		"[exposed_secret:aws_secret_access_key:h1]"}
+		"[exposed_secret:aws_secret_access_key:h1]",
+		"npm_token npm_…x9Q in https://www.example.com/ops/deploy.docx [exposed_secret:npm_token:h3]"}
+	slices.Sort(got)
 	if !slices.Equal(got, want) {
 		t.Errorf("leaked = %q, want %q", got, want)
 	}

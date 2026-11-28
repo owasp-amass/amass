@@ -30,8 +30,8 @@ const (
 	secretPreviewProp = "secret_preview"
 )
 
-// leakedCredentials notes each credential an asset of the footprint
-// discloses, with its kind and masked preview, where it was found and, for
+// leakedCredentials notes each credential an asset of the footprint, or a
+// document stored from one of its URLs, discloses, with its kind and masked preview, where it was found and, for
 // AWS keys found beside their access key ID, the account. Credentials found
 // only outside the footprint are not reported. It reads with one value
 // search; a repository without value searches gives none.
@@ -55,7 +55,11 @@ func leakedCredentials(ctx context.Context, g graph.Graph, owned map[string]grap
 		}
 		var where []graph.Asset
 		for _, e := range in {
-			if a, mine := owned[e.FromID]; mine {
+			a, mine, err := disclosedByFootprint(ctx, g, owned, e.FromID)
+			if err != nil {
+				return err
+			}
+			if mine {
 				where = append(where, a)
 			}
 		}
@@ -81,6 +85,25 @@ func leakedCredentials(ctx context.Context, g graph.Graph, owned map[string]grap
 		}
 	}
 	return nil
+}
+
+// disclosedByFootprint returns the asset that disclosed a credential and
+// whether it is the footprint's: an asset the footprint owns, or a document
+// (File) stored from a URL it owns.
+func disclosedByFootprint(ctx context.Context, g graph.Graph, owned map[string]graph.Asset,
+	id string) (graph.Asset, bool, error) {
+	if a, mine := owned[id]; mine {
+		return a, true, nil
+	}
+	a, err := g.GetAsset(ctx, id)
+	if err != nil || a.Type != "File" {
+		return a, false, nil
+	}
+	from, err := g.Edges(ctx, id, "in", "file", time.Time{})
+	if err != nil {
+		return a, false, err
+	}
+	return a, slices.ContainsFunc(from, func(e graph.Relation) bool { _, mine := owned[e.FromID]; return mine }), nil
 }
 
 // secretLabel returns a found credential's kind and masked preview, from

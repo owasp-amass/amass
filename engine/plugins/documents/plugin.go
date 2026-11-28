@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
+	"github.com/owasp-amass/amass/v5/engine/plugins/leaks"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/docmeta"
@@ -76,21 +77,23 @@ type documents struct {
 	archive    *rate.Limiter
 	direct     *rate.Limiter
 	source     *et.Source
+	// secrets records the credentials a document's text discloses, read as
+	// the document is, since the text is not kept
+	secrets *leaks.Recorder
 
 	mu   sync.Mutex
 	runs map[string]*runState
 }
 
 func NewDocuments() et.Plugin {
+	source := &et.Source{Name: "Documents", Confidence: 90}
 	return &documents{
 		name:       "Documents",
 		ArchiveURL: "https://web.archive.org/web/",
 		archive:    rate.NewLimiter(rate.Every(5*time.Second), 1),
 		direct:     rate.NewLimiter(rate.Every(time.Second), 1),
-		source: &et.Source{
-			Name:       "Documents",
-			Confidence: 90,
-		},
+		source:     source,
+		secrets:    leaks.NewRecorder("Documents", source),
 	}
 }
 

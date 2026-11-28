@@ -75,7 +75,11 @@ read without it.
 The `Exposed-Secrets` plugin (`engine/plugins/leaks`) scans what the
 enumeration stored with `internal/secretscan` (formats in
 `internal/semantics/secret_patterns.json`): URLs, including their decoded
-query strings, service banners and response headers, and TXT records.
+query strings, service banners and response headers (an HTTP probe's whole
+body is its Service's output), and TXT records. Content the database does
+not keep is scanned as it is read, with a `leaks.Recorder`: the `Documents`
+plugin records what a document's extracted text discloses, linked from the
+File, before the text is dropped.
 
 - An identifier (an AWS access key ID, an AWS account ID from an ARN) is an
   `Identifier` in full, linked by `discloses` from where it was found. An
@@ -111,7 +115,8 @@ changed.
 ### The leaked credentials exposure class
 
 The exposure lens reports `leaked_credentials` ("Leaked credentials") for each
-credential an asset of the footprint discloses: its kind, masked preview,
+credential an asset of the footprint, or a document stored from one of its
+URLs, discloses: its kind, masked preview,
 where it was found (masked too, since a URL's query can carry the key), the
 AWS account of an access key ID found beside an AWS key, and the reference
 `amass secrets found` takes. A credential found only outside the footprint is

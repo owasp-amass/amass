@@ -171,6 +171,9 @@ func companyNamesAuthor(rules semantics.DocumentRules, company string, vendors [
 // URL or name is recorded as what the document references (a vendor, a
 // partner) without being enumerated.
 //
+// The credentials the text discloses are recorded as it is read (a
+// leaks.Recorder), linked from the File, their values sealed.
+//
 // It returns the usernames the text shows in home-directory paths, for the
 // account leads. The text itself is not stored: the document model reads a
 // document by fetching it again (internal/ai), so no copy of its content is
@@ -181,6 +184,9 @@ func (d *documents) contentLeads(e *et.Event, fent *dbt.Entity, u *oamurl.URL, d
 	if err != nil {
 		return nil
 	}
+	// the text is read once, here, so the credentials it discloses are
+	// recorded now: linked from the File, the value sealed, never kept
+	d.secrets.Record(e, fent, content.Text)
 
 	body := content.Text + "\n" + strings.Join(content.Links, "\n")
 	static := semantics.ArchiveURLs()
