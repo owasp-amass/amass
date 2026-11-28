@@ -93,6 +93,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	enrich.NewEmails,
 	enrich.NewHeaderRefs,
 	enrich.NewOnionLocation,
+	enrich.NewPhoneDetails,
 	enrich.NewTLSCerts,
 	enrich.NewURLs,
 	gleif.NewGLEIF,

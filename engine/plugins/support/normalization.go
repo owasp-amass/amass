@@ -63,6 +63,10 @@ func PhoneToOAMPhone(phone, ext, country string) *oamcon.Phone {
 		raw += " Ext. " + ext
 	}
 
+	// the country the number belongs to, not the hint it was parsed with
+	if region := phonenumbers.GetRegionCodeForNumber(num); len(region) == 2 && region != "ZZ" {
+		country = region
+	}
 	return &oamcon.Phone{
 		Raw:           raw,
 		E164:          e164,
@@ -70,6 +74,28 @@ func PhoneToOAMPhone(phone, ext, country string) *oamcon.Phone {
 		CountryCode:   int(num.GetCountryCode()),
 		Ext:           ext,
 	}
+}
+
+// phoneLineTypes names libphonenumber's number types.
+var phoneLineTypes = map[phonenumbers.PhoneNumberType]string{
+	phonenumbers.FIXED_LINE: "fixed_line", phonenumbers.MOBILE: "mobile",
+	phonenumbers.FIXED_LINE_OR_MOBILE: "fixed_line_or_mobile", phonenumbers.TOLL_FREE: "toll_free",
+	phonenumbers.PREMIUM_RATE: "premium_rate", phonenumbers.SHARED_COST: "shared_cost",
+	phonenumbers.VOIP: "voip", phonenumbers.PERSONAL_NUMBER: "personal_number", phonenumbers.PAGER: "pager",
+	phonenumbers.UAN: "uan", phonenumbers.VOICEMAIL: "voicemail",
+}
+
+// PhoneDetails reads an E.164 number offline (libphonenumber): its line
+// type (fixed_line, mobile, toll_free, voip, …) and the area it was issued
+// in, in English. Either is "" when the numbering plan does not say.
+func PhoneDetails(e164 string) (lineType, region string) {
+	num, err := phonenumbers.Parse(e164, "")
+	if err != nil || !phonenumbers.IsValidNumber(num) {
+		return "", ""
+	}
+	lineType = phoneLineTypes[phonenumbers.GetNumberType(num)]
+	region, _ = phonenumbers.GetGeocodingForNumber(num, "en")
+	return lineType, strings.TrimSpace(region)
 }
 
 func RawURLToOAM(raw string) *oamurl.URL {
