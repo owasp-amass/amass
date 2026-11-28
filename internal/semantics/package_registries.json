@@ -1,6 +1,6 @@
 {
   "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
-  "_about": "The software package registries Amass reads for an organization's published packages, from each in-scope registered domain. Maven Central: a groupId is the publisher's domain reversed (example.com is com.example), and Sonatype makes a publisher prove that domain with a DNS TXT record before it may publish under it (verification_source), so the groups search (maven.search, Solr query g:<group> and g:<group>.*) lists namespaces verified for the domain; the newest version's POM (maven.repository) names the project, organization and source control URLs, and the organization's name. npm: the registry search (npm.search, text=<domain>) returns each package's links and the email addresses of its publisher and maintainers; a package counts only when a maintainer's or the publisher's address is at the domain, or its homepage is on it. Each package is stored as a Product of product_type, named by its Package URL (purl_source), and its registry namespace (a Maven groupId, an npm scope, or the publishing user of an unscoped npm package) as an Account. At most max_packages packages per registry and domain are stored, newest first, and at most max_poms POMs are read per domain. Every http(s) URL a package names is stored, including code hosts, for later evidence. registry_hosts are the registries' and documentation sites where every package has a page under one host, like the code hosts and social sites account_platforms.json lists: the controlled-footprint walk does not pass control from a URL on one of them to the host, since the page is the publisher's but the site is not. hosting_domains give each project its own subdomain (example.github.io); the related-domains lens, like cloud providers' hosting domains, never offers them as an organization's domains.",
+  "_about": "The software package registries Amass reads for an organization's published packages, from each in-scope registered domain. Maven Central: a groupId is the publisher's domain reversed (example.com is com.example), and Sonatype makes a publisher prove that domain with a DNS TXT record before it may publish under it (verification_source), so the groups search (maven.search, Solr query g:<group> and g:<group>.*) lists namespaces verified for the domain; the newest version's POM (maven.repository) names the project, organization and source control URLs, and the organization's name. npm: the registry search (npm.search, text=<domain>) returns each package's links and the email addresses of its publisher and maintainers; a package counts only when a maintainer's or the publisher's address is at the domain, or its homepage is on it. NuGet (nuget.search), crates.io (crates.search), RubyGems (rubygems.search) and Packagist (packagist.search) are searched by text for the domain, and a result counts only when a URL or address it names is in the enumeration's footprint (the domain searched for or any domain in scope): NuGet's project URL; a crate's or gem's homepage or documentation; a Packagist package's homepage, an author's homepage or an author's address, read from its metadata (packagist.metadata, at most max_metadata packages per domain). npm's addresses and homepage are judged against the same footprint. A NuGet package's namespace is its first owner and a Packagist package's its vendor; a crate's or gem's is its first owner, read from the registry's owners list (crates.owners, rubygems.owners, {name} the package's name) for at most max_metadata packages per domain. PyPI has no search API and Docker Hub is searched only by name, so neither is read from a domain. Each package is stored as a Product of product_type, named by its Package URL (purl_source), and its registry namespace (a Maven groupId, an npm scope, or the publishing user of an unscoped npm package) as an Account. At most max_packages packages per registry and domain are stored, newest first, and at most max_poms POMs are read per domain. Every http(s) URL a package names is stored, including code hosts, for later evidence. registry_hosts are the registries' and documentation sites where every package has a page under one host, like the code hosts and social sites account_platforms.json lists: the controlled-footprint walk does not pass control from a URL on one of them to the host, since the page is the publisher's but the site is not. hosting_domains give each project its own subdomain (example.github.io); the related-domains lens, like cloud providers' hosting domains, never offers them as an organization's domains.",
   "maven": {
     "search": "https://search.maven.org/solrsearch/select",
     "repository": "https://repo1.maven.org/maven2",
@@ -11,12 +11,33 @@
     "search": "https://registry.npmjs.org/-/v1/search",
     "source": "https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search"
   },
+  "nuget": {
+    "search": "https://azuresearch-usnc.nuget.org/query",
+    "source": "https://learn.microsoft.com/en-us/nuget/api/search-query-service-resource"
+  },
+  "crates": {
+    "search": "https://crates.io/api/v1/crates",
+    "owners": "https://crates.io/api/v1/crates/{name}/owners",
+    "source": "https://crates.io/data-access"
+  },
+  "rubygems": {
+    "search": "https://rubygems.org/api/v1/search.json",
+    "owners": "https://rubygems.org/api/v1/gems/{name}/owners.json",
+    "source": "https://guides.rubygems.org/rubygems-org-api/"
+  },
+  "packagist": {
+    "search": "https://packagist.org/search.json",
+    "metadata": "https://repo.packagist.org/p2/",
+    "source": "https://packagist.org/apidoc"
+  },
   "purl_source": "https://github.com/package-url/purl-spec",
   "product_type": "software_package",
   "max_packages": 100,
   "max_poms": 25,
+  "max_metadata": 25,
   "registry_hosts": ["npmjs.com", "npmjs.org", "npm.im", "maven.apache.org", "maven.org", "sonatype.org",
     "sonatype.com", "mvnrepository.com", "javadoc.io", "jitpack.io", "readthedocs.org", "unpkg.com", "jsdelivr.net",
-    "yarnpkg.com", "opensource.org", "spdx.org"],
+    "yarnpkg.com", "opensource.org", "spdx.org", "nuget.org", "crates.io", "docs.rs", "lib.rs", "rubygems.org",
+    "rubydoc.info", "packagist.org"],
   "hosting_domains": ["github.io", "gitlab.io", "readthedocs.io"]
 }

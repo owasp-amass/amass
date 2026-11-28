@@ -27,14 +27,20 @@ type PackageRegistries struct {
 		Source             string `json:"source"`
 		VerificationSource string `json:"verification_source"`
 	} `json:"maven"`
-	NPM struct {
-		Search string `json:"search"`
-		Source string `json:"source"`
-	} `json:"npm"`
+	NPM       searchRegistry `json:"npm"`
+	NuGet     searchRegistry `json:"nuget"`
+	Crates    searchRegistry `json:"crates"`
+	RubyGems  searchRegistry `json:"rubygems"`
+	Packagist struct {
+		Search   string `json:"search"`
+		Metadata string `json:"metadata"`
+		Source   string `json:"source"`
+	} `json:"packagist"`
 	PurlSource     string   `json:"purl_source"`
 	ProductType    string   `json:"product_type"`
 	MaxPackages    int      `json:"max_packages"`
 	MaxPOMs        int      `json:"max_poms"`
+	MaxMetadata    int      `json:"max_metadata"`
 	RegistryHosts  []string `json:"registry_hosts"`
 	HostingDomains []string `json:"hosting_domains"`
 }
@@ -46,16 +52,30 @@ var loadPackageRegistries = sync.OnceValue(func() PackageRegistries {
 	if err := dec.Decode(&c); err != nil {
 		panic("package_registries.json: " + err.Error())
 	}
-	for _, u := range []string{c.Maven.Search, c.Maven.Repository, c.NPM.Search} {
+	for _, u := range []string{c.Maven.Search, c.Maven.Repository, c.NPM.Search, c.NuGet.Search, c.Crates.Search,
+		c.RubyGems.Search, c.Packagist.Search, c.Packagist.Metadata} {
 		if !strings.HasPrefix(u, "https://") {
-			panic("package_registries.json: maven.search, maven.repository and npm.search must be https URLs")
+			panic("package_registries.json: every registry's search and repository must be an https URL")
 		}
 	}
-	if c.ProductType == "" || c.MaxPackages <= 0 || c.MaxPOMs < 0 {
-		panic("package_registries.json: product_type, max_packages and max_poms are required")
+	for _, o := range []string{c.Crates.Owners, c.RubyGems.Owners} {
+		if !strings.HasPrefix(o, "https://") || !strings.Contains(o, "{name}") {
+			panic("package_registries.json: crates.owners and rubygems.owners must be https URLs with {name}")
+		}
+	}
+	if c.ProductType == "" || c.MaxPackages <= 0 || c.MaxPOMs < 0 || c.MaxMetadata < 0 {
+		panic("package_registries.json: product_type, max_packages, max_poms and max_metadata are required")
 	}
 	return c
 })
+
+// searchRegistry is a registry read through one search endpoint.
+type searchRegistry struct {
+	Search string `json:"search"`
+	// Owners is the URL of a package's owners list, {name} its name.
+	Owners string `json:"owners,omitempty"`
+	Source string `json:"source"`
+}
 
 // PackageRegistryCatalog returns the package registry catalog.
 func PackageRegistryCatalog() PackageRegistries { return loadPackageRegistries() }

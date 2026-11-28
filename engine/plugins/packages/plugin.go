@@ -4,8 +4,10 @@
 
 // Package packages collects the software packages an organization publishes
 // on public package registries, from each in-scope registered domain: the
-// Maven Central groups named for the domain, and the npm packages its email
-// addresses maintain or whose homepage it hosts (semantics
+// Maven Central groups named for the domain, and the npm, NuGet, crates.io,
+// RubyGems and Packagist packages a search for the domain returns whose
+// homepage, project or documentation URL, or a maintainer's or author's
+// address, is in the enumeration's footprint (semantics
 // package_registries.json). Each package is stored as a Product named by its
 // Package URL, and its registry namespace as an Account joined to the domain
 // it is tied to; the websites the packages name are stored and handed to the
@@ -25,6 +27,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/account"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -97,8 +100,8 @@ func (p *packagesPlugin) Stop() { p.log.Info("Plugin stopped") }
 
 // pkg is one published package as a registry describes it.
 type pkg struct {
-	registry  string // maven or npm
-	namespace string // groupId, @scope or ~user
+	registry  string // its Package URL type: maven, npm, nuget, cargo, gem or composer
+	namespace string // groupId, @scope, ~user or vendor; "" for a registry without namespaces
 	name      string // artifactId or package name
 	title     string // the name the registry shows: group:artifact, or the npm package name
 	purl      string
@@ -107,11 +110,13 @@ type pkg struct {
 	urls      []pkgURL
 	// organization is the publisher a Maven POM names
 	organization string
-	// maintainers are the maintainers' addresses at the domain (npm)
+	// maintainers are the maintainers' or authors' addresses in the
+	// footprint (npm, Packagist)
 	maintainers []string
-	// nameTied is set when the namespace is named for the domain (a Maven
-	// groupId); an npm namespace is tied to it by its maintainers' addresses
-	nameTied bool
+	// domain is the registered domain the package is tied to: the domain its
+	// Maven group is named for, or the domain of the address or URL in the
+	// footprint that kept it
+	domain string
 }
 
 // namespacePage returns the registry's page for the package's namespace, the
@@ -125,6 +130,10 @@ func (k pkg) namespacePage() string {
 		return "https://www.npmjs.com/" + k.namespace
 	case "maven":
 		return "https://central.sonatype.com/namespace/" + k.namespace
+	case "composer":
+		return "https://packagist.org/packages/" + k.namespace + "/"
+	case "nuget":
+		return "https://www.nuget.org/profiles/" + strings.TrimPrefix(k.namespace, "~")
 	}
 	return ""
 }
@@ -139,8 +148,13 @@ func (p *packagesPlugin) check(e *et.Event) error {
 		return err
 	}
 
+	f := footprintOf(e, apex)
 	pkgs := p.maven(e, apex)
-	pkgs = append(pkgs, p.npm(e, apex)...)
+	pkgs = append(pkgs, p.npm(e, apex, f)...)
+	pkgs = append(pkgs, p.nuget(e, apex, f)...)
+	pkgs = append(pkgs, p.crates(e, apex, f)...)
+	pkgs = append(pkgs, p.rubygems(e, apex, f)...)
+	pkgs = append(pkgs, p.packagist(e, apex, f)...)
 	for _, k := range pkgs {
 		p.store(e, apex, k)
 	}
@@ -155,35 +169,15 @@ func (p *packagesPlugin) store(e *et.Event, apex string, k pkg) {
 	sess := e.Session
 	db := sess.DB()
 
-	acct, err := db.CreateAsset(ctx, &account.Account{ID: k.registry + ":" + k.namespace,
-		Type: account.PackageNamespace, Username: k.namespace})
-	if err != nil || acct == nil {
-		return
-	}
-	support.AddSource(ctx, sess, acct, p.source)
-	if k.nameTied || len(k.maintainers) > 0 {
-		if dom, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: apex}); err == nil && dom != nil {
-			support.Link(ctx, sess, acct, "namespace_domain", dom, p.source)
-		}
-	}
-	// The maintainers' addresses at the domain, the reason an npm package was
-	// kept, as the namespace's ContactRecord (Account --contact-->
-	// ContactRecord --id--> Identifier).
-	if len(k.maintainers) > 0 {
-		if cr := support.LinkContactRecord(ctx, sess, acct, "contact", k.namespacePage(), p.source); cr != nil {
-			for _, m := range k.maintainers {
-				support.LinkEmail(ctx, sess, cr, "id", m, p.source)
-			}
-		}
-	}
-
 	prod, err := db.CreateAsset(ctx, &platform.Product{ID: k.purl, Name: k.title,
 		Type: p.catalog.ProductType, Category: k.registry})
 	if err != nil || prod == nil {
 		return
 	}
 	support.AddSource(ctx, sess, prod, p.source)
-	support.Link(ctx, sess, acct, "package", prod, p.source)
+	if k.namespace != "" {
+		p.storeNamespace(ctx, sess, prod, k)
+	}
 	if id, err := db.CreateAsset(ctx, &general.Identifier{UniqueID: general.PackageURL + ":" + k.purl,
 		ID: k.purl, Type: general.PackageURL}); err == nil && id != nil {
 		support.AddSource(ctx, sess, id, p.source)
@@ -216,6 +210,33 @@ func (p *packagesPlugin) store(e *et.Event, apex string, k pkg) {
 		slog.Group("plugin", "name", p.name, "handler", p.name+"-Handler"))
 }
 
+// storeNamespace records the package's registry namespace as an Account
+// that publishes it, joined to the domain the package is tied to, with the
+// maintainers' addresses that kept it as its ContactRecord (Account
+// --contact--> ContactRecord --id--> Identifier).
+func (p *packagesPlugin) storeNamespace(ctx context.Context, sess et.Session, prod *dbt.Entity, k pkg) {
+	db := sess.DB()
+	acct, err := db.CreateAsset(ctx, &account.Account{ID: k.registry + ":" + k.namespace,
+		Type: account.PackageNamespace, Username: k.namespace})
+	if err != nil || acct == nil {
+		return
+	}
+	support.AddSource(ctx, sess, acct, p.source)
+	support.Link(ctx, sess, acct, "package", prod, p.source)
+	if k.domain != "" {
+		if dom, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: k.domain}); err == nil && dom != nil {
+			support.Link(ctx, sess, acct, "namespace_domain", dom, p.source)
+		}
+	}
+	if len(k.maintainers) > 0 {
+		if cr := support.LinkContactRecord(ctx, sess, acct, "contact", k.namespacePage(), p.source); cr != nil {
+			for _, m := range k.maintainers {
+				support.LinkEmail(ctx, sess, cr, "id", m, p.source)
+			}
+		}
+	}
+}
+
 // packageURL returns the URL asset for a URL a package names, or nil when it
 // is not an http(s) URL. URLs on code hosts and registry sites are kept: the
 // controlled-footprint walk does not pass control from them to the shared
@@ -230,26 +251,67 @@ func packageURL(raw string) *oamurl.URL {
 	return support.RawURLToOAM(u.String())
 }
 
-// ownAddress reports whether an email address is at the domain or one of its
-// subdomains.
-func ownAddress(email, apex string) bool {
-	email = strings.ToLower(strings.TrimSpace(email))
-	at := strings.LastIndexByte(email, '@')
-	if at < 1 {
-		return false
+// footprint is the registered domains a package's addresses and URLs must
+// be in to tie it to the organization: the domain searched for, and every
+// domain in the enumeration's scope.
+type footprint []string
+
+// footprintOf is the footprint of a search for apex in e's session.
+func footprintOf(e *et.Event, apex string) footprint {
+	f := footprint{apex}
+	for _, d := range e.Session.Scope().Domains() {
+		if d = strings.TrimSuffix(strings.ToLower(d), "."); d != "" && d != apex {
+			f = append(f, d)
+		}
 	}
-	host := email[at+1:]
-	return host == apex || strings.HasSuffix(host, "."+apex)
+	return f
 }
 
-// ownHost reports whether a URL's host is the domain or under it.
-func ownHost(raw, apex string) bool {
+// host returns the footprint domain a URL's host is or is under, or "".
+func (f footprint) host(raw string) string {
 	u, err := url.Parse(strings.TrimPrefix(strings.TrimSpace(raw), "git+"))
 	if err != nil {
-		return false
+		return ""
 	}
-	host := strings.ToLower(u.Hostname())
-	return host == apex || strings.HasSuffix(host, "."+apex)
+	return f.domainOf(u.Hostname())
+}
+
+// address returns the footprint domain an email address is at, or "".
+func (f footprint) address(email string) string {
+	email = strings.TrimSpace(email)
+	at := strings.LastIndexByte(email, '@')
+	if at < 1 {
+		return ""
+	}
+	return f.domainOf(email[at+1:])
+}
+
+// domainOf returns the footprint domain host is or is under, or "".
+func (f footprint) domainOf(host string) string {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	for _, d := range f {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return d
+		}
+	}
+	return ""
+}
+
+// tiedURLs returns the URLs of us that are not empty, and the footprint
+// domain of the first one in it, or "".
+func (f footprint) tiedURLs(us ...pkgURL) ([]pkgURL, string) {
+	var out []pkgURL
+	domain := ""
+	for _, u := range us {
+		if strings.TrimSpace(u.raw) == "" {
+			continue
+		}
+		out = append(out, u)
+		if domain == "" {
+			domain = f.host(u.raw)
+		}
+	}
+	return out, domain
 }
 
 // newest orders packages newest first and keeps at most n.

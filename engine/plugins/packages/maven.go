@@ -51,8 +51,7 @@ func parseMavenSearch(data []byte, group string) ([]pkg, error) {
 			continue
 		}
 		out = append(out, pkg{registry: "maven", namespace: d.Group, name: d.Artifact, title: d.Group + ":" + d.Artifact,
-			purl: "pkg:maven/" + d.Group + "/" + d.Artifact, version: d.Latest, updated: d.Timestamp,
-			nameTied: true})
+			purl: "pkg:maven/" + d.Group + "/" + d.Artifact, version: d.Latest, updated: d.Timestamp})
 	}
 	return out, nil
 }
@@ -109,6 +108,7 @@ func (p *packagesPlugin) maven(e *et.Event, apex string) []pkg {
 		for _, k := range found {
 			if !seen[k.purl] {
 				seen[k.purl] = true
+				k.domain = apex // the group is named for it
 				pkgs = append(pkgs, k)
 			}
 		}

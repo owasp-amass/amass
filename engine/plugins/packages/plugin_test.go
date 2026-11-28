@@ -27,7 +27,7 @@ func TestParseMavenSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || got[0].purl != "pkg:maven/com.example/core" || got[0].version != "2.1.0" ||
-		got[0].title != "com.example:core" || !got[0].nameTied || got[1].namespace != "com.example.cloud" {
+		got[0].title != "com.example:core" || got[1].namespace != "com.example.cloud" {
 		t.Fatalf("parseMavenSearch = %+v", got)
 	}
 	if n := newest(got, 1); len(n) != 1 || n[0].name != "sdk" {
@@ -66,7 +66,7 @@ func TestParseNPMSearch(t *testing.T) {
 		{"package":{"name":"unrelated","scope":"unscoped",
 			"links":{"homepage":"https://elsewhere.org"},
 			"publisher":{"username":"someone","email":"someone@elsewhere.org"}}}]}`)
-	got, err := parseNPMSearch(data, "example.com")
+	got, err := parseNPMSearch(data, footprint{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,11 +76,12 @@ func TestParseNPMSearch(t *testing.T) {
 	w := got[0]
 	if w.namespace != "@example" || w.name != "widgets" || w.title != "@example/widgets" ||
 		w.purl != "pkg:npm/%40example/widgets" || !reflect.DeepEqual(w.maintainers, []string{"jdoe@example.com"}) ||
-		len(w.urls) != 2 || w.urls[1].role != RoleRepository || w.nameTied {
+		len(w.urls) != 2 || w.urls[1].role != RoleRepository || w.domain != "example.com" {
 		t.Errorf("scoped package = %+v", w)
 	}
 	c := got[1]
-	if c.namespace != "~builder" || c.purl != "pkg:npm/example-cli" || len(c.maintainers) != 0 {
+	if c.namespace != "~builder" || c.purl != "pkg:npm/example-cli" || len(c.maintainers) != 0 ||
+		c.domain != "example.com" {
 		t.Errorf("homepage-anchored package = %+v", c)
 	}
 }
@@ -103,13 +104,22 @@ func TestPackageURL(t *testing.T) {
 	}
 }
 
-func TestOwnAddressAndHost(t *testing.T) {
-	if !ownAddress("Dev@Mail.Example.com", "example.com") || ownAddress("dev@notexample.com", "example.com") ||
-		ownAddress("example.com", "example.com") {
-		t.Error("ownAddress")
+// A footprint ties addresses and URLs in any of its domains, and names the
+// domain that tied them.
+func TestFootprint(t *testing.T) {
+	f := footprint{"example.com", "example-labs.org"}
+	if f.address("Dev@Mail.Example.com") != "example.com" || f.address("dev@notexample.com") != "" ||
+		f.address("example.com") != "" || f.address("ops@example-labs.org") != "example-labs.org" {
+		t.Error("address")
 	}
-	if !ownHost("git+https://www.example.com/x", "example.com") || ownHost("https://example.com.evil.org", "example.com") {
-		t.Error("ownHost")
+	if f.host("git+https://www.example.com/x") != "example.com" || f.host("https://example.com.evil.org") != "" ||
+		f.host("https://docs.example-labs.org/") != "example-labs.org" {
+		t.Error("host")
+	}
+	urls, domain := f.tiedURLs(pkgURL{"", RoleHomepage}, pkgURL{"https://github.com/x/y", RoleRepository},
+		pkgURL{"https://docs.example-labs.org", RoleProject})
+	if len(urls) != 2 || domain != "example-labs.org" {
+		t.Errorf("tiedURLs = %v, %q", urls, domain)
 	}
 }
 
@@ -118,6 +128,8 @@ func TestNamespacePage(t *testing.T) {
 		{"npm", "@example", "https://www.npmjs.com/org/example"},
 		{"npm", "~builder", "https://www.npmjs.com/~builder"},
 		{"maven", "com.example", "https://central.sonatype.com/namespace/com.example"},
+		{"composer", "example", "https://packagist.org/packages/example/"},
+		{"nuget", "~builder", "https://www.nuget.org/profiles/builder"},
 		{"pypi", "example", ""},
 	} {
 		if got := (pkg{registry: c.registry, namespace: c.namespace}).namespacePage(); got != c.want {
