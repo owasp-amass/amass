@@ -38,6 +38,7 @@ import (
 type Session struct {
 	et.Session
 	id      uuid.UUID
+	start   time.Time
 	ctx     context.Context
 	cfg     *config.Config
 	db      repository.Repository
@@ -83,7 +84,7 @@ func NewSession(t testing.TB) *Session {
 	cfg.Dir = t.TempDir()
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	s = &Session{id: uuid.New(), ctx: ctx, cfg: cfg, db: db,
+	s = &Session{id: uuid.New(), start: time.Now(), ctx: ctx, cfg: cfg, db: db,
 		log: slog.New(slog.NewTextHandler(io.Discard, nil)), stats: &et.SessionStats{},
 		http:   &et.SessionHTTPClients{General: client, Probe: client, Crawl: client, Bulk: client},
 		ranger: cidranger.NewPCTrieRanger(), backlog: &Backlog{}, ps: pubsub.NewLogger()}
@@ -93,6 +94,8 @@ func NewSession(t testing.TB) *Session {
 }
 
 func (s *Session) ID() uuid.UUID { return s.id }
+
+func (s *Session) StartTime() time.Time { return s.start }
 
 func (s *Session) Ctx() context.Context { return s.ctx }
 

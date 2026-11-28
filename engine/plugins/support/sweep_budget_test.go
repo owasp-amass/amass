@@ -6,6 +6,7 @@ package support
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
@@ -40,6 +42,16 @@ func (f *fakeSweepDB) IncomingEdges(_ context.Context, entity *dbt.Entity, _ tim
 func (f *fakeSweepDB) OutgoingEdges(context.Context, *dbt.Entity, time.Time, ...string) ([]*dbt.Edge, error) {
 	return []*dbt.Edge{{Relation: &oamgen.SimpleRelation{Name: "ptr_record"}}}, nil
 }
+
+func (f *fakeSweepDB) FindEntityById(context.Context, string) (*dbt.Entity, error) {
+	return nil, errors.New("not found")
+}
+
+func (f *fakeSweepDB) FindEntityTags(context.Context, *dbt.Entity, time.Time, ...string) ([]*dbt.EntityTag, error) {
+	return nil, nil
+}
+
+func (f *fakeSweepDB) DeleteEntity(context.Context, string) error { return nil }
 
 func TestSweepBudgetSpend(t *testing.T) {
 	b := SweepBudgetFor(plugintest.NewSession(t))
@@ -88,7 +100,7 @@ func TestSweepBudgetRefund(t *testing.T) {
 
 	db := &fakeSweepDB{forward: map[string]bool{"198.51.100.1": true, "198.51.100.3": true}}
 	now := time.Now()
-	if !b.recheck(context.Background(), db, cidr, now) {
+	if !b.recheck(context.Background(), db, cidr, time.Time{}, now) {
 		t.Fatal("two hits refunded nothing")
 	}
 	if got := b.TrySpend(cidr, 1_000); got != 2*sweepRefundPerHit {
@@ -97,10 +109,10 @@ func TestSweepBudgetRefund(t *testing.T) {
 
 	// Checks come at most once per sweepRecheckEvery, never credit a hit
 	// twice, and settle the reverse-DNS-only address as dead.
-	if b.recheck(context.Background(), db, cidr, now.Add(time.Second)) {
+	if b.recheck(context.Background(), db, cidr, time.Time{}, now.Add(time.Second)) {
 		t.Error("a recheck ran again before sweepRecheckEvery")
 	}
-	if b.recheck(context.Background(), db, cidr, now.Add(sweepSettle)) {
+	if b.recheck(context.Background(), db, cidr, time.Time{}, now.Add(sweepSettle)) {
 		t.Error("the same hits were credited twice")
 	}
 	if n := len(b.nb[cidr].pending); n != 0 {
@@ -121,7 +133,7 @@ func TestSweepBudgetCaps(t *testing.T) {
 		b.RecordSwept(cidr, addr)
 		forward[addr] = true
 	}
-	b.recheck(context.Background(), &fakeSweepDB{forward: forward}, cidr, time.Now())
+	b.recheck(context.Background(), &fakeSweepDB{forward: forward}, cidr, time.Time{}, time.Now())
 	if got := b.TrySpend(cidr, 1_000_000); got != sweepBudgetCeiling-10 {
 		t.Fatalf("TrySpend = %d, want the ceiling less what was swept, %d", got, sweepBudgetCeiling-10)
 	}
@@ -161,5 +173,46 @@ func TestBudgetedSweep(t *testing.T) {
 	}
 	if n := sweep("203.0.113.10", 20); n < 20 {
 		t.Errorf("a sweep outside the scope's netblocks covered %d addresses, want 20", n)
+	}
+}
+
+// A dead address the session stored, with its unanswered reverse DNS alias,
+// is removed; one with a PTR answer, or stored before the session, is kept.
+func TestPruneDead(t *testing.T) {
+	sess := plugintest.NewSession(t)
+	ctx := context.Background()
+	since := time.Now().Add(-time.Minute)
+	later := time.Now().Add(sweepPruneQuiet + time.Minute)
+
+	nb := sess.Asset(t, &oamnet.Netblock{CIDR: netip.MustParsePrefix("198.51.100.0/24"), Type: "IPv4"})
+	swept := func(last string) (*dbt.Entity, *dbt.Entity) {
+		ip := sess.Asset(t, &oamnet.IPAddress{Address: netip.MustParseAddr("198.51.100." + last), Type: "IPv4"})
+		alias := sess.Asset(t, &oamdns.FQDN{Name: last + ".100.51.198.in-addr.arpa"})
+		sess.Edge(t, nb, &oamgen.SimpleRelation{Name: "contains"}, ip)
+		sess.Edge(t, ip, &oamgen.SimpleRelation{Name: "ptr_record"}, alias)
+		return ip, alias
+	}
+
+	dead, deadAlias := swept("7")
+	if pruneDead(ctx, sess.DB(), "198.51.100.7", time.Now().Add(time.Hour), later) {
+		t.Error("an address stored before the session was removed")
+	}
+	if !pruneDead(ctx, sess.DB(), "198.51.100.7", since, later) {
+		t.Fatal("the dead address was kept")
+	}
+	for _, id := range []string{dead.ID, deadAlias.ID} {
+		if _, err := sess.DB().FindEntityById(ctx, id); err == nil {
+			t.Errorf("%s is still stored", id)
+		}
+	}
+	if _, err := sess.DB().FindEntityById(ctx, nb.ID); err != nil {
+		t.Error("the netblock was removed")
+	}
+
+	_, answered := swept("8")
+	host := sess.Asset(t, &oamdns.FQDN{Name: "host.owasp.org"})
+	sess.Edge(t, answered, &oamdns.BasicDNSRelation{Name: "dns_record", Header: oamdns.RRHeader{RRType: 12}}, host)
+	if pruneDead(ctx, sess.DB(), "198.51.100.8", since, later) {
+		t.Error("an address with a PTR answer was removed")
 	}
 }

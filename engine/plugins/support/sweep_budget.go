@@ -47,14 +47,20 @@ const (
 	// sweepSettle is how long a swept address has to show a hit; after it,
 	// one without a hit is dead and is not checked again.
 	sweepSettle = 2 * time.Minute
+	// sweepPruneAge is how long after it was swept a dead address may be
+	// removed (pruneDead), so no handler still holds it.
+	sweepPruneAge = 10 * time.Minute
 )
 
 // SweepDB is the read access the budget's refunds need; asset-db
 // repositories (what Session.DB() returns) satisfy it.
 type SweepDB interface {
+	FindEntityById(ctx context.Context, id string) (*dbt.Entity, error)
 	FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, limit int, filters dbt.ContentFilters) ([]*dbt.Entity, error)
+	FindEntityTags(ctx context.Context, entity *dbt.Entity, since time.Time, names ...string) ([]*dbt.EntityTag, error)
 	IncomingEdges(ctx context.Context, entity *dbt.Entity, since time.Time, labels ...string) ([]*dbt.Edge, error)
 	OutgoingEdges(ctx context.Context, entity *dbt.Entity, since time.Time, labels ...string) ([]*dbt.Edge, error)
+	DeleteEntity(ctx context.Context, id string) error
 }
 
 type nbBudget struct {
@@ -63,9 +69,13 @@ type nbBudget struct {
 	granted int
 	checked time.Time
 	// pending are the swept addresses not yet confirmed or found dead, with
-	// when each was swept; done are those that were.
+	// when each was swept; done are those that were; dead are those found
+	// dead and not yet removed, with when each was swept.
 	pending map[string]time.Time
 	done    map[string]bool
+	dead    map[string]time.Time
+	// gone are the dead addresses removed, which are not swept again
+	gone map[string]bool
 }
 
 // SweepBudget holds one session's per-netblock sweep budgets.
@@ -104,7 +114,8 @@ func (b *SweepBudget) Seed(cidr string, window int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, ok := b.nb[cidr]; !ok {
-		b.nb[cidr] = &nbBudget{remaining: window, pending: map[string]time.Time{}, done: map[string]bool{}}
+		b.nb[cidr] = &nbBudget{remaining: window, pending: map[string]time.Time{}, done: map[string]bool{},
+			dead: map[string]time.Time{}, gone: map[string]bool{}}
 	}
 }
 
@@ -151,8 +162,11 @@ func (b *SweepBudget) RecordSwept(cidr, addr string) {
 // recheck refunds the netblock's budget by how many of its pending swept
 // addresses have turned out to host a real asset, at most once per
 // sweepRecheckEvery. A pending address that has had sweepSettle to show a
-// hit and has none is dead. It reports whether it refunded anything.
-func (b *SweepBudget) recheck(ctx context.Context, db SweepDB, cidr string, now time.Time) bool {
+// hit and has none is dead, and once sweepPruneAge has passed since it was
+// swept, it is removed when this session (started at since) stored it and
+// nothing else was recorded about it (pruneDead). It reports whether it
+// refunded anything.
+func (b *SweepBudget) recheck(ctx context.Context, db SweepDB, cidr string, since, now time.Time) bool {
 	b.mu.Lock()
 	e, ok := b.nb[cidr]
 	if !ok || db == nil || now.Sub(e.checked) < sweepRecheckEvery {
@@ -165,27 +179,54 @@ func (b *SweepBudget) recheck(ctx context.Context, db SweepDB, cidr string, now 
 	for addr, at := range e.pending {
 		pending[addr] = at
 	}
+	var prune []string
+	for addr, at := range e.dead {
+		if now.Sub(at) >= sweepPruneAge {
+			prune = append(prune, addr)
+		}
+	}
 	b.mu.Unlock()
 
 	hits := 0
-	var settled []string
+	var confirmed []string
+	dead := map[string]time.Time{}
 	for addr, at := range pending {
 		if ctx.Err() != nil {
 			break
 		}
 		if sweepAddrConfirmed(ctx, db, addr) {
 			hits++
-			settled = append(settled, addr)
+			confirmed = append(confirmed, addr)
 		} else if now.Sub(at) >= sweepSettle {
-			settled = append(settled, addr)
+			dead[addr] = at
+		}
+	}
+	var removed []string
+	for _, addr := range prune {
+		if ctx.Err() != nil {
+			break
+		}
+		if pruneDead(ctx, db, addr, since, now) {
+			removed = append(removed, addr)
 		}
 	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, addr := range settled {
+	for _, addr := range confirmed {
 		delete(e.pending, addr)
 		e.done[addr] = true
+	}
+	for addr, at := range dead {
+		delete(e.pending, addr)
+		e.done[addr] = true
+		e.dead[addr] = at
+	}
+	for _, addr := range prune {
+		delete(e.dead, addr)
+	}
+	for _, addr := range removed {
+		e.gone[addr] = true
 	}
 	if hits > 0 {
 		e.remaining = min(e.remaining+hits*sweepRefundPerHit, sweepBudgetCeiling)
@@ -236,7 +277,9 @@ func ScopeNetblock(sess et.Session, addr netip.Addr) (string, bool) {
 // addr is in a netblock the scope holds, the sweep spends that netblock's
 // budget instead: it sweeps only what the budget grants and records what it
 // swept for the refunds, so the sweeps around many hosts in one network
-// never add up to the whole network.
+// never add up to the whole network. Each sweep there first checks the
+// netblock's earlier sweeps (recheck): refunds for hosts found, and removal
+// of the dead addresses stored for nothing.
 func BudgetedSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int, callback SweepCallback) {
 	cidr, ok := ScopeNetblock(e.Session, addr.Address)
 	if !ok {
@@ -246,20 +289,28 @@ func BudgetedSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int
 
 	b := SweepBudgetFor(e.Session)
 	b.Seed(cidr, SweepSeedWindow)
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
+	b.recheck(ctx, e.Session.DB(), cidr, e.Session.StartTime(), time.Now())
+	cancel()
 	granted := b.TrySpend(cidr, size)
-	if granted < size {
-		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		if b.recheck(ctx, e.Session.DB(), cidr, time.Now()) {
-			granted += b.TrySpend(cidr, size-granted)
-		}
-		cancel()
-	}
 	if granted <= 0 {
 		return
 	}
 
 	IPAddressSweep(e, addr, src, granted, func(ev *et.Event, a *oamnet.IPAddress, s *et.Source) {
+		// an address removed as dead was evaluated once already
+		if b.removed(cidr, a.Address.String()) {
+			return
+		}
 		b.RecordSwept(cidr, a.Address.String())
 		callback(ev, a, s)
 	})
+}
+
+// removed reports whether addr was removed from cidr as dead.
+func (b *SweepBudget) removed(cidr, addr string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	e, ok := b.nb[cidr]
+	return ok && e.gone[addr]
 }
