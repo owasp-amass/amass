@@ -14,6 +14,7 @@ import (
 	"time"
 
 	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
@@ -38,6 +39,20 @@ func TestDBStatsCountsCallsByCaller(t *testing.T) {
 	if _, ok := wrapped.(sqlReads); !ok {
 		t.Fatal("the wrapped repository hides the optional reads")
 	}
+	for name, ok := range map[string]bool{
+		"StepReader":           is[repository.StepReader](wrapped),
+		"ChangeReader":         is[repository.ChangeReader](wrapped),
+		"CoKeyedGrouper":       is[repository.CoKeyedGrouper](wrapped),
+		"DegreeReader":         is[repository.DegreeReader](wrapped),
+		"EntityPager":          is[repository.EntityPager](wrapped),
+		"IPRangeReader":        is[repository.IPRangeReader](wrapped),
+		"ValueHistogramReader": is[repository.ValueHistogramReader](wrapped),
+		"RunRecorder":          is[repository.RunRecorder](wrapped),
+	} {
+		if !ok {
+			t.Errorf("the wrapped repository hides %s", name)
+		}
+	}
 	if _, ok := wrapped.(coordStores); !ok {
 		t.Fatal("the wrapped repository hides the journal, leases, secrets or work queues")
 	}
@@ -55,14 +70,23 @@ func TestDBStatsCountsCallsByCaller(t *testing.T) {
 	if _, _, err := wrapped.(sqlReads).ReadEdgesLimited(ctx, ent, "out", time.Time{}, 5); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := wrapped.(repository.ChangeReader).GraphChanges(ctx, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
 
 	var buf bytes.Buffer
 	stats.log(slog.New(slog.NewTextHandler(&buf, nil)))
 	out := buf.String()
-	for _, want := range []string{"calls=5", "TestDBStatsCountsCallsByCaller FindEntityById\" calls=3",
-		"ReadEdgesLimited"} {
+	for _, want := range []string{"calls=6", "TestDBStatsCountsCallsByCaller FindEntityById\" calls=3",
+		"ReadEdgesLimited", "GraphChanges"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("log lacks %q:\n%s", want, out)
 		}
 	}
+}
+
+// is reports whether v has the capability T.
+func is[T any](v any) bool {
+	_, ok := v.(T)
+	return ok
 }

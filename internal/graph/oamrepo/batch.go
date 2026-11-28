@@ -63,6 +63,18 @@ func (s *ReadStats) methods() []string {
 	return methods
 }
 
+// Reset forgets the reads recorded so far, so the next Summary counts only
+// what follows.
+func (s *ReadStats) Reset() {
+	if s == nil {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls, s.took = nil, nil
+}
+
 // Summary returns the reads recorded so far, their total time, and each
 // method's reads as "method=n" in method order.
 func (s *ReadStats) Summary() (int, time.Duration, string) {

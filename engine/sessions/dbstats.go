@@ -60,24 +60,27 @@ type coordStores interface {
 	repository.WorkQueue
 }
 
-// sqlReads are the optional reads countingRepository forwards.
+// sqlReads are the optional capabilities countingRepository forwards and
+// counts. The SQL repositories have them all, so a session that counts its
+// calls reads the database the way one that does not would: by steps,
+// ranges, pages and histograms rather than per asset.
 type sqlReads interface {
-	ReadEdgesLimited(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, bool, error)
-	ReadEdgesPage(context.Context, *dbt.Entity, string, time.Time, *dbt.EdgeCursor, int, ...string) ([]*dbt.Edge,
-		*dbt.EdgeCursor, error)
+	repository.LimitedEdgeReader
+	repository.EdgePager
+	repository.ValueFinder
+	repository.AssetReplacer
+	repository.StepReader
+	repository.ChangeReader
+	repository.CoKeyedGrouper
+	repository.DegreeReader
+	repository.EntityPager
+	repository.IPRangeReader
+	repository.ValueHistogramReader
+	repository.RunRecorder
 	FindEntitiesByIds(context.Context, []string) ([]*dbt.Entity, error)
 	ReadEdgesPerLabel(context.Context, *dbt.Entity, string, time.Time, int, ...string) ([]*dbt.Edge, []string, error)
 	ReadEdgesForEntities(context.Context, []string, string, time.Time, int, ...string) (map[string][]*dbt.Edge,
 		[]string, error)
-	ReplaceAsset(context.Context, oam.Asset) (*dbt.Entity, error)
-	FindEntitiesByTagValue(context.Context, oam.AssetType, string, string, bool, time.Time, int) ([]*dbt.Entity,
-		bool, error)
-	FindEntitiesByAttribute(context.Context, oam.AssetType, string, string, bool, time.Time, int) ([]*dbt.Entity,
-		bool, error)
-	FindEntitiesByTagValueAfter(context.Context, oam.AssetType, string, string, bool, time.Time, string,
-		int) ([]*dbt.Entity, bool, error)
-	FindEntitiesByAttributeAfter(context.Context, oam.AssetType, string, string, bool, time.Time, string,
-		int) ([]*dbt.Entity, bool, error)
 }
 
 // withDBStats wraps repo to count its calls when DBStatsEnv is set and repo
@@ -181,8 +184,6 @@ func (s *dbStats) log(l *slog.Logger) {
 			"mean", (r.c.took / time.Duration(r.c.n)).Round(time.Microsecond).String())
 	}
 }
-
-func (r *countingRepository) sql() sqlReads { return r.Repository.(sqlReads) }
 
 func (r *countingRepository) CreateEntity(ctx context.Context, e *dbt.Entity) (*dbt.Entity, error) {
 	defer r.stats.record("CreateEntity", time.Now())
@@ -296,62 +297,4 @@ func (r *countingRepository) FindEdgeTags(ctx context.Context, e *dbt.Edge, sinc
 func (r *countingRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 	defer r.stats.record("DeleteEdgeTag", time.Now())
 	return r.Repository.DeleteEdgeTag(ctx, id)
-}
-
-func (r *countingRepository) ReadEdgesLimited(ctx context.Context, e *dbt.Entity, dir string, since time.Time,
-	limit int, labels ...string) ([]*dbt.Edge, bool, error) {
-	defer r.stats.record("ReadEdgesLimited", time.Now())
-	return r.sql().ReadEdgesLimited(ctx, e, dir, since, limit, labels...)
-}
-
-func (r *countingRepository) ReadEdgesPage(ctx context.Context, e *dbt.Entity, dir string, since time.Time,
-	after *dbt.EdgeCursor, limit int, labels ...string) ([]*dbt.Edge, *dbt.EdgeCursor, error) {
-	defer r.stats.record("ReadEdgesPage", time.Now())
-	return r.sql().ReadEdgesPage(ctx, e, dir, since, after, limit, labels...)
-}
-
-func (r *countingRepository) FindEntitiesByIds(ctx context.Context, ids []string) ([]*dbt.Entity, error) {
-	defer r.stats.record("FindEntitiesByIds", time.Now())
-	return r.sql().FindEntitiesByIds(ctx, ids)
-}
-
-func (r *countingRepository) ReadEdgesPerLabel(ctx context.Context, e *dbt.Entity, dir string, since time.Time,
-	perLabel int, labels ...string) ([]*dbt.Edge, []string, error) {
-	defer r.stats.record("ReadEdgesPerLabel", time.Now())
-	return r.sql().ReadEdgesPerLabel(ctx, e, dir, since, perLabel, labels...)
-}
-
-func (r *countingRepository) ReadEdgesForEntities(ctx context.Context, ids []string, dir string, since time.Time,
-	perEntity int, labels ...string) (map[string][]*dbt.Edge, []string, error) {
-	defer r.stats.record("ReadEdgesForEntities", time.Now())
-	return r.sql().ReadEdgesForEntities(ctx, ids, dir, since, perEntity, labels...)
-}
-
-func (r *countingRepository) ReplaceAsset(ctx context.Context, a oam.Asset) (*dbt.Entity, error) {
-	defer r.stats.record("ReplaceAsset", time.Now())
-	return r.sql().ReplaceAsset(ctx, a)
-}
-
-func (r *countingRepository) FindEntitiesByTagValue(ctx context.Context, t oam.AssetType, name, value string,
-	contains bool, since time.Time, limit int) ([]*dbt.Entity, bool, error) {
-	defer r.stats.record("FindEntitiesByTagValue", time.Now())
-	return r.sql().FindEntitiesByTagValue(ctx, t, name, value, contains, since, limit)
-}
-
-func (r *countingRepository) FindEntitiesByAttribute(ctx context.Context, t oam.AssetType, key, value string,
-	contains bool, since time.Time, limit int) ([]*dbt.Entity, bool, error) {
-	defer r.stats.record("FindEntitiesByAttribute", time.Now())
-	return r.sql().FindEntitiesByAttribute(ctx, t, key, value, contains, since, limit)
-}
-
-func (r *countingRepository) FindEntitiesByTagValueAfter(ctx context.Context, t oam.AssetType, name, value string,
-	contains bool, since time.Time, after string, limit int) ([]*dbt.Entity, bool, error) {
-	defer r.stats.record("FindEntitiesByTagValue", time.Now())
-	return r.sql().FindEntitiesByTagValueAfter(ctx, t, name, value, contains, since, after, limit)
-}
-
-func (r *countingRepository) FindEntitiesByAttributeAfter(ctx context.Context, t oam.AssetType, key, value string,
-	contains bool, since time.Time, after string, limit int) ([]*dbt.Entity, bool, error) {
-	defer r.stats.record("FindEntitiesByAttribute", time.Now())
-	return r.sql().FindEntitiesByAttributeAfter(ctx, t, key, value, contains, since, after, limit)
 }

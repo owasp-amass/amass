@@ -47,6 +47,10 @@ type AISettings struct {
 	// (the default) writes strong proposals and journals the rest, "journal"
 	// only journals them, and "off" turns it off. It needs no model.
 	Attribution string `yaml:"attribution,omitempty" json:"attribution,omitempty"`
+	// AttributionCanaryEvery checks the attribution passes' lasting cache:
+	// every N passes, each organization is also searched without it and a
+	// difference is logged. Zero (the default) never checks.
+	AttributionCanaryEvery int `yaml:"attribution_canary_every,omitempty" json:"attribution_canary_every,omitempty"`
 	// Journal is the review journal path; empty uses review.jsonl in the
 	// Amass output directory.
 	Journal string `yaml:"journal,omitempty" json:"journal,omitempty"`
@@ -364,6 +368,7 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 		{"AMASS_LLM_GUIDANCE_ROUNDS", &c.GuidanceRounds},
 		{"AMASS_LLM_MAX_TOKENS", &c.MaxTokens},
 		{"AMASS_LLM_CONTEXT_TOKENS", &c.ContextTokens},
+		{"AMASS_ATTRIBUTION_CANARY_EVERY", &c.AttributionCanaryEvery},
 	}
 	for _, pair := range ints {
 		if raw, ok := lookup(pair.key); ok {
@@ -397,6 +402,9 @@ func ResolveAISettings(base AISettings, lookup func(string) (string, bool)) (AIS
 	}
 	if c.GuidanceRounds > 3 {
 		return c, fmt.Errorf("AI guidance_rounds must be 0..3")
+	}
+	if c.AttributionCanaryEvery < 0 || c.AttributionCanaryEvery > 1000 {
+		return c, fmt.Errorf("AI attribution_canary_every must be 0..1000")
 	}
 	if c.ContextTokens != 0 && (c.ContextTokens < 2048 || c.ContextTokens > 262144) {
 		return c, fmt.Errorf("AI context_tokens must be 0 or 2048..262144")

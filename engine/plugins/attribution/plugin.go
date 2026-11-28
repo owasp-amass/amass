@@ -13,9 +13,11 @@ package attribution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/owasp-amass/amass/v5/internal/ai/classify"
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/oamrepo"
+	"github.com/owasp-amass/amass/v5/internal/lens"
 	"github.com/owasp-amass/amass/v5/internal/review"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -125,8 +128,8 @@ func (p *plugin) tracker(sess et.Session) *tracker {
 	}
 
 	mode, _, err := sess.Config().AIAttribution(p.lookup)
-	t := &tracker{p: p, sess: sess, mode: mode, orgs: map[string]*dbt.Entity{},
-		allOrgs: map[string]*dbt.Entity{}, dupProcessed: map[string]struct{}{},
+	t := &tracker{p: p, sess: sess, mode: mode, canary: sess.Config().AIAttributionCanaryEvery(p.lookup),
+		orgs: map[string]*dbt.Entity{}, allOrgs: map[string]*dbt.Entity{}, dupProcessed: map[string]struct{}{},
 		allPersons: map[string]*dbt.Entity{}, personProcessed: map[string]struct{}{}}
 	switch {
 	case err != nil:
@@ -180,10 +183,19 @@ type tracker struct {
 	// person-duplicate search. personProcessed is its incremental cursor.
 	allPersons      map[string]*dbt.Entity
 	personProcessed map[string]struct{}
-	gen             uint64
-	pending         bool
-	first           time.Time
-	last            time.Time
+	// counted is the adapter the passes read through, counting its reads for
+	// the log, and lasting keeps what they read from one pass to the next.
+	counted oamrepo.Adapter
+	lasting *graph.LastingCache
+	// passes counts the passes; every canary-th one also searches each
+	// organization without the lasting cache and compares
+	// (options.ai.attribution_canary_every). Zero never does.
+	passes  int
+	canary  int
+	gen     uint64
+	pending bool
+	first   time.Time
+	last    time.Time
 }
 
 func (t *tracker) enabled() *tracker {
@@ -297,18 +309,37 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 	defer cancel()
 
 	adapter := oamrepo.New(t.sess.DB(), t.sess.Config())
+	if t.lasting == nil {
+		t.counted = adapter
+		t.counted.Stats = &oamrepo.ReadStats{}
+		t.lasting = graph.NewLastingCache(t.counted)
+	}
+
+	t.passes++
+	canary := t.canary > 0 && t.passes%t.canary == 0
 	for _, o := range orgs {
 		if ctx.Err() != nil {
 			return
 		}
 
-		// each organization's reads are counted on their own, for the log
-		counted := adapter
-		counted.Stats = &oamrepo.ReadStats{}
+		// each organization's reads are counted on their own, for the log,
+		// and read after the cache has dropped what changed since the last
+		// search, the writes this pass made included
+		t.counted.Stats.Reset()
 		start := time.Now()
-		org, err := counted.GetAsset(ctx, o.ID)
+		g, err := t.lasting.Refresh(ctx)
+		if err != nil && !errors.Is(err, graph.ErrUnsupported) {
+			t.sess.Log().Warn("AI attribution reads without its lasting cache", "error", err.Error())
+		}
+
+		org, err := g.GetAsset(ctx, o.ID)
 		if err != nil {
 			continue
+		}
+
+		var want *lens.OwnershipGapReport
+		if canary {
+			want = t.uncachedSearch(ctx, adapter, org)
 		}
 
 		policy := review.AttributionPolicy{Mode: t.mode, Anchors: t.sess.Config().Domains()}
@@ -316,11 +347,13 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 			policy.Model = ai.OwnershipModel{LinearModel: t.model}
 		}
 
-		res, err := review.AttributeOwnership(ctx, counted, oamrepo.Catalog{}, org, counted, t.journal, policy)
+		res, err := review.AttributeOwnership(ctx, g, oamrepo.Catalog{}, org, t.counted, t.journal, policy)
 		if err != nil {
 			t.sess.Log().Error(fmt.Sprintf("AI attribution for %s: %v", graph.AssetLabel(org), err))
+		} else if want != nil {
+			t.compareCanary(org, *want, res.Report)
 		}
-		reads, took, byMethod := counted.Stats.Summary()
+		reads, took, byMethod := t.counted.Stats.Summary()
 		t.sess.Log().Info("AI attribution pass", "organization", graph.AssetLabel(org),
 			"footprint", res.Report.Footprint, "candidates", len(res.Report.Candidates),
 			"lens_reads", res.Report.Reads, "db_reads", reads, "db_took", took.Round(time.Millisecond).String(),
@@ -366,4 +399,34 @@ func (t *tracker) widenScope(ctx context.Context, gains []graph.Asset) {
 		_, _ = t.sess.Scope().Admit(&et.AdmissionRequest{Entity: ent, Via: t.p.name,
 			Evidence: []et.AdmissionEvidence{{Signal: et.SignalOwnershipAttribution, Strength: et.StrengthStrong}}})
 	}
+}
+
+// uncachedSearch searches org's ownership gaps with a cache for this search
+// alone, for the canary to compare with the lasting cache's search.
+func (t *tracker) uncachedSearch(ctx context.Context, adapter oamrepo.Adapter,
+	org graph.Asset) *lens.OwnershipGapReport {
+	report, err := lens.SearchOwnershipGaps(ctx, graph.Cached(adapter), oamrepo.Catalog{}, org)
+	if err != nil {
+		t.sess.Log().Warn("AI attribution canary search failed", "organization", graph.AssetLabel(org),
+			"error", err.Error())
+		return nil
+	}
+
+	return &report
+}
+
+// compareCanary warns when the lasting cache's search found other than the
+// search without it. Writes other handlers made between the two searches
+// can also explain a difference.
+func (t *tracker) compareCanary(org graph.Asset, want, got lens.OwnershipGapReport) {
+	want.Reads, got.Reads = 0, 0
+	if reflect.DeepEqual(want, got) {
+		t.sess.Log().Info("AI attribution canary matched", "organization", graph.AssetLabel(org))
+		return
+	}
+
+	t.sess.Log().Warn("AI attribution canary found the lasting cache's search differs", "organization",
+		graph.AssetLabel(org), "footprint", got.Footprint, "footprint_uncached", want.Footprint,
+		"candidates", len(got.Candidates), "candidates_uncached", len(want.Candidates),
+		"truncated", got.Truncated, "truncated_uncached", want.Truncated)
 }

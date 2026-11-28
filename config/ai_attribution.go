@@ -59,3 +59,21 @@ func (c *Config) AnnounceAIDecisions(lookup func(string) (string, bool)) bool {
 	}
 	return true
 }
+
+// AIAttributionCanaryEvery is how many attribution passes go by between
+// checks of the passes' lasting cache (AISettings.AttributionCanaryEvery,
+// or AMASS_ATTRIBUTION_CANARY_EVERY); zero, and settings that do not
+// resolve, never check.
+func (c *Config) AIAttributionCanaryEvery(lookup func(string) (string, bool)) int {
+	var base AISettings
+	if c.AI != nil {
+		base = *c.AI
+	}
+
+	s, err := ResolveAISettings(base, lookup)
+	if err != nil {
+		return 0
+	}
+
+	return s.AttributionCanaryEvery
+}
