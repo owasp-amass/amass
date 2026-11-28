@@ -6,36 +6,43 @@ package support
 
 import (
 	"context"
+	"fmt"
+	"net/netip"
 	"testing"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/engine/plugins/plugintest"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// fakeSweepDB confirms exactly the addresses in its set: a confirmed address
-// has a stored IPAddress with an outgoing edge, an unconfirmed one does not.
-type fakeSweepDB struct{ confirmed map[string]bool }
+// fakeSweepDB stores every address, links each its reverse DNS alias, and
+// gives the addresses in forward a forward DNS name.
+type fakeSweepDB struct{ forward map[string]bool }
 
-func (f *fakeSweepDB) FindEntitiesByContent(_ context.Context, _ oam.AssetType, _ time.Time, _ int, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
+func (f *fakeSweepDB) FindEntitiesByContent(_ context.Context, _ oam.AssetType, _ time.Time, _ int,
+	filters dbt.ContentFilters) ([]*dbt.Entity, error) {
 	s, _ := filters["address"].(string)
-	if f.confirmed[s] {
-		return []*dbt.Entity{{ID: s}}, nil
+	return []*dbt.Entity{{ID: s}}, nil
+}
+
+func (f *fakeSweepDB) IncomingEdges(_ context.Context, entity *dbt.Entity, _ time.Time,
+	_ ...string) ([]*dbt.Edge, error) {
+	if f.forward[entity.ID] {
+		return []*dbt.Edge{{Relation: &oamgen.SimpleRelation{Name: "dns_record"}}}, nil
 	}
 	return nil, nil
 }
 
-func (f *fakeSweepDB) OutgoingEdges(_ context.Context, entity *dbt.Entity, _ time.Time, _ ...string) ([]*dbt.Edge, error) {
-	if entity != nil && f.confirmed[entity.ID] {
-		return []*dbt.Edge{{}}, nil
-	}
-	return nil, nil
+func (f *fakeSweepDB) OutgoingEdges(context.Context, *dbt.Entity, time.Time, ...string) ([]*dbt.Edge, error) {
+	return []*dbt.Edge{{Relation: &oamgen.SimpleRelation{Name: "ptr_record"}}}, nil
 }
 
 func TestSweepBudgetSpend(t *testing.T) {
-	const sid = "test-sweep-spend"
-	defer DiscardSweepBudget(sid)
-	b := SweepBudgetFor(sid)
+	b := SweepBudgetFor(plugintest.NewSession(t))
 
 	const cidr = "198.51.100.0/24"
 	// Unseeded netblock grants nothing.
@@ -61,10 +68,11 @@ func TestSweepBudgetSpend(t *testing.T) {
 	}
 }
 
+// Addresses a forward DNS name resolves to refund the budget once each; one
+// that only answers reverse DNS refunds nothing, and is dead once it had
+// the settle time to show a hit.
 func TestSweepBudgetRefund(t *testing.T) {
-	const sid = "test-sweep-refund"
-	defer DiscardSweepBudget(sid)
-	b := SweepBudgetFor(sid)
+	b := SweepBudgetFor(plugintest.NewSession(t))
 
 	const cidr = "198.51.100.0/24"
 	b.Seed(cidr, 64)
@@ -76,56 +84,82 @@ func TestSweepBudgetRefund(t *testing.T) {
 	b.RecordSwept(cidr, "198.51.100.2")
 	b.RecordSwept(cidr, "198.51.100.3")
 	// An address outside any tracked netblock is ignored.
-	b.RecordSwept("10.0.0.0/8", "10.0.0.1")
+	b.RecordSwept("203.0.113.0/24", "203.0.113.1")
 
-	db := &fakeSweepDB{confirmed: map[string]bool{"198.51.100.1": true, "198.51.100.3": true}}
-	RecheckSweepBudgets(context.Background(), db, sid)
-
-	// Two confirmed hits refund two windows.
+	db := &fakeSweepDB{forward: map[string]bool{"198.51.100.1": true, "198.51.100.3": true}}
+	now := time.Now()
+	if !b.recheck(context.Background(), db, cidr, now) {
+		t.Fatal("two hits refunded nothing")
+	}
 	if got := b.TrySpend(cidr, 1_000); got != 2*sweepRefundPerHit {
 		t.Fatalf("after 2 hits TrySpend = %d, want %d", got, 2*sweepRefundPerHit)
 	}
 
-	// A second re-check must not re-credit the same hits.
-	RecheckSweepBudgets(context.Background(), db, sid)
-	if got := b.TrySpend(cidr, 1_000); got != 0 {
-		t.Fatalf("second re-check re-credited hits: TrySpend = %d, want 0", got)
+	// Checks come at most once per sweepRecheckEvery, never credit a hit
+	// twice, and settle the reverse-DNS-only address as dead.
+	if b.recheck(context.Background(), db, cidr, now.Add(time.Second)) {
+		t.Error("a recheck ran again before sweepRecheckEvery")
+	}
+	if b.recheck(context.Background(), db, cidr, now.Add(sweepSettle)) {
+		t.Error("the same hits were credited twice")
+	}
+	if n := len(b.nb[cidr].pending); n != 0 {
+		t.Errorf("%d addresses still pending after the settle time", n)
 	}
 }
 
-func TestSweepBudgetRefundCeiling(t *testing.T) {
-	const sid = "test-sweep-ceiling"
-	defer DiscardSweepBudget(sid)
-	b := SweepBudgetFor(sid)
+func TestSweepBudgetCaps(t *testing.T) {
+	b := SweepBudgetFor(plugintest.NewSession(t))
 
 	const cidr = "198.51.100.0/24"
 	b.Seed(cidr, 10)
 	_ = b.TrySpend(cidr, 10)
 
-	confirmed := make(map[string]bool)
+	forward := map[string]bool{}
 	for i := 0; i < 200; i++ {
-		addr := "150.156.2." + itoa(i)
+		addr := fmt.Sprintf("198.51.100.%d", i)
 		b.RecordSwept(cidr, addr)
-		confirmed[addr] = true
+		forward[addr] = true
 	}
-	RecheckSweepBudgets(context.Background(), &fakeSweepDB{confirmed: confirmed}, sid)
+	b.recheck(context.Background(), &fakeSweepDB{forward: forward}, cidr, time.Now())
+	if got := b.TrySpend(cidr, 1_000_000); got != sweepBudgetCeiling-10 {
+		t.Fatalf("TrySpend = %d, want the ceiling less what was swept, %d", got, sweepBudgetCeiling-10)
+	}
 
-	if got := b.TrySpend(cidr, 1_000_000); got != sweepBudgetCeiling {
-		t.Fatalf("refund not capped: TrySpend = %d, want ceiling %d", got, sweepBudgetCeiling)
+	// however much is refunded, a netblock is swept for at most
+	// sweepNetblockMax addresses
+	b.nb[cidr].remaining = sweepBudgetCeiling
+	if got := b.TrySpend(cidr, 1_000_000); got != 0 {
+		t.Errorf("TrySpend past sweepNetblockMax = %d, want 0", got)
 	}
 }
 
-// itoa avoids a strconv import for the 0-199 test addresses.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
+// A sweep in a netblock the scope holds spends its budget; elsewhere it
+// sweeps what was asked.
+func TestBudgetedSweep(t *testing.T) {
+	sess := plugintest.NewSession(t)
+	sess.Scope().AddCIDR("198.51.100.0/24")
+	sess.Scope().AddCIDR("198.51.100.0/25")
+
+	if cidr, ok := ScopeNetblock(sess, netip.MustParseAddr("198.51.100.10")); !ok || cidr != "198.51.100.0/25" {
+		t.Errorf("ScopeNetblock = %q, %v, want the most specific netblock", cidr, ok)
 	}
-	var buf [3]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
+
+	sweep := func(addr string, size int) int {
+		n := 0
+		e := &et.Event{Session: sess}
+		ip := &oamnet.IPAddress{Address: netip.MustParseAddr(addr), Type: "IPv4"}
+		BudgetedSweep(e, ip, &et.Source{Name: "test"}, size, func(*et.Event, *oamnet.IPAddress, *et.Source) { n++ })
+		return n
 	}
-	return string(buf[i:])
+
+	if n := sweep("198.51.100.10", 100); n > SweepSeedWindow+1 {
+		t.Errorf("the first sweep in the netblock covered %d addresses, want at most its budget", n)
+	}
+	if n := sweep("198.51.100.20", 100); n != 0 {
+		t.Errorf("a sweep with the budget spent and no hits covered %d addresses", n)
+	}
+	if n := sweep("203.0.113.10", 20); n < 20 {
+		t.Errorf("a sweep outside the scope's netblocks covered %d addresses, want 20", n)
+	}
 }

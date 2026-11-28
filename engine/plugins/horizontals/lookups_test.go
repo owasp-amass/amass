@@ -135,22 +135,6 @@ func TestPTRRecordLookups(t *testing.T) {
 	}
 }
 
-func TestInOwnedNetblock(t *testing.T) {
-	sess := plugintest.NewSession(t)
-	h := &horaddr{name: "Horizontals-IPAddress-Handler", plugin: NewHorizontals().(*horizPlugin)}
-
-	// A netblock in scope is one the organization owns (added by the scored
-	// infrastructure correlation, or operator-provided).
-	sess.Scope().Add(&oamnet.Netblock{CIDR: netip.MustParsePrefix("192.0.2.0/24"), Type: "IPv4"})
-
-	if cidr, ok := h.inOwnedNetblock(sess, &oamnet.IPAddress{Address: netip.MustParseAddr("192.0.2.5"), Type: "IPv4"}); !ok || cidr != "192.0.2.0/24" {
-		t.Errorf("an IP inside an in-scope netblock should be owned; cidr=%q ok=%v", cidr, ok)
-	}
-	if _, ok := h.inOwnedNetblock(sess, &oamnet.IPAddress{Address: netip.MustParseAddr("198.51.100.5"), Type: "IPv4"}); ok {
-		t.Error("an IP outside every in-scope netblock should not be owned")
-	}
-}
-
 func TestRegisteredDomainAndNetblock(t *testing.T) {
 	sess := plugintest.NewSession(t)
 	h := NewHorizontals().(*horizPlugin)

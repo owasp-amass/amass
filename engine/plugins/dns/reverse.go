@@ -94,7 +94,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 			}
 		}
 		if size > 0 {
-			support.IPAddressSweep(e, ip, src, size, sweepCallback)
+			support.BudgetedSweep(e, ip, src, size, sweepCallback)
 		}
 	}
 	return nil

@@ -95,25 +95,27 @@ func CreateOrgIdentifier(sess et.Session, orgent *dbt.Entity, idType, value stri
 	return createIDClaim(sess, orgent, idType, value, src)
 }
 
-// StoreUnambiguousIdentifier records the organization's identifier of idType
-// when every record a collector matched to it by name agrees on one value. A
-// name match can join the records of several entities with the same name, so
-// differing values are none of them the organization's for certain, and
-// nothing is stored.
-func StoreUnambiguousIdentifier(sess et.Session, orgent *dbt.Entity, idType string, values []string, src *et.Source) {
-	var value string
+// StoreMajorityIdentifier records the organization's identifier of idType
+// when the records a collector matched to it by name agree on one value: all
+// of them, or at least two thirds of three or more. A name match can join the
+// records of several entities with the same name, such as a research
+// foundation beside its university, so a value held by a clear majority is
+// the organization's, and without one nothing is stored.
+func StoreMajorityIdentifier(sess et.Session, orgent *dbt.Entity, idType string, values []string, src *et.Source) {
+	counts := map[string]int{}
+	total := 0
 	for _, v := range values {
-		v = strings.ToUpper(strings.TrimSpace(v))
-		if v == "" {
-			continue
+		if v = strings.ToUpper(strings.TrimSpace(v)); v != "" {
+			counts[v]++
+			total++
 		}
-		if value != "" && v != value {
+	}
+
+	for value, n := range counts {
+		if n == total || (total >= 3 && 3*n >= 2*total) {
+			_, _ = createIDClaim(sess, orgent, idType, value, src)
 			return
 		}
-		value = v
-	}
-	if value != "" {
-		_, _ = createIDClaim(sess, orgent, idType, value, src)
 	}
 }
 

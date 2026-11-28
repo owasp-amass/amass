@@ -80,7 +80,7 @@ func (d *dnsIP) check(e *et.Event) error {
 				size = d.plugin.firstSweepSize
 			}
 			if size > 0 {
-				support.IPAddressSweep(e, ip, d.source, size, sweepCallback)
+				support.BudgetedSweep(e, ip, d.source, size, sweepCallback)
 			}
 		}
 	}

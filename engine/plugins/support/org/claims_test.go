@@ -134,8 +134,9 @@ func TestFindOrgByJurisdictionAndRegistrationIDClaim(t *testing.T) {
 	}
 }
 
-// An identifier is stored only when every matched record agrees on it.
-func TestStoreUnambiguousIdentifier(t *testing.T) {
+// An identifier is stored only when the matched records agree on it: all of
+// them, or two thirds of three or more.
+func TestStoreMajorityIdentifier(t *testing.T) {
 	for name, c := range map[string]struct {
 		values []string
 		want   string
@@ -144,12 +145,14 @@ func TestStoreUnambiguousIdentifier(t *testing.T) {
 		"conflicting":        {[]string{"ABC123", "XYZ789"}, ""},
 		"none":               {[]string{"", " "}, ""},
 		"one with the empty": {[]string{"", "DEF456"}, "DEF456"},
+		"two thirds":         {[]string{"ABC123", "abc123", "XYZ789"}, "ABC123"},
+		"under two thirds":   {[]string{"ABC123", "ABC123", "XYZ789", "XYZ789", "DEF456"}, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			sess := plugintest.NewSession(t)
 			orgent := newOrg(t, sess, "acme:1", "acme")
 
-			StoreUnambiguousIdentifier(sess, orgent, UEIIdentifier, c.values, srcA)
+			StoreMajorityIdentifier(sess, orgent, UEIIdentifier, c.values, srcA)
 			got, err := findOrgByIDClaim(sess, UEIIdentifier, c.want, srcA)
 			if c.want == "" {
 				edges, _ := sess.DB().OutgoingEdges(context.Background(), orgent, time.Time{}, "id")

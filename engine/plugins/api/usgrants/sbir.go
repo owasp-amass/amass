@@ -177,7 +177,7 @@ func querySBIR(h *source, e *et.Event, orgent *dbt.Entity, name string) {
 		h.store(e, orgent, g)
 	}
 
-	// the recipient's identifiers, when every matched award agrees on them
-	org.StoreUnambiguousIdentifier(e.Session, orgent, org.UEIIdentifier, ueis, h.src)
-	org.StoreUnambiguousIdentifier(e.Session, orgent, oamgen.DUNSNumer, duns, h.src)
+	// the recipient's identifiers, when the matched awards agree on them
+	org.StoreMajorityIdentifier(e.Session, orgent, org.UEIIdentifier, ueis, h.src)
+	org.StoreMajorityIdentifier(e.Session, orgent, oamgen.DUNSNumer, duns, h.src)
 }

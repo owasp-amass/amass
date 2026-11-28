@@ -140,12 +140,12 @@ func (h *awards) query(e *et.Event, orgent *dbt.Entity, name string) []*dbt.Enti
 				if !semantics.SameOrgName(name, a.RecipientName) {
 					continue
 				}
-				ueis = append(ueis, a.RecipientUEI)
 				id := a.transferID()
 				if id == "" || seen[id] {
 					continue
 				}
 				seen[id] = true
+				ueis = append(ueis, a.RecipientUEI)
 				if ent := h.store(e, orgent, a, id); ent != nil {
 					fundents = append(fundents, ent)
 				}
@@ -158,8 +158,8 @@ func (h *awards) query(e *et.Event, orgent *dbt.Entity, name string) []*dbt.Enti
 	}
 
 	// the recipient's Unique Entity ID identifies it for duplicate detection,
-	// when every matched award names the same one
-	org.StoreUnambiguousIdentifier(e.Session, orgent, org.UEIIdentifier, ueis, h.plugin.source)
+	// when the matched awards agree on one
+	org.StoreMajorityIdentifier(e.Session, orgent, org.UEIIdentifier, ueis, h.plugin.source)
 	return fundents
 }
 
