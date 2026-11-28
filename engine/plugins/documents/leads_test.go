@@ -10,9 +10,11 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -252,5 +254,60 @@ func TestBrokenHostIgnored(t *testing.T) {
 	got := neighbors(t, f, fent, "contains")
 	if slices.Contains(got, "http://www.examp") || !slices.Contains(got, "https://partner.other.org/x") {
 		t.Errorf("contains %v", got)
+	}
+}
+
+// An author field holding the computer's account name becomes a directory
+// Account of the publishing domain rather than a person or a name to decide,
+// one holding only initials names no one, and brackets around a name are
+// dropped.
+func TestAuthorAccountsAndInitials(t *testing.T) {
+	for _, c := range []struct {
+		author  string
+		account string
+		person  string
+	}{
+		{author: "jdoe", account: "directory:example.com:jdoe"},
+		{author: "J.D."},
+		{author: "(Jane Doe)", person: "Jane Doe"},
+	} {
+		t.Run(c.author, func(t *testing.T) {
+			f := newFixture(t, http.StatusOK, ooxmlDoc(t, c.author, "Microsoft Office Word", "16.0000", "", "Plan"))
+			raw := "https://www.example.com/plans/plan.docx"
+			if err := f.d.check(f.event(t, raw)); err != nil {
+				t.Fatal(err)
+			}
+			fent := f.file(t, raw)
+			if fent == nil {
+				t.Fatal("no File stored")
+			}
+
+			ctx := context.Background()
+			authors := neighbors(t, f, fent, "author")
+			if c.person == "" && len(authors) != 0 {
+				t.Errorf("authors %v, want none", authors)
+			}
+			if c.person != "" && !slices.Contains(authors, c.person) {
+				t.Errorf("authors %v, want %s", authors, c.person)
+			}
+
+			tags, _ := f.sess.DB().FindEntityTags(ctx, fent, time.Time{}, graph.UncertainNameProp)
+			if len(tags) != 0 {
+				t.Errorf("%q was kept as a name to decide", c.author)
+			}
+
+			var accounts []string
+			for _, key := range neighbors(t, f, fent, "contains") {
+				if strings.HasPrefix(key, "directory:") {
+					accounts = append(accounts, key)
+				}
+			}
+			if c.account == "" && len(accounts) != 0 {
+				t.Errorf("accounts %v, want none", accounts)
+			}
+			if c.account != "" && !slices.Equal(accounts, []string{c.account}) {
+				t.Errorf("accounts %v, want %s", accounts, c.account)
+			}
+		})
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -394,11 +395,12 @@ func (d *documents) store(e *et.Event, urlent *dbt.Entity, u *oamurl.URL, dt sem
 	// everything the document names that maps to an OAM type is linked from
 	// the File and handed to the pipeline as a lead
 	var n leads
-	authors := d.metadataLeads(e, fent, meta, &n)
+	authors, logins := d.metadataLeads(e, fent, meta, &n)
 	// content first, so an email address the document itself holds is
 	// observed before a username is compared with it
 	usernames := d.contentLeads(e, fent, u, dt, data, &n)
-	d.accountLeads(e, fent, u, append(meta.Usernames, usernames...), authors, &n)
+	accounts := append(append(slices.Clone(meta.Usernames), logins...), usernames...)
+	d.accountLeads(e, fent, u, accounts, authors, &n)
 	d.imageLeads(e, fent, dt, data, &n)
 	d.logLeads(e, u, n)
 }

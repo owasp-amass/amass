@@ -50,18 +50,27 @@ type author struct {
 // metadataLeads stores what the document's metadata names as OAM assets
 // linked from the File: the people who wrote or last edited it and the
 // organization named as its company (author), and the software that made it
-// (created_with). Each is dispatched as a lead.
-func (d *documents) metadataLeads(e *et.Event, fent *dbt.Entity, meta docmeta.Metadata, n *leads) []author {
+// (created_with). Each is dispatched as a lead. An author field that holds
+// the computer's account name is returned among logins, for the account
+// leads, and one that holds only initials names no one.
+func (d *documents) metadataLeads(e *et.Event, fent *dbt.Entity, meta docmeta.Metadata,
+	n *leads) (authors []author, logins []string) {
 	rules := semantics.Documents()
 
-	var authors []author
 	seen := map[string]bool{}
 	for _, raw := range []string{meta.Author, meta.LastModifiedBy} {
-		raw = strings.TrimSpace(raw)
+		raw = docmeta.Unwrap(raw)
 		if raw == "" || rules.IsPlaceholderAuthor(raw) || seen[strings.ToLower(raw)] {
 			continue
 		}
 		seen[strings.ToLower(raw)] = true
+		if login, ok := docmeta.LoginName(raw); ok {
+			logins = append(logins, login)
+			continue
+		}
+		if docmeta.Initials(raw) {
+			continue
+		}
 
 		if pent, p := d.storeName(e, fent, raw, "author", []string{meta.Company}, n); pent != nil {
 			authors = append(authors, author{ent: pent, first: p.FirstName, last: p.FamilyName})
@@ -103,7 +112,7 @@ func (d *documents) metadataLeads(e *et.Event, fent *dbt.Entity, meta docmeta.Me
 			n.orgs++
 		}
 	}
-	return authors
+	return authors, logins
 }
 
 // storeName stores what a name in one of the document's person fields names
