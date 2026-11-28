@@ -11,14 +11,20 @@
 // discover-only federated_with leads for the horizontal-correlation lens to
 // weigh, never auto-enumerated.
 //
-// Scope: Microsoft (Entra/M365) only in this pass. Okta/ADFS/SAML/OIDC
-// fingerprinting is a planned follow-on. The active pre-auth user-enumeration
-// oracle is deliberately excluded — it is credential-attack preparation, not
-// evidence collection.
+// It also finds the host the domain's users sign in at: a federated tenant's
+// AuthURL, and the issuer of the OpenID Connect discovery document of the
+// registered domain and of its sign-in names (discovery.go). A provider's
+// tenant host gives the provider's organization identifier where it
+// publishes one (Okta); the organization's own federation server gives the
+// certificates that sign its tokens.
+//
+// The active pre-auth user-enumeration oracle is deliberately excluded — it
+// is credential-attack preparation, not evidence collection.
 package identity
 
 import (
 	"context"
+	"html"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -28,6 +34,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	amasshttp "github.com/owasp-amass/amass/v5/internal/net/http"
+	"github.com/owasp-amass/amass/v5/internal/semantics"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -41,6 +48,7 @@ type identity struct {
 	log    *slog.Logger
 	rlimit *rate.Limiter
 	source *et.Source
+	asked  askedHosts
 }
 
 func NewIdentity() et.Plugin {
@@ -80,10 +88,12 @@ func (p *identity) check(e *et.Event) error {
 		return nil
 	}
 
-	// The identity tenant and federation trust belong to the registered domain,
-	// not to each subdomain, so this runs once per apex.
+	// The identity tenant and federation trust belong to the registered
+	// domain, not to each subdomain, so Microsoft is asked once per apex; the
+	// apex and its sign-in names are asked for their discovery document.
 	host := strings.ToLower(fqdn.Name)
-	if dom, err := publicsuffix.EffectiveTLDPlusOne(host); err != nil || dom != host {
+	apex, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil || (apex != host && !semantics.IsLoginLabel(strings.SplitN(host, ".", 2)[0])) {
 		return nil
 	}
 
@@ -96,24 +106,41 @@ func (p *identity) check(e *et.Event) error {
 	}
 	support.MarkAssetMonitored(e.Session, e.Entity, p.source)
 
+	if apex == host {
+		p.microsoft(e, host)
+	}
+	if p.asked.take(e.Session.ID().String(), apex) {
+		p.discover(e, host)
+	}
+	return nil
+}
+
+// microsoft resolves the domain's Entra tenant, its namespace, brand name
+// and federation server, and the sibling domains of its tenant.
+func (p *identity) microsoft(e *et.Event, host string) {
 	tenant := p.entraTenant(e, e.Entity, host)
-	ns := p.userRealm(e, host)
-	if ns != "" {
+	r := p.userRealm(e, host)
+	if r.namespace != "" {
 		owner := e.Entity
 		if tenant != nil {
 			owner = tenant
 		}
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
-		support.AddProperty(ctx, e.Session, owner, "namespace_type", ns)
+		support.AddProperty(ctx, e.Session, owner, "namespace_type", r.namespace)
+		if r.brand != "" {
+			support.AddProperty(ctx, e.Session, owner, "federation_brand_name", r.brand)
+		}
 		cancel()
+	}
+	if r.authHost != "" {
+		p.signsInAt(e, e.Entity, r.authHost)
 	}
 
 	// A confirmed Microsoft tenant (either probe) means GetFederationInformation
 	// will answer; skip it on non-Microsoft domains to avoid pointless calls.
-	if tenant != nil || ns != "" {
+	if tenant != nil || r.namespace != "" {
 		p.federation(e, e.Entity, host)
 	}
-	return nil
 }
 
 var guidInIssuer = regexp.MustCompile(`(?i)"issuer"\s*:\s*"[^"]*?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
@@ -122,21 +149,13 @@ var guidInIssuer = regexp.MustCompile(`(?i)"issuer"\s*:\s*"[^"]*?([0-9a-f]{8}-[0
 // carries a tenant GUID, records it as an Identifier the domain's identity
 // tenant points at. Returns the Identifier entity, or nil.
 func (p *identity) entraTenant(e *et.Event, apex *dbt.Entity, host string) *dbt.Entity {
-	_ = support.WaitLimit(e.Session.Ctx(), p.rlimit)
-
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
-	defer cancel()
-
-	url := "https://login.microsoftonline.com/" + host + "/.well-known/openid-configuration"
-	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: url})
-	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
-		return nil
-	}
-
-	guid := tenantID(resp.Body)
+	guid := tenantID(p.get(e, "https://login.microsoftonline.com/"+host+"/.well-known/openid-configuration"))
 	if guid == "" {
 		return nil
 	}
+
+	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 10*time.Second)
+	defer cancel()
 	ident := support.LinkAsset(ctx, e.Session, apex, "identity_tenant", &oamgen.Identifier{
 		UniqueID: oamgen.AzureTenantID + ":" + guid, ID: guid, Type: oamgen.AzureTenantID,
 	}, p.source)
@@ -157,25 +176,42 @@ func tenantID(body string) string {
 	return ""
 }
 
-var nameSpaceType = regexp.MustCompile(`(?i)<NameSpaceType>\s*([A-Za-z]+)\s*</NameSpaceType>`)
+var (
+	nameSpaceType = regexp.MustCompile(`(?i)<NameSpaceType>\s*([A-Za-z]+)\s*</NameSpaceType>`)
+	brandName     = regexp.MustCompile(`(?i)<FederationBrandName>\s*([^<]*?)\s*</FederationBrandName>`)
+	authURL       = regexp.MustCompile(`(?i)<AuthURL>\s*([^<]*?)\s*</AuthURL>`)
+)
 
-// userRealm reads the Microsoft getuserrealm.srf namespace for the domain:
-// "managed" (auth terminates at Entra) or "federated" (routes to an upstream
-// IdP). Returns "" for Unknown or no answer. A synthetic admin@ probe user is
-// used; the probe hits Microsoft, never the target.
-func (p *identity) userRealm(e *et.Event, host string) string {
-	_ = support.WaitLimit(e.Session.Ctx(), p.rlimit)
+// realm is what Microsoft's getuserrealm.srf says about a domain.
+type realm struct {
+	namespace string // "managed" or "federated"
+	brand     string // the tenant's federation brand name
+	authHost  string // a federated tenant's sign-in host
+}
 
-	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 15*time.Second)
-	defer cancel()
+// userRealm reads the Microsoft getuserrealm.srf answer for the domain: its
+// namespace, "managed" (auth terminates at Entra) or "federated" (routes to
+// an upstream IdP), and for a federated tenant its brand name and sign-in
+// host. A synthetic admin@ probe user is used; the probe hits Microsoft,
+// never the target.
+func (p *identity) userRealm(e *et.Event, host string) realm {
+	return parseRealm(p.get(e, "https://login.microsoftonline.com/getuserrealm.srf?login=admin@"+host+"&xml=1"))
+}
 
-	url := "https://login.microsoftonline.com/getuserrealm.srf?login=admin@" + host + "&xml=1"
-	resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: url})
-	if err != nil || resp == nil || resp.StatusCode != http.StatusOK {
-		return ""
+// parseRealm reads a getuserrealm.srf answer. The brand name and sign-in host
+// are kept only for a known namespace.
+func parseRealm(body string) realm {
+	r := realm{namespace: namespaceType(body)}
+	if r.namespace == "" {
+		return realm{}
 	}
-
-	return namespaceType(resp.Body)
+	if m := brandName.FindStringSubmatch(body); len(m) == 2 {
+		r.brand = html.UnescapeString(m[1])
+	}
+	if m := authURL.FindStringSubmatch(body); len(m) == 2 {
+		r.authHost = urlHost(html.UnescapeString(m[1]))
+	}
+	return r
 }
 
 // namespaceType returns the NameSpaceType of a getuserrealm.srf answer,

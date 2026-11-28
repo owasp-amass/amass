@@ -1,0 +1,25 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass finds the identity provider behind a domain. The registered domain and each of its names whose first label is one of login_labels (stored names only; none are guessed) are asked for their OpenID Connect discovery document at oidc_path (OpenID Connect Discovery 1.0, oidc_source); its issuer is the host the domain's users sign in at (FQDN identity_provider). Microsoft's realm answer gives the same for a federated tenant (its AuthURL). A host under one of a provider's suffixes is that provider's tenant host, a third party of the domain; a provider with a tenant_path is asked there for its organization identifier (Okta's well-known organization metadata), stored as an Identifier of tenant_type that the domain's identity_tenant points at. Any other provider host is the organization's own federation server: its SAML/WS-Federation metadata at federation_metadata_path (federation_source) names the certificates that sign its tokens, stored as TLSCertificates (signing_certificate). At most max_hosts names of one registered domain are asked.",
+  "oidc_path": "/.well-known/openid-configuration",
+  "oidc_source": "https://openid.net/specs/openid-connect-discovery-1_0.html",
+  "federation_metadata_path": "/FederationMetadata/2007-06/FederationMetadata.xml",
+  "federation_source": "https://learn.microsoft.com/en-us/windows-server/identity/ad-fs/technical-reference/the-role-of-claims",
+  "login_labels": ["login", "sso", "auth", "idp", "adfs", "sts", "fs", "id", "signin", "identity", "shibboleth", "cas", "saml", "accounts"],
+  "max_hosts": 10,
+  "providers": [
+    {"name": "Okta", "suffixes": ["okta.com", "oktapreview.com", "okta-emea.com", "okta-gov.com"], "tenant_type": "okta_org",
+      "tenant_path": "/.well-known/okta-organization",
+      "source": "https://developer.okta.com/docs/api/openapi/okta-management/management/tag/OrgSetting/"},
+    {"name": "Auth0", "suffixes": ["auth0.com"], "source": "https://auth0.com/docs/get-started/applications/configure-applications-with-oidc-discovery"},
+    {"name": "OneLogin", "suffixes": ["onelogin.com"], "source": "https://developers.onelogin.com/openid-connect"},
+    {"name": "Ping Identity", "suffixes": ["pingone.com", "pingone.eu", "pingone.asia", "pingidentity.com"], "source": "https://docs.pingidentity.com/"},
+    {"name": "JumpCloud", "suffixes": ["jumpcloud.com"], "source": "https://jumpcloud.com/support/sso-with-oidc"},
+    {"name": "Duo", "suffixes": ["duosecurity.com"], "source": "https://duo.com/docs/sso-oidc-generic"},
+    {"name": "Google", "suffixes": ["accounts.google.com"], "source": "https://developers.google.com/identity/openid-connect/openid-connect"},
+    {"name": "Microsoft", "suffixes": ["microsoftonline.com", "sts.windows.net", "microsoftonline.us", "b2clogin.com"], "source": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc"},
+    {"name": "Identity Automation", "suffixes": ["rapididentity.com"], "source": "https://www.identityautomation.com/rapididentity/"},
+    {"name": "CyberArk", "suffixes": ["idaptive.app", "my.idaptive.app", "cyberark.cloud"], "source": "https://docs.cyberark.com/identity/latest/en/content/developer/oidc/oidc-intro.htm"},
+    {"name": "Amazon Cognito", "suffixes": ["amazoncognito.com"], "source": "https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-oidc-flow.html"}
+  ]
+}

@@ -7,7 +7,8 @@
       {"labels": ["dns_record"], "from": ["FQDN"], "through": ["dns_record"]}
     ],
     "TLSCertificate": [
-      {"labels": ["certificate"], "from": ["Service"]}
+      {"labels": ["certificate"], "from": ["Service"]},
+      {"labels": ["signing_certificate"], "from": ["FQDN"]}
     ],
     "Service": [
       {"labels": ["port"], "from": ["FQDN", "IPAddress", "URL"]}
