@@ -8,6 +8,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -99,4 +100,29 @@ func (p *AccountPlatform) Patterns() []*regexp.Regexp { return p.patterns }
 // an account.
 func (p *AccountPlatform) IsReserved(segment string) bool {
 	return p.reserved[strings.ToLower(segment)]
+}
+
+// AccountHandle recognizes a platform account in a URL: its host names the
+// platform and its path yields the handle. It returns false when no platform
+// matches or the path is a site page rather than an account.
+func AccountHandle(raw string) (AccountPlatform, string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return AccountPlatform{}, "", false
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+
+	ps := loadAccountPlatforms()
+	for i := range ps {
+		p := &ps[i]
+		if !p.OwnsHost(host) {
+			continue
+		}
+		for _, re := range p.Patterns() {
+			if m := re.FindStringSubmatch(u.Path); m != nil && m[1] != "" && !p.IsReserved(m[1]) {
+				return *p, m[1], true
+			}
+		}
+	}
+	return AccountPlatform{}, "", false
 }

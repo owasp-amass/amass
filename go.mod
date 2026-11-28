@@ -26,7 +26,7 @@ require (
 	github.com/nyaruka/phonenumbers v1.8.1
 	github.com/openrdap/rdap v0.10.2
 	github.com/owasp-amass/asset-db v0.24.6-0.20261128002117-5d736f949b94
-	github.com/owasp-amass/open-asset-model v0.15.2-0.20261128041746-0bf116c123b4
+	github.com/owasp-amass/open-asset-model v0.15.2-0.20261128050146-b02931e69917
 	github.com/owasp-amass/resolve v0.10.2-0.20261123040118-169cbd251db8
 	github.com/pioz/countries v0.2.2
 	github.com/samber/slog-common v0.22.0

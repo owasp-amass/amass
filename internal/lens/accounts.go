@@ -7,7 +7,6 @@ package lens
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -80,13 +79,12 @@ func FindAccounts(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		out.Owner, out.OwnerID = graph.AssetLabel(s.owners[0]), s.owners[0].ID
 	}
 
-	rules := semantics.AccountPlatforms()
 	byPlatform := map[string]*ChangeGroup{}
 	var order []string
 	seen := map[string]bool{}
 
 	for _, u := range urls {
-		platform, entry, ok := matchAccount(rules, urlRaw(u))
+		platform, entry, ok := matchAccount(urlRaw(u))
 		if !ok {
 			continue
 		}
@@ -130,35 +128,14 @@ func FindAccounts(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 	return out, nil
 }
 
-// matchAccount recognizes a platform account in a URL: its host names the
-// platform and its path yields the handle. It returns false when no platform
-// matches or the path is a site page rather than an account.
-func matchAccount(rules []semantics.AccountPlatform, raw string) (string, AccountEntry, bool) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
+// matchAccount recognizes a platform account in a URL
+// (semantics.AccountHandle).
+func matchAccount(raw string) (string, AccountEntry, bool) {
+	p, handle, ok := semantics.AccountHandle(raw)
+	if !ok {
 		return "", AccountEntry{}, false
 	}
-	host := strings.ToLower(u.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-
-	for i := range rules {
-		p := &rules[i]
-		if !p.OwnsHost(host) {
-			continue
-		}
-		for _, re := range p.Patterns() {
-			m := re.FindStringSubmatch(u.Path)
-			if m == nil || m[1] == "" {
-				continue
-			}
-			if p.IsReserved(m[1]) {
-				continue
-			}
-			return p.Platform, AccountEntry{Platform: p.Platform, Type: p.AccountType, Handle: m[1], URL: raw}, true
-		}
-	}
-
-	return "", AccountEntry{}, false
+	return p.Platform, AccountEntry{Platform: p.Platform, Type: p.AccountType, Handle: handle, URL: raw}, true
 }
 
 // Text implements Report.

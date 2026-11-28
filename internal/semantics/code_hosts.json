@@ -1,0 +1,17 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass reads an organization's public code-host organizations, from each in-scope registered domain. The candidates are the GitHub and GitLab accounts the organization's stored website and social-media profile URLs name (account_platforms.json), and, on GitHub, the domain's first label as a handle (owasp.org is github.com/owasp). A named account is the organization's own; a guessed GitHub organization counts only when the website or email its profile names is in the enumeration's footprint (the domain searched for or any domain in scope). GitHub's REST API (github.api, github.source) answers 60 requests an hour without a key, so one budget of requests_per_hour is shared by every session of the engine, first come first served, and a request with none left is not made. For a tied GitHub organization, its profile (orgs/<handle>), its public repositories (orgs/<handle>/repos, at most max_repositories) and its public members (orgs/<handle>/public_members, at most max_members) are read. GitLab's API (gitlab.api, gitlab.source) is paced normally: a named group's profile and its projects (at most max_repositories). Each organization is stored as an Account of account type code_host_organization (unique ID <host>:<handle>), with its name, website, email and location as a ContactRecord keyed by its page, its repositories as repository URLs and their homepages as website URLs (dispatched, so scope decides what is collected from them), its members as code_host_user Accounts, and namespace_domain the footprint domain its website is on.",
+  "github": {
+    "api": "https://api.github.com",
+    "page": "https://github.com/",
+    "source": "https://docs.github.com/en/rest/orgs/orgs#get-an-organization",
+    "requests_per_hour": 50
+  },
+  "gitlab": {
+    "api": "https://gitlab.com/api/v4",
+    "page": "https://gitlab.com/",
+    "source": "https://docs.gitlab.com/ee/api/groups.html"
+  },
+  "max_repositories": 100,
+  "max_members": 100
+}

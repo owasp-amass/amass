@@ -11,7 +11,6 @@ import (
 
 	"github.com/owasp-amass/amass/v5/internal/graph"
 	"github.com/owasp-amass/amass/v5/internal/graph/graphtest"
-	"github.com/owasp-amass/amass/v5/internal/semantics"
 )
 
 func TestFindAccounts(t *testing.T) {
@@ -76,7 +75,6 @@ func TestFindAccounts(t *testing.T) {
 }
 
 func TestMatchAccount(t *testing.T) {
-	rules := semantics.AccountPlatforms()
 	cases := []struct {
 		raw, platform, handle string
 		ok                    bool
@@ -90,7 +88,7 @@ func TestMatchAccount(t *testing.T) {
 		{"https://example.com/owasp", "", "", false},
 	}
 	for _, c := range cases {
-		platform, entry, ok := matchAccount(rules, c.raw)
+		platform, entry, ok := matchAccount(c.raw)
 		if ok != c.ok || platform != c.platform || (ok && entry.Handle != c.handle) {
 			t.Errorf("matchAccount(%q) = (%q,%q,%v), want (%q,%q,%v)", c.raw, platform, entry.Handle, ok,
 				c.platform, c.handle, c.ok)

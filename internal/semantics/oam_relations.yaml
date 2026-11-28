@@ -47,6 +47,15 @@ relations:
   - {source: Account, label: contact, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: attribute, purpose: contact,
      note: "Contact information published for the account: a package namespace's maintainer addresses, a bug-bounty program's website, or the business name and domain an ad system's sellers.json lists for a seller account. What it names may be the operator, a parent company or an agency, so control does not flow through it; the lenses weigh it."}
+  - {source: Account, label: repository, relation_type: SimpleRelation, destination: URL,
+     attribution: controls, purpose: web,
+     note: "A public repository of a code-host organization (its page on the code host). The organization publishes it, but the code host's domain is shared by every account, so control does not pass to the host (lens.SharedPlatformHost)."}
+  - {source: Account, label: website, relation_type: SimpleRelation, destination: URL,
+     attribution: shared, purpose: web, reviewed: true,
+     note: "A website a code-host organization or one of its repositories names as its homepage. Often the organization's own site, but also a documentation host or a partner's page, so ownership does not pass through."}
+  - {source: Account, label: member, relation_type: SimpleRelation, destination: Account,
+     attribution: attribute, purpose: identity,
+     note: "A user a code-host organization publicly lists as its member. A user chooses to show the membership; it describes the user, not something the organization owns."}
   - {source: Account, label: in_scope, relation_type: SimpleRelation, destination: FQDN,
      attribution: shared, purpose: corporate,
      note: "A name a bug-bounty program lists as in scope. Programs normally list their own assets, but some list a vendor-hosted tenant or a partner's system, so the listing alone confers no ownership; the ownership-gap lens weighs it only when the program is tied to an organization."}

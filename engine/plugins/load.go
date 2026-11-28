@@ -35,6 +35,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/brute"
 	"github.com/owasp-amass/amass/v5/engine/plugins/bucket"
 	"github.com/owasp-amass/amass/v5/engine/plugins/cloud"
+	"github.com/owasp-amass/amass/v5/engine/plugins/codehost"
 	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/documents"
 	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
@@ -86,6 +87,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	bucket.NewBucketProbe,
 	brute.NewFQDNAlterations,
 	cloud.NewCloudRanges,
+	codehost.NewCodeHosts,
 	dns.NewDNS,
 	edgar.NewEDGAR,
 	dnssd.NewDNSPlugin,
