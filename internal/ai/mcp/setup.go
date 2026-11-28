@@ -82,9 +82,12 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 	}
 	// options.ai.documents.hold bounds how long a run is kept open for the
 	// documents left to read; 0 keeps none open
+	// (a configuration without options.ai has no AI settings at all)
 	hold := collect.DefaultHoldLimit
-	if v, ok := cfg.AI.Documents.HoldDuration(); ok {
-		hold = v
+	if cfg.AI != nil {
+		if v, ok := cfg.AI.Documents.HoldDuration(); ok {
+			hold = v
+		}
 	}
 	if hold == 0 {
 		m.HoldLimit = -1
