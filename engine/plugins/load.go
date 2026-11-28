@@ -44,6 +44,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/lookalike"
 	mtasts "github.com/owasp-amass/amass/v5/engine/plugins/mta_sts"
 	"github.com/owasp-amass/amass/v5/engine/plugins/packages"
+	"github.com/owasp-amass/amass/v5/engine/plugins/reputation"
 	"github.com/owasp-amass/amass/v5/engine/plugins/routing"
 	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
 	securitytxt "github.com/owasp-amass/amass/v5/engine/plugins/security_txt"
@@ -114,6 +115,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	adstxt.NewAdsTxt,
 	bounty.NewBountyScopes,
 	packages.NewPackages,
+	reputation.NewReputation,
 	sshp.NewSSHProbing,
 	bannerp.NewBannerProbing,
 	rdap.NewRDAP,

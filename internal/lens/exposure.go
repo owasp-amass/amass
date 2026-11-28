@@ -6,6 +6,7 @@ package lens
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -41,6 +42,7 @@ const (
 	ExposureBadCert      = "certificate_problems"
 	ExposureUnsupported  = "unsupported_software"
 	ExposurePublicBucket = "public_bucket"
+	ExposureReputation   = "reputation_listed"
 )
 
 // ExposureClass is one kind of exposure and what falls in it.
@@ -143,6 +145,9 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 			"backports them before treating the version as vulnerable"}
 	publicBucket := ExposureClass{Name: ExposurePublicBucket, Title: "World-readable storage buckets",
 		Rationale: "a publicly listable object-storage bucket exposes its files to anyone on the internet"}
+	listed := ExposureClass{Name: ExposureReputation, Title: "Addresses on reputation feeds",
+		Rationale: "an address or netblock a blocklist names is often refused by mail servers and firewalls, and " +
+			"can mean a host was compromised, a range was hijacked or a Tor exit runs there"}
 	note := func(c *ExposureClass, example string) {
 		c.Count++
 		if len(c.Examples) < exposureExamples {
@@ -230,19 +235,57 @@ func FindExposure(ctx context.Context, g graph.Graph, schema graph.SchemaCatalog
 		}
 	}
 
+	if err := reputationListed(ctx, g, s.owned, func(example string) { note(&listed, example) }); err != nil {
+		return out, err
+	}
+
 	out.lensBase = s.base()
 	if services.Truncated {
 		out.Truncated, out.Reason = true, services.Reason
 	}
 
 	out.Services = len(services.Services)
-	for _, c := range append(classes, unsupported, unusual, certs, publicBucket) {
+	for _, c := range append(classes, unsupported, unusual, certs, publicBucket, listed) {
 		if c.Count > 0 {
 			out.Classes = append(out.Classes, c)
 		}
 	}
 
 	return out, nil
+}
+
+// reputationListed notes each address and netblock of the footprint a
+// reputation feed lists (engine plugin reputation), read with one value
+// search per feed and type. A repository without value searches gives none.
+func reputationListed(ctx context.Context, g graph.Graph, owned map[string]graph.Asset,
+	note func(string)) error {
+	vs, ok := g.(ValueSearcher)
+	if !ok {
+		return nil
+	}
+	titles := semantics.ReputationFeedTitles()
+	names := make([]string, 0, len(titles))
+	for name := range titles {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		for _, typ := range []string{"IPAddress", "Netblock"} {
+			found, _, err := vs.FindByTagValue(ctx, typ, semantics.ReputationListingProperty, name, false, 0)
+			if errors.Is(err, ErrValueSearchUnsupported) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+			for _, a := range found {
+				if _, mine := owned[a.ID]; mine {
+					note(fmt.Sprintf("%s (%s)", graph.AssetLabel(a), titles[name]))
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // classOfService returns the index of the first class a service falls in,

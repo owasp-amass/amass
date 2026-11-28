@@ -1,0 +1,15 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "Keyless reputation feeds Amass matches the IP addresses and netblocks an enumeration reaches against. Each feed is downloaded at most once per refresh_hours (a feed's own terms set the floor: Spamhaus asks for no more than one download an hour) and kept on disk, at most max_bytes. A feed's format is ndjson_cidr (one JSON object per line, its cidr field the listed range; Spamhaus DROP) or lines (one address or range per line, # starting a comment; the Tor exit list and FireHOL netsets). Reserved and private ranges a feed lists (FireHOL level 1 lists the bogons) are skipped, so in-house space is never flagged. A listed asset gets the reputation_listing property, the feed's name. A listing describes the address, not who runs it: it is never ownership evidence. The exposure lens reports the organization's listed addresses and netblocks.",
+  "feeds": [
+    {"name": "spamhaus-drop", "title": "Spamhaus DROP", "url": "https://www.spamhaus.org/drop/drop_v4.json", "format": "ndjson_cidr",
+      "refresh_hours": 12, "source": "https://www.spamhaus.org/blocklists/do-not-route-or-peer/"},
+    {"name": "spamhaus-drop", "title": "Spamhaus DROP", "url": "https://www.spamhaus.org/drop/drop_v6.json", "format": "ndjson_cidr",
+      "refresh_hours": 12, "source": "https://www.spamhaus.org/blocklists/do-not-route-or-peer/"},
+    {"name": "tor-exit", "title": "Tor exit relay", "url": "https://check.torproject.org/torbulkexitlist", "format": "lines",
+      "refresh_hours": 6, "source": "https://metrics.torproject.org/collector.html#type-tordnsel"},
+    {"name": "firehol-level1", "title": "FireHOL level 1", "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
+      "format": "lines", "refresh_hours": 24, "source": "https://iplists.firehol.org/?ipset=firehol_level1"}
+  ],
+  "max_bytes": 16777216
+}
