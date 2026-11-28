@@ -6,6 +6,7 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -102,6 +103,18 @@ func (m AnthropicModel) Generate(ctx context.Context, history []Message, specs [
 		}
 		if msg.Role != "user" && msg.Role != "assistant" {
 			return out, fmt.Errorf("unknown message role %q", msg.Role)
+		}
+
+		if msg.Role == "user" && len(msg.Images) > 0 {
+			blocks := []any{}
+			for _, img := range msg.Images {
+				blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{
+					"type": "base64", "media_type": img.MediaType,
+					"data": base64.StdEncoding.EncodeToString(img.Data)}})
+			}
+			blocks = append(blocks, map[string]any{"type": "text", "text": msg.Text})
+			messages = append(messages, map[string]any{"role": "user", "content": blocks})
+			continue
 		}
 
 		messages = append(messages, map[string]any{"role": msg.Role, "content": msg.Text})

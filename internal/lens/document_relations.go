@@ -224,7 +224,7 @@ func FindDocumentRelations(ctx context.Context, g graph.Graph, schema graph.Sche
 	}
 
 	r := &docRelations{ctx: ctx, g: dg, publisher: publisher, resolved: map[string]docEnd{},
-		found: map[string]*docRelation{}, linked: map[string]bool{}}
+		found: map[string]*docRelation{}, linked: map[string]bool{}, ancestors: map[string]map[string]bool{}}
 	for _, src := range sources {
 		if ctx.Err() != nil {
 			return report, ctx.Err()
@@ -245,6 +245,7 @@ func FindDocumentRelations(ctx context.Context, g graph.Graph, schema graph.Sche
 		}
 	}
 
+	r.dropReversed()
 	for _, d := range r.found {
 		report.Candidates = append(report.Candidates, d.candidate())
 	}
@@ -316,6 +317,9 @@ type docRelations struct {
 	resolved  map[string]docEnd
 	found     map[string]*docRelation
 	linked    map[string]bool
+	// ancestors caches, by organization ID, the organizations stored above
+	// it (ancestorsOf)
+	ancestors map[string]map[string]bool
 }
 
 // add counts one finding of one document toward the relationship it states.
@@ -363,6 +367,9 @@ func (r *docRelations) add(src DocumentSource, st docStatement) error {
 	}
 	linked, err := r.isLinked(from.ID, to.ID, sig.Label)
 	if err != nil || linked {
+		return err
+	}
+	if bad, err := r.contradictsStored(from, to, sig.Label); err != nil || bad {
 		return err
 	}
 

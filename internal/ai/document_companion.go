@@ -80,8 +80,10 @@ type DocumentCompanion struct {
 	Interval   time.Duration
 	Batch      int
 	ChunkChars int
-	// Fetcher gets a document's text; nil fetches it over HTTP.
+	// Fetcher gets a document's text; nil fetches it over HTTP, reading a
+	// scanned document's pages with Pages.
 	Fetcher DocumentFetcher
+	Pages   PageReader
 	// MaxLeads caps the adaptive lead budget (see allowance): 0 leaves it to
 	// the confirmation rate and the run's size, a negative value submits no
 	// leads (findings are still stored).
@@ -296,7 +298,7 @@ func (c *DocumentCompanion) pass(ctx context.Context, run collect.Run, act colle
 		res, err := ReadDocuments(ctx, c.Graph, c.Store, c.Journal, root, DocumentRunOptions{Model: c.Model,
 			ModelID: c.ModelID, ModelTimeout: c.ModelTimeout, ChunkChars: c.ChunkChars, Max: batch,
 			MaxChunks: c.MaxChunks, DocumentTimeout: c.DocumentTimeout,
-			Fetcher: c.Fetcher, Schema: c.Schema, OnChunk: func() { count(act, ActivityChunksRead, 1) },
+			Fetcher: c.Fetcher, Pages: c.Pages, Schema: c.Schema, OnChunk: func() { count(act, ActivityChunksRead, 1) },
 			Skip: st.skip})
 		if err != nil {
 			if ctx.Err() == nil {

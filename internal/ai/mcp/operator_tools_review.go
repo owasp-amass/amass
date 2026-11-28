@@ -253,8 +253,8 @@ func (t *operatorTools) documentTools() {
 			return msg, func(via string) (*mcp.CallToolResult, error) {
 				run, err := ai.ReadDocuments(ctx, dg, op.Graph.Repo, op.Journal, root,
 					ai.DocumentRunOptions{Model: model, ModelID: modelID, ModelTimeout: timeout,
-						ChunkChars: op.Documents.ChunkChars, Max: limit,
-						Reread: a.Reread, DryRun: a.DryRun, Actor: approver(req, via)})
+						Pages: ai.DocumentPages(op.Documents, model), ChunkChars: op.Documents.ChunkChars,
+						Max: limit, Reread: a.Reread, DryRun: a.DryRun, Actor: approver(req, via)})
 				if err != nil {
 					return nil, err
 				}

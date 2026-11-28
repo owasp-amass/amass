@@ -116,6 +116,13 @@ type DocumentModelSettings struct {
 	// still read; without a cap a model that repeats itself fills the whole
 	// context window before it stops.
 	MaxTokens int `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
+	// Vision says whether the document model can read pictures, for scanned
+	// documents whose pages are pictures of text: "auto" (the default) asks
+	// an Ollama model's capabilities and takes an Anthropic model as able and
+	// an OpenAI-compatible one as not, "on" and "off" say so. A model that
+	// cannot is given the text Tesseract reads from the pages, when Tesseract
+	// is installed.
+	Vision string `yaml:"vision,omitempty" json:"vision,omitempty"`
 	// ShareWithAssistants lets other models (the main investigation model and
 	// MCP clients) read the document model's findings, which quote the
 	// documents. Off by default: they then see only counts.
@@ -197,6 +204,11 @@ func (d *DocumentModelSettings) Validate() error {
 		if err != nil || v < 5*time.Second || v > 15*time.Minute {
 			return fmt.Errorf("options.ai.documents.model_timeout must be 5s..15m")
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(d.Vision)) {
+	case "", "auto", "on", "off":
+	default:
+		return fmt.Errorf("options.ai.documents.vision must be auto, on or off")
 	}
 	if d.MaxLeads < -1 || d.MaxLeads > 10000 {
 		return fmt.Errorf("options.ai.documents.max_leads must be -1 (none), 0 (adaptive) or up to 10000")

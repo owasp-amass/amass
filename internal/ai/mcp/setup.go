@@ -105,7 +105,8 @@ func NewOperator(cfg *config.Config, g oamrepo.Adapter, opts OperatorOptions) (*
 		dg.WithholdDocumentText = false
 		m.Companions = append(m.Companions, &ai.DocumentCompanion{Graph: dg, Store: g.Repo,
 			Journal: j, Model: model, ModelID: modelID, ModelTimeout: timeout,
-			ChunkChars: cfg.AI.Documents.ChunkChars, MaxLeads: cfg.AI.Documents.MaxLeads, Hold: hold,
+			Pages: ai.DocumentPages(cfg.AI.Documents, model), ChunkChars: cfg.AI.Documents.ChunkChars,
+			MaxLeads: cfg.AI.Documents.MaxLeads, Hold: hold,
 			MaxChunks: cfg.AI.Documents.MaxChunks, DocumentTimeout: cfg.AI.Documents.DocumentTimeoutDuration()})
 	}
 	go func() {

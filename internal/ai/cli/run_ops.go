@@ -138,8 +138,8 @@ func (e *runEnv) readDocuments(repo repository.Repository, aliases []graph.Organ
 		return err
 	}
 	docRun, err := ai.ReadDocuments(context.Background(), dg, repo, j, root, ai.DocumentRunOptions{Model: dm,
-		ModelID: modelID, ModelTimeout: timeout, ChunkChars: docs.ChunkChars, Max: o.docMax,
-		MaxChunks: docs.MaxChunks, DocumentTimeout: docs.DocumentTimeoutDuration(),
+		ModelID: modelID, ModelTimeout: timeout, Pages: ai.DocumentPages(docs, dm), ChunkChars: docs.ChunkChars,
+		Max: o.docMax, MaxChunks: docs.MaxChunks, DocumentTimeout: docs.DocumentTimeoutDuration(),
 		Reread: o.docReread, DryRun: o.docDryRun})
 	if werr := writeDocumentRun(e.out, graph.AssetLabel(root), docRun); werr != nil && err == nil {
 		err = werr

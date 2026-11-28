@@ -83,8 +83,10 @@ type DocumentRunOptions struct {
 	DryRun bool
 	// Actor is who undoes earlier readings when Reread is set.
 	Actor string
-	// Fetcher gets a document's text; nil fetches it over HTTP.
+	// Fetcher gets a document's text; nil fetches it over HTTP, reading a
+	// scanned document's pages with Pages.
 	Fetcher DocumentFetcher
+	Pages   PageReader
 	// Schema gives the relationship semantics the documents are found by;
 	// nil uses the OAM catalog.
 	Schema graph.SchemaCatalog
@@ -213,7 +215,7 @@ func ReadDocuments(ctx context.Context, g graph.Graph, store review.DocumentStat
 		opts.Actor = review.InferenceSource + " (reread)"
 	}
 	if opts.Fetcher == nil {
-		opts.Fetcher = HTTPFetcher{}
+		opts.Fetcher = HTTPFetcher{Pages: opts.Pages}
 	}
 	if opts.Schema == nil {
 		opts.Schema = oamrepo.Catalog{}

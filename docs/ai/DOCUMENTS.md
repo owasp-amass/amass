@@ -75,6 +75,22 @@ the others count the version as remaining.
 
 ## Reading
 
+- **Scanned PDFs:** a PDF with under 200 characters of text (`scanned`) has
+  its page pictures read instead: `docmeta.PageImages` returns its JPEG image
+  streams of at least 600 pixels a side, in order (CCITT, JBIG2 and JPEG 2000
+  pages are not read yet). `HTTPFetcher.Pages` (`ai.DocumentPages`) reads at
+  most 64 of them:
+  - when the document model sees pictures (`options.ai.documents.vision`; on
+    auto, an Anthropic model does, an Ollama model does when `/api/show`
+    lists `vision`, an OpenAI-compatible one does not), each page is sent as
+    an `llm.Image` with a prompt to write out its text;
+  - otherwise Tesseract (`tesseract stdin stdout`) reads each page, when it is
+    installed (the Compose images have it);
+  - without either, the document has no text, as before
+    (`ErrNoPageReader`).
+
+  The transcription is then read like any text, so quotes are checked
+  against it.
 - **Text clean-up:** `cleanText` replaces control characters, other than
   newlines and tabs, with spaces. A schema-constrained reply can't copy a raw
   control character into a JSON string, and Ollama fails the request partway
@@ -103,11 +119,18 @@ the others count the version as remaining.
   - Organization, Person, Product and ProductRelease values are proper names:
     `properName`, which rejects fragments of words split by PDF extraction
     (`fragmented`);
+  - a relation's two ends are not one organization by normalized name
+    (`sameOrganization`);
   - an Organization or Person value does not name something else
     (`semantics.MisnamedDocumentName`, `document_names.json`): a building or
     a law named as an Organization ("Boyd Hall", "Clery Act"), a course
     named as either ("CS 101"), or a job title named as a Person ("Dean of
     Students").
+
+After every chunk is read, `dropContradictions` rejects the hierarchy
+findings (`lens.HierarchyPredicate`: `unit_of`, `subsidiary_of`,
+`acquired_by`, `owned_by`) of which two put each of two organizations over
+the other.
 
 ### Failures
 
@@ -307,6 +330,14 @@ and proposes, through the relation framework:
 
 - **Skipped pairs:** pairs already linked by the label, or for organizations
   by `org_unit` or `subsidiary` in either direction.
+- **Contradictions** (`document_contradictions.go`), for `org_unit` and
+  `subsidiary`:
+  - the proposed child is already stored above the proposed parent
+    (`ancestorsOf`, up to 8 levels);
+  - for `org_unit`, the child is already stored as a unit of an organization
+    that is neither above nor below the proposed parent;
+  - the documents state the pair both ways (`dropReversed`), in one document
+    or across two: neither is proposed.
 - **Units of the publisher:** the prompt has the model write
   `lens.DocumentPublisher` (`PUBLISHER`) as the object of a `unit_of` finding
   for an office, department, campus or program of the organization that runs

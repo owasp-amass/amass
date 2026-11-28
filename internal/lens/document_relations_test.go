@@ -249,3 +249,55 @@ func TestUnitKey(t *testing.T) {
 		t.Errorf("UnitKey = %q", got)
 	}
 }
+
+// A finding the stored hierarchy or another finding contradicts gives no
+// proposal: one that puts an organization over one stored above it, a unit
+// already stored under an unrelated organization, and two organizations the
+// documents each put over the other. (A unit of the publisher stored under
+// another organization is proposed as a new unit instead: see
+// TestFindDocumentRelationsPublisherUnits.)
+func TestFindDocumentRelationsContradictions(t *testing.T) {
+	g := documentRelationFixture()
+	add := func(id, name string) {
+		g.Assets[id] = graph.Asset{ID: id, Type: "Organization", Key: name, Content: map[string]any{"name": name}}
+		g.orgs[strings.ToLower(name)] = []string{id}
+	}
+	link := func(from, label, to string) {
+		g.Links = append(g.Links, graph.Relation{ID: from + "-" + label + "-" + to, FromID: from, ToID: to,
+			Label: label, Type: "SimpleRelation"})
+	}
+	rel := func(file, subj, obj, sha string) {
+		g.EvidenceByID[file] = append(g.EvidenceByID[file], graphtest.SimpleProp(propDocStatement,
+			`{"kind":"relation","subject":"`+subj+`","subject_type":"Organization","predicate":"unit_of",`+
+				`"object":"`+obj+`","object_type":"Organization","sha256":"`+sha+`"}`))
+	}
+
+	add("holding", "OWASP Holding")
+	link("holding", "subsidiary", "owasp")
+	rel("f-report", "OWASP Holding", "OWASP Foundation", "v1")
+
+	add("other", "Utica Products")
+	add("office", "Grants Office")
+	link("other", "org_unit", "office")
+	rel("f-report", "Grants Office", "OWASP Alumni Fund", "v1")
+
+	add("lab", "OWASP Lab")
+	rel("f-report", "OWASP Lab", "OWASP Alumni Fund", "v1")
+	rel("f-catalog", "OWASP Alumni Fund", "OWASP Lab", "v2")
+
+	r, err := FindDocumentRelations(context.Background(), g, graphtest.VendorCatalog{PlanCatalog: graphtest.TestOAMCatalog},
+		g.Assets["owasp.org"], LensLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range r.Candidates {
+		for _, id := range []string{"holding", "office", "lab"} {
+			if c.FromID == id || c.ToID == id {
+				t.Errorf("a contradicted finding was proposed: %+v", c)
+			}
+		}
+	}
+	if len(r.Candidates) != 4 {
+		t.Errorf("candidates %+v, want the fixture's four", r.Candidates)
+	}
+}

@@ -6,6 +6,7 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,6 +156,14 @@ func compatibleMessages(history []Message) ([]map[string]any, error) {
 			return nil, fmt.Errorf("unknown message role %q", msg.Role)
 		}
 		item := map[string]any{"role": msg.Role, "content": msg.Text}
+		if msg.Role == "user" && len(msg.Images) > 0 {
+			parts := []any{map[string]any{"type": "text", "text": msg.Text}}
+			for _, img := range msg.Images {
+				parts = append(parts, map[string]any{"type": "image_url", "image_url": map[string]any{
+					"url": "data:" + img.MediaType + ";base64," + base64.StdEncoding.EncodeToString(img.Data)}})
+			}
+			item["content"] = parts
+		}
 		if msg.Role == "tool" {
 			item["tool_call_id"] = msg.ToolCallID
 		}

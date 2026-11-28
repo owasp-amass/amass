@@ -35,6 +35,9 @@ type DocumentFetcher interface {
 // otherwise from the document's URL, and extracts their text in memory.
 type HTTPFetcher struct {
 	Client *http.Client
+	// Pages reads a scanned PDF's text from the pictures of its pages; nil
+	// leaves a scan without text.
+	Pages PageReader
 }
 
 // Document implements DocumentFetcher.
@@ -122,7 +125,19 @@ func fetchDocument(ctx context.Context, f HTTPFetcher, src lens.DocumentSource) 
 	if err != nil {
 		return out, &documentError{kind: FailureExtract, err: fmt.Errorf("extract text: %w", err)}
 	}
-	out.text = strings.TrimSpace(content.Text + "\n" + strings.Join(content.Links, "\n"))
+	text := content.Text
+	if f.Pages != nil && scanned(dt.Format, text) {
+		if pages, _ := docmeta.PageImages(dt.Format, data); len(pages) > 0 {
+			read, err := f.Pages.ReadPages(ctx, pages)
+			if err != nil && !errors.Is(err, ErrNoPageReader) {
+				return out, &documentError{kind: FailureExtract, err: fmt.Errorf("read scanned pages: %w", err)}
+			}
+			if strings.TrimSpace(read) != "" {
+				text = read
+			}
+		}
+	}
+	out.text = strings.TrimSpace(text + "\n" + strings.Join(content.Links, "\n"))
 	return out, nil
 }
 

@@ -83,7 +83,7 @@ func (v *docVocabulary) validateRelation(s DocumentStatement, chunk string) stri
 	if !v.allows(s.SubjectType, s.Predicate, s.ObjectType) {
 		return fmt.Sprintf("%s does not relate %s to %s", s.Predicate, s.SubjectType, s.ObjectType)
 	}
-	if strings.EqualFold(s.Subject, s.Object) || len(s.Detail) > maxStatementTerm {
+	if strings.EqualFold(s.Subject, s.Object) || sameOrganization(s) || len(s.Detail) > maxStatementTerm {
 		return fmt.Sprintf("%s: identical ends or overlong detail", s.Predicate)
 	}
 	for _, end := range []struct{ typ, value string }{{s.SubjectType, s.Subject}, {s.ObjectType, s.Object}} {

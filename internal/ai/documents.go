@@ -244,6 +244,8 @@ func readDocument(ctx context.Context, model llm.Model, modelID, url, text strin
 		}
 	}
 
+	kept, rejected := dropContradictions(out.Statements)
+	out.Statements, out.Rejected = kept, append(out.Rejected, rejected...)
 	out.Category = topCategory(categories)
 	return out, nil
 }

@@ -6,10 +6,12 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -88,6 +90,7 @@ type ollamaToolCall struct {
 type ollamaMessage struct {
 	Role      string           `json:"role"`
 	Content   string           `json:"content"`
+	Images    []string         `json:"images,omitempty"`
 	ToolCalls []ollamaToolCall `json:"tool_calls,omitempty"`
 	ToolName  string           `json:"tool_name,omitempty"`
 }
@@ -136,7 +139,11 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 	for _, msg := range history {
 		switch msg.Role {
 		case "system", "user":
-			msgs = append(msgs, ollamaMessage{Role: msg.Role, Content: msg.Text})
+			om := ollamaMessage{Role: msg.Role, Content: msg.Text}
+			for _, img := range msg.Images {
+				om.Images = append(om.Images, base64.StdEncoding.EncodeToString(img.Data))
+			}
+			msgs = append(msgs, om)
 		case "assistant":
 			om := ollamaMessage{Role: "assistant", Content: msg.Text}
 			for _, c := range msg.Calls {
@@ -251,25 +258,9 @@ func (m OllamaModel) chat(ctx context.Context, history []Message, specs []ToolSp
 // Ollama does not report one. A num_ctx above it gains nothing, and a prompt
 // that needs more than it is read poorly.
 func (m OllamaModel) ContextLength(ctx context.Context) (int, error) {
-	chat, err := OllamaChatURL(m.Endpoint)
+	show, err := m.show(ctx)
 	if err != nil {
 		return 0, err
-	}
-	url := strings.TrimSuffix(chat, "/api/chat") + "/api/show"
-
-	status, body, err := postJSON(ctx, m.Client, 30*time.Second, url, nil, map[string]any{"model": m.ModelName})
-	if err != nil {
-		return 0, err
-	}
-	if status < 200 || status > 299 {
-		return 0, fmt.Errorf("ollama HTTP status %d: %s", status, apiError(body))
-	}
-
-	var show struct {
-		ModelInfo map[string]any `json:"model_info"`
-	}
-	if err := json.Unmarshal(body, &show); err != nil {
-		return 0, fmt.Errorf("decode ollama model details: %w", err)
 	}
 	for k, v := range show.ModelInfo {
 		if n, ok := v.(float64); ok && strings.HasSuffix(k, ".context_length") && n > 0 {
@@ -277,4 +268,42 @@ func (m OllamaModel) ContextLength(ctx context.Context) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+// Capable reports whether Ollama lists the capability (vision, tools) for
+// the model in /api/show.
+func (m OllamaModel) Capable(ctx context.Context, capability string) (bool, error) {
+	show, err := m.show(ctx)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(show.Capabilities, capability), nil
+}
+
+// ollamaShow is what Ollama's /api/show says about a model.
+type ollamaShow struct {
+	ModelInfo    map[string]any `json:"model_info"`
+	Capabilities []string       `json:"capabilities"`
+}
+
+// show reads the model's details from Ollama's /api/show.
+func (m OllamaModel) show(ctx context.Context) (ollamaShow, error) {
+	var show ollamaShow
+	chat, err := OllamaChatURL(m.Endpoint)
+	if err != nil {
+		return show, err
+	}
+	url := strings.TrimSuffix(chat, "/api/chat") + "/api/show"
+
+	status, body, err := postJSON(ctx, m.Client, 30*time.Second, url, nil, map[string]any{"model": m.ModelName})
+	if err != nil {
+		return show, err
+	}
+	if status < 200 || status > 299 {
+		return show, fmt.Errorf("ollama HTTP status %d: %s", status, apiError(body))
+	}
+	if err := json.Unmarshal(body, &show); err != nil {
+		return show, fmt.Errorf("decode ollama model details: %w", err)
+	}
+	return show, nil
 }

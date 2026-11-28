@@ -14,6 +14,16 @@ type Message struct {
 	Text       string `json:"text,omitempty"`
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	Calls      []Call `json:"calls,omitempty"`
+	// Images are pictures a user message shows a model that can see them,
+	// such as the pages of a scanned document.
+	Images []Image `json:"images,omitempty"`
+}
+
+// Image is a picture in a message: its media type (image/jpeg, image/png)
+// and its bytes.
+type Image struct {
+	MediaType string `json:"media_type"`
+	Data      []byte `json:"data"`
 }
 
 type Call struct {

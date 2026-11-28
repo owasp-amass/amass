@@ -77,11 +77,24 @@ func ooxmlImages(data []byte) ([]Image, error) {
 }
 
 func pdfImages(data []byte) ([]Image, error) {
+	var out []Image
+	err := pdfJPEGs(data, func(n int, _, body []byte) bool {
+		if x, err := ReadEXIF(body); err == nil {
+			out = append(out, Image{Name: "stream " + strconv.Itoa(n), EXIF: x})
+		}
+		return true
+	})
+	return out, err
+}
+
+// pdfJPEGs calls each with the dictionary and body of each JPEG (DCTDecode)
+// image stream of a PDF kept whole, in order, at most maxImages of them,
+// until each returns false.
+func pdfJPEGs(data []byte, each func(n int, dict, body []byte) bool) error {
 	if !bytes.HasPrefix(bytes.TrimLeft(data[:min(len(data), 1024)], "\x00\r\n\t "), []byte("%PDF-")) {
-		return nil, errNotPDF
+		return errNotPDF
 	}
 
-	var out []Image
 	read := 0
 	for n, loc := range streamRe.FindAllIndex(data, -1) {
 		if read >= maxImages {
@@ -108,9 +121,9 @@ func pdfImages(data []byte) ([]Image, error) {
 			continue
 		}
 		read++
-		if x, err := ReadEXIF(body); err == nil {
-			out = append(out, Image{Name: "stream " + strconv.Itoa(n), EXIF: x})
+		if !each(n, dict, body) {
+			break
 		}
 	}
-	return out, nil
+	return nil
 }
