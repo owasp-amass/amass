@@ -12,6 +12,7 @@ Infrastructure correlation associates more netblocks and autonomous systems with
 | --- | --- | --- | --- |
 | [Shared netblock registrant organization](#ipnet-registrant-org) | strong | identity | 0.75 |
 | [Shared AS registrant organization](#asn-registrant-org) | strong | identity | 0.75 |
+| [AS operator organization in PeeringDB](#asn-peeringdb-org) | strong | identity | 0.70 |
 | [Netblock announced by the organization's AS](#asn-announced-netblock) | supporting | infrastructure | 0.60 |
 | [RPKI ROA authorizes the organization's AS](#roa-authorizes-own-asn) | strong | infrastructure | 0.75 |
 | [Routing registry maintainer of the organization's netblocks](#irr-maintainer-own-origins) | strong | infrastructure | 0.70 |
@@ -56,6 +57,26 @@ Infrastructure correlation associates more netblocks and autonomous systems with
 
 - A parent or network operator can hold the AS registration for legally separate subsidiaries.
 - Upstream providers sometimes register AS numbers on behalf of customers.
+
+<a id="asn-peeringdb-org"></a>
+## AS operator organization in PeeringDB
+
+`asn-peeringdb-org`: strong identity signal, weight 0.70 (confidence 70).
+
+**Finds:** An autonomous system whose PeeringDB network record belongs to a PeeringDB organization that names the target organization (AutonomousSystem --contact--> ContactRecord --organization--> Organization). It covers the AS found in scope and the organization's other networks in PeeringDB.
+
+**Why it counts:** PeeringDB records are kept by the networks themselves, and PeeringDB staff confirm a user's affiliation with an organization before the user may edit its networks. Every network under one PeeringDB organization is run by that operator, so one in-scope AS leads to the operator's others.
+
+**Guards:**
+
+- Only autonomous systems already reached by the enumeration start a lookup; PeeringDB is never searched by organization name.
+- At most max_networks networks of one PeeringDB organization are recorded.
+- A matching organization name alone is never sufficient: the record must belong to the organization the lens starts from.
+
+**Can still mislead when:**
+
+- A carrier or reseller can list a customer's network under its own PeeringDB organization.
+- A PeeringDB organization can outlive a sale of one of its networks until the record is updated.
 
 <a id="asn-announced-netblock"></a>
 ## Netblock announced by the organization's AS

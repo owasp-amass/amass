@@ -39,6 +39,25 @@
       ]
     },
     {
+      "id": "asn-peeringdb-org",
+      "title": "AS operator organization in PeeringDB",
+      "kind": "identity",
+      "strength": "strong",
+      "weight": 0.7,
+      "matcher": "asn_peeringdb_org",
+      "finds": "An autonomous system whose PeeringDB network record belongs to a PeeringDB organization that names the target organization (AutonomousSystem --contact--> ContactRecord --organization--> Organization). It covers the AS found in scope and the organization's other networks in PeeringDB.",
+      "rationale": "PeeringDB records are kept by the networks themselves, and PeeringDB staff confirm a user's affiliation with an organization before the user may edit its networks. Every network under one PeeringDB organization is run by that operator, so one in-scope AS leads to the operator's others.",
+      "guards": [
+        "Only autonomous systems already reached by the enumeration start a lookup; PeeringDB is never searched by organization name.",
+        "At most max_networks networks of one PeeringDB organization are recorded.",
+        "A matching organization name alone is never sufficient: the record must belong to the organization the lens starts from."
+      ],
+      "counter_indications": [
+        "A carrier or reseller can list a customer's network under its own PeeringDB organization.",
+        "A PeeringDB organization can outlive a sale of one of its networks until the record is updated."
+      ]
+    },
+    {
       "id": "asn-announced-netblock",
       "title": "Netblock announced by the organization's AS",
       "kind": "infrastructure",

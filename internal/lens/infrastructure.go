@@ -118,10 +118,40 @@ func FindRelatedInfrastructure(ctx context.Context, g graph.Graph, orgID string)
 
 	ipnetSig := "shared netblock registrant organization: " + name
 	asnSig := "shared AS registrant organization: " + name
-	announceSig := "announced by an AS registered to: " + name
+	announceSig := "announced by an AS of: " + name
 	orgWitness := func(ce graph.Relation) graph.WitnessEdge {
 		return graph.WitnessEdge{EdgeID: ce.ID, Label: "organization", RelationType: ce.Type,
 			FromID: ce.FromID, FromType: "ContactRecord", ToID: ce.ToID, ToType: "Organization", To: name}
+	}
+
+	peeringSig := "AS operator organization in PeeringDB: " + name
+	// ownedAS records an autonomous system of the organization, reached by
+	// asW, and scores the netblocks it announces (announcement is operation,
+	// not registration, so they are supporting unless the AS is small).
+	ownedAS := func(asID string, asW graph.WitnessEdge) {
+		ownAS[asID] = asW
+		if as, err := g.GetAsset(ctx, asID); err == nil {
+			ownASNumbers["AS"+graph.ContentString(as, "number")] = true
+		}
+		anns, err := g.Edges(ctx, asID, "out", "announces", time.Time{})
+		if err != nil {
+			return
+		}
+		annSigID, annLabel := SigASNAnnouncedNetblock, announceSig
+		if len(anns) <= asnSmallNetblocks {
+			annSigID = SigSmallASNAnnounced
+			annLabel = fmt.Sprintf("announced by an AS of %s that announces %d prefixes", name, len(anns))
+		}
+		for _, ann := range anns {
+			nb, err := g.GetAsset(ctx, ann.ToID)
+			if err != nil {
+				continue
+			}
+			ownNetblocks[ann.ToID] = true
+			annW := graph.WitnessEdge{EdgeID: ann.ID, Label: "announces", RelationType: ann.Type,
+				FromID: ann.FromID, FromType: "AutonomousSystem", ToID: ann.ToID, ToType: "Netblock"}
+			add("Netblock", graph.ContentString(nb, "cidr"), annSigID, annLabel, asW, annW)
+		}
 	}
 
 	for _, ce := range contacts {
@@ -170,34 +200,29 @@ func FindRelatedInfrastructure(ctx context.Context, g graph.Graph, orgID string)
 					continue
 				}
 				for _, ae := range ases {
-					regW := graph.WitnessEdge{EdgeID: ae.ID, Label: "registration", RelationType: ae.Type,
-						FromID: ae.FromID, FromType: "AutonomousSystem", ToID: ae.ToID, ToType: "AutnumRecord"}
-					ownAS[ae.FromID] = regW
-					if as, err := g.GetAsset(ctx, ae.FromID); err == nil {
-						ownASNumbers["AS"+graph.ContentString(as, "number")] = true
-					}
-					anns, err := g.Edges(ctx, ae.FromID, "out", "announces", time.Time{})
-					if err != nil {
-						continue
-					}
-					annSigID, annLabel := SigASNAnnouncedNetblock, announceSig
-					if len(anns) <= asnSmallNetblocks {
-						annSigID = SigSmallASNAnnounced
-						annLabel = fmt.Sprintf("announced by an AS registered to %s that announces %d prefixes",
-							name, len(anns))
-					}
-					for _, ann := range anns {
-						nb, err := g.GetAsset(ctx, ann.ToID)
-						if err != nil {
-							continue
-						}
-						ownNetblocks[ann.ToID] = true
-						annW := graph.WitnessEdge{EdgeID: ann.ID, Label: "announces", RelationType: ann.Type,
-							FromID: ann.FromID, FromType: "AutonomousSystem", ToID: ann.ToID, ToType: "Netblock"}
-						add("Netblock", graph.ContentString(nb, "cidr"), annSigID, annLabel, regW, annW)
-					}
+					ownedAS(ae.FromID, graph.WitnessEdge{EdgeID: ae.ID, Label: "registration",
+						RelationType: ae.Type, FromID: ae.FromID, FromType: "AutonomousSystem", ToID: ae.ToID,
+						ToType: "AutnumRecord"})
 				}
 			}
+		}
+
+		// AutonomousSystem --contact--> ContactRecord: the operator record a
+		// network keeps in PeeringDB names the organization.
+		operated, err := g.Edges(ctx, ce.FromID, "in", "contact", time.Time{})
+		if err != nil {
+			return report, err
+		}
+		for _, oe := range operated {
+			as, err := g.GetAsset(ctx, oe.FromID)
+			if err != nil || as.Type != "AutonomousSystem" {
+				continue
+			}
+			w := graph.WitnessEdge{EdgeID: oe.ID, Label: "contact", RelationType: oe.Type, FromID: oe.FromID,
+				FromType: "AutonomousSystem", ToID: oe.ToID, ToType: "ContactRecord"}
+			add("AutonomousSystem", graph.ContentString(as, "number"), SigASNPeeringDBOrg, peeringSig, w,
+				orgWitness(ce))
+			ownedAS(oe.FromID, w)
 		}
 	}
 

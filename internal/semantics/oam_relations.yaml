@@ -95,6 +95,9 @@ relations:
   - {source: AutonomousSystem, label: registration, relation_type: SimpleRelation, destination: AutnumRecord,
      attribution: same_subject, purpose: registration,
      note: "The AS number registration record (engine scope association)."}
+  - {source: AutonomousSystem, label: contact, relation_type: SimpleRelation, destination: ContactRecord,
+     attribution: controller, purpose: network, reviewed: true,
+     note: "The operator record the network keeps about itself in PeeringDB: the PeeringDB organization running it, with its website and address. PeeringDB confirms a user's affiliation with the organization before they may edit its networks, so the organization named is the AS's operator; the infrastructure lens scores it (asn-peeringdb-org)."}
   - {source: ContactRecord, label: fqdn, relation_type: SimpleRelation, destination: FQDN,
      attribution: attribute, purpose: contact, reviewed: true,
      note: "Domain listed in the contact (for example an email domain); may belong to the contact party or a provider."}

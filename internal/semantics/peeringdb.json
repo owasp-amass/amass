@@ -1,0 +1,11 @@
+{
+  "_license": "Copyright © by Jeff Foley 2017-2026. All rights reserved. Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file. SPDX-License-Identifier: Apache-2.0",
+  "_about": "How Amass reads PeeringDB, the database networks keep about themselves for interconnection (source). Its API answers without a key, at a lower request rate (request_seconds apart). For an autonomous system the enumeration reaches, net_path?asn= gives the network's record: its name, website, type, peering policy and routing registry as-set, and its PeeringDB organization (org_id). org_path gives the organization: its name, website and address. The record is stored as a ContactRecord keyed by the organization's PeeringDB page (page_url), which the AS points at (contact), so every network of one PeeringDB organization shares it. net_path?org_id= lists the organization's other networks; at most max_networks are recorded, as autonomous systems pointing at the same ContactRecord. PeeringDB is never searched by organization name.",
+  "source": "https://www.peeringdb.com/apidocs/",
+  "api": "https://www.peeringdb.com/api",
+  "net_path": "/net",
+  "org_path": "/org/",
+  "page_url": "https://www.peeringdb.com/org/",
+  "request_seconds": 3,
+  "max_networks": 50
+}

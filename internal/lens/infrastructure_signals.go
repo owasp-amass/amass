@@ -41,6 +41,10 @@ const (
 	// organization that announces few prefixes: an enterprise network, not a
 	// transit or hosting one.
 	SigSmallASNAnnounced = "small-asn-announced-netblock"
+	// SigASNPeeringDBOrg is an autonomous system whose PeeringDB network
+	// record belongs to a PeeringDB organization that names the
+	// organization.
+	SigASNPeeringDBOrg = "asn-peeringdb-org"
 )
 
 // Infrastructure signal matchers: how each signal is found in the graph.
@@ -53,11 +57,12 @@ const (
 	matchInfraIRRShared   = "irr_maintainer"
 	matchInfraSPFRange    = "spf_range"
 	matchInfraSmallASN    = "small_asn_announced_netblock"
+	matchInfraPeeringDB   = "asn_peeringdb_org"
 )
 
 var infrastructureMatchers = map[string]bool{matchInfraIPNetReg: true, matchInfraASNReg: true,
 	matchInfraASNAnnounce: true, matchInfraROA: true, matchInfraIRROwn: true, matchInfraIRRShared: true,
-	matchInfraSPFRange: true, matchInfraSmallASN: true}
+	matchInfraSPFRange: true, matchInfraSmallASN: true, matchInfraPeeringDB: true}
 
 var loadInfrastructureCatalog = sync.OnceValues(func() (signalCatalog, error) {
 	var c signalCatalog

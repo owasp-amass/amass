@@ -17,6 +17,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/ocds"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/osm"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/peeringdb"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/propublica"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v5/engine/plugins/api/schemaorg"
@@ -104,6 +105,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	mtasts.NewMTASTS,
 	ocds.NewOCDS,
 	osm.NewOpenStreetMap,
+	peeringdb.NewPeeringDB,
 	propublica.NewProPublica,
 	securitytxt.NewSecurityTxt,
 	bimi.NewBIMI,
