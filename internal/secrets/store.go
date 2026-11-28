@@ -99,7 +99,11 @@ func (s *Store) Put(source, field, value, actor string) error {
 		return errors.New("no value to store")
 	}
 
-	name := Name(source, field)
+	return s.put(Name(source, field), value, actor)
+}
+
+// put seals value under name, replacing an earlier one.
+func (s *Store) put(name, value, actor string) error {
 	ct, nonce, err := s.Key.seal(name, []byte(value))
 	if err != nil {
 		return err
@@ -138,6 +142,9 @@ func (s *Store) List() ([]Entry, error) {
 
 	out := make([]Entry, 0, len(all))
 	for _, sec := range all {
+		if isFound(sec.Name) {
+			continue
+		}
 		if source, field, ok := splitName(sec.Name); ok {
 			out = append(out, Entry{Source: source, Field: field, KeyID: sec.KeyID, UpdatedAt: sec.UpdatedAt,
 				UpdatedBy: sec.UpdatedBy})
@@ -165,6 +172,9 @@ func (s *Store) Values() (values map[string]map[string]string, skipped int, err 
 
 	values = map[string]map[string]string{}
 	for _, sec := range all {
+		if isFound(sec.Name) {
+			continue
+		}
 		source, field, ok := splitName(sec.Name)
 		if !ok || sec.KeyID != s.Key.ID() {
 			skipped++
@@ -199,6 +209,28 @@ func (s *Store) Rotate(next *Key, actor string) (rotated, skipped int, err error
 			}
 			rotated++
 		}
+	}
+
+	// found credentials are rotated with the rest
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	all, err := s.DB.ListSecrets(ctx)
+	if err != nil {
+		return rotated, skipped, err
+	}
+	for _, sec := range all {
+		if !isFound(sec.Name) {
+			continue
+		}
+		plain, err := s.Key.open(sec.Name, sec.Ciphertext, sec.Nonce)
+		if sec.KeyID != s.Key.ID() || err != nil {
+			skipped++
+			continue
+		}
+		if err := to.put(sec.Name, string(plain), actor); err != nil {
+			return rotated, skipped, err
+		}
+		rotated++
 	}
 	return rotated, skipped, nil
 }

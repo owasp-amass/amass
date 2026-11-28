@@ -69,3 +69,23 @@ the engine, `ai`, `mcp`, `mcp-stdio` and `secrets` services read it through
 `docker compose run --rm -T secrets set Shodan apikey < shodan.key`. The key
 file isn't committed; back it up with the database, since the store can't be
 read without it.
+
+## Credentials found exposed
+
+The `Exposed-Secrets` plugin (`engine/plugins/leaks`) scans what the
+enumeration stored with `internal/secretscan` (formats in
+`internal/semantics/secret_patterns.json`): URLs, including their decoded
+query strings, service banners and response headers, and TXT records.
+
+- An identifier (an AWS access key ID, an AWS account ID from an ARN) is an
+  `Identifier` in full, linked by `discloses` from where it was found. An
+  access key ID is linked by `cloud_account` to the account it carries
+  (`secretscan.AWSAccountFromKeyID`).
+- A secret is an `exposed_secret` Identifier, `<kind>:<SHA-256>`, with the
+  properties `secret_kind` and `secret_preview` (masked). Its value is sealed
+  in this store as `found:<kind>:<hash>` (`Store.PutFound`) when the process
+  has the master key; without one only the hash and preview are kept.
+  `Store.Found` opens it again. Found credentials are never data source
+  credentials: `Values` and `List` skip them, and `Rotate` re-seals them with
+  the rest.
+- Found credentials are never used or tested.

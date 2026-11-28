@@ -149,6 +149,9 @@ relations:
   - {source: DomainRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
      attribution: third_party, purpose: registration, vendor: false,
      note: "WHOIS service of the registrar or registry."}
+  - {source: FQDN, label: discloses, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity, reviewed: true,
+     note: "A credential or cloud identifier found in the name's TXT records: an exposed secret (its kind and hash, never the value) or an AWS access key ID or account ID. It describes what the name published, not something its owner owns; the exposure lens reports the footprint's."}
   - {source: FQDN, label: dns_record, relation_type: BasicDNSRelation, destination: FQDN,
      attribution: infrastructure, purpose: dns,
      note: "DNS resolution (A, AAAA, CNAME and others). Targets are hosting or CDN infrastructure that many parties share; does not carry ownership."}
@@ -206,6 +209,9 @@ relations:
   - {source: FQDN, label: verified_for, relation_type: SimpleRelation, destination: Service,
      attribution: third_party, purpose: dns,
      note: "A TXT verification record shows the domain was verified for this service."}
+  - {source: File, label: discloses, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity, reviewed: true,
+     note: "A credential or cloud identifier found in the document's content: an exposed secret (its kind and hash, never the value) or an AWS access key ID or account ID."}
   - {source: File, label: author, relation_type: SimpleRelation, destination: Organization,
      attribution: attribute, purpose: web,
      note: "Who the document's metadata names as its author or last editor. A stronger claim than a mention, but a document can be written for or about another party, so ownership does not pass through."}
@@ -299,6 +305,9 @@ relations:
   - {source: IPNetRecord, label: whois_server, relation_type: SimpleRelation, destination: FQDN,
      attribution: third_party, purpose: registration, vendor: false,
      note: "WHOIS service of the registry."}
+  - {source: Identifier, label: cloud_account, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity,
+     note: "The cloud account an access key ID belongs to: an AWS access key ID carries its account number, decoded offline."}
   - {source: Identifier, label: issuing_agent, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: third_party, purpose: identity,
      note: "The body that issued or registers the identifier."}
@@ -398,6 +407,9 @@ relations:
   - {source: Product, label: website, relation_type: SimpleRelation, destination: URL,
      attribution: controls, purpose: web,
      note: "The product's website."}
+  - {source: Service, label: discloses, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity, reviewed: true,
+     note: "A credential or cloud identifier found in the service's banner or response headers: an exposed secret (its kind and hash, never the value) or an AWS access key ID or account ID."}
   - {source: Service, label: certificate, relation_type: SimpleRelation, destination: TLSCertificate,
      attribution: same_subject, purpose: certificate,
      note: "Certificate presented by the service (engine scope association)."}
@@ -470,6 +482,9 @@ relations:
   - {source: TLSCertificate, label: subject_contact, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: controller, purpose: certificate,
      note: "Certificate subject (engine scope association). Names the organization for OV/EV certificates; DV certificates usually have none."}
+  - {source: URL, label: discloses, relation_type: SimpleRelation, destination: Identifier,
+     attribution: attribute, purpose: identity, reviewed: true,
+     note: "A credential or cloud identifier found in the URL, often in its query string (an API key, a pre-signed AWS credential): an exposed secret (its kind and hash, never the value) or an AWS access key ID or account ID."}
   - {source: URL, label: contact, relation_type: SimpleRelation, destination: ContactRecord,
      attribution: attribute, purpose: contact,
      note: "Contact information the page or file at the URL publishes (a security.txt file's contacts and links, an ads.txt file's owner domain and contact). What it names may belong to the publisher, a parent company or an agency, so control does not flow through it; the lenses weigh it."}

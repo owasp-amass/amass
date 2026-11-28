@@ -307,11 +307,16 @@ func (d dependencyScan) fallbackName(visited []graph.Asset) (string, string, boo
 		return "", "", false, "", nil
 	}
 
-	best := visited[0]
+	// At an equal distance an asset the search reached names the party
+	// better than the asset it started from (an AS's registration record
+	// rather than the AS number), then the shorter label wins.
+	start := visited[0]
+	best := start
 	for _, v := range visited[1:] {
 		dv, okv := d.w.ownerDist[v.Type]
 		db, okb := d.w.ownerDist[best.Type]
-		if okv && (!okb || dv < db || (dv == db && len(graph.AssetLabel(v)) < len(graph.AssetLabel(best)))) {
+		if okv && (!okb || dv < db || (dv == db && (best.ID == start.ID ||
+			len(graph.AssetLabel(v)) < len(graph.AssetLabel(best))))) {
 			best = v
 		}
 	}
