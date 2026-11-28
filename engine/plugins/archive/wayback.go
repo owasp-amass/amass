@@ -111,13 +111,13 @@ func (w *wayback) check(e *et.Event) error {
 }
 
 // read asks the archive about the domain in e, within ctx, the reader's
-// budget for it.
-func (w *wayback) read(ctx context.Context, e *et.Event) {
+// budget for it, and reports whether the archive answered.
+func (w *wayback) read(ctx context.Context, e *et.Event) bool {
 	fqdn := e.Entity.Asset.(*oamdns.FQDN)
 	rows, answered := w.query(ctx, e, fqdn.Name)
 	if !answered {
 		// a refusal is not an answer: the domain is asked again later
-		return
+		return false
 	}
 	// a domain with more captures than are read may hold documents past
 	// them: ask for its documents on their own
@@ -142,6 +142,7 @@ func (w *wayback) read(ctx context.Context, e *et.Event) {
 				slog.Group("plugin", "name", w.name, "handler", w.name+"-Handler"))
 		}
 	}
+	return true
 }
 
 // waybackPageRows is how many captures one Wayback request asks for. The CDX

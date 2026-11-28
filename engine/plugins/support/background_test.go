@@ -49,3 +49,24 @@ func TestBackgroundLane(t *testing.T) {
 		}
 	}
 }
+
+// A job queued for later counts as background work from the start and runs
+// once its wait has passed.
+func TestBackgroundLaneEnqueueAfter(t *testing.T) {
+	hold := 20 * time.Minute
+	sess := plugintest.NewSession(t)
+	sess.Config().BackgroundHold = &hold
+
+	var runs atomic.Int32
+	l := NewBackgroundLane("test", time.Minute)
+	l.EnqueueAfter(sess, "owasp.org", "Test", "owasp.org", 50*time.Millisecond, func(context.Context) { runs.Add(1) })
+	if sess.Stats().Background() < 1 {
+		t.Error("the waiting job is not background work")
+	}
+	for deadline := time.Now().Add(5 * time.Second); runs.Load() == 0 || sess.Stats().Background() != 0; {
+		if time.Now().After(deadline) {
+			t.Fatalf("ran %d times, %d background units left", runs.Load(), sess.Stats().Background())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

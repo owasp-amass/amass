@@ -114,18 +114,18 @@ func (c *commonCrawl) check(e *et.Event) error {
 }
 
 // read asks the index about the domain in e, within ctx, the reader's budget
-// for it.
-func (c *commonCrawl) read(ctx context.Context, e *et.Event) {
+// for it, and reports whether the index answered.
+func (c *commonCrawl) read(ctx context.Context, e *et.Event) bool {
 	fqdn := e.Entity.Asset.(*oamdns.FQDN)
 	api := c.latestIndex(ctx, e)
 	if api == "" {
-		// The crawl list could not be read; try again on a later event.
-		return
+		// the crawl list could not be read: the domain is asked again later
+		return false
 	}
 
 	rows, answered := c.query(ctx, e, api, fqdn.Name)
 	if !answered {
-		return
+		return false
 	}
 	support.MarkAssetMonitored(e.Session, e.Entity, c.source)
 
@@ -137,6 +137,7 @@ func (c *commonCrawl) read(ctx context.Context, e *et.Event) {
 	if len(urls) > 0 {
 		storeURLs(e, c.source, c.name, urls)
 	}
+	return true
 }
 
 // latestIndex returns the CDX API endpoint of the most recent crawl, reading

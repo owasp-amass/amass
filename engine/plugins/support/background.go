@@ -69,6 +69,36 @@ func (l *BackgroundLane) Enqueue(sess et.Session, key, plugin, what string, work
 	}
 }
 
+// EnqueueAfter queues work for the session as Enqueue does once after has
+// passed, unless the session ends first. The wait counts as lane work, so
+// the run waits for it no longer than the background hold allows, and a job
+// due after the hold has run out is skipped as a queued one is.
+func (l *BackgroundLane) EnqueueAfter(sess et.Session, key, plugin, what string, after time.Duration,
+	work func(context.Context)) {
+	id := sess.ID().String()
+	sess.Stats().AddBackground(1)
+	background.add(id, 1)
+	go func() {
+		defer func() {
+			// released after the job is queued, so the run never looks done
+			// in between
+			background.add(id, -1)
+			sess.Stats().AddBackground(-1)
+		}()
+
+		t := time.NewTimer(after)
+		defer t.Stop()
+		select {
+		case <-sess.Ctx().Done():
+			return
+		case <-t.C:
+		}
+		if !sess.Done() {
+			l.Enqueue(sess, key, plugin, what, work)
+		}
+	}()
+}
+
 func (l *BackgroundLane) run() {
 	for {
 		l.mu.Lock()
