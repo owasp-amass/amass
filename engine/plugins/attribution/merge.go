@@ -312,8 +312,8 @@ func (t *tracker) duplicateReportFor(ctx context.Context, adapter oamrepo.Adapte
 // incrementalProposals raises duplicate and identity proposals for the
 // organizations touched since the last pass, so they accumulate for review
 // while the enumeration runs rather than only at drain. It records proposals
-// only — nothing is merged until the drain pass — so it never deletes an
-// organization another handler is still writing to. Each organization is
+// only: quietMerges applies the strong ones once their organizations have
+// gone unwritten, and the drain pass the rest. Each organization is
 // compared once (tracked in dupProcessed), so the per-pass cost is bounded by
 // what changed, not the run's total, and the de-dupe in the journal makes a
 // proposal the drain pass also finds harmless.

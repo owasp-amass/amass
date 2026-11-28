@@ -101,6 +101,65 @@ func LinkWebsite(sess et.Session, orgent *dbt.Entity, rawURL, host string, src *
 	return err == nil
 }
 
+// registrantOrgNamed returns the Organization the domain's own registration
+// names as its registrant, FQDN --registration--> DomainRecord
+// --registrant_contact--> ContactRecord --organization--> Organization, when
+// it is known by one of names exactly. The domain's registration naming an
+// organization of the same name is evidence that both sources mean it; a
+// registrant known by another name, such as a privacy service, is not
+// reused.
+func registrantOrgNamed(sess et.Session, domain string, names ...string) *dbt.Entity {
+	var want []string
+	for _, n := range names {
+		if n = strings.TrimSpace(n); n != "" {
+			want = append(want, n)
+		}
+	}
+	if domain == "" || len(want) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(sess.Ctx(), 20*time.Second)
+	defer cancel()
+
+	fq, err := sess.DB().CreateAsset(ctx, &oamdns.FQDN{Name: domain})
+	if err != nil || fq == nil {
+		return nil
+	}
+
+	for _, dr := range outgoing(ctx, sess, fq, "registration") {
+		for _, cr := range outgoing(ctx, sess, dr, "registrant_contact") {
+			for _, orgent := range outgoing(ctx, sess, cr, "organization") {
+				if _, ok := orgent.Asset.(*oamorg.Organization); !ok {
+					continue
+				}
+				if exact, _, _ := NameMatch(sess, orgent, want); len(exact) > 0 {
+					return orgent
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// outgoing returns the entities ent's relations labeled label lead to.
+func outgoing(ctx context.Context, sess et.Session, ent *dbt.Entity, label string) []*dbt.Entity {
+	edges, err := sess.DB().OutgoingEdges(ctx, ent, time.Time{}, label)
+	if err != nil {
+		return nil
+	}
+
+	var out []*dbt.Entity
+	for _, edge := range edges {
+		if to, err := sess.DB().FindEntityById(ctx, edge.ToEntity.ID); err == nil && to != nil {
+			out = append(out, to)
+		}
+	}
+
+	return out
+}
+
 // DomainIdentity is the organization a source names as a registered domain's
 // owner: Wikidata by the entity whose official website is the domain, a site
 // by the schema.org markup on its own homepage.
@@ -136,6 +195,10 @@ func StoreDomainIdentity(e *et.Event, domain string, id DomainIdentity, src *et.
 	defer cancel()
 
 	orgent := OrgForControlledDomain(e.Session, domain)
+	linked := orgent != nil
+	if orgent == nil {
+		orgent = registrantOrgNamed(e.Session, domain, id.Name, id.LegalName)
+	}
 	if orgent == nil {
 		var err error
 		orgent, err = CreateOrgAsset(e.Session, nil, nil, &oamorg.Organization{
@@ -153,6 +216,15 @@ func StoreDomainIdentity(e *et.Event, domain string, id DomainIdentity, src *et.
 		}
 		LinkWebsite(e.Session, orgent, website, domain, src)
 	} else {
+		if !linked {
+			// the website chain lets later sources find it directly
+			website := id.Website
+			if website == "" {
+				website = "https://" + domain
+			}
+			LinkWebsite(e.Session, orgent, website, domain, src)
+		}
+
 		support.AddSource(ctx, e.Session, orgent, src)
 		if o := orgent.Asset.(*oamorg.Organization); id.Country != "" && o.Jurisdiction == "" {
 			o.Jurisdiction = id.Country

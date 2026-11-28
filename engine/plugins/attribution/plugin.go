@@ -7,8 +7,10 @@
 // finds the ownership gaps of the session's in-scope organizations, writes
 // the strong proposals with an amass-ai source, widens the scope the same
 // way the Horizontals plugin does, and leaves the rest in the review
-// journal. Once the enumeration's other work has drained, it merges the
-// duplicate organizations the evidence supports. It needs no model.
+// journal. It merges the duplicate organizations the evidence supports
+// once no session has written to them for a while, and the rest of those
+// the evidence supports once the enumeration's other work has drained. It
+// needs no model.
 package attribution
 
 import (
@@ -61,6 +63,9 @@ type plugin struct {
 	// othersWait bounds how long auto mode waits for other sessions before
 	// recording proposals without applying them.
 	othersWait time.Duration
+	// mergeQuiet is how long the organizations of a strong merge proposal
+	// must go unwritten before it is applied mid-run (quietMerges).
+	mergeQuiet time.Duration
 	// mergeMu lets one session's merge pass run at a time.
 	mergeMu  sync.Mutex
 	mu       sync.Mutex
@@ -70,7 +75,8 @@ type plugin struct {
 // NewAttribution returns the ownership attribution plugin.
 func NewAttribution() et.Plugin {
 	return &plugin{name: "AI-Attribution", lookup: os.LookupEnv, quiet: defaultQuiet, maxWait: defaultMaxWait,
-		mergeCheck: defaultMergeCheck, othersWait: defaultOthersWait, sessions: map[uuid.UUID]*tracker{}}
+		mergeCheck: defaultMergeCheck, othersWait: defaultOthersWait, mergeQuiet: defaultMergeQuiet,
+		sessions: map[uuid.UUID]*tracker{}}
 }
 
 func (p *plugin) Name() string {
@@ -315,11 +321,16 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 		t.lasting = graph.NewLastingCache(t.counted)
 	}
 
+	// a duplicate waiting for its merge is not searched on its own
+	waiting := t.quietMerges(ctx, adapter)
 	t.passes++
 	canary := t.canary > 0 && t.passes%t.canary == 0
 	for _, o := range orgs {
 		if ctx.Err() != nil {
 			return
+		}
+		if _, wait := waiting[o.ID]; wait {
+			continue
 		}
 
 		// each organization's reads are counted on their own, for the log,
@@ -382,8 +393,8 @@ func (t *tracker) pass(orgs []*dbt.Entity) {
 
 	// Raise duplicate and identity proposals for the organizations touched
 	// since the last pass, so they accumulate for review mid-run instead of
-	// only at drain. Record-only: nothing is merged until the drain pass, so
-	// this never deletes an organization another handler is still writing to.
+	// only at drain. Record-only: the next pass's quietMerges applies the
+	// strong ones whose organizations have gone unwritten.
 	t.incrementalProposals(ctx, adapter)
 	t.incrementalPersonProposals(ctx, adapter)
 }
